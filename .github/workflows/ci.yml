@@ -85,7 +85,6 @@ jobs:
 
       - name: Build editor client (typecheck)
         run: npm run build
-        working-directory: source/editor
 
       - name: Smoke test (server boots, editor responds)
         shell: bash
