@@ -16,7 +16,35 @@
 8. Значимые пользовательские изменения фиксировать в `CHANGELOG.MD`; обновлять ТЗ и roadmap, когда меняется цель, формат проекта или критерии этапа.
 9. Сохранять применимые upstream-уведомления и лицензии. Удаление legacy-кода не означает автоматического права убрать авторские уведомления.
 
+## Как использовать ТЗ, roadmap и технические источники
+
+- [Техническое задание](technical-specification.md) — нормативный контракт продукта, архитектуры и acceptance criteria.
+- [Каталог источников](REFERENCE-SOURCES.md) — официальные руководства/исходники, версии, кандидаты библиотек и замечания по лицензиям. Ссылка в каталоге является reference, а не утверждением о выборе зависимости.
+- [README](../README.md) — подтверждённые команды локальной разработки, правила веток/PR и действующие CI checks.
+- Для API/runtime decisions в первую очередь сверять [Phaser docs](https://docs.phaser.io/phaser/getting-started/what-is-phaser), [EVA.js repository](https://github.com/eva-engine/eva.js), [Cocos Creator 4.0 manual](https://docs.cocos.com/creator/4.0/manual/en/) и [Unity 6.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d). Cocos Creator manual и исходный репозиторий Cocos 4 — разные источники; Unity/Cocos описывают поведение своих продуктов, но не заменяют проектные решения Codogma.
+
+### Definition of Ready для каждой задачи
+
+Перед началом реализации карточка задачи/PR должна содержать:
+1. Ссылку на раздел ТЗ и соответствующий пункт roadmap.
+2. Точный пользовательский сценарий или технический дефект и ожидаемое поведение.
+3. Перечень затрагиваемых подсистем/файлов после исследования исходников; не выдумывать пути до аудита.
+4. Acceptance criteria и минимальный воспроизводимый fixture/test.
+5. Обязательные обратносуместимые изменения, миграции/ограничения и то, что явно не входит в scope.
+6. Кандидатные библиотеки/источники с версией и лицензией, если нужны; новые зависимости — только после доказательства пробела и решения по PoC/ADR.
+
+### С чего начинается реализация
+
+Первый исполнительский шаг — **Этап 1 (audit & decisions)**. Он не должен превращаться в большой кодовый рефакторинг. Его результат — четыре проверяемых артефакта:
+- `docs/capability-matrix.md`: реализовано / частично / отсутствует / не подтверждено для редактора, runtime и export;
+- `docs/dependency-capability-matrix.md`: версия, лицензия, runtime/editor/build scope, ограничения и причина сохранения/замены каждой значимой зависимости;
+- `docs/decisions/ADR-0001-core-architecture.md`: границы Project Model/Core/Phaser adapter/Editor/Preview Host, lifecycle, time/input/scene contracts и открытые решения;
+- `docs/performance-baseline.md`: закреплённые fixtures, среда и фактические baseline measurements, без выдуманных порогов.
+
+После приёмки этих артефактов следует выполнить Этап 2 как небольшой вертикальный срез (Project/Scene/Node → один пользовательский TypeScript-компонент → Inspector metadata → save/reopen → runtime preview → build fixture). Не реализовывать все будущие подсистемы в одном PR и не добавлять конкурирующие runtime/renderer/physics зависимости до соответствующих ADR/PoC.
+
 ---
+
 
 ## Этап 0 — базовая версия и текущая инфраструктура
 
@@ -46,20 +74,21 @@
 
 ### Задачи
 
-- [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP.
+- [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP; сохранить результат в `docs/capability-matrix.md` с фактическими evidence/tests.
 - [ ] Включить отдельные workflow-строки для Sprite Editor (slicing/trim/pivot/collision shapes/sorting/9-slicing), Tilemap brushes/layouts/chunks, camera/coordinate conversion, input (mouse/keyboard/touch), audio lifecycle, UI layouts/text, particles/lighting, localization, save storage и Dev/Release build profiles.
 - [ ] Для каждой возможности указать: существующая реализация, публичный/внутренний контракт, покрывающие тесты, ограничения и gap относительно целевого UX.
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
 - [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
 - [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
-- [ ] Составить Dependency & Capability Matrix текущего форка: версия, лицензия, роль, browser/runtime/editor scope, ограничения и цена обновления.
+- [ ] Составить Dependency & Capability Matrix текущего форка: версия, лицензия, роль, browser/runtime/editor scope, ограничения и цена обновления; сохранить его в `docs/dependency-capability-matrix.md` и включить транзитивные runtime/build dependencies.
 - [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
-- [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri.
-- [ ] Описать текущий baseline производительности и проверок; не ставить пороги без воспроизводимой методики.
+- [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri. Первое решение оформить как `docs/decisions/ADR-0001-core-architecture.md`, явно выделив принятые решения, открытые вопросы, альтернативы и последствия.
+- [ ] Описать текущий baseline производительности и проверок в `docs/performance-baseline.md`; закрепить fixtures, браузер/ОС/железо и метод измерения, не ставить пороги без воспроизводимой методики.
 
 ### Критерии приёмки
 
-- [ ] Есть таблица фактического состояния, а не дублированный перечень желаемых функций.
+- [ ] Есть таблица фактического состояния `docs/capability-matrix.md`, а не дублированный перечень желаемых функций.
+- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md` и `docs/performance-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
 - [ ] Технологические кандидаты не записаны как окончательное решение без PoC.
@@ -147,7 +176,7 @@
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
-- [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production.
+- [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production; проверить возможность использования [Vite](https://vite.dev/guide/) только после сравнения с текущей сборкой.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
 - [ ] Добавить подходящие обработчики ассетов: атласы, оптимизацию изображений, проверку аудио/шрифтов и другие операции только при подтверждённой потребности.
 - [ ] Подготовить platform-neutral API Platform Services и Mock/Local implementation.
@@ -216,10 +245,10 @@
 - [ ] Зафиксировать правила camera/world/local/screen/UI coordinate conversion, Y-based sorting для top-down сцен, camera bounds/follow и render order между world и UI.
 - [ ] Согласовать component metadata, Inspector, custom TypeScript и runtime model.
 - [ ] Проверить Prefabs/nested Prefabs/overrides, обновление экземпляров и сохранение связей.
-- [ ] Улучшить Tilemap workflow: layers/palettes, reusable brush presets/custom brushes, rule tiles/auto-tiling, collisions/object layers, animated tiles и совместимый Tiled import/export с предупреждением о неподдерживаемых свойствах.
+- [ ] Улучшить Tilemap workflow: layers/palettes, reusable brush presets/custom brushes, rule tiles/auto-tiling, collisions/object layers, animated tiles и совместимый [Tiled](https://docs.mapeditor.org/en/latest/manual/introduction/) import/export с предупреждением о неподдерживаемых свойствах.
 - [ ] Проверить square-grid workflow, затем оценить hex/isometric layouts; измерить tilemap chunk updates/culling и не перестраивать целую карту при изменении одной клетки.
-- [ ] Развивать Animation workflow: timeline/keys/curves/events и state graph только если это оправдано реальными требованиями.
-- [ ] Проверить Physics Editor на соответствие runtime bodies, collision layers/masks, editable sprite collision shapes и debug overlays.
+- [ ] Развивать Animation workflow: timeline/keys/curves/events и state graph по подходам [Cocos Animation Graph](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/animation/marionette) / [Unity Animator Controller](https://docs.unity.com/en-us/engine/6000.6/manual/animation-section/animation-mecanim/animation-animator-controller/animator), но только если это оправдано реальными требованиями и совместимо с текущим Phaser runtime.
+- [ ] Проверить Physics Editor на соответствие runtime bodies, collision layers/masks, editable sprite collision shapes и debug overlays; сверить реальные возможности [Phaser physics](https://docs.phaser.io/phaser/concepts/physics) и кандидатов только через ADR/PoC.
 - [ ] Проверить input focus/routing (UI versus world), touch cancellation, camera coordinate transforms, audio unlock/focus behavior и lifecycle cleanup.
 - [ ] Проверить UI Editor на 9-slice, text/rich text/font fallback, keyboard focus, safe areas, resizing and aspect ratios.
 - [ ] Добавить smoke/acceptance fixtures для audio groups, localization keys/fallbacks и save data migration, если соответствующие P1 capabilities реализуются в этой фазе.
