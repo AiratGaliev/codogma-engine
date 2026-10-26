@@ -247,8 +247,8 @@
 - [ ] Инвентаризировать используемые builder/bundler-инструменты и расширять существующий pipeline, прежде чем вводить новый.
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
-- [ ] Ввести минимальный Feature/Capability Registry contract для build (stable feature IDs, provider, scopes/targets, declared requirements/conflicts) и fixture; не связывать его реализацию с готовностью UI Package Manager.
-- [ ] Хранить выбор необязательных features в версионируемой project/target configuration отдельно от установленного npm dependency tree; defaults и required features должны быть явными.
+- [ ] Ввести минимальный Feature/Capability Registry contract для встроенных функций и test fixture (stable feature IDs, provider, scopes/targets, declared requirements/conflicts); первая сборочная версия не должна зависеть от готовности UI Package Manager.
+- [ ] Хранить выбор необязательных features в версионируемой project/target configuration отдельно от установленного npm dependency tree; defaults и required features должны быть явными. На этапе 4A допускается встроенный registry и mock/fixture provider; интеграцию реальных package-provided descriptors через `codogma` metadata выполнить на этапе 8 после утверждения package metadata schema.
 - [ ] На основе выбранных features и target вычислять declared feature-dependency closure, проверять недостающих provider packages, конфликты и unsupported scopes/targets; выдавать machine-readable diagnostics, не устанавливая npm dependencies автоматически.
 - [ ] Включить состав selected features и причины inclusion/exclusion в build report; проверить на fixture, что выключенные/неподдерживаемые и editor-only contributions не попадают в production bundle там, где это доказуемо import graph/bundler.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
@@ -272,7 +272,7 @@
 - [ ] Недоступность платформенного SDK не приводит к падению базовой игры.
 - [ ] В тестах и документации разделены Yandex Games, VK Mini Apps и VK Play.
 - [ ] Runtime/build-only зависимости не попадают в лишние production bundles.
-- [ ] Feature Registry различает package installed, feature provided/available, feature enabled in project, target-included и runtime/editor-activated states; один статус не переключает другой автоматически.
+- [ ] Feature Registry различает package installed, feature provided/available, feature enabled in project, target-included и runtime/editor-activated states; один статус не переключает другой автоматически. На этапе 4A package-installed/provider state разрешено проверять через тестовый fixture descriptor, не считая финальный package metadata contract уже утверждённым.
 - [ ] Fixture проверяет feature dependency closure, отсутствующий provider, несовместимую комбинацию/target и структурированную диагностику.
 - [ ] Повторная сборка с той же конфигурацией даёт стабильный список выбранных функций и эквивалентный состав bundle; tree-shaking claims подтверждаются измеримым bundle report, а не одним лишь описанием metadata.
 
