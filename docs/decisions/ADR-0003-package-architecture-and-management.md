@@ -10,6 +10,8 @@ Codogma Engine развивается из существующего редак
 
 Модель исходников и управления пакетами вдохновляется EVA.js, а UX Package Manager и интеграция пакетов в редактор — Unity Package Manager. Реестр функций и выборочная сборка также изучены по исходникам COCOS 4.0: это reference для описания возможностей, их зависимостей и build-time selection, а не указание превращать каждый модуль в npm-пакет. npm остаётся источником истины по установке, разрешению package dependencies и lockfile. Эти референсы не означают копирования чужих API или форматов.
 
+Аудит текущей ветки `dev` дополнительно установил, что Codogma подключает Phaser 4.2.1 через вендорный runtime bundle из `source/editor/plugins/phasereditor2d.phaser/plugin.json` (`scripts/phaser.min.js` для production и `scripts/phaser.js` для development), а не через прямую npm dependency. При этом исходники upstream Phaser модульно организованы и у тега `v4.2.1` есть отдельные варианты сборки. Поэтому текущее ограничение относится к **пути поставки и интеграции Codogma**, а не к абсолютной невозможности модульной сборки самого Phaser. См. [аудит в ТЗ](../technical-specification.md#уточнение-фактическая-интеграция-phaser-421) и [каталог исходников](../REFERENCE-SOURCES.md).
+
 **Текущее состояние переходное:** в репозитории существуют root npm project и редактор в `source/editor` со своим manifest/lockfile; `src/editor`, `packages/*` в целевой роли и согласованные npm Workspaces ещё не внедрены. Этот ADR определяет целевую архитектуру, а не утверждает, что миграция уже выполнена.
 
 ## Принятые архитектурные принципы
@@ -53,6 +55,7 @@ Codogma Engine развивается из существующего редак
 - Устанавливаемость через npm, объявление/доступность функции, включение в project configuration, включение в конкретный build target и активация в editor/runtime являются разными состояниями. Проектный выбор features и target-specific overrides должен быть версионируемым и воспроизводимым в CI.
 - Registry проверяет feature-level requirements, conflicts, scopes/targets и compatibility; это не npm dependency resolver. Если feature provider не установлен, выдаётся структурированная диагностика и, где уместно, предложение открыть Package Manager. Автоматическая установка и разрешение транзитивных package dependencies остаются ответственностью npm/Package Manager Service.
 - Build pipeline использует явный набор project-enabled features для выбранного target, вычисляет declared feature-dependency closure, валидирует полноту и формирует report о выбранных features, entry points/modules и причинах inclusion/exclusion. Editor-only contributions исключаются из production game bundle. Включение/исключение реального кода проверяется fixture/build report; registry metadata сама по себе не гарантирует удаление dynamic imports или side-effect modules.
+- Для текущего Phaser 4.2.1 bundle-based пути установка wrapper-пакетов и выбор feature descriptors не доказывают физическое исключение подсистем из output. Возможность использовать upstream/custom build, отдельные runtime modules или иной поддерживаемый import path проверяется на fixture; до этого Feature Registry описывает разрешённый набор возможностей, но не обещает автоматически уменьшать Phaser bundle.
 - Editor Host, Inspector, CLI и build должны использовать общие descriptors и diagnostics. Curated feature sets могут добавляться позднее как удобные группы feature IDs, но не заменяют обязательный registry и не являются собственным dependency resolver.
 
 ### 6. Метаданные пакета и API compatibility
@@ -96,6 +99,7 @@ Codogma Engine развивается из существующего редак
 - Финальная структура `codogma` metadata/schema, Feature/Capability Registry descriptor, project feature configuration и перечень package kinds/scopes.
 - Семантика required/default/optional features, conflicts, target-specific overrides и диагностика отсутствующего provider.
 - Какие bundler/module graph guarantees доступны в реальном pipeline и при каких side effects/dynamic imports можно доказать, что выключенный feature code не попадает в output.
+- Какой путь поставки Phaser 4.2.1 следует поддерживать для target-specific build: существующий bundle, официальный альтернативный bundle или кастомная сборка; критерии — API coverage, совместимость generated code, внешние runtime-модули, реальный raw/gzip output и сложность поддержки.
 - Граница и точные exports `@codogma/editor-api`, версия Editor Extension API и совместимость с существующим Colibri/plugin registry.
 - Как проектно хранить enabled/disabled state editor extensions и как обрабатывать миграцию/ошибки их активации.
 - Какой набор источников будет включён по умолчанию и какая политика применяется к npm lifecycle scripts, лицензиям, vulnerability/provenance checks и сторонним extensions.
