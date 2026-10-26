@@ -1,0 +1,72 @@
+{
+    "id": "606c223e-4098-48df-a65e-511ae41577e7",
+    "sceneType": "SCENE",
+    "settings": {
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "OfficialE2E",
+        "compilerOutputLanguage": "TYPE_SCRIPT"
+    },
+    "displayList": [
+        {
+            "type": "Image",
+            "id": "3b074138-71f4-4a26-ada0-a0e4d23fb645",
+            "label": "player",
+            "x": 400,
+            "y": 300,
+            "texture": {
+                "key": "dino"
+            },
+            "Arcade.active": true,
+            "body.physicsType": 0,
+            "body.geometry": 1,
+            "body.velocity.x": 120,
+            "body.collideWorldBounds": true,
+            "list": [
+                {
+                    "type": "Glow",
+                    "id": "b4f94e14-8900-4198-bb41-8ffb7f6e5038",
+                    "label": "glow_1",
+                    "preFX": true,
+                    "color": "#ff9d45",
+                    "outerStrength": 6
+                }
+            ]
+        },
+        {
+            "type": "Text",
+            "id": "1ba6e1a8-ae98-4fee-b010-58c98c36ddcc",
+            "label": "score",
+            "x": 180,
+            "y": 40,
+            "text": "Official @phaserjs/editor-mcp-server works!",
+            "color": "#ff9d45"
+        }
+    ],
+    "plainObjects": [
+        {
+            "type": "Collider",
+            "id": "8a0a8464-4abe-4eaa-9c5e-de98d2523812",
+            "label": "worldCollider",
+            "object1": "player",
+            "object2": "gameObjects.list",
+            "overlapOnly": false
+        }
+    ],
+    "meta": {
+        "app": "Phaser Editor 2D - Scene Editor",
+        "url": "https://phasereditor2d.com",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    },
+    "lists": [
+        {
+            "id": "9766f293-39a2-4325-8203-43f80679ca4c",
+            "label": "gameObjects",
+            "objectIds": [
+                "3b074138-71f4-4a26-ada0-a0e4d23fb645",
+                "1ba6e1a8-ae98-4fee-b010-58c98c36ddcc"
+            ]
+        }
+    ]
+}

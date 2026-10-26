@@ -1,0 +1,285 @@
+/*
+
+Rules to provide the dark colors
+
+Important:
+    - No layout information should be provided.
+    - To layout a control, see controls.css.
+    - To layout a workbench UI, see workbench.css
+
+Modern dark palette (updated for the Phaser 4.2.1 edition):
+    - window        #18191c
+    - pane          #1f2126
+    - active area   #24262c
+    - input         #26282e
+    - border        #ffffff14
+    - text          #e6e7ea
+    - accent        #ff9d45 (Phaser orange)
+
+*/
+
+.dark body, .dark .Window {
+    background: #18191c !important;
+    color: #e6e7ea;
+}
+
+/* a */
+
+.dark a {
+    color: #ffab63;
+}
+
+/* input */
+
+.dark input,
+.dark textarea {
+    background: #26282e;
+    color: #f2f3f5;
+    border-style: solid;
+    border-width: 1px;
+    border-color: #ffffff1c;
+    border-radius: 4px;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.dark input[type="file"] {
+    display: none;
+}
+
+.dark input:focus,
+.dark textarea:focus {
+    background: #2b2d34;
+    border-color: #ff9d45 !important;
+    outline-style: none;
+    box-shadow: 0 0 0 1px #ff9d4540;
+}
+
+.dark input:read-only,
+.dark textarea:read-only {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+/* button */
+
+.dark button,
+.dark input[type="submit"]
+
+/* , .dark .ToolbarItem */
+    {
+    background: #34373f;
+    border-color: #ffffff1a;
+    color: #f0f1f3;
+    text-shadow: none;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 5px;
+    padding: 5px 10px;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+
+.dark button[disabled] {
+    color: rgba(255, 255, 255, 0.35);
+    text-shadow: none;
+}
+
+.dark button:hover,
+.dark .ToolbarItem:hover {
+    background: #41454e;
+}
+
+.dark button[disabled]:hover {
+    background: #34373f;
+}
+
+.dark button:active,
+.dark .ToolbarItem.active {
+    background: #2b2d34;
+}
+
+.dark .ColorButton canvas {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Tooltip */
+
+.dark .Tooltip {
+    background: #101114;
+    border-color: #ffffff26;
+    border-radius: 5px;
+    box-shadow: 0 4px 14px #00000066;
+}
+
+/* TabPane */
+
+.dark .TabPaneContentArea,
+.dark .TabPaneLabel.selected {
+    background: #1f2126;
+}
+
+.dark .TabPaneContentArea:empty {
+    background: transparent !important;
+}
+
+.dark .TabPaneLabel.selected {
+    text-shadow: none;
+}
+
+.dark .TabPaneLabelSection.selected {
+    border-bottom-color: inherit;
+    color: inherit;
+}
+
+.dark .TabPane.activePart .TabPaneLabelSection.selected {
+    border-bottom-color: #ff9d45 !important;
+    color: #ffc591;
+}
+
+/* Part */
+
+.dark .TabPane.activePart .TabPaneLabel.selected {
+    box-shadow: inset 0px 2px 0px #ff9d45;
+}
+
+.dark .TabPane.activePart .TabPaneContentArea,
+.dark .TabPane.activePart .TabPaneLabel.selected {
+    background: #24262c;
+}
+
+.dark .ViewerPart .FilteredViewer {
+    background: transparent;
+}
+
+/* ViewerPart */
+
+.dark .ViewerPart {
+    display: grid;
+    grid-template-columns: 2px 1fr 2px;
+    grid-template-rows: 0px 1fr 0px;
+}
+
+/* Scroll Bar */
+
+.dark {
+    /* firefox */
+    scrollbar-color: #4a4e58 transparent;
+}
+
+.dark .ScrollBar,
+.dark ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.dark .ScrollHandler,
+.dark ::-webkit-scrollbar-thumb {
+    background: #43464e;
+    border-radius: 6px;
+}
+
+.dark .ScrollHandler:hover,
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #565a64;
+}
+
+.dark .ScrollHandler:active,
+.dark ::-webkit-scrollbar-thumb:active {
+    background: #6b707c;
+}
+
+/* Property Page */
+
+.dark .PropertySectionPane {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.dark .PropertyTitleArea {
+    color: #c9ccd3;
+}
+
+.dark .PropertyTitleArea label,
+.dark .PropertySubTitleLabel {
+    text-shadow: none;
+}
+
+/* Toolbar */
+
+.dark .ToolbarItem {
+    text-shadow: none;
+    border-color: transparent;
+}
+
+
+.dark .ToolbarItem.ActionSelected {
+    background: #2e3138;
+    border-color: #ffffff24;
+}
+
+/* Icon buttons */
+
+.dark .IconButton:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ProgressBar */
+
+.dark .ProgressBar {
+    background: #ff9d45;
+}
+
+/* Pane */
+
+.dark .Pane {
+    background: #1f2126;
+}
+
+/* Dialog */
+
+.dark .darkDialogContainer {
+    background: #131418;
+}
+
+.dark .Dialog {
+    background: #202227;
+    border-radius: 8px;
+    box-shadow: 0 10px 34px #000000a8;
+}
+
+.dark .Dialog .DialogTitlePane {
+    text-shadow: none;
+}
+
+/* Menu */
+
+.dark .Menu {
+    list-style-type: none;
+    background: #24262c;
+    padding: 4px;
+    margin: 0px;
+    border-style: solid;
+    border-width: 1px;
+    border-color: #ffffff1f;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px #00000080;
+}
+
+.dark .MenuItemSeparator {
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.dark .MenuItem {
+    border-radius: 4px;
+}
+
+.dark .MenuItem:hover,
+.dark .MenuItemSelected {
+    background: #ff9d45;
+    color: #16171a;
+}
+
+.dark .MenuItemDisabled {
+    color: rgba(255, 255, 255, 0.38);
+}
+
+.dark .MenuItemDisabled:hover {
+    color: rgba(255, 255, 255, 0.38);
+    background: transparent;
+}

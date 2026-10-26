@@ -1,0 +1,37 @@
+{
+    "id": "fa57f8d7-cbac-4bef-a06d-1b74e3b8d4c4",
+    "sceneType": "SCENE",
+    "settings": {
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "MyGame",
+        "compilerOutputLanguage": "TYPE_SCRIPT"
+    },
+    "displayList": [
+        {
+            "type": "Image",
+            "id": "caaa9334-af9e-4272-a284-5d8323f2e07e",
+            "label": "dino",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 429,
+            "y": 174
+        },
+        {
+            "type": "Text",
+            "id": "cc539402-18af-41d0-9d4f-d454bcb33011",
+            "label": "text_1",
+            "x": 325,
+            "y": 199,
+            "text": "Hello Phaser 4.2.1!"
+        }
+    ],
+    "plainObjects": [],
+    "meta": {
+        "app": "Phaser Editor 2D - Scene Editor",
+        "url": "https://phasereditor2d.com",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    }
+}

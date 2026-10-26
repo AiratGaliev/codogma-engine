@@ -1,0 +1,18 @@
+{
+  "name": "codogma-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Codogma Engine — open-source IDE for HTML5 game development (a Phaser Editor 2D fork) with full Phaser 4.2.1 support",
+  "scripts": {
+    "dev": "node server/server.mjs 2>&1 | tee dev.log",
+    "start": "node server/server.mjs",
+    "mcp": "node server/mcp-launcher.mjs",
+    "mcp:builtin": "node server/mcp-stdio.mjs",
+    "build": "cd source/editor && npm run build",
+    "watch": "cd source/editor && npm start"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@phaserjs/editor-mcp-server": "^1.0.6"
+  }
+}

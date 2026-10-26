@@ -1,0 +1,8 @@
+.DS_Store
+*.zip
+!phaser-editor2d-project-*.zip
+dev.log
+node_modules/
+tool-results/
+.idea/
+worklog.md

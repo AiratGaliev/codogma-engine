@@ -1,0 +1,10 @@
+{
+    "id": "phasereditor2d.mcp",
+    "priority": 100,
+    "styles": [
+        "styles/ai.css"
+    ],
+    "scripts": [
+        "scripts/mcp-bridge-client.js"
+    ]
+}

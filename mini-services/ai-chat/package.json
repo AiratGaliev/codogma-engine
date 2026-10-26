@@ -1,0 +1,14 @@
+{
+    "name": "phaser-editor-ai-chat",
+    "version": "1.0.0",
+    "private": true,
+    "description": "AI Chat backend for Codogma Engine (LLM completions via z-ai-web-dev-sdk)",
+    "type": "module",
+    "scripts": {
+        "dev": "node --watch index.mjs",
+        "start": "node index.mjs"
+    },
+    "dependencies": {
+        "z-ai-web-dev-sdk": "^0.0.18"
+    }
+}

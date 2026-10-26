@@ -1,0 +1,57 @@
+{
+    "id": "77c52778-5166-4099-8a52-f3716ca0b64d",
+    "sceneType": "SCENE",
+    "settings": {
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "CoinRush",
+        "compilerOutputLanguage": "TYPE_SCRIPT"
+    },
+    "displayList": [
+        {
+            "type": "Image",
+            "id": "93f9b720-d414-4d09-9210-a8bff1ed6d2d",
+            "label": "dino",
+            "x": 350,
+            "y": 250,
+            "texture": {
+                "key": "dino"
+            }
+        },
+        {
+            "type": "Text",
+            "id": "447e3099-4e29-4db0-80b2-19a499355355",
+            "label": "scoreText",
+            "x": 20,
+            "y": 16,
+            "text": "Score: 0",
+            "color": "#ffffff"
+        },
+        {
+            "type": "Text",
+            "id": "6f6560b8-9bf8-49d4-82e7-2de7e022e30a",
+            "label": "hintText",
+            "x": 300,
+            "y": 420,
+            "text": "Collect the coins!",
+            "color": "#ffff00"
+        },
+        {
+            "type": "Image",
+            "id": "0a03472a-db55-45de-89f0-b1219335506d",
+            "label": "player2",
+            "x": 550,
+            "y": 280,
+            "texture": {
+                "key": "dino"
+            }
+        }
+    ],
+    "plainObjects": [],
+    "meta": {
+        "app": "Phaser Editor 2D - Scene Editor",
+        "url": "https://phasereditor2d.com",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    }
+}

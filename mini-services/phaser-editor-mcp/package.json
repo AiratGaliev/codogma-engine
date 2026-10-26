@@ -1,0 +1,15 @@
+{
+    "name": "phaser-editor-mcp-bridge",
+    "version": "1.0.0",
+    "description": "WebSocket/HTTP bridge between the official @phaserjs/editor-mcp-server and the Codogma Engine browser client (standalone mini-service).",
+    "type": "module",
+    "scripts": {
+        "dev": "node --watch index.mjs",
+        "start": "node index.mjs",
+        "mcp": "node node_modules/@phaserjs/editor-mcp-server/build/index.js"
+    },
+    "dependencies": {
+        "@phaserjs/editor-mcp-server": "^1.0.6",
+        "ws": "^8.22.0"
+    }
+}
