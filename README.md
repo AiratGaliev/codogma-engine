@@ -301,6 +301,8 @@ Start the server first, then run <code>npm run test:e2e</code>. Inspect the firs
 
 - [Build guide](BUILD.md)
 - [Editor documentation](https://docs.codogma.com)
+- [Technical specification (RU)](docs/technical-specification.md)
+- [Roadmap (RU)](docs/roadmap.md)
 - [CI Fast workflow](.github/workflows/ci.yml)
 - [MCP E2E workflow](.github/workflows/e2e.yml)
 - [Release workflow](.github/workflows/release.yml)
