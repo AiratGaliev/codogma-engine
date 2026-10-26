@@ -6,13 +6,15 @@ namespace colibri {
         private _iconCache: Map<string, ui.controls.IconImage>;
         private _loadIconsFromAtlas: boolean;
         private _loadResources: boolean;
+        private _iconFormat: "png" | "svg";
         private _atlasImage: ui.controls.IImage;
         private _atlasData: ui.controls.IAtlasData;
         private _resources: ui.ide.Resources;
 
         constructor(id: string, config?: {
             loadIconsFromAtlas?: boolean,
-            loadResources?: boolean
+            loadResources?: boolean,
+            iconFormat?: "png" | "svg"
         }) {
 
             this._id = id;
@@ -20,6 +22,7 @@ namespace colibri {
             this._loadIconsFromAtlas = Boolean(config?.loadIconsFromAtlas);
 
             this._loadResources = Boolean(config?.loadResources);
+            this._iconFormat = config?.iconFormat ?? "png";
 
             this._iconCache = new Map();
         }
@@ -153,7 +156,9 @@ namespace colibri {
 
         private getThemeIcon(name: string, theme: "dark" | "light" | "common") {
 
-            const iconPath = this.getIconsAtlasFrameName(name, theme);
+            // SVG не требует отдельных файлов @2x: браузер масштабирует вектор.
+            const ratio = this._iconFormat === "png" && ui.controls.DEVICE_PIXEL_RATIO_x2 ? "@2x" : "";
+            const iconPath = `${theme}/${name}${ratio}.${this._iconFormat}`;
 
             const url = this.getPluginURL(`icons/${iconPath}`);
 
