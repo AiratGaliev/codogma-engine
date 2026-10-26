@@ -19,7 +19,7 @@
 | 7 | Этап 4B: Platform Services | **P1 после Core и базового build** | Сначала platform-neutral API и mock/local adapter, затем первая целевая интеграция **Yandex Games**. VK Mini Apps и VK Play — отдельные последующие задачи/targets, а не один недифференцированный адаптер. Platform SDK не должен блокировать редакторские vertical slices и независимую HTML5-сборку. |
 | 8 | Этап 6: QA, diagnostics и profiling | **Непрерывно; полный gate перед release** | Unit/type/lint checks появляются вместе с соответствующим кодом. Расширенный profiler, browser acceptance и release gates добавляются по мере появления измеряемых подсистем. |
 | 9 | Этап 7: Tauri desktop shell | **Не блокирует Web-first MVP** | Начинать после доказанного browser workflow и baseline. Небольшой throwaway PoC допустим раньше для снятия конкретного риска; полноценная упаковка не должна задерживать HTML5 build. |
-| 10 | Этап 8: расширения и npm ecosystem | **Отложенный** | Сначала стабильные внутренние контракты и sample projects. Публичные пакеты/plugin API — только после реального потребителя, versioning, тестов и документации. |
+| 10 | Этап 8: npm-based Package Manager и экосистема расширений | **Отложенный этап реализации, архитектура закладывается сразу** | npm остаётся resolver/install/lockfile engine; сначала внутренние пакеты, manifests и clean-install fixture, затем общий Package Manager Service и UI. Собственный registry и feature sets — позже, по подтверждённой потребности. |
 
 ### Что не следует делать параллельно «на всякий случай»
 
@@ -64,12 +64,13 @@
 
 ### С чего начинается реализация
 
-Первый исполнительский шаг — **Этап 1 (audit & decisions)**. Он не должен превращаться в большой кодовый рефакторинг. Его результат — шесть проверяемых артефактов:
+Первый исполнительский шаг — **Этап 1 (audit & decisions)**. Он не должен превращаться в большой кодовый рефакторинг. Его результат — семь проверяемых артефактов:
 - `docs/capability-matrix.md`: реализовано / частично / отсутствует / не подтверждено для редактора, runtime и export;
 - `docs/dependency-capability-matrix.md`: версия, лицензия, runtime/editor/build scope, ограничения и причина сохранения/замены каждой значимой зависимости;
 - `docs/decisions/ADR-0001-core-architecture.md`: границы Project Model/Core/Phaser adapter/Editor/Preview Host, lifecycle, time/input/scene contracts и открытые решения;
 - `docs/performance-baseline.md`: закреплённые fixtures, среда и фактические baseline measurements, без выдуманных порогов;
 - `docs/decisions/ADR-0002-typescript-toolchain.md`: решение по strict TS, lint/format/dead-code/architecture tooling и порядку миграции;
+- `docs/decisions/ADR-0003-package-architecture-and-management.md`: границы `@codogma/cge`, npm Workspaces, npm-based Package Manager, engine metadata, безопасность и открытые вопросы package layout;
 - `docs/code-quality-baseline.md`: текущие compiler/lint/unused-code findings, scope пилота, false-positive policy и правила постепенного усиления CI.
 
 После приёмки этих артефактов следует выполнить Этап 2 как небольшой вертикальный срез: Project/Scene/Node → один пользовательский TypeScript-компонент → Inspector metadata → save/reopen → runtime preview → проверяемый build fixture. На этом шаге fixture доказывает связность сценария, но не заменяет отдельную приёмку полноценного headless HTML5 pipeline на Этапе 4. Не реализовывать все будущие подсистемы в одном PR и не добавлять конкурирующие runtime/renderer/physics зависимости до соответствующих ADR/PoC.
@@ -127,12 +128,13 @@
 - [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
 - [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri. Первое решение оформить как `docs/decisions/ADR-0001-core-architecture.md`, явно выделив принятые решения, открытые вопросы, альтернативы и последствия.
 - [ ] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile, выбор ESLint/Prettier/Knip/dependency-cruiser, интеграция TypeScript project references, legacy TSLint migration и CI ratchet plan.
+- [ ] Оформить `docs/decisions/ADR-0003-package-architecture-and-management.md`: подтвердить npm как источник истины зависимостей, роль `@codogma/cge`, целевые Workspace boundaries и этапность интеграции; точные физические пути/metadata schema оставить открытыми до проверки существующих manifests, lockfiles и PoC.
 - [ ] Описать текущий baseline производительности и проверок в `docs/performance-baseline.md`; закрепить fixtures, браузер/ОС/железо и метод измерения, не ставить пороги без воспроизводимой методики.
 
 ### Критерии приёмки
 
 - [ ] Есть таблица фактического состояния `docs/capability-matrix.md`, а не дублированный перечень желаемых функций.
-- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
+- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/decisions/ADR-0003-package-architecture-and-management.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
 - [ ] Новый TypeScript pilot проходит strict typecheck, lint, format check и соответствующие unit tests; Knip/dependency-cruiser report scope и false-positive handling документированы.
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
@@ -157,6 +159,7 @@
 
 ### Задачи
 
+- [ ] На основании ADR-0003 подготовить минимальный workspace/package skeleton для `@codogma/cge` и новых Codogma-owned модулей; существующий `source/editor` не переносить до отдельной проверенной миграции.
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 - [ ] Определить версионирование формата и механизм миграции; подготовить compatibility fixtures для текущих проектов.
@@ -403,14 +406,24 @@
 
 ---
 
-## Этап 8 — расширения и экосистема пакетов
+## Этап 8 — npm-based Package Manager, расширения и экосистема пакетов
 
 **Цель:** предоставить возможность развивать жанровые инструменты и платформенные интеграции без перегрузки ядра.
 
-**Зависимости:** стабильные контракты Project Model/Core (этап 2), Preview/build (этапы 3–4), editor/runtime integration (этап 5) и diagnostics/quality gates (этап 6). Экосистема расширений не должна предшествовать стабильности этих контрактов.
+**Зависимости:** стабильные контракты Project Model/Core (этап 2), Preview/build (этапы 3–4), editor/runtime integration (этап 5) и diagnostics/quality gates (этап 6). Экосистема расширений не должна предшествовать стабильности этих контрактов. Архитектурные решения Package Manager закладываются уже на этапе 1; реализация сервиса/UI выполняется после стабилизации package/API contracts.
 
 ### Задачи
 
+- [ ] Создать общий Package Manager Service поверх npm CLI: редактор и CLI используют один типизированный контракт, структурированные результаты/ошибки и общий lifecycle операций.
+- [ ] Реализовать и протестировать install/update/remove/list для npm-зависимостей, управление процессами, отмену, понятные ошибки, фиксацию результата и восстановление при неудачной операции.
+- [ ] Согласовать и валидировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`; не дублировать в нём npm dependency tree и не вводить собственный resolver.
+- [ ] Проверить clean install через `npm ci` в отдельном fixture project с committed lockfile; проверить согласованность manifest/lockfile и воспроизводимость build в CI.
+- [ ] Реализовать проверки совместимости package API/version и targets; подтвердить, что Editor-only/build-only зависимости исключаются из runtime production bundle.
+- [ ] Поддержать источники по принятой очереди: npm registry/scoped registry и локальные пакеты сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
+- [ ] Применить явную политику lifecycle scripts, лицензий, уязвимостей и provenance; не считать сторонние редакторские плагины изолированными только по их manifest metadata.
+- [ ] Развивать Package Manager UI только поверх общего service API: поиск/фильтры, package details, версии, dependencies, install/update/remove и диагностические статусы.
+- [ ] Рассмотреть curated feature sets как группировку пакетов, не как отдельный dependency resolver.
+- [ ] Не создавать собственный registry или самостоятельную систему подписи на раннем этапе; принять отдельное решение только при подтверждённой потребности.
 - [ ] Разделить engine/editor/build/platform code на внутренние модули с явными зависимостями.
 - [ ] Определить manifest/metadata расширения, совместимость версий, lifecycle, разрешения и точки интеграции.
 - [ ] Зафиксировать отдельные extension hooks для custom Inspector editors/schema validators, import/reimport pipeline, Scene Editor gizmos/brushes, profiler overlays, build hooks, target profiles and localization tools.
@@ -427,6 +440,11 @@
 
 - [ ] Расширение заявляет зависимости и совместимые версии.
 - [ ] Установка/отключение расширения не повреждает проектные данные.
+- [ ] Package Manager Service использует npm как единственный resolver/installer для npm packages; повторного resolver и lockfile в Codogma нет.
+- [ ] Clean-install fixture проходит `npm ci` и build; UI и CLI вызывают общий service contract.
+- [ ] Package metadata/schema валидируются; engine incompatibility, недоступный источник и ошибки установки дают диагностируемый результат.
+- [ ] Production bundle проверяется на отсутствие Editor-only/build-only dependencies без явного разрешённого включения.
+- [ ] Токены и credentials не записываются в tracked project files; политика lifecycle scripts и доверия описана.
 - [ ] Публичные API тестируются отдельно и документированы.
 - [ ] Каждый supported extension hook имеет minimal example project, version contract, declared scope (editor/runtime/build) и acceptance test; editor-only modules не попадают в runtime build по умолчанию.
 - [ ] Runtime зависимости расширения не попадают в game build без явного включения.
