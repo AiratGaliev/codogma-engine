@@ -22,6 +22,7 @@
 - [Каталог источников](REFERENCE-SOURCES.md) — официальные руководства/исходники, версии, кандидаты библиотек и замечания по лицензиям. Ссылка в каталоге является reference, а не утверждением о выборе зависимости.
 - [README](../README.md) — подтверждённые команды локальной разработки, правила веток/PR и действующие CI checks.
 - Для API/runtime decisions в первую очередь сверять [Phaser docs](https://docs.phaser.io/phaser/getting-started/what-is-phaser), [EVA.js repository](https://github.com/eva-engine/eva.js), [Cocos Creator 4.0 manual](https://docs.cocos.com/creator/4.0/manual/en/) и [Unity 6.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d). Cocos Creator manual и исходный репозиторий Cocos 4 — разные источники; Unity/Cocos описывают поведение своих продуктов, но не заменяют проектные решения Codogma.
+- Для нового кода обязательны TypeScript strict profile и автоматические quality checks из раздела 12.1 ТЗ. Toolchain candidates: [ESLint/typescript-eslint](https://typescript-eslint.io/getting-started/), [Prettier](https://prettier.io/docs/install.html), [Knip](https://knip.dev/), [dependency-cruiser](https://github.com/sverweij/dependency-cruiser). Не указывать команды как доступные, пока они не реализованы.
 
 ### Definition of Ready для каждой задачи
 
@@ -76,19 +77,25 @@
 
 - [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP; сохранить результат в `docs/capability-matrix.md` с фактическими evidence/tests.
 - [ ] Включить отдельные workflow-строки для Sprite Editor (slicing/trim/pivot/collision shapes/sorting/9-slicing), Tilemap brushes/layouts/chunks, camera/coordinate conversion, input (mouse/keyboard/touch), audio lifecycle, UI layouts/text, particles/lighting, localization, save storage и Dev/Release build profiles.
+- [ ] Инвентаризировать TypeScript configs/project references, TS compiler options, scripts and lockfiles во всех packages, текущий scope TSLint и generated/dynamic plugin entry points; не предполагать, что repo-wide checks уже существуют.
+- [ ] Зафиксировать toolchain baseline и staged migration plan для strict TypeScript, ESLint/typescript-eslint, Prettier, Knip и dependency-cruiser; отметить точный initial scope для новых Codogma modules и текущие legacy findings.
 - [ ] Для каждой возможности указать: существующая реализация, публичный/внутренний контракт, покрывающие тесты, ограничения и gap относительно целевого UX.
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
 - [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
 - [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
 - [ ] Составить Dependency & Capability Matrix текущего форка: версия, лицензия, роль, browser/runtime/editor scope, ограничения и цена обновления; сохранить его в `docs/dependency-capability-matrix.md` и включить транзитивные runtime/build dependencies.
+- [ ] Указать developer tools в отдельной категории devDependencies, их package scope, scripts, lockfile, role, runtime exclusion и rationale; убрать дублирующие lint/format tools, если такие найдутся.
 - [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
+- [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
 - [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri. Первое решение оформить как `docs/decisions/ADR-0001-core-architecture.md`, явно выделив принятые решения, открытые вопросы, альтернативы и последствия.
+- [ ] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile, выбор ESLint/Prettier/Knip/dependency-cruiser, интеграция TypeScript project references, legacy TSLint migration и CI ratchet plan.
 - [ ] Описать текущий baseline производительности и проверок в `docs/performance-baseline.md`; закрепить fixtures, браузер/ОС/железо и метод измерения, не ставить пороги без воспроизводимой методики.
 
 ### Критерии приёмки
 
 - [ ] Есть таблица фактического состояния `docs/capability-matrix.md`, а не дублированный перечень желаемых функций.
-- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md` и `docs/performance-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
+- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
+- [ ] Новый TypeScript pilot проходит strict typecheck, lint, format check и соответствующие unit tests; Knip/dependency-cruiser report scope и false-positive handling документированы.
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
 - [ ] Технологические кандидаты не записаны как окончательное решение без PoC.
@@ -314,6 +321,7 @@
 - [ ] Рассмотреть расширения для графов диалогов/квестов, AI/NPC behavior, navigation, waves, localization и других жанровых инструментов.
 - [ ] Разграничить editor plugin, game runtime package, build tool и platform adapter: они не должны по умолчанию загружаться в один и тот же runtime.
 - [ ] Подготовить документацию/пример создания расширения и совместимый test project.
+- [ ] Пересматривать Knip entry points и architectural rules при добавлении нового plugin registry/module boundary, чтобы автоматический анализ не ошибочно удалял dynamic plugins и не допускал межслойные импорты.
 - [ ] Поддерживать несколько небольших reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates, собираемые CI и основанные на публичном API.
 - [ ] Публиковать npm-пакеты только после определения semver, backward compatibility и поддержки API.
 - [ ] Рассмотреть MCP/AI tools как безопасный интерфейс к проектным операциям с валидацией, ограничением scope и понятными подтверждениями разрушительных действий.
