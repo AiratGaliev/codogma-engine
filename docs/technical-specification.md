@@ -21,7 +21,7 @@ Codogma Engine должен развиться в самостоятельный
 ### 1.1. Приоритет продуктовой ценности
 
 1. **Единая модель редактора и runtime.** Объект, компонент и ресурс, с которыми работает разработчик в редакторе, должны соответствовать тем же данным и экземплярам в работающей игре.
-2. **Живой запуск и диагностика.** Запускать игру из Studio, выбирать объекты текущего запуска, видеть фактические свойства компонентов и состояние систем, быстро находить ошибки и регрессии.
+2. **Живой запуск и диагностика.** Запускать игру из редактора, выбирать объекты текущего запуска, видеть фактические свойства компонентов и состояние систем, быстро находить ошибки и регрессии.
 3. **Стабильный проектный формат и TypeScript API.** Визуальные инструменты должны помогать реальному коду, а не требовать переписывать приложение под закрытую модель конструктора.
 4. **Конвейер создания и выпуска 2D Web-игры.** Валидация ресурсов, воспроизводимая сборка, браузерная проверка и интеграции платформ.
 5. **Удобство коммерческой разработки.** Профилирование, диагностика, автоматические проверки, документация и расширяемость.
@@ -35,7 +35,7 @@ Codogma Engine должен развиться в самостоятельный
 |---|---|---|
 | **A — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая схема metadata для Inspector/serialization/runtime и версионированное сохранение. | Fixture проходит создание/изменение/save/reopen; lifecycle и миграции покрыты тестами; Core тестируется без запуска UI редактора. |
 | **B — Browser Preview** | Запуск и остановка игры через Preview Host, связь runtime entity/component с проектной моделью, просмотр фактического runtime state и доступные log/error diagnostics. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart. Preview не требует Tauri и не создаёт второй игровой цикл. |
-| **C — Независимая HTML5-сборка** | Headless build, проверка схемы/ссылок/ассетов, детерминированный выходной каталог и отдельный запуск собранной игры без Studio/server. | CI/fixture собирает проект, проверяет результат и подтверждает, что editor-only зависимости не попали в game bundle. |
+| **C — Независимая HTML5-сборка** | Headless build, проверка схемы/ссылок/ассетов, детерминированный выходной каталог и отдельный запуск собранной игры без открытого UI редактора и сервера. | CI/fixture собирает проект, проверяет результат и подтверждает, что editor-only зависимости не попали в game bundle. |
 | **D — Первая платформенная интеграция** | Platform-neutral Services API и mock/local adapter, затем отдельный Yandex Games adapter; отказ SDK не ломает базовый игровой сценарий. | Unit/integration tests плюс отдельная проверка в официальном тестовом окружении. VK Mini Apps и VK Play принимаются как самостоятельные targets с собственными capability matrix. |
 
 Переход между Gate A/B/C/D не означает, что все будущие editor capabilities должны быть реализованы заранее. Каждая базовая функция принимается отдельно, но должна согласованно проходить соответствующие стадии данных, runtime и build. Подробная очередь и зависимости определяются [дорожной картой](roadmap.md).
@@ -89,7 +89,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 - TypeScript как основной язык пользовательской игровой логики.
 - Единая сериализуемая модель проекта и согласованный API редактора/runtime.
 - Runtime adapter для текущего [Phaser 4](https://docs.phaser.io/phaser/getting-started/what-is-phaser) и возможность исследовать [PixiJS](https://pixijs.com/8.x/guides/) как альтернативный rendering adapter без переписывания всей IDE.
-- Встроенный предпросмотр, запуск игры отдельно от Studio и запуск/проверка в обычном браузере.
+- Встроенный предпросмотр, запуск игры отдельно от редактора и запуск/проверка в обычном браузере.
 - Инспекция живых объектов, диагностические overlay, логи, ошибки, базовая отладка и профилирование.
 - Валидация ресурсов и ссылок, оптимизированные воспроизводимые HTML5-сборки и проверка результата.
 - Адаптеры платформенных сервисов и тестовые реализации для локальной разработки.
@@ -111,7 +111,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 ### 4.1. Логические слои
 
 ~~~text
-Codogma Studio (browser / desktop shell / future integrations)
+Editor UI (browser / optional desktop shell)
 └─ Editor UI
    ├─ Scene Editor, Hierarchy, Inspector, Prefabs, Asset Browser
    ├─ Animation / Tilemap / UI / Physics tools
@@ -140,9 +140,9 @@ Independent HTML5 Game Build
 
 Помимо Studio, проект должен получить headless-интерфейс к тем же Project Model, importer и build API. CLI/CI не зависит от открытого editor UI: он может валидировать проект, проверять dependency graph и выполнять HTML5 build. Это разделение требуется для воспроизводимых сборок и автоматических проверок, а не для дублирования бизнес-логики.
 
-### 4.2. Codogma Studio и системный backend
+### 4.2. Редактор и системный backend
 
-Studio — это инструмент разработки: окна, панели, команды, управление проектом, выбор файлов, запуск preview, инструменты отладки и настройки приложения.
+Редактор — это инструмент разработки: окна, панели, команды, управление проектом, выбор файлов, запуск preview, инструменты отладки и настройки приложения.
 
 - [Tauri 2](https://v2.tauri.app/) — основной кандидат на desktop-оболочку, но окончательный выбор принимается после PoC.
 - Rust/Tauri отвечает за интеграцию с ОС: безопасный файловый доступ, диалоги, управление процессами и операции, для которых это даёт доказанную пользу.
@@ -158,7 +158,7 @@ Tauri и Electron не выбираются только по размеру д�
 - Project Model и публичный Engine API не зависят от внутренних классов Colibri, UI-фреймворка, Tauri и конкретной реализации Phaser.
 - Editor UI работает с моделью проекта и контрактами инструментов, а не напрямую создаёт разрозненные экземпляры Phaser в каждом редакторском модуле.
 - Runtime adapters реализуют ограниченный набор стабильных контрактов; специализированные возможности доступны через явные backend-specific extensions.
-- Platform Services и build tools не должны требовать, чтобы игровой код знал детали оболочки Studio.
+- Platform Services и build tools не должны требовать, чтобы игровой код знал детали оболочки редактора.
 - Внешние npm-библиотеки остаются заменяемыми деталями; формат проекта и публичный API Codogma задаются самим проектом.
 
 ## 5. Единая модель проекта — обязательный фундамент
@@ -325,7 +325,7 @@ Codogma предоставляет единый публичный Physics API �
 
 ### 8.1. Три режима проверки игры
 
-1. **Embedded Game View** — игра в центральной панели Studio; быстрая итерация, проверка сцены, выделение объектов и live inspector.
+1. **Embedded Game View** — игра в центральной панели редактора; быстрая итерация, проверка сцены, выделение объектов и live inspector.
 2. **Standalone Game Window** — игра в отдельном окне для fullscreen, масштабирования, ввода, производительности и проверки игрового поведения без панелей редактора.
 3. **External Browser Preview** — запуск в обычном браузере для проверки целевого HTML5-поведения, включая сценарии платформенных площадок.
 
@@ -421,7 +421,7 @@ Codogma предоставляет единый публичный Physics API �
 - Для UI-графики учитывать 9-slicing/tiled sprites, текстовые атласы/шрифты, outlines/shadows и rich text; при использовании custom fonts явно задавать fallback и поведение при отсутствии символа.
 - Ввод должен корректно маршрутизироваться между игровым UI и игровым миром; keyboard navigation/focus, понятные hit targets и масштабирование текста должны поддерживаться там, где это применимо к типу контента.
 - Обеспечить тесты на разные aspect ratios, разрешения, ориентации и мобильные viewport; элементы не должны случайно выходить за экран или перекрывать safe area.
-- Не смешивать UI-систему редактора со UI runtime игры: панели Studio и элементы игровой сцены используют разные слои, жизненные циклы и зависимости.
+- Не смешивать UI-систему редактора со UI runtime игры: панели редактора и элементы игровой сцены используют разные слои, жизненные циклы и зависимости.
 
 **Physics Editor**
 - Визуально редактировать тела/формы, типы тел, материалы, joints при поддержке backend, collision layers/groups/masks и настройки world.
@@ -497,7 +497,7 @@ P0/P1/P2 — приоритеты требований, не обещание д
 Для иконок интерфейса редактора использовать набор [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons) как согласованный исходный набор. Не смешивать его с другими независимыми icon packs без отдельного решения и обоснования в документации.
 
 - Перед реализацией составить карту используемых команд/идентификаторов иконок и выбрать только те значки, которые нужны общим операциям UI и поддерживаемым возможностям **2D-редактора**. Иконки, предназначенные исключительно для 3D-сцен, 3D-объектов и 3D-инструментов, не переносить; это требование не означает добавления 3D-функций в Codogma.
-- Для светлой и тёмной темы обязательно предусмотреть **раздельные наборы или отдельные theme-specific файлы вариантов** и выбирать нужный вариант по активной теме Studio. Не полагаться на автоматическую CSS-перекраску одного общего файла вместо отдельных light/dark-вариантов.
+- Для светлой и тёмной темы обязательно предусмотреть **раздельные наборы или отдельные theme-specific файлы вариантов** и выбирать нужный вариант по активной теме редактора. Не полагаться на автоматическую CSS-перекраску одного общего файла вместо отдельных light/dark-вариантов.
 - Проверять визуальную различимость значков на реальных фонах светлой/тёмной темы и в применимых состояниях интерфейса (например, disabled, selected и warning). Иконки не должны пропадать, сливаться с фоном или терять смысл из-за перекраски.
 - При адаптации сохранять происхождение каждого заимствованного значка: закреплённую версию/commit upstream, имя исходного файла, соответствующий идентификатор Codogma и описание локальных изменений. Сохранять необходимые upstream copyright и license notices; для указанного snapshot Godot — [MIT License](https://github.com/godotengine/godot/blob/c8256a8ecec068340753869e423dd478c84ef167/LICENSE.txt).
 - Это нормативное требование к будущей работе, а не поручение немедленно переносить иконки в код. Реализация начинается как отдельная запланированная задача после инвентаризации и согласования карты; этот документальный change сам по себе не добавляет иконки, зависимости или runtime-функции.
@@ -520,21 +520,21 @@ P0/P1/P2 — приоритеты требований, не обещание д
 - Генерировать atlas/texture variants разных размеров и форматов при подтверждённой потребности; в build report указывать выбранный вариант, итоговый размер и причины включения ресурса.
 - Отчёт о размере production bundle и отдельных ресурсных группах, обнаружение неожиданных крупных ресурсов и ненужных runtime-зависимостей.
 - Воспроизводимая HTML5-сборка с явным выходным каталогом, исходными картами или эквивалентом диагностики для dev build, понятными ошибками и зафиксированными build settings.
-- Сборка должна запускаться без editor UI. Команда в headless CLI/CI должна уметь валидировать проект, проверять ресурсные зависимости и собирать игру; диагностический результат не должен зависеть от открытой сцены в Studio.
+- Сборка должна запускаться без открытого UI редактора. Команда в headless CLI/CI должна уметь валидировать проект, проверять ресурсные зависимости и собирать игру; диагностический результат не должен зависеть от открытой сцены в Studio.
 - Итоговая игра работает без editor server, MCP bridge, Tauri и внутренних development fixtures; production bundle содержит только нужные runtime/build outputs.
 - Итоговую сборку можно запускать отдельным browser acceptance smoke test и проверять на целевых платформах.
 - Предусмотреть versioned build profiles как минимум для Development и Release; target-specific settings не должны неявно смешиваться с общими настройками проекта.
 - Development build сохраняет диагностические имена/source maps по возможности и может подключать profiler/debug overlay; Release build исключает editor/MCP/debug-only modules, минимизирует bundle и сообщает о компромиссах оптимизации.
 - Для Web отдельно проверяются стартовый download size, время до первого кадра, прогрессивная/отложенная загрузка ресурсов, кеширование и восстановление после сетевой ошибки. Целевые профили учитывают различия desktop/mobile: размер atlas/texture variants, поддерживаемые форматы компрессии, DPR budget и лимиты памяти браузера. Compression/deployment headers (например, gzip/Brotli) должны быть задокументированы как ответственность build output или хостинга.
 - Для target/browser matrix фиксируются необходимые API и fallback-поведение. Нельзя заявлять поддержку WebGL/WebGPU, звукового формата или compressed texture format без реальной проверки.
-- Изменение build profile должно быть воспроизводимым: настройки сериализуются, попадают в отчёт и не зависят от последнего вручную открытого состояния Studio.
+- Изменение build profile должно быть воспроизводимым: настройки сериализуются, попадают в отчёт и не зависят от последнего вручную открытого состояния редактора.
 
 ### 10.2. CLI и разделение editor/runtime/build
 
-Headless CLI — самостоятельный интерфейс к тем же Project Model, schema, importer и build APIs, которыми пользуется Studio, а не альтернативная реализация этих правил.
+Headless CLI — самостоятельный интерфейс к тем же Project Model, schema, importer и build APIs, которыми пользуется редактор, а не альтернативная реализация этих правил.
 
 - Основные команды будущего CLI: validate project, inspect dependency graph, import/reimport assets, build HTML5 и produce machine-readable report. Синтаксис команд фиксируется после первого рабочего вертикального среза.
-- CLI не должен импортировать окно/панель Studio только ради project validation или build. По возможности он запускается в CI без GUI и без интерактивных запросов.
+- CLI не должен импортировать окно/панель редактора только ради project validation или build. По возможности он запускается в CI без GUI и без интерактивных запросов.
 - Валидация и build должны возвращать ненулевой exit code при критических ошибках и конкретные сообщения с путём/ID проблемного объекта или ресурса.
 - Формат отчёта должен поддерживать чтение человеком и автоматическую обработку CI; версии CLI/schema должны быть видимыми.
 - Runtime-зависимости, editor-only зависимости и build-only зависимости разделяются. Например, инструменты обработки изображений и browser-test runner не попадают в runtime игры.
@@ -720,7 +720,7 @@ Profiler должен сначала собирать воспроизводим
 - Asset pipeline/CLI: validate/build без GUI, stable asset references, migration/import metadata, dependency graph, deterministic output и корректные exit codes.
 - Editor/runtime integration: полный browser scenario, включающий scene/Prefab, пользовательский компонент, Inspector и play mode.
 - Preview/debugger: управление lifecycle preview, обработка log/error, отсутствие зависших процессов и корректное связывание runtime entity с проектной моделью.
-- Build/platform: тестирование собранной HTML5-игры отдельно от Studio; платформенные adapters проверяются отдельно в mock и целевом окружении.
+- Build/platform: тестирование собранной HTML5-игры отдельно от редактора; платформенные adapters проверяются отдельно в mock и целевом окружении.
 - Input/scene/time services: тесты преобразования координат, UI-vs-world event routing, focus loss, scene transition/cancellation, таймеров/tweens и отсутствия callbacks после disposal.
 - Sprite/Tilemap/UI authoring: fixtures на slicing/pivot/custom collision shapes, deterministc render sorting, 9-slicing, brush/Undo/Redo, tilemap chunk metrics и разные viewport/aspect ratios.
 - Audio/storage/localization: browser autoplay/focus behavior, ресурсное освобождение, миграции save data, missing locale keys и fallback behavior.
@@ -764,7 +764,7 @@ CI Fast сейчас не выполняет весь перечисленный
 - [Gideros official site](https://gideros.rocks/) — 2D editor/tooling and asset workflow reference only; verify current maintenance and licensing before relying on details.
 - [Phaser documentation](https://docs.phaser.io/phaser/getting-started/what-is-phaser), [physics](https://docs.phaser.io/phaser/concepts/physics), [input](https://docs.phaser.io/phaser/concepts/input), [cameras](https://docs.phaser.io/phaser/concepts/cameras), [animations](https://docs.phaser.io/phaser/concepts/animations), [tweens](https://docs.phaser.io/phaser/concepts/tweens), [audio](https://docs.phaser.io/phaser/concepts/audio) — actual initial runtime capabilities and integration limits.
 - [PixiJS 8 documentation](https://pixijs.com/8.x/guides/) — possible rendering adapter reference; PixiJS alone is not a full replacement for Phaser's scene/game framework.
-- [Tauri 2 documentation](https://v2.tauri.app/) — desktop shell, permissions and IPC/security model; use only for Studio host responsibilities.
+- [Tauri 2 documentation](https://v2.tauri.app/) — desktop shell, permissions and IPC/security model; use only for editor desktop-shell responsibilities.
 - [Tiled user manual](https://docs.mapeditor.org/en/latest/manual/introduction/) — tilemap formats, isometric/hexagonal layouts, object layers, brushes, tile collisions and custom extensions.
 - Unity 6 / Unity 6.6 User Manual, 6000.6 — [2D overview](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d), [Sprites](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite), [Tilemaps](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/tilemaps), [2D Physics](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics), [2D Physics Core API](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics-api), [2D in URP](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-urp), [2D Profiler](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/profiler-2d), [Sprite Atlas workflow](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/atlas/create-sprite-atlas). Использовать как функциональную карту спрайтов, collision shapes, sorting, 9-slicing, tilemap palettes/brushes, profiler и 2D light/post-process workflows, не как требование копировать Unity packages или URP.
 
@@ -773,7 +773,7 @@ CI Fast сейчас не выполняет весь перечисленный
 2. Автоматическая динамическая batching-оптимизация по умолчанию; ручная оптимизация должна быть обоснована профилем.
 3. Ресурсный менеджер с dependency tracking, bundles, progress, cache/release lifecycle и проверяемыми стабильными ссылками.
 4. Animation Controller/state graph, UI layout/constraints, Tiled interoperability, particle editor с повторно запускаемым preview и явная политика DPR/scaling.
-5. Разделение editor UI и headless CLI/build tooling на общих API, чтобы CI и production build не зависели от открытой Studio.
+5. Разделение editor UI и headless CLI/build tooling на общих API, чтобы CI и production build не зависели от открытого UI редактора.
 6. Полноценный sprite authoring workflow: import/slicing/pivot/custom collision geometry, sorting, 9-slicing и atlas inspection.
 7. Различать scene authoring, runtime input/scene/time services и production build profiles; editor feature должна проходить acceptance как минимум в save/reopen, runtime и production output.
 8. Развивать дополнительные capabilities — localization, local save, custom brushes, SpriteShape-like terrain, 2D lighting и advanced accessibility — через явные этапы/extensions, а не бесконтрольное расширение ядра.
