@@ -634,6 +634,7 @@ codogma-engine/
 │   ├── build-html5/             # HTML5 build tooling
 │   ├── platform-services/       # общие контракты игровых платформ
 │   ├── platform-yandex-games/   # адаптер конкретной платформы
+│   ├── package-manager/         # Node-side Package Manager Service
 │   └── ...                      # другие самостоятельные пакеты
 └── package.json                 # корень репозитория / npm Workspaces
 ```
@@ -750,8 +751,8 @@ Acceptance: новый engine module не принимается без strict t
 
 #### Package Manager Service
 
-- Editor UI и CLI используют общий типизированный Package Manager Service. Они не реализуют параллельную логику изменения `package.json` и не вызывают npm с несогласованными правилами.
-- Сервис безопасно вызывает npm CLI с контролируемыми аргументами, ограниченным root активного проекта, управлением процессами/отменой, структурированными результатами и понятной диагностикой.
+- Package Manager Service — Node-side подсистема с целевыми исходниками в `packages/package-manager/`; она используется локальным server/backend и headless CLI. Браузерный Editor Host обращается к сервису через типизированный HTTP/IPC contract и не запускает npm напрямую, не обходит backend и не получает произвольный доступ к filesystem.
+- Server/backend и CLI используют одну реализацию сервиса и общий типизированный контракт; параллельной логики изменения `package.json` в UI не должно быть. Сервис безопасно вызывает npm CLI с контролируемыми аргументами, ограниченным root активного проекта, управлением процессами/отменой, структурированными результатами и понятной диагностикой.
 - Сервис поддерживает установку, обновление, удаление и просмотр пакетов; проверяет engine/editor API compatibility, metadata и согласованность manifest/lockfile. Ошибки должны давать диагностируемый и тестируемый результат восстановления.
 - Источники базируются на поддерживаемых npm механизмах: registry/scoped registry, local/file, Git и tarball. Поддержку и UX источников вводить поэтапно; credentials не записываются в tracked project configuration.
 - npm installation не является доказательством безопасности. Политика lifecycle scripts, источников, лицензий, известных уязвимостей и provenance должна быть явной. Сам package kind не создаёт sandbox и не ограничивает права кода.
