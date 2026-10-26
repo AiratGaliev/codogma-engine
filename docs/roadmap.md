@@ -457,7 +457,7 @@
 - [ ] Несовместимый или ошибочный extension даёт диагностируемый результат и не приводит к необработанному падению редактора.
 - [ ] Отключение extension не повреждает project data и не требует удаления пакета из npm dependency tree.
 - [ ] Package Manager Service использует npm как единственный resolver/installer; собственного npm lockfile/resolver в Codogma нет.
-- [ ] Feature descriptors проходят schema/compatibility validation, а их источники явно зарегистрированы; случайное выполнение произвольного кода из `node_modules` не требуется для discovery.
+- [ ] Feature descriptors проходят schema/compatibility validation, feature scopes/targets не расширяют ограничения package provider, а discovery читает декларативные metadata и не исполняет пакетный код только ради обнаружения функций.
 - [ ] Clean-install fixture проходит `npm ci` и build; Editor UI и CLI используют общий service contract.
 - [ ] Editor-only/build-only dependencies не попадают в production game bundle без явного разрешённого включения.
 - [ ] Credentials не записываются в tracked project files; политика lifecycle scripts и доверия описана.
