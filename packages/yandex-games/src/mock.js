@@ -233,8 +233,8 @@ export function createMockYandexGamesSdk(options = {}) {
             record("getFlags", { defaultFlags, clientFeatures });
             return { ...defaultFlags, ...(options.remoteFlags ?? {}) };
         },
-        getServerTime: async () => {
-            record("getServerTime");
+        serverTime: async () => {
+            record("serverTime");
             return options.serverTime ?? Date.now();
         },
         openExternalLink: async (url) => record("openExternalLink", { url }),
