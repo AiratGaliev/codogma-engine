@@ -39,7 +39,7 @@
 3. Перед переписыванием существующей функции определить, что уже работает в текущем Colibri/Phaser Editor client, где расположены ограничения и что действительно надо заменить.
 4. Новый модуль проходит критерии и сравнивается с legacy-сценарием до удаления старой реализации.
 5. Не создавать вторую сущность, сцену или игровой цикл там, где можно добавить adapter к существующей реализации.
-6. Выделять npm-пакеты, когда у подсистем есть стабильный публичный API и понятные зависимости. Сначала — внутренние модули в monorepo.
+6. Исходники самостоятельных, независимо подключаемых возможностей оформлять как пакеты в `packages/` внутри монорепозитория; не создавать пакет на каждый класс. Публичную публикацию выполнять только после стабилизации API, SemVer/compatibility policy, тестов и документации. Локальную совместную разработку связывать через npm Workspaces.
 7. Для архитектурных рисков сначала создать PoC и критерии решения. Не считать выбор Tauri, Svelte, PixiJS или ECS доказанным только потому, что существует удачный open-source пример.
 8. Значимые пользовательские изменения фиксировать в `CHANGELOG.MD`; обновлять ТЗ и roadmap, когда меняется цель, формат проекта или критерии этапа.
 9. Сохранять применимые upstream-уведомления и лицензии. Удаление legacy-кода не означает автоматического права убрать авторские уведомления.
@@ -110,7 +110,7 @@
 2. **Затем — матрицы:** записать найденные gaps, версии/лицензии/scope зависимостей и текущие compiler/lint/unused-code findings. Не переносить пожелания в колонку «реализовано» без evidence.
 3. **После baseline — решения:** оформить ADR по архитектуре и toolchain с альтернативами и последствиями. Инструменты оценивать как согласованный набор; сначала проверить конфликты версий и package scope, затем устанавливать.
 4. **Пилотировать новый код отдельно:** один минимальный Codogma-owned module с strict TypeScript, runtime validation границ данных, ESLint, Prettier, unit test, а Knip/dependency-cruiser — в report mode.
-5. **Gate этапа:** только после артефактов и принятого ADR фиксировать контракт первого vertical slice. Не смешивать этот этап с миграцией legacy-кода или реализацией всех перечисленных редакторских gaps.
+5. **Gate этапа:** после фиксации baseline и принятых ADR согласовать контракт первого vertical slice. Перенос редактора `source/editor` → `src/editor` выполняется отдельным migration PR после аудита путей и до полноценного наращивания нового Core; не объединять его с реализацией Core или консолидацией npm Workspaces/lockfile. Не переписывать при этом весь legacy-код.
 
 ### Задачи
 
@@ -128,7 +128,8 @@
 - [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
 - [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri. Первое решение оформить как `docs/decisions/ADR-0001-core-architecture.md`, явно выделив принятые решения, открытые вопросы, альтернативы и последствия.
 - [ ] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile, выбор ESLint/Prettier/Knip/dependency-cruiser, интеграция TypeScript project references, legacy TSLint migration и CI ratchet plan.
-- [ ] Оформить `docs/decisions/ADR-0003-package-architecture-and-management.md`: подтвердить npm как источник истины зависимостей, роль `@codogma/cge`, целевые Workspace boundaries и этапность интеграции; точные физические пути/metadata schema оставить открытыми до проверки существующих manifests, lockfiles и PoC.
+- [ ] Поддерживать `docs/decisions/ADR-0003-package-architecture-and-management.md` как нормативное решение: целевые исходники Editor Host в `src/editor`, самостоятельные package roots в `packages/*`, `@codogma/cge` в `packages/cge`, npm Workspaces для локальной разработки, selective installation в пользовательские проекты и Extension API; точная metadata schema и детали migration/workspace tooling проходят PoC.
+- [ ] После фиксации capability/dependency baseline подготовить и выполнить отдельный migration PR `source/editor` → `src/editor`: сохранить внутреннюю структуру и TypeScript project references; обновить root scripts, server `EDITOR_DIR`, CI/cache paths, release archive, `BUILD.md` и README; проверить root/editor clean install, сборку, HTTP smoke и состав ZIP. Не объединять перенос каталога с workspace/lockfile migration.
 - [ ] Описать текущий baseline производительности и проверок в `docs/performance-baseline.md`; закрепить fixtures, браузер/ОС/железо и метод измерения, не ставить пороги без воспроизводимой методики.
 
 ### Критерии приёмки
@@ -138,6 +139,7 @@
 - [ ] Новый TypeScript pilot проходит strict typecheck, lint, format check и соответствующие unit tests; Knip/dependency-cruiser report scope и false-positive handling документированы.
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
+- [ ] Отдельная миграция `source/editor` → `src/editor` принята после сборки редактора, server smoke, CI/release path audit и проверки ZIP без лишних файлов; рабочие команды и README указывают на реально существующие пути.
 - [ ] Технологические кандидаты не записаны как окончательное решение без PoC.
 - [ ] Риски совместимости и лицензирования описаны с владельцами/планом проверки.
 
@@ -159,7 +161,7 @@
 
 ### Задачи
 
-- [ ] На основании ADR-0003 подготовить минимальный workspace/package skeleton для `@codogma/cge` и новых Codogma-owned модулей; существующий `source/editor` не переносить до отдельной проверенной миграции.
+- [ ] Подготовить минимальный npm Workspace/package skeleton с исходниками Core в `packages/cge` и только теми самостоятельными пакетами, которые нужны первому vertical slice. После отдельной миграции добавить `src/editor` в root Workspaces при подтверждённой совместимости; package/lockfile consolidation провести отдельным проверяемым изменением. Не создавать `src/cge` как параллельный корень исходников.
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 - [ ] Определить версионирование формата и механизм миграции; подготовить compatibility fixtures для текущих проектов.
@@ -408,51 +410,45 @@
 
 ## Этап 8 — npm-based Package Manager, расширения и экосистема пакетов
 
-**Цель:** предоставить возможность развивать жанровые инструменты и платформенные интеграции без перегрузки ядра.
+**Цель:** предоставить пользователю управляемый набор выбираемых пакетов и единый workflow, при котором пакет может добавлять возможности движка и редактора без правок Editor Host.
 
-**Зависимости:** стабильные контракты Project Model/Core (этап 2), Preview/build (этапы 3–4), editor/runtime integration (этап 5) и diagnostics/quality gates (этап 6). Экосистема расширений не должна предшествовать стабильности этих контрактов. Архитектурные решения Package Manager закладываются уже на этапе 1; реализация сервиса/UI выполняется после стабилизации package/API contracts.
+**Зависимости:** стабильные контракты Project Model/Core (этап 2), Preview/build (этапы 3–4), editor/runtime integration (этап 5) и diagnostics/quality gates (этап 6). Архитектурные границы и Extension API проектируются заранее; полноценный Package Manager реализуется после подтверждения package/API contracts.
 
 ### Задачи
 
-**Очередность Package Manager: сначала контракты и слои, затем сервис, затем UX.**
-
-- [ ] Разделить engine/editor/build/platform code на внутренние модули с явными зависимостями; не переносить legacy editor без отдельного плана.
-- [ ] Выделять самостоятельный npm package только при наличии отдельной ответственности, стабильного публичного API, тестов, документации и поддерживаемого versioning.
-- [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`; не дублировать npm dependency tree и не вводить собственный resolver.
-- [ ] Установить версионируемые контракты package kinds/targets, совместимости с Core/host API, точек интеграции и публичных exports; точную схему согласовать в ADR и PoC.
-- [ ] Создать общий Package Manager Service поверх npm CLI: Editor и CLI используют единый типизированный контракт, структурированные результаты/ошибки и общий lifecycle операций.
-- [ ] Реализовать и протестировать install/update/remove/list для npm-зависимостей, управление процессами и отмену, безопасную передачу аргументов, ограничение project root, журналирование и восстановление после неудачной операции.
-- [ ] Проверить clean install через `npm ci` в отдельном fixture project с committed lockfile; проверить согласованность manifest/lockfile и воспроизводимость build в CI.
-- [ ] Реализовать проверки совместимости package API/version и targets; подтвердить, что Editor-only/build-only зависимости исключаются из runtime production bundle.
-- [ ] Поддержать источники по принятой очереди: npm registry/scoped registry и локальные пакеты сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
-- [ ] Применить явную политику lifecycle scripts, лицензий, уязвимостей и provenance; не считать сторонние редакторские плагины изолированными только по их manifest metadata.
-- [ ] Развивать Package Manager UI только поверх общего service API: поиск/фильтры, package details, версии, dependencies, install/update/remove и диагностические статусы.
-- [ ] Рассмотреть curated feature sets как группировку пакетов, не как отдельный dependency resolver.
+- [ ] Сформировать taxonomy пакетов по ответственности и scope: Core/shared, editor-extension, runtime, build/CLI, platform adapter и tooling. Имя пакета не обязано начинаться с `plugin-`.
+- [ ] Поддерживать исходники самостоятельных пакетов в `packages/<name>/` с собственными manifests, публичными exports, тестами и документацией; не создавать отдельный пакет на каждый класс. Пакет можно разрабатывать в монорепозитории до публичной публикации.
+- [ ] Настроить npm Workspaces для локальной разработки пакетов и проверить, что workspace linkage не приводит к установке всех пакетов как dependencies каждого потребительского проекта. После миграции редактора включить `src/editor` в согласованную workspace-схему.
+- [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP или платформенных SDK.
+- [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`: kind, scopes/targets, совместимость с Engine/Editor API и explicit entry points. Metadata не дублирует npm dependency tree и не заменяет npm resolver.
+- [ ] Утвердить версионируемые TypeScript contracts для Editor Extension API и extension lifecycle; точную схему и API подтвердить через ADR/PoC до обещания публичной совместимости.
+- [ ] Создать общий Package Manager Service поверх npm CLI: Editor Host и CLI используют единый типизированный контракт, структурированные результаты/ошибки и общий lifecycle операций.
+- [ ] Реализовать и протестировать install/update/remove/list для npm dependencies, управление процессами и отмену, безопасную передачу аргументов, ограничение project root, журналирование и восстановление после неудачной операции.
+- [ ] Проверить clean install через `npm ci` в отдельном fixture project с committed lockfile; fixture должен объявлять только необходимые пакеты и получать только их транзитивные зависимости.
+- [ ] Разделить область установки и исполнения: base Editor Host dependencies, project-level packages и активные editor extensions не должны случайно смешиваться. В целевом сценарии Extension API получает список пакетов активного проекта и активирует только совместимые расширения с явным entry point и разрешённым scope.
+- [ ] Обеспечить package-level registrations для команд, меню/shortcuts, panels/views, settings, Inspector property editors, schema validators, asset import/reimport handlers, Scene Editor gizmos/brushes, profiler overlays, build hooks и target profiles.
+- [ ] Установку/обновление/удаление сопровождать проверкой metadata/API compatibility и понятной диагностикой. Добавить project-level activation/disable для editor extensions так, чтобы отключение не требовало изменения npm dependency tree и не повреждало проектные данные.
+- [ ] Проверить, что editor-only/build-only зависимости не попадают в production game bundle; build pipeline должен анализировать declared scopes/targets и фактический dependency graph.
+- [ ] Поддержать источники по очереди: npm registry/scoped registry и local/file packages сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
+- [ ] Применить явную политику lifecycle scripts, лицензий, уязвимостей и provenance. Не считать сторонние editor extensions изолированными только по manifest metadata.
+- [ ] Рассмотреть curated feature sets как группы пакетов, устанавливаемые явным действием пользователя, а не как отдельный resolver или автоматический набор обязательных dependencies.
 - [ ] Не создавать собственный registry или самостоятельную систему подписи на раннем этапе; принять отдельное решение только при подтверждённой потребности.
-- [ ] Определить manifest/metadata расширения, совместимость версий, lifecycle, разрешения и точки интеграции для custom Inspector editors/schema validators, import/reimport pipeline, Scene Editor gizmos/brushes, profiler overlays, build hooks, target profiles и localization tools.
-- [ ] Разграничить editor plugin, game runtime package, build tool и platform adapter: они не должны по умолчанию загружаться в один и тот же runtime.
-- [ ] Подготовить документацию/пример создания расширения и совместимый test project.
-- [ ] Поддерживать небольшие reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates, собираемые CI и основанные на публичном API.
-- [ ] Рассмотреть расширения для графов диалогов/квестов, AI/NPC behavior, navigation, waves, localization и других жанровых инструментов.
-- [ ] Публиковать npm-пакеты только после определения semver, backward compatibility и поддержки API.
-- [ ] Пересматривать Knip entry points и architectural rules при добавлении нового plugin registry/module boundary, чтобы автоматический анализ не ошибочно удалял dynamic plugins и не допускал межслойные импорты.
-- [ ] Рассмотреть MCP/AI tools как безопасный интерфейс к проектным операциям с валидацией, ограничением scope и понятными подтверждениями разрушительных действий.
+- [ ] Подготовить documentation/reference package/example project для создания, установки, включения, отключения и тестирования editor extension; каждый supported hook должен иметь версионируемый контракт и minimal acceptance fixture.
+- [ ] Публиковать пакеты в npm только после определения SemVer, backward compatibility, лицензирования, публичных exports и воспроизводимого release процесса.
+- [ ] Пересматривать Knip entry points и architectural rules при добавлении dynamic extension discovery; не удалять динамически загружаемые расширения на основании одного лишь отсутствия статических imports.
 
 ### Критерии приёмки
 
-- [ ] Расширение заявляет зависимости и совместимые версии.
-- [ ] Установка/отключение расширения не повреждает проектные данные.
-- [ ] Package Manager Service использует npm как единственный resolver/installer для npm packages; повторного resolver и lockfile в Codogma нет.
-- [ ] Clean-install fixture проходит `npm ci` и build; UI и CLI вызывают общий service contract.
-- [ ] Package metadata/schema валидируются; engine incompatibility, недоступный источник и ошибки установки дают диагностируемый результат.
-- [ ] Production bundle проверяется на отсутствие Editor-only/build-only dependencies без явного разрешённого включения.
-- [ ] Токены и credentials не записываются в tracked project files; политика lifecycle scripts и доверия описана.
-- [ ] Публичные API тестируются отдельно и документированы.
-- [ ] Каждый supported extension hook имеет minimal example project, version contract, declared scope (editor/runtime/build) и acceptance test; editor-only modules не попадают в runtime build по умолчанию.
-- [ ] Runtime зависимости расширения не попадают в game build без явного включения.
-- [ ] Совместимость и лицензии проверены перед публикацией.
-
----
+- [ ] Пакеты имеют явные назначения/scopes, публичные exports и проверяемые compatibility contracts.
+- [ ] Пользовательский fixture устанавливает только выбранные прямые пакеты и их транзитивные dependencies через npm; в manifest/lockfile нет автоматически добавленного полного набора Codogma packages.
+- [ ] Editor Extension с корректными metadata/entry point регистрирует как минимум одну команду и одну панель через публичный API без изменения исходников Editor Host.
+- [ ] Несовместимый или ошибочный extension даёт диагностируемый результат и не приводит к необработанному падению редактора.
+- [ ] Отключение extension не повреждает project data и не требует удаления пакета из npm dependency tree.
+- [ ] Package Manager Service использует npm как единственный resolver/installer; собственного npm lockfile/resolver в Codogma нет.
+- [ ] Clean-install fixture проходит `npm ci` и build; Editor UI и CLI используют общий service contract.
+- [ ] Editor-only/build-only dependencies не попадают в production game bundle без явного разрешённого включения.
+- [ ] Credentials не записываются в tracked project files; политика lifecycle scripts и доверия описана.
+- [ ] Публичные API тестируются отдельно; для каждого поддерживаемого extension hook есть минимальный пример и acceptance test.
 
 ## Дальние направления — после стабилизации Core и HTML5 pipeline
 
