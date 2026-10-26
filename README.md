@@ -406,6 +406,7 @@ Start the server first, then run <code>npm run test:e2e</code>. Inspect the firs
 - [Technical specification (RU)](docs/technical-specification.md)
 - [Roadmap (RU)](docs/roadmap.md)
 - [Technical reference catalog (RU)](docs/REFERENCE-SOURCES.md)
+- [Package architecture and npm-based Package Manager ADR (RU)](docs/decisions/ADR-0003-package-architecture-and-management.md)
 - [CI Fast workflow](.github/workflows/ci.yml)
 - [MCP E2E workflow](.github/workflows/e2e.yml)
 - [Release workflow](.github/workflows/release.yml)
