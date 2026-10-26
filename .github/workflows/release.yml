@@ -52,7 +52,7 @@ jobs:
           sleep 3
           curl -sf http://localhost:3100/editor/product.json | tee /dev/stderr | grep -q "Codogma Engine"
           curl -sf -o /dev/null http://localhost:3100/editor/
-          kill "$SRV"
+          kill $SRV
 
       - name: Pack release archive
         shell: bash
