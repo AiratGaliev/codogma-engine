@@ -119,6 +119,8 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>BUILD.md</code> | Additional build notes. |
 | <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
 
+**Target package architecture (planned):** the Editor Host is intended to move from `source/editor/` to `src/editor/`, while independently addressable package sources will live under `packages/*` and be developed with npm Workspaces. This target layout is not yet present in the current checkout. Until the dedicated migration and workspace changes are merged, the paths and commands in this README describe the current `source/editor/` layout.
+
 ## Daily development commands
 
 Run these commands from the repository root unless noted otherwise.
