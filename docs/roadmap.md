@@ -414,9 +414,14 @@
 
 ### Задачи
 
-- [ ] Создать общий Package Manager Service поверх npm CLI: редактор и CLI используют один типизированный контракт, структурированные результаты/ошибки и общий lifecycle операций.
-- [ ] Реализовать и протестировать install/update/remove/list для npm-зависимостей, управление процессами, отмену, понятные ошибки, фиксацию результата и восстановление при неудачной операции.
-- [ ] Согласовать и валидировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`; не дублировать в нём npm dependency tree и не вводить собственный resolver.
+**Очередность Package Manager: сначала контракты и слои, затем сервис, затем UX.**
+
+- [ ] Разделить engine/editor/build/platform code на внутренние модули с явными зависимостями; не переносить legacy editor без отдельного плана.
+- [ ] Выделять самостоятельный npm package только при наличии отдельной ответственности, стабильного публичного API, тестов, документации и поддерживаемого versioning.
+- [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`; не дублировать npm dependency tree и не вводить собственный resolver.
+- [ ] Установить версионируемые контракты package kinds/targets, совместимости с Core/host API, точек интеграции и публичных exports; точную схему согласовать в ADR и PoC.
+- [ ] Создать общий Package Manager Service поверх npm CLI: Editor и CLI используют единый типизированный контракт, структурированные результаты/ошибки и общий lifecycle операций.
+- [ ] Реализовать и протестировать install/update/remove/list для npm-зависимостей, управление процессами и отмену, безопасную передачу аргументов, ограничение project root, журналирование и восстановление после неудачной операции.
 - [ ] Проверить clean install через `npm ci` в отдельном fixture project с committed lockfile; проверить согласованность manifest/lockfile и воспроизводимость build в CI.
 - [ ] Реализовать проверки совместимости package API/version и targets; подтвердить, что Editor-only/build-only зависимости исключаются из runtime production bundle.
 - [ ] Поддержать источники по принятой очереди: npm registry/scoped registry и локальные пакеты сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
@@ -424,16 +429,13 @@
 - [ ] Развивать Package Manager UI только поверх общего service API: поиск/фильтры, package details, версии, dependencies, install/update/remove и диагностические статусы.
 - [ ] Рассмотреть curated feature sets как группировку пакетов, не как отдельный dependency resolver.
 - [ ] Не создавать собственный registry или самостоятельную систему подписи на раннем этапе; принять отдельное решение только при подтверждённой потребности.
-- [ ] Разделить engine/editor/build/platform code на внутренние модули с явными зависимостями.
-- [ ] Определить manifest/metadata расширения, совместимость версий, lifecycle, разрешения и точки интеграции.
-- [ ] Зафиксировать отдельные extension hooks для custom Inspector editors/schema validators, import/reimport pipeline, Scene Editor gizmos/brushes, profiler overlays, build hooks, target profiles and localization tools.
-- [ ] Выделять пакет для самостоятельной подсистемы только при наличии стабильного публичного API, тестов и независимой ответственности.
-- [ ] Рассмотреть расширения для графов диалогов/квестов, AI/NPC behavior, navigation, waves, localization и других жанровых инструментов.
+- [ ] Определить manifest/metadata расширения, совместимость версий, lifecycle, разрешения и точки интеграции для custom Inspector editors/schema validators, import/reimport pipeline, Scene Editor gizmos/brushes, profiler overlays, build hooks, target profiles и localization tools.
 - [ ] Разграничить editor plugin, game runtime package, build tool и platform adapter: они не должны по умолчанию загружаться в один и тот же runtime.
 - [ ] Подготовить документацию/пример создания расширения и совместимый test project.
-- [ ] Пересматривать Knip entry points и architectural rules при добавлении нового plugin registry/module boundary, чтобы автоматический анализ не ошибочно удалял dynamic plugins и не допускал межслойные импорты.
-- [ ] Поддерживать несколько небольших reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates, собираемые CI и основанные на публичном API.
+- [ ] Поддерживать небольшие reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates, собираемые CI и основанные на публичном API.
+- [ ] Рассмотреть расширения для графов диалогов/квестов, AI/NPC behavior, navigation, waves, localization и других жанровых инструментов.
 - [ ] Публиковать npm-пакеты только после определения semver, backward compatibility и поддержки API.
+- [ ] Пересматривать Knip entry points и architectural rules при добавлении нового plugin registry/module boundary, чтобы автоматический анализ не ошибочно удалял dynamic plugins и не допускал межслойные импорты.
 - [ ] Рассмотреть MCP/AI tools как безопасный интерфейс к проектным операциям с валидацией, ограничением scope и понятными подтверждениями разрушительных действий.
 
 ### Критерии приёмки
