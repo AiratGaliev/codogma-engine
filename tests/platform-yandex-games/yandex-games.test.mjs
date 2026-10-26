@@ -134,8 +134,11 @@ test("payments expose catalog, purchase and consume", async () => {
     platform.dispose();
 });
 
-test("platform flags merge local defaults with remote values", async () => {
-    const { platform } = makePlatform({ remoteFlags: { difficulty: "hard" } });
+test("platform flags and server time use the official SDK methods", async () => {
+    const { platform, mockSdk } = makePlatform({
+        remoteFlags: { difficulty: "hard" },
+        serverTime: 123456789
+    });
     await platform.initialize();
 
     assert.deepEqual(
@@ -143,6 +146,8 @@ test("platform flags merge local defaults with remote values", async () => {
         { difficulty: "hard", music: "on" }
     );
     assert.equal(platform.platform.getLanguage(), "ru");
+    assert.equal(await platform.platform.getServerTime(), 123456789);
+    assert.ok(mockSdk.calls.some((call) => call.method === "serverTime"));
 
     platform.dispose();
 });
