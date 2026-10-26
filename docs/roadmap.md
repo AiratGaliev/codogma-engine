@@ -146,6 +146,7 @@
 - [ ] Инвентаризировать используемые builder/bundler-инструменты и расширять существующий pipeline, прежде чем вводить новый.
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
+- [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
 - [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
 - [ ] Добавить подходящие обработчики ассетов: атласы, оптимизацию изображений, проверку аудио/шрифтов и другие операции только при подтверждённой потребности.
@@ -211,6 +212,7 @@
 - [ ] Для каждого текущего editor subsystem зафиксировать состояние, тесты и отличия от требуемого UX.
 - [ ] Усилить основной Scene Editor workflow: hierarchy, Transform, selection, multi-edit, Undo/Redo, безопасное сохранение.
 - [ ] Проверить Sprite Editor workflow: single/multiple import, sprite sheet slicing, trim/crop, pivot, generated/editable collision geometry, sorting layers/groups, 9-slicing и tiled draw mode.
+- [ ] Проверить atlas preview/analyzer: rendered vs culled sprite counts, atlas page count and utilization, duplicate/unused atlas assignments and target variants where instrumentation allows.
 - [ ] Зафиксировать правила camera/world/local/screen/UI coordinate conversion, Y-based sorting для top-down сцен, camera bounds/follow и render order между world и UI.
 - [ ] Согласовать component metadata, Inspector, custom TypeScript и runtime model.
 - [ ] Проверить Prefabs/nested Prefabs/overrides, обновление экземпляров и сохранение связей.
@@ -249,7 +251,7 @@
 - [ ] Реализовать live runtime hierarchy/component inspector и переходы между runtime selection и editor selection.
 - [ ] Добавить физические overlays, состояния объектов и поддерживаемую диагностику animation/resources.
 - [ ] Измерять frame time и количество runtime объектов; добавить доступные renderer/texture/resource metrics с точным описанием их источника.
-- [ ] В рамках доступной instrumentation добавить 2D-метрики: rendered sprites, atlas usage, batches/draw calls, tilemap chunks/update/collision time, physics step/contact counts, asset loading and bundle size.
+- [ ] В рамках доступной instrumentation добавить 2D-метрики: rendered vs culled sprites, atlas count/pages/utilization, batches/draw calls, tilemap chunks and render/update/collision time, physics step/contact counts, asset loading and bundle size.
 - [ ] Для Web release измерять initial download size, time-to-first-frame и отложенную/прогрессивную загрузку; не использовать непроверенные абсолютные thresholds.
 - [ ] Добавить memory/CPU measurements только там, где платформа даёт корректную метрику; не подменять измерение оценкой без маркировки.
 - [ ] Ввести воспроизводимые performance fixtures и regression baselines.
@@ -283,6 +285,7 @@
 - [ ] Рассмотреть расширения для графов диалогов/квестов, AI/NPC behavior, navigation, waves, localization и других жанровых инструментов.
 - [ ] Разграничить editor plugin, game runtime package, build tool и platform adapter: они не должны по умолчанию загружаться в один и тот же runtime.
 - [ ] Подготовить документацию/пример создания расширения и совместимый test project.
+- [ ] Поддерживать несколько небольших reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates, собираемые CI и основанные на публичном API.
 - [ ] Публиковать npm-пакеты только после определения semver, backward compatibility и поддержки API.
 - [ ] Рассмотреть MCP/AI tools как безопасный интерфейс к проектным операциям с валидацией, ограничением scope и понятными подтверждениями разрушительных действий.
 
@@ -306,6 +309,7 @@
 - Более глубокий asset pipeline, оптимизация загрузки и bundle budgets.
 - Дополнительные платформенные SDK и форматы экспорта.
 - Spline-based 2D terrain/shapes, advanced 2D lighting/shadows/normal maps and shader/post-process extensions after renderer capability and performance validation.
+- Optional 2D bone rigging/skinning and sprite-part attachments beyond imported skeletal animation playback, if authoring demand and runtime integration justify it.
 - Advanced localization/text shaping (including RTL), accessibility-focused game UI and hot reload with state preservation only after core lifecycle contracts stabilize.
 - Распространение шаблонов/расширений и более широкий plugin ecosystem.
 - Интеграция с VS Code или другими IDE как альтернативный интерфейс к тем же проектным контрактам.
