@@ -183,6 +183,12 @@ The local server exposes editor routes including:
 
 The server also listens on the MCP bridge port (default <code>1902</code>) for the contract used by the official MCP package. Keep the HTTP port and MCP bridge port distinct.
 
+## Yandex Games integration
+
+Codogma includes an initial modular integration package for the official Yandex Games SDK, with a local mock adapter for development and tests. It covers SDK initialization, gameplay/loading lifecycle, fullscreen and rewarded ads, player data, leaderboards, payments, platform flags/environment, fullscreen, review prompts and shortcuts.
+
+See [Yandex Games integration guide](docs/yandex-games-integration.md) and `packages/yandex-games/`. This is a modular foundation, not yet a visual editor settings panel or an automatic export wizard; those require a later editor/build-pipeline phase.
+
 ## MCP and AI tooling
 
 Codogma can expose editor tools over MCP. The default launcher uses the official <code>@phaserjs/editor-mcp-server</code> npm dependency and connects it to the running server through the local bridge. Built-in MCP implementations are available as fallback entry points.

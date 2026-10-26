@@ -86,6 +86,9 @@ jobs:
       - name: Build editor client (typecheck)
         run: npm run build
 
+      - name: Test Yandex Games integration package
+        run: npm run test:platform
+
       - name: Smoke test (server boots, editor responds)
         shell: bash
         run: |

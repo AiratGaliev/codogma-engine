@@ -1,0 +1,23 @@
+{
+  "name": "@codogma/yandex-games",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modular Yandex Games SDK integration for Codogma Engine and Phaser HTML5 projects",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./mock": {
+      "types": "./src/index.d.ts",
+      "import": "./src/mock.js"
+    },
+    "./sdk-loader": {
+      "types": "./src/index.d.ts",
+      "import": "./src/sdk-loader.js"
+    }
+  },
+  "files": ["src", "README.md", "examples"]
+}
