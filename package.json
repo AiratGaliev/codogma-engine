@@ -9,7 +9,8 @@
     "mcp": "node server/mcp-launcher.mjs",
     "mcp:builtin": "node server/mcp-stdio.mjs",
     "build": "cd source/editor && npm run build",
-    "watch": "cd source/editor && npm start"
+    "watch": "cd source/editor && npm start",
+    "test:e2e": "node tests/mcp-e2e-test.mjs node server/mcp-launcher.mjs"
   },
   "license": "MIT",
   "dependencies": {
