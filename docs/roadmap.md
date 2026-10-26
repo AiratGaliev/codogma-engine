@@ -47,8 +47,10 @@
 ### Задачи
 
 - [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP.
+- [ ] Включить отдельные workflow-строки для Sprite Editor (slicing/trim/pivot/collision shapes/sorting/9-slicing), Tilemap brushes/layouts/chunks, camera/coordinate conversion, input (mouse/keyboard/touch), audio lifecycle, UI layouts/text, particles/lighting, localization, save storage и Dev/Release build profiles.
 - [ ] Для каждой возможности указать: существующая реализация, публичный/внутренний контракт, покрывающие тесты, ограничения и gap относительно целевого UX.
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
+- [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
 - [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
 - [ ] Составить Dependency & Capability Matrix текущего форка: версия, лицензия, роль, browser/runtime/editor scope, ограничения и цена обновления.
 - [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
@@ -77,6 +79,7 @@
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 - [ ] Определить версионирование формата и механизм миграции; подготовить compatibility fixtures для текущих проектов.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
+- [ ] Утвердить границы API для Input (mouse/keyboard/touch и coordinate spaces), Time/Tween/scheduler и Scene Manager (async load, transition, cancellation, disposal); отдельные необязательные capabilities не должны проникать во все компоненты.
 - [ ] Прототипировать ECS/component core: registry компонентов, system scheduler, детерминированный lifecycle, структурные изменения и disposal.
 - [ ] Интегрировать runtime core в управляемые фазы Phaser tick; не заводить независимый `requestAnimationFrame`.
 - [ ] Добавить Component Schema/Metadata для полей Inspector, валидации, default values и ссылок на ресурсы.
@@ -94,6 +97,7 @@
 - [ ] Inspector использует те же metadata/schema, что и сериализация и runtime adapter.
 - [ ] Core можно тестировать без запуска редактора UI; его публичные API не импортируют Colibri/Tauri API напрямую.
 - [ ] Есть результат performance comparison для representative fixture; ECS не объявляется ускорением без данных.
+- [ ] Контракты Input/Time/Scene Manager, если входят в пилот, покрывают focus loss, UI-vs-world routing, pause/resume и безопасное освобождение timers/listeners.
 
 **Gate:** прежде чем массово переписывать текущие игровые сущности, Core проходит отдельный пилот на одной законченной механике. Интеграция с Last Hero может использоваться как дополнительная реальная проверка через отдельную ветку/репозиторий, но Codogma не должен получать жёсткую зависимость на код игры.
 
@@ -142,9 +146,11 @@
 - [ ] Инвентаризировать используемые builder/bundler-инструменты и расширять существующий pipeline, прежде чем вводить новый.
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
+- [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
 - [ ] Добавить подходящие обработчики ассетов: атласы, оптимизацию изображений, проверку аудио/шрифтов и другие операции только при подтверждённой потребности.
 - [ ] Подготовить platform-neutral API Platform Services и Mock/Local implementation.
+- [ ] Проверить локальное сохранение пользовательского состояния/прогресса с версионированием, миграциями, повреждёнными данными и graceful handling недоступного browser storage.
 - [ ] Добавить Yandex Games adapter к официальному SDK и тестовую реализацию для локальной разработки.
 - [ ] Отделить VK Mini Apps/VK Bridge и VK Play как разные targets/integrations с отдельными возможностями.
 - [ ] Определить capabilities адаптеров: реклама, rewarded ads, покупки, сохранения, лидерборды, player info и pause/resume.
@@ -204,11 +210,18 @@
 
 - [ ] Для каждого текущего editor subsystem зафиксировать состояние, тесты и отличия от требуемого UX.
 - [ ] Усилить основной Scene Editor workflow: hierarchy, Transform, selection, multi-edit, Undo/Redo, безопасное сохранение.
+- [ ] Проверить Sprite Editor workflow: single/multiple import, sprite sheet slicing, trim/crop, pivot, generated/editable collision geometry, sorting layers/groups, 9-slicing и tiled draw mode.
+- [ ] Зафиксировать правила camera/world/local/screen/UI coordinate conversion, Y-based sorting для top-down сцен, camera bounds/follow и render order между world и UI.
 - [ ] Согласовать component metadata, Inspector, custom TypeScript и runtime model.
 - [ ] Проверить Prefabs/nested Prefabs/overrides, обновление экземпляров и сохранение связей.
-- [ ] Улучшить Tilemap workflow: слои, кисти, коллизии, большие карты и совместимые import/export.
+- [ ] Улучшить Tilemap workflow: layers/palettes, reusable brush presets/custom brushes, rule tiles/auto-tiling, collisions/object layers, animated tiles и совместимый Tiled import/export с предупреждением о неподдерживаемых свойствах.
+- [ ] Проверить square-grid workflow, затем оценить hex/isometric layouts; измерить tilemap chunk updates/culling и не перестраивать целую карту при изменении одной клетки.
 - [ ] Развивать Animation workflow: timeline/keys/curves/events и state graph только если это оправдано реальными требованиями.
-- [ ] Проверить Physics Editor на соответствие runtime bodies, collision layers/masks и debug overlays.
+- [ ] Проверить Physics Editor на соответствие runtime bodies, collision layers/masks, editable sprite collision shapes и debug overlays.
+- [ ] Проверить input focus/routing (UI versus world), touch cancellation, camera coordinate transforms, audio unlock/focus behavior и lifecycle cleanup.
+- [ ] Проверить UI Editor на 9-slice, text/rich text/font fallback, keyboard focus, safe areas, resizing and aspect ratios.
+- [ ] Добавить smoke/acceptance fixtures для audio groups, localization keys/fallbacks и save data migration, если соответствующие P1 capabilities реализуются в этой фазе.
+- [ ] Проверить точечные importer extensions (PSD/Aseprite) через общий asset metadata/reimport contract, а не через отдельные несогласованные форматы.
 - [ ] Рассмотреть UI layout tools: anchors, responsive layout, scale modes, interactive states и mobile safe areas.
 - [ ] Улучшать graphics/audio/assets workflow на основе capability matrix и production pain points.
 - [ ] Решение о Svelte/Vite/dockview/CodeMirror/Monaco принимать после сравнительного прототипа; если текущий workbench подходит, расширять его.
@@ -236,6 +249,8 @@
 - [ ] Реализовать live runtime hierarchy/component inspector и переходы между runtime selection и editor selection.
 - [ ] Добавить физические overlays, состояния объектов и поддерживаемую диагностику animation/resources.
 - [ ] Измерять frame time и количество runtime объектов; добавить доступные renderer/texture/resource metrics с точным описанием их источника.
+- [ ] В рамках доступной instrumentation добавить 2D-метрики: rendered sprites, atlas usage, batches/draw calls, tilemap chunks/update/collision time, physics step/contact counts, asset loading and bundle size.
+- [ ] Для Web release измерять initial download size, time-to-first-frame и отложенную/прогрессивную загрузку; не использовать непроверенные абсолютные thresholds.
 - [ ] Добавить memory/CPU measurements только там, где платформа даёт корректную метрику; не подменять измерение оценкой без маркировки.
 - [ ] Ввести воспроизводимые performance fixtures и regression baselines.
 - [ ] Добавить unit/integration tests для Core, schema, serialization, runtime adapters и project validation.
@@ -263,6 +278,7 @@
 
 - [ ] Разделить engine/editor/build/platform code на внутренние модули с явными зависимостями.
 - [ ] Определить manifest/metadata расширения, совместимость версий, lifecycle, разрешения и точки интеграции.
+- [ ] Зафиксировать отдельные extension hooks для custom Inspector editors/schema validators, import/reimport pipeline, Scene Editor gizmos/brushes, profiler overlays, build hooks, target profiles and localization tools.
 - [ ] Выделять пакет для самостоятельной подсистемы только при наличии стабильного публичного API, тестов и независимой ответственности.
 - [ ] Рассмотреть расширения для графов диалогов/квестов, AI/NPC behavior, navigation, waves, localization и других жанровых инструментов.
 - [ ] Разграничить editor plugin, game runtime package, build tool и platform adapter: они не должны по умолчанию загружаться в один и тот же runtime.
@@ -275,6 +291,7 @@
 - [ ] Расширение заявляет зависимости и совместимые версии.
 - [ ] Установка/отключение расширения не повреждает проектные данные.
 - [ ] Публичные API тестируются отдельно и документированы.
+- [ ] Каждый supported extension hook имеет minimal example project, version contract, declared scope (editor/runtime/build) и acceptance test; editor-only modules не попадают в runtime build по умолчанию.
 - [ ] Runtime зависимости расширения не попадают в game build без явного включения.
 - [ ] Совместимость и лицензии проверены перед публикацией.
 
@@ -288,6 +305,8 @@
 - Расширенные production инструменты для профилирования, runtime recording и debugging.
 - Более глубокий asset pipeline, оптимизация загрузки и bundle budgets.
 - Дополнительные платформенные SDK и форматы экспорта.
+- Spline-based 2D terrain/shapes, advanced 2D lighting/shadows/normal maps and shader/post-process extensions after renderer capability and performance validation.
+- Advanced localization/text shaping (including RTL), accessibility-focused game UI and hot reload with state preservation only after core lifecycle contracts stabilize.
 - Распространение шаблонов/расширений и более широкий plugin ecosystem.
 - Интеграция с VS Code или другими IDE как альтернативный интерфейс к тем же проектным контрактам.
 
