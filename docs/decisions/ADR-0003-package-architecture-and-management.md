@@ -1,7 +1,7 @@
 # ADR-0003: Архитектура пакетов и менеджер пакетов Codogma
 
 **Статус:** целевое направление принято; детали API metadata, миграции и workspace configuration требуют аудита и PoC.  
-**Дата:** 26.10.2026  
+**Дата:** 27.10.2026  
 **Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [каталог технических источников](../REFERENCE-SOURCES.md).
 
 ## Контекст
@@ -83,8 +83,8 @@ Codogma Engine развивается из существующего редак
 1. Провести инвентаризацию root/editor manifests, lockfiles, scripts, CI и release packaging; подтвердить dependency/capability baseline.
 2. Отдельным PR перенести редактор `source/editor` → `src/editor`, обновить связанные пути, сохранить внутренние TS references и проверить build/server/release. Не добавлять при этом новую Core implementation.
 3. Отдельным PoC подключить npm Workspaces для `packages/*` и `src/editor`, проверить clean install, TypeScript build, server smoke, MCP integration/release archive и согласованность единого root lockfile.
-4. Создать минимальный `packages/cge` и только те независимые package roots, которые нужны первому vertical slice; новые контракты покрыть strict typecheck, tests и dependency-boundary checks.
-5. Утвердить package metadata и Feature/Capability Registry schema на fixture package: проверить descriptors, feature dependencies/conflicts, project selection и передачу выбранных capabilities в build report.
+4. Создать минимальный `packages/cge` и только необходимые для первого vertical slice package roots; проверить strict typecheck, tests и dependency boundaries. В согласованном с Roadmap build-пилоте проверить базовый registry на built-in features и test provider без зависимости от готового Package Manager UI.
+5. Утвердить package metadata и package-provided Feature/Capability descriptors на fixture package: проверить feature dependencies/conflicts, project/target selection и передачу выбранных capabilities в build report.
 6. Утвердить Editor Extension API/lifecycle на fixture package, который регистрирует команду и панель; точно зафиксировать versioned contracts.
 7. Реализовать общий Package Manager Service над npm CLI и интегрировать его в Editor Host/CLI после готовности package/API contracts.
 8. Позже добавлять curated feature sets, каталог, дополнительные источники, подписи/provenance UX и иные расширенные функции при подтверждённой потребности.
