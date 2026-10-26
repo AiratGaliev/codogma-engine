@@ -1,0 +1,99 @@
+name: CI Fast
+
+on:
+  pull_request:
+    branches: [dev, test, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-fast-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: fast-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            source/editor/package-lock.json
+
+      - name: Validate pull request routing
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$BASE_BRANCH" in
+            dev)
+              case "$HEAD_BRANCH" in
+                feat/*|feature/*|fix/*|refactor/*|test/*|docs/*|chore/*|hotfix/*)
+                  echo "Допустимый маршрут: $HEAD_BRANCH -> dev"
+                  ;;
+                *)
+                  echo "::error::Рабочие PR должны использовать feat/*, feature/*, fix/*, refactor/*, test/*, docs/* или chore/* и направляться в dev."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            test)
+              if [[ "$HEAD_BRANCH" != "dev" ]]; then
+                echo "::error::В test допускается только PR из dev."
+                exit 1
+              fi
+              echo "Допустимый маршрут: dev -> test"
+              ;;
+            main)
+              case "$HEAD_BRANCH" in
+                test|hotfix/*)
+                  echo "Допустимый маршрут: $HEAD_BRANCH -> main"
+                  ;;
+                *)
+                  echo "::error::В main допускается только PR из test или аварийной ветки hotfix/*."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "::error::Неизвестная целевая ветка: $BASE_BRANCH"
+              exit 1
+              ;;
+          esac
+
+      - name: Install locked dependencies (root)
+        run: npm ci
+
+      - name: Install locked dependencies (editor client)
+        run: npm ci
+        working-directory: source/editor
+
+      - name: Build editor client (typecheck)
+        run: npm run build
+        working-directory: source/editor
+
+      - name: Smoke test (server boots, editor responds)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3100 PROJECT_DIR=tests/workspace/test-typescript node server/server.mjs &
+          SRV=$!
+          sleep 3
+          curl -sf http://localhost:3100/editor/product.json | tee /dev/stderr | grep -q "Codogma Engine"
+          curl -sf -o /dev/null http://localhost:3100/editor/
+          kill "$SRV"
