@@ -31,6 +31,16 @@ See [BUILD.md](BUILD.md).
 
 The code in this repository is under the MIT license (see [LICENSE](LICENSE)). Codogma Engine is based on the open-source Phaser Editor 2D v3 client by Arian Fornaris; the original Phaser Editor products remain (c) Arian Fornaris. Codogma Engine modifications and additions are (c) Airat Galiev.
 
+### Branching & pull requests
+
+Development follows the route `feat/* | fix/* | refactor/* | test/* | docs/* | chore/* | hotfix/*` → `dev` → `test` → `main`:
+
+* work happens in topic branches (`feat/…`, `fix/…`, `refactor/…`, `docs/…`, `chore/…`) and is merged into `dev` by PR;
+* `dev` → `test` by PR (integration / acceptance);
+* `test` → `main` by PR (releases); urgent fixes go through `hotfix/*` branches directly to `main`.
+
+CI validates this routing on every PR (see `.github/workflows/ci.yml`) and rejects misplaced PRs. The PR template in `.github/pull_request_template.md` mirrors the required checks.
+
 ## What is included in this deployment
 
 * **`server/server.mjs`** — a dependency-free Node.js implementation of the IDE server protocol
