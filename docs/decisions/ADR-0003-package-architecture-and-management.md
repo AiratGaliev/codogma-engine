@@ -99,7 +99,7 @@ Codogma Engine развивается из существующего редак
 - Граница и точные exports `@codogma/editor-api`, версия Editor Extension API и совместимость с существующим Colibri/plugin registry.
 - Как проектно хранить enabled/disabled state editor extensions и как обрабатывать миграцию/ошибки их активации.
 - Какой набор источников будет включён по умолчанию и какая политика применяется к npm lifecycle scripts, лицензиям, vulnerability/provenance checks и сторонним extensions.
-- Нужны ли собственный registry, package catalogue, curated feature sets или отдельная process isolation для extensions в desktop-сценарии.
+- Нужны ли собственный публичный package registry/catalogue, curated feature sets или отдельная process isolation для extensions в desktop-сценарии.
 
 ## Последствия
 
