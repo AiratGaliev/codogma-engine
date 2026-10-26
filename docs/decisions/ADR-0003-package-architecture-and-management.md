@@ -58,7 +58,7 @@ Codogma Engine развивается из существующего редак
 ### 6. Метаданные пакета и API compatibility
 
 - Стандартный `package.json` сохраняет npm-семантику. Engine-specific metadata может находиться в namespaced поле `codogma`; поле не дублирует dependency graph.
-- Metadata должна позволять определить package kind, supported scopes/targets, совместимую версию Engine/Editor Extension API и явные entry points. Точная schema/version, разрешённые values и validation rules остаются открытыми до ADR/PoC и должны тестироваться schema fixtures.
+- Metadata должна позволять определить package kind, supported scopes/targets, совместимую версию Engine/Editor Extension API, явные entry points и предоставляемые Feature/Capability descriptors (в metadata `codogma` либо через явную ссылку на валидируемое декларативное описание). Точная schema/version, разрешённые values и validation rules остаются открытыми до ADR/PoC и должны тестироваться schema fixtures; discovery не должен требовать исполнения package code.
 - Публичные точки входа объявляются через npm `exports`; приватные deep imports не используются как межпакетный контракт. `peerDependencies` применяются там, где это соответствует роли host/Core.
 - Version compatibility должна проверяться до активации extension и до production build; несовместимость даёт структурированное диагностическое сообщение.
 
