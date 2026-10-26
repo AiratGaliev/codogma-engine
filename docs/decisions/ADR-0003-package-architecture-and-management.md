@@ -8,7 +8,7 @@
 
 Codogma Engine развивается из существующего редактора на базе Phaser Editor/Colibri в самостоятельный Web-first 2D-движок. Нужны независимые пакеты с собственными API и версиями, выборочная установка возможностей в пользовательские игровые проекты и возможность расширять UI редактора без изменения его исходников.
 
-Модель исходников и управления пакетами вдохновляется EVA.js, а UX Package Manager и интеграция пакетов в редактор — Unity Package Manager. npm остаётся источником истины по установке, разрешению зависимостей и lockfile. Эти референсы не означают копирования чужих API или форматов.
+Модель исходников и управления пакетами вдохновляется EVA.js, а UX Package Manager и интеграция пакетов в редактор — Unity Package Manager. Реестр функций и выборочная сборка также изучены по исходникам COCOS 4.0: это reference для описания возможностей, их зависимостей и build-time selection, а не указание превращать каждый модуль в npm-пакет. npm остаётся источником истины по установке, разрешению package dependencies и lockfile. Эти референсы не означают копирования чужих API или форматов.
 
 **Текущее состояние переходное:** в репозитории существуют root npm project и редактор в `source/editor` со своим manifest/lockfile; `src/editor`, `packages/*` в целевой роли и согласованные npm Workspaces ещё не внедрены. Этот ADR определяет целевую архитектуру, а не утверждает, что миграция уже выполнена.
 
@@ -46,14 +46,23 @@ Codogma Engine развивается из существующего редак
 - Editor-only и build-only пакет не должен включаться в production game bundle только потому, что он установлен в `node_modules`; сборка проверяет package scope/target и фактический dependency graph.
 - npm остаётся единственным resolver/installer и владельцем стандартного npm lockfile. Codogma добавляет engine-specific compatibility checks, metadata validation, diagnostics, package discovery, UX и сборочные правила, не создавая второй resolver или lockfile.
 
-### 5. Метаданные пакета и API compatibility
+### 5. Реестр функций (Feature/Capability Registry) и выборочная сборка
+
+- Помимо package dependency graph, Codogma должен иметь единый versioned registry логических функций движка. Пакет — единица установки; feature/capability — логическая функция, предоставляемая одним или несколькими package modules. Не создавать отдельный npm package для каждой функции, если это не оправдано собственной границей ответственности.
+- Registry объединяет descriptors встроенных функций и явно опубликованных package-provided features. Descriptor должен содержать stable ID, provider/package, scopes/targets, entry points, declared feature requirements, conflicts when applicable, required/optional/default policy и сведения о совместимости. Точная metadata schema, versioning и источник descriptor утверждаются после PoC; не объявлять этот контракт уже реализованным.
+- Устанавливаемость через npm, объявление/доступность функции, включение в project configuration, включение в конкретный build target и активация в editor/runtime являются разными состояниями. Проектный выбор features и target-specific overrides должен быть версионируемым и воспроизводимым в CI.
+- Registry проверяет feature-level requirements, conflicts, scopes/targets и compatibility; это не npm dependency resolver. Если feature provider не установлен, выдаётся структурированная диагностика и, где уместно, предложение открыть Package Manager. Автоматическая установка и разрешение транзитивных package dependencies остаются ответственностью npm/Package Manager Service.
+- Build pipeline использует явный набор project-enabled features для выбранного target, вычисляет declared feature-dependency closure, валидирует полноту и формирует report о выбранных features, entry points/modules и причинах inclusion/exclusion. Editor-only contributions исключаются из production game bundle. Включение/исключение реального кода проверяется fixture/build report; registry metadata сама по себе не гарантирует удаление dynamic imports или side-effect modules.
+- Editor Host, Inspector, CLI и build должны использовать общие descriptors и diagnostics. Curated feature sets могут добавляться позднее как удобные группы feature IDs, но не заменяют обязательный registry и не являются собственным dependency resolver.
+
+### 6. Метаданные пакета и API compatibility
 
 - Стандартный `package.json` сохраняет npm-семантику. Engine-specific metadata может находиться в namespaced поле `codogma`; поле не дублирует dependency graph.
 - Metadata должна позволять определить package kind, supported scopes/targets, совместимую версию Engine/Editor Extension API и явные entry points. Точная schema/version, разрешённые values и validation rules остаются открытыми до ADR/PoC и должны тестироваться schema fixtures.
 - Публичные точки входа объявляются через npm `exports`; приватные deep imports не используются как межпакетный контракт. `peerDependencies` применяются там, где это соответствует роли host/Core.
 - Version compatibility должна проверяться до активации extension и до production build; несовместимость даёт структурированное диагностическое сообщение.
 
-### 6. Editor Extension API и регистрация в UI
+### 7. Editor Extension API и регистрация в UI
 
 - Editor Host предоставляет типизированные, версионированные extension points. Package может объявить editor entry point и регистрировать через публичный API команды, пункты меню/hotkeys, panels/views, application/project settings, custom Inspector editors, schema validators, asset importers/reimport handlers, Scene Editor gizmos/brushes, profiler/debug views и build hooks.
 - В начальной модели Editor Host обнаруживает только packages, явно заявленные в зависимостях активного проекта, включённые для этого проекта и снабжённые корректными metadata/entry points с совместимой API version. Глобальная установка editor extensions вне проекта не входит в MVP. Наличие произвольного пакета в `node_modules` не является разрешением выполнить его код.
@@ -61,7 +70,7 @@ Codogma Engine развивается из существующего редак
 - Extension registration не должен требовать правок исходников Editor Host или приватных импортов Colibri. При недоступной/ошибочной регистрации редактор должен предоставить понятную ошибку и не падать без обработки.
 - Метаданные сами по себе не создают sandbox. Сторонний extension, выполняющийся в процессе редактора, имеет права соответствующего процесса, пока не реализована отдельная изоляция.
 
-### 7. Package Manager Service
+### 8. Package Manager Service
 
 - Package Manager Service — Node-side подсистема с целевыми исходниками в `packages/package-manager/`, используемая локальным server/backend и headless CLI. Браузерный Editor Host UI обращается к ней через типизированный HTTP/IPC contract; UI не запускает npm, не управляет filesystem напрямую и не редактирует manifests параллельной логикой.
 - Сервис координирует install/update/remove/list, запускает npm CLI с контролируемыми аргументами, ограничивает project root, поддерживает отмену/управление процессом, выдаёт structured results и понятную диагностику.
@@ -75,15 +84,18 @@ Codogma Engine развивается из существующего редак
 2. Отдельным PR перенести редактор `source/editor` → `src/editor`, обновить связанные пути, сохранить внутренние TS references и проверить build/server/release. Не добавлять при этом новую Core implementation.
 3. Отдельным PoC подключить npm Workspaces для `packages/*` и `src/editor`, проверить clean install, TypeScript build, server smoke, MCP integration/release archive и согласованность единого root lockfile.
 4. Создать минимальный `packages/cge` и только те независимые package roots, которые нужны первому vertical slice; новые контракты покрыть strict typecheck, tests и dependency-boundary checks.
-5. Утвердить metadata schema, package kinds/scopes, Editor Extension API и lifecycle на fixture package, который регистрирует команду и панель.
-6. Реализовать общий Package Manager Service над npm CLI и интегрировать его в Editor Host/CLI после готовности package/API contracts.
-7. Позже добавлять curated feature sets, каталог, дополнительные источники, подписи/provenance UX и иные расширенные функции при подтверждённой потребности.
+5. Утвердить package metadata и Feature/Capability Registry schema на fixture package: проверить descriptors, feature dependencies/conflicts, project selection и передачу выбранных capabilities в build report.
+6. Утвердить Editor Extension API/lifecycle на fixture package, который регистрирует команду и панель; точно зафиксировать versioned contracts.
+7. Реализовать общий Package Manager Service над npm CLI и интегрировать его в Editor Host/CLI после готовности package/API contracts.
+8. Позже добавлять curated feature sets, каталог, дополнительные источники, подписи/provenance UX и иные расширенные функции при подтверждённой потребности.
 
 ## Открытые вопросы
 
 - Окончательная конфигурация npm Workspaces, порядок включения `src/editor`, root scripts и удаление второго lockfile после успешного PoC.
 - Доступность имени `@codogma/cge` и права на npm scope `@codogma` перед публичной публикацией.
-- Финальная структура `codogma` metadata/schema и перечень package kinds/scopes.
+- Финальная структура `codogma` metadata/schema, Feature/Capability Registry descriptor, project feature configuration и перечень package kinds/scopes.
+- Семантика required/default/optional features, conflicts, target-specific overrides и диагностика отсутствующего provider.
+- Какие bundler/module graph guarantees доступны в реальном pipeline и при каких side effects/dynamic imports можно доказать, что выключенный feature code не попадает в output.
 - Граница и точные exports `@codogma/editor-api`, версия Editor Extension API и совместимость с существующим Colibri/plugin registry.
 - Как проектно хранить enabled/disabled state editor extensions и как обрабатывать миграцию/ошибки их активации.
 - Какой набор источников будет включён по умолчанию и какая политика применяется к npm lifecycle scripts, лицензиям, vulnerability/provenance checks и сторонним extensions.
@@ -91,6 +103,6 @@ Codogma Engine развивается из существующего редак
 
 ## Последствия
 
-**Положительные:** разработчики Codogma используют единый source monorepo; пакеты могут развиваться с независимыми контрактами и версиями; пользователь устанавливает только необходимые возможности; Editor Host расширяется пакетами без правок его исходников; npm отвечает за стандартное разрешение зависимостей и lockfile.
+**Положительные:** разработчики Codogma используют единый source monorepo; пакеты могут развиваться с независимыми контрактами и версиями; пользователь устанавливает только необходимые пакеты и выбирает нужные функции; Feature Registry даёт общую модель возможностей для Editor Host/project validation/CLI/build; production build может проверяемо включать только выбранные и допустимые target features; Editor Host расширяется пакетами без правок его исходников; npm отвечает за стандартное разрешение package dependencies и lockfile.
 
 **Компромиссы:** появятся дополнительные требования к package metadata, API/version compatibility, Editor Extension lifecycle, dependency boundaries, release automation и security review. Эти механизмы должны строиться поэтапно и не должны подменять npm.
