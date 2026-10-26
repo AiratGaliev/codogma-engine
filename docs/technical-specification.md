@@ -57,13 +57,24 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Работа с файлами | Существует контракт `IFileStorage` и HTTP-реализация файлового доступа; конкретные методы и текущие ограничения нужно сохранять в capability inventory |
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
-| Runtime | Phaser 4.2.1, соответствующие ресурсы/типы и адаптации редактора/генератора к Phaser API |
+| Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
 | AI/MCP | Есть MCP-интеграция и отдельный необязательный AI Chat service |
 | CI | `fast-checks` проверяет маршрутизацию PR, сборку редактора и server smoke test; `mcp-integration` выполняет MCP E2E при продвижении в `test` и `main` |
 | TypeScript / lint baseline | В `source/editor/package.json` указаны TypeScript 5.3.3 и legacy TSLint 6.1.3; `build` использует TypeScript project references (`tsc -b`). Новая инженерная политика должна усиливать типы и static analysis постепенно, без массовой ломки унаследованного editor code |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
 Эта база содержит значительное количество существующего UI и логики. Поэтому **нельзя начинать развитие с автоматического переписывания Colibri или всей редакторской системы на новый UI-фреймворк**. Сначала надо определить реальные пробелы и границы связанности, затем заменять только то, что мешает целевому продукту.
+
+#### Уточнение: фактическая интеграция Phaser 4.2.1
+
+Проверка ветки `dev` и upstream-тега `v4.2.1` (27.10.2026) выявляет важное различие: **исходный код Phaser модульно организован, но текущая интеграция Codogma использует его как вендорный bundle**.
+
+- [`plugin.json`](../source/editor/plugins/phasereditor2d.phaser/plugin.json) подключает production-файл `scripts/phaser.min.js`, а в режиме разработки — `scripts/phaser.js`. Это текущая схема загрузки runtime внутри editor plugin.
+- В [корневом `package.json`](../package.json) и [`source/editor/package.json`](../source/editor/package.json) Phaser не объявлен как npm dependency. Поэтому текущий Phaser runtime не управляется npm dependency graph пользовательского проекта как обычная установленная Codogma-зависимость.
+- Upstream Phaser 4.2.1 имеет модульно организованные исходники и отдельные варианты поставки/сборки, включая [Arcade Physics build](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js) и [конфигурацию distribution build](https://github.com/phaserjs/phaser/blob/v4.2.1/config/webpack.dist.config.js). Это не означает, что нынешняя интеграция Codogma автоматически выбирает или исключает отдельные подсистемы; доступность кастомной сборки надо подтвердить реальным fixture и совместимостью editor-generated code.
+- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts) — большой сгенерированный слой TypeScript declarations/API, а не реализация runtime. [`phaser-box2d.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser-box2d.ts) отдельно отмечает, что ambient declarations Box2D не поставляют сам Box2D runtime: игре, использующей этот API, нужно включить соответствующий runtime-модуль отдельно.
+
+Таким образом, корректная характеристика — **«модульные исходники, но монолитный по текущему способу подключения runtime bundle»**, а не утверждение, что Phaser невозможно разделить. Сам факт наличия папок, деклараций или wrapper-пакетов не доказывает, что соответствующий runtime-код исключается из конечной сборки.
 
 ### 2.2. Что пока нельзя считать реализованным
 
@@ -287,6 +298,12 @@ EVA.js следует изучать как архитектурный reference
 Текущая интеграция с Phaser 4.2.1 — практический старт. Публичный API Codogma не должен повсеместно раскрывать типы и классы Phaser, если это не специальное расширение.
 
 Не нужно абстрагировать каждый метод и каждую возможность ради абстракции. Общие контракты нужны для стабильных понятий: сцены/объекты, Transform, жизненный цикл компонентов, время, ввод, ресурсы, физика, аудио, анимация и диагностика. Для специализированных функций допускается runtime-specific bridge.
+
+#### Ограничение текущего пути поставки
+
+Runtime Adapter изолирует API и жизненный цикл, но сам по себе **не делает единый Phaser bundle выборочным**. Пока путь загрузки включает полный вендорный runtime, отключение feature в конфигурации может управлять доступностью функции на уровне Codogma, но не является доказательством удаления байтов соответствующей подсистемы из production output.
+
+До заявления о выборочной сборке необходимо сравнить текущий baseline с поддерживаемыми upstream build variants и/или воспроизводимой кастомной сборкой, проверить generated code и runtime-модули (включая внешние модули вроде Box2D), измерить итоговый output и закрепить результат в build fixture/report. Если отдельный модуль не удаётся исключить проверяемо, документация и UI не должны обещать уменьшение bundle только на основании Feature Registry metadata.
 
 ### 7.2. PixiJS — экспериментальная альтернатива, не обещанная замена
 
