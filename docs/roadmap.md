@@ -147,6 +147,14 @@
 
 **Зависимости:** этап 1.
 
+### Внутренняя очередь выполнения
+
+1. **Сначала — формат данных:** схема Project/Scene/Node/Transform/Component/Prefab/Asset Reference, стабильные IDs, сериализация, versioning/migrations и compatibility fixtures.
+2. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, serialization и runtime adapter используют одну схему.
+3. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
+4. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
+5. **Отдельное решение, а не предположение:** data-oriented ECS и дополнительные physics backends не входят в минимальный Core автоматически. Сравнить component-object API и нужные physics capabilities на fixture; усложнять модель только если это оправдано тестами/измерениями.
+
 ### Задачи
 
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
@@ -182,6 +190,13 @@
 **Цель:** сделать рабочую игру доступной из Studio как реальную runtime-сессию, а не только как результат генерации кода.
 
 **Зависимости:** базовые Project Model и Runtime Adapter contracts из этапа 2; первые прототипы можно делать параллельно без ожидания полной ECS.
+
+### Внутренняя очередь выполнения
+
+1. **Первая цель — Browser Preview:** запустить fixture в обычном браузере, обрабатывать повторные Play/Stop/Restart, ошибки запуска и завершать принадлежащие preview процессы без утечек. Это первый путь; Tauri не требуется.
+2. **Сразу после него — runtime identity и диагностика:** связать runtime entity/component ID с Project Model, получать реальные runtime values, различать runtime mutations и serialized source data, привязывать errors/logs к запуску.
+3. **Следующий UI-слой — Embedded Game View:** подключать после доказанного browser lifecycle. Сравнить отзывчивость Studio под нагрузкой; не обещать изоляцию, если не измерены отдельные context/window/process.
+4. **Только затем — расширенная диагностика:** overlays, time scale и single-step после подтверждения scheduler semantics. Отдельное окно — дополнительный способ проверки fullscreen/input/scaling, а не блокер первой browser-сессии.
 
 ### Задачи
 
