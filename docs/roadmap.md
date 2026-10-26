@@ -264,6 +264,8 @@
 - [ ] Проверить точечные importer extensions (PSD/Aseprite) через общий asset metadata/reimport contract, а не через отдельные несогласованные форматы.
 - [ ] Рассмотреть UI layout tools: anchors, responsive layout, scale modes, interactive states и mobile safe areas.
 - [ ] Улучшать graphics/audio/assets workflow на основе capability matrix и production pain points.
+- [ ] Провести отдельный аудит icon identifiers Colibri и подготовить карту перехода на [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons): оставить только значки общих UI-команд и поддерживаемых 2D-возможностей, исключить 3D-only icons.
+- [ ] Для отобранных значков подготовить и проверить отдельные варианты для светлой и тёмной тем, включая контраст и применимые UI-состояния; зафиксировать source commit, исходный файл, mapping и необходимые MIT notices. Не выполнять массовую замену до ревью карты и плановой задачи.
 - [ ] Решение о Svelte/Vite/dockview/CodeMirror/Monaco принимать после сравнительного прототипа; если текущий workbench подходит, расширять его.
 - [ ] Если новая UI оболочка доказано полезна, переносить views по одной; legacy и новый view сосуществуют только через явный bridge, а не два независимых источника данных.
 
@@ -272,6 +274,9 @@
 - [ ] Для каждого перенесённого/изменённого инструмента есть checklist основных действий и regression tests.
 - [ ] Undo/Redo, save/reopen, Prefab update и code generation сохраняют ожидаемую семантику.
 - [ ] Browser workflow остаётся проверяемым в ходе UI миграции.
+- [ ] Набор иконок ограничен общими UI-командами и поддерживаемыми 2D-инструментами; 3D-only иконки не включены и не используются.
+- [ ] Светлая и тёмная темы корректно выбирают свои варианты иконок; проверены читаемость, контраст и применимые состояния интерфейса.
+- [ ] Происхождение заимствованных значков документировано по конкретному upstream commit и исходным файлам, необходимые license/copyright notices сохранены.
 - [ ] Не заявлены поддерживаемыми эффекты/physics/animation capabilities, которые не работают в runtime или export.
 - [ ] Удаление legacy view/module возможно только после подтверждённой замены и проверки всех известных consumers.
 
