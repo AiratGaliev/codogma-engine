@@ -669,7 +669,7 @@ Unity Package Manager и модульный подход EVA.js полезны �
 #### Репозиторные команды и зависимости
 
 - Инструменты статического анализа и форматирования регистрируются в devDependencies соответствующего package (root/editor/workspace), не в production dependencies игры.
-- Сохранять существующую структуру двух npm packages до отдельного ADR: не вводить npm workspaces только ради запуска линтеров. Корневые scripts могут делегировать задачи в source/editor, либо инструменты могут запускаться в package-scope; стратегия должна быть едина и документирована.
+- Сохранить текущие npm package boundaries root/editor до аудита; целевую модель npm Workspaces для новых внутренних Codogma-пакетов описать в ADR-0003 и вводить после migration PoC. Не переносить наследуемый editor package автоматически и не вводить Workspaces только ради запуска линтеров.
 - Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
 - Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
 - Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
@@ -699,6 +699,49 @@ Acceptance: новый engine module не принимается без strict t
 Каждая точка интеграции должна иметь версию контракта, явные scopes (editor/runtime/build), проверку зависимостей и тестовый пример.
 
 Для основной функциональности необходимо поддерживать несколько маленьких reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates. Они должны использовать публичный API, документировать ограничения runtime и регулярно проходить build/preview acceptance; примеры не должны зависеть от скрытых внутренних API или появляться в release bundle пользовательской игры без явного включения. Установка плагина не должна автоматически давать доступ ко всему filesystem или включать его runtime bundle в каждую игру. Поддержка hot reload пользовательских скриптов может быть добавлена после стабилизации component lifecycle; при невозможности безопасно сохранить runtime state допустим корректный restart preview с предупреждением.
+
+### 12.2. Пакетная архитектура и менеджер пакетов на базе npm
+
+**Нормативное направление:** Codogma Engine использует стандартную инфраструктуру npm для зависимостей и развивает собственный слой интеграции с движком. Референсы [Unity Package Manager](https://docs.unity3d.com/6000.6/Documentation/Manual/PackagesList.html) и [EVA.js](https://github.com/eva-engine/eva.js) служат источниками архитектурных идей, а не форматом, который нужно копировать буквально. Подробное решение фиксируется в [ADR-0003](decisions/ADR-0003-package-architecture-and-management.md).
+
+#### Публичный Core package
+
+- Целевое имя основного пакета публичного ядра — `@codogma/cge`. Это пакет Core/public API, а не фасад, автоматически включающий Editor, Build, platform adapters и DevTools.
+- `cge` используется как внутреннее сокращение Codogma Game Engine. `src/cge/` рассматривается как целевое логическое пространство новых Codogma-owned модулей; точные физические границы исходников и npm workspace/package roots определяются после аудита. Сам каталог `src/cge/` не обязательно является корнем публикуемого npm package.
+- Существующий редактор остаётся в `source/editor` до отдельного решения о поэтапной миграции. ТЗ не требует переносить его ради переименования каталогов.
+- Логически разделяются Core/public API, Project Model, Runtime, runtime adapters, Editor, Build/CLI, Platform adapters, DevTools и Package Manager. Граница логического модуля не означает обязательного немедленного создания отдельного npm package.
+- Core не зависит от Editor/Colibri/desktop shell/Phaser implementation/platform SDK. Runtime не импортирует editor-only, MCP, server и build-time код. Editor и CLI/build используют одни и те же Project Model/schema contracts.
+
+#### npm как инфраструктурный источник истины
+
+- npm отвечает за установку зависимостей, SemVer, разрешение транзитивного дерева, registries, стандартные package manifests и lockfiles.
+- Codogma не реализует собственный resolver или второй lockfile для npm-зависимостей. `package.json` и соответствующий `package-lock.json` остаются источником истины для зависимостей проекта.
+- npm Workspaces — целевая модель совместной разработки внутренних пакетов в монорепозитории. Переход выполняется после инвентаризации текущей структуры, manifests и lockfiles и успешного PoC; существующий редактор не переносится массово автоматически.
+- Отдельный project config, если он потребуется, содержит только engine-specific settings и не дублирует npm dependencies.
+- Для CI/чистой установки используется `npm ci` в рамках согласованной конфигурации. Флаги, меняющие форму dependency tree, должны быть закреплены и одинаковы в локальном процессе и CI.
+
+#### Метаданные Codogma и публичные контракты
+
+- Стандартный `package.json` сохраняет свою семантику. Дополнительные поля движка могут находиться в namespaced поле `codogma`; точная schema/version определяется ADR и тестируется.
+- Метаданные должны позволить проверять тип/назначение пакета, совместимость с Engine API, поддержку целевых сред и точки интеграции, но не заменять npm dependency declarations.
+- Пакеты разделяются по назначению и включению: Core/shared, runtime, editor, build/CLI, platform adapters и tooling. Конкретная таксономия остаётся открытой до схемы и пилота.
+- Использовать явные public exports и версионированные контракты. Пакеты-расширения объявляют зависимости на Core/host через стандартные npm mechanisms, включая `peerDependencies` там, где они подходят. Публиковать отдельный пакет следует лишь при самостоятельной ответственности, стабильном API, тестах и понятной поддержке.
+
+#### Package Manager Service
+
+- Editor UI и CLI используют единый типизированный Package Manager Service. UI не управляет npm напрямую и не изменяет manifests параллельной логикой.
+- Сервис безопасно вызывает npm CLI с контролируемыми аргументами, ограниченным корнем проекта, управлением процессами, структурированными результатами и понятной диагностикой.
+- Установка/обновление/удаление должны проверять согласованность manifest и lockfile и предоставлять тестируемое восстановление после ошибки.
+- Базовые источники наследуются от npm: registry и scoped registries, local/file, Git и tarball. Authentication credentials не сохраняются в tracked project config.
+- Политика lifecycle scripts, источников, лицензий, известных уязвимостей и provenance должна быть явной. Тип пакета сам по себе не изолирует исполняемый код расширения.
+- Состав game bundle проверяется автоматически: editor-only, build-only и tooling dependencies не попадают в runtime без явного разрешённого включения.
+
+#### Что сознательно откладывается
+
+Собственный package resolver, собственный npm-совместимый lockfile, отдельный registry, публичный каталог, рейтинги, feature sets и сложная система подписи не входят в начальный фундамент. Сначала необходимы внутренние пакеты, проверенные manifests, воспроизводимая установка и согласованный Package Manager Service. Каталог/feature sets могут позже предоставлять curated groups пакетов, но разрешение зависимостей всё равно остаётся за npm.
+
+**Критерии приёмки архитектурного направления:** единый источник истины для npm dependencies; отсутствие цикла Core → Editor; возможность собирать runtime без Editor; потребители используют общий Package Manager Service; внутренний пакет проходит clean install и build в тестовом проекте; неудачные пакетные операции диагностируемы и не оставляют незаметно повреждённое состояние проекта.
+
 
 ## 13. Performance, QA и release gates
 
