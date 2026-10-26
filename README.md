@@ -254,7 +254,7 @@ The branch flow is part of the project workflow, not a convention to bypass when
 |---|---|---|
 | `dev` | Daily integration branch | Topic branches through a PR; an explicitly justified hotfix integration when needed |
 | `test` | Acceptance branch for a release candidate | Only `dev` through a PR |
-| `main` | Stable branch and source of release archives | Only `test), or an emergency `hotfix/*` branch through a PR |
+| `main` | Stable branch and source of release archives | Only `test` or an emergency `hotfix/*` branch through a PR |
 
 The intended promotion route is **`topic branch → dev → test → main`**. Do not skip a stage for ordinary development work.
 
@@ -262,9 +262,9 @@ The intended promotion route is **`topic branch → dev → test → main`**. Do
 
 1. **Never push changes directly to `dev`, `test` or `main`.** Create a branch and open a PR, including for documentation-only changes. The active GitHub Rulesets require PRs and passing status checks, block branch deletion and non-fast-forward updates, and do not allow bypassing the rules.
 2. **Never send routine feature or bug-fix branches directly to `test` or `main`.** Do not open `dev → main` or `test → dev` PRs. A routine release candidate must flow through `dev → test → main`.
-3. **Start ordinary work from the latest `dev`.** Do not create a new feature branch from a stale local branch, an unrelated topic branch or `test`/`main).
+3. **Start ordinary work from the latest `dev`.** Do not create a new feature branch from a stale local branch, an unrelated topic branch or `test`/`main`.
 4. **Keep each PR focused on one coherent task.** Avoid unrelated refactors, speculative cleanup and unfinished partial work in the same PR. Split independently reviewable work into separate topic branches.
-5. **Do not promote a partial release candidate.** A `dev → test` PR means the changes proposed for that candidate are implemented, integrated and ready for acceptance—not that development needs to pause or that the entire long-term engine vision must be finished. Keep unfinished work in topic branches and merge it into `dev) when it is ready.
+5. **Do not promote a partial release candidate.** A `dev → test` PR means the changes proposed for that candidate are implemented, integrated and ready for acceptance—not that development needs to pause or that the entire long-term engine vision must be finished. Keep unfinished work in topic branches and merge it into `dev` when it is ready.
 6. **Do not bypass a failing check.** Do not disable a workflow, rename or remove a required status, weaken a test, or change the PR target solely to make a red check disappear. Fix the cause and rerun the checks, or document a genuine infrastructure failure and rerun the affected workflow.
 7. **Update tests and documentation with the change.** If behaviour, an API, generated code, a project format, setup, or a developer workflow changes, update the corresponding tests and documentation in the same PR. Never describe an unimplemented capability as complete.
 8. **Report evidence honestly.** List the commands run and their results. Explicitly call out checks not run and known limitations; do not mark skipped checks as passed.
@@ -293,7 +293,7 @@ Use a short, descriptive branch name and one of these prefixes:
 | `chore/*` | Maintenance and tooling |
 | `hotfix/*` | Emergency fix for a release-blocking problem; not a substitute for an ordinary `fix/*` |
 
-Do not use branch names such as `work`, `changes` or `update` that do not communicate the change type. If a branch already contains changes based on an old `dev), update it deliberately before opening the PR; do not silently change its base to another permanent branch.
+Do not use branch names such as `work`, `changes` or `update` that do not communicate the change type. If a branch already contains changes based on an old `dev`, update it deliberately before opening the PR; do not silently change its base to another permanent branch.
 
 ### Allowed PR routes
 
