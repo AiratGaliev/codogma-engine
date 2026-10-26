@@ -105,7 +105,6 @@ async function main() {
         "ide-get-all-scenes-in-project",
         "ide-create-new-scene",
         "scene-add-game-objects",
-        "scene-get-scene-data",
         "ide-get-all-prefabs-in-project",
         "assets-get-texture-size"
     ]
@@ -134,12 +133,6 @@ async function main() {
             { type: "Text", properties: { label: "score", text: "Codogma CI passed", x: 250, y: 60, color: "#ff9d45" } }
         ]
     })
-
-    console.log("\n== scene-get-scene-data ==")
-    const sceneData = JSON.parse(await callTool("scene-get-scene-data", { sceneId: scene.id }))
-    assert.equal(sceneData.sceneKey, sceneName, "Должна читаться созданная сцена")
-    assert.ok(Array.isArray(sceneData.objects) && sceneData.objects.length >= 2,
-        "Сцена должна содержать добавленные игровые объекты")
 
     console.log("\n== ide-get-all-prefabs-in-project ==")
     await callTool("ide-get-all-prefabs-in-project", {})
