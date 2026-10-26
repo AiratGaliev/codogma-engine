@@ -322,7 +322,7 @@ export function createYandexGamesPlatformServices(client) {
             return requireMethod(getSDK(), "getFlags", "getFlags")({ defaultFlags, clientFeatures });
         },
         async getServerTime() {
-            return requireMethod(getSDK(), "getServerTime", "getServerTime")();
+            return requireMethod(getSDK(), "serverTime", "serverTime")();
         },
         async requestFullscreen() {
             return requireMethod(getSDK()?.screen?.fullscreen, "request", "screen.fullscreen.request")();
