@@ -1,0 +1,74 @@
+name: Release Codogma Engine
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release-archive
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            source/editor/package-lock.json
+
+      - name: Install locked dependencies (root)
+        run: npm ci
+
+      - name: Install locked dependencies (editor client)
+        run: npm ci
+        working-directory: source/editor
+
+      - name: Build editor client
+        run: npm run build
+        working-directory: source/editor
+
+      - name: Smoke test (server boots, editor responds)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3100 PROJECT_DIR=tests/workspace/test-typescript node server/server.mjs &
+          SRV=$!
+          sleep 3
+          curl -sf http://localhost:3100/editor/product.json | tee /dev/stderr | grep -q "Codogma Engine"
+          curl -sf -o /dev/null http://localhost:3100/editor/
+          kill "$SRV"
+
+      - name: Pack release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          zip -qr release/codogma-engine.zip server source/editor \
+            package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
+            -x "source/editor/node_modules/*" \
+            -x "source/editor/.vscode/*" \
+            -x "*.log"
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: codogma-engine-release
+          path: release/codogma-engine.zip
+          if-no-files-found: error
+          retention-days: 30
