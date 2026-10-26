@@ -43,6 +43,7 @@ Codogma Engine должен развиться в самостоятельный
 | Runtime | Phaser 4.2.1, соответствующие ресурсы/типы и адаптации редактора/генератора к Phaser API |
 | AI/MCP | Есть MCP-интеграция и отдельный необязательный AI Chat service |
 | CI | `fast-checks` проверяет маршрутизацию PR, сборку редактора и server smoke test; `mcp-integration` выполняет MCP E2E при продвижении в `test` и `main` |
+| TypeScript / lint baseline | В `source/editor/package.json` указаны TypeScript 5.3.3 и legacy TSLint 6.1.3; `build` использует TypeScript project references (`tsc -b`). Новая инженерная политика должна усиливать типы и static analysis постепенно, без массовой ломки унаследованного editor code |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
 Эта база содержит значительное количество существующего UI и логики. Поэтому **нельзя начинать развитие с автоматического переписывания Colibri или всей редакторской системы на новый UI-фреймворк**. Сначала надо определить реальные пробелы и границы связанности, затем заменять только то, что мешает целевому продукту.
@@ -513,7 +514,14 @@ Headless CLI — самостоятельный интерфейс к тем ж�
 
 Внешние npm-пакеты предпочтительнее самописных аналогов, если они реально подходят, но наличие зрелой библиотеки не отменяет интеграционной работы. Кандидаты ниже не являются уже утверждёнными зависимостями:
 
-- JSON Schema + Ajv — schema validation;
+- [ESLint](https://eslint.org/docs/latest/use/getting-started/) + [typescript-eslint](https://typescript-eslint.io/getting-started/) — linting, including typed rules for selected code paths;
+- [Prettier](https://prettier.io/docs/install.html) + eslint-config-prettier — deterministic formatting without conflicting lint rules;
+- [Knip](https://knip.dev/) — unused files/exports/types/dependencies/scripts, with careful configuration of dynamic plugin entry points;
+- [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) — architecture boundaries, circular dependencies and invalid runtime/editor/build imports;
+- [TypeScript strict compiler options](https://www.typescriptlang.org/tsconfig/strict) — strong typing; also evaluate [noUncheckedIndexedAccess](https://www.typescriptlang.org/tsconfig/noUncheckedIndexedAccess.html) and [exactOptionalPropertyTypes](https://www.typescriptlang.org/tsconfig/exactOptionalPropertyTypes.html);
+- [TypeDoc](https://typedoc.org/) and [API Extractor](https://api-extractor.com/pages/overview/intro/) — public API docs/reports after an external SDK surface exists;
+- [Vitest](https://vitest.dev/guide/) and [Playwright](https://playwright.dev/docs/intro) — unit/integration and browser acceptance;
+- JSON Schema + [Ajv](https://ajv.js.org/) — schema validation;
 - Vite — кандидат для dev/build pipeline, если он подходит текущей структуре и не дублирует существующую сборку;
 - Vitest и Playwright — unit/integration и browser E2E;
 - sharp и free-tex-packer-core — build-time обработка изображений и атласов;
@@ -602,6 +610,52 @@ Unity Package Manager и модульный подход EVA.js полезны �
 - тесты, документация и определённая поддержка;
 - понятный способ подключения в редактор, runtime либо build pipeline.
 
+### 12.1. TypeScript-first engineering toolchain
+
+**Цель:** новые Codogma subsystems пишутся на TypeScript с сильной статической типизацией и единым автоматическим контролем качества. Статус «код компилируется» недостаточен: архитектурные ошибки, неиспользуемые зависимости и нарушение слоёв должны выявляться до runtime acceptance.
+
+#### Язык и типизация
+
+- TypeScript — основной и обязательный язык нового Engine Core, Project Model, Runtime Adapters, editor integrations, build tools и platform adapters. JavaScript допускается для конфигурационных файлов/скриптов, где это оправдано, генерации и vendored/upstream кода; причины фиксируются, а новый runtime-код нельзя писать на нетипизированном JavaScript по умолчанию.
+- Для новых Codogma modules обязательна отдельная TypeScript config с strict: true и совместимыми дополнительными гарантиями: noUncheckedIndexedAccess, exactOptionalPropertyTypes, noImplicitOverride, noImplicitReturns, noFallthroughCasesInSwitch и forceConsistentCasingInFileNames. Каждая опция подтверждается compilation fixture; несовместимость с наследуемым кодом не должна отключать строгий режим новых модулей.
+- Не использовать any как способ обхода архитектурной границы. Для неизвестных JSON/SDK/plugin inputs использовать unknown, runtime validation и type narrowing. Casts и non-null assertions требуют локального обоснования, если они пересекают границу доверия или скрывают невозможное состояние.
+- Запрещать @ts-ignore в новом коде; редкое @ts-expect-error допустимо только с пояснением проверяемой причины и тестом. При смене schema, платформенного SDK или external data проверять runtime values, не полагаясь только на compile-time types.
+- Включить type-only imports, discriminated unions, exhaustive handling через never и явные типы публичных экспортов/контрактов там, где это повышает устойчивость API. Не создавать дублирующие декларации одной модели в Core, editor и serializer.
+- Унаследованный Phaser Editor/Colibri код мигрируется постепенно: строгий режим и линтер сначала применяются к новому Core и изменяемым областям; фиксируется baseline legacy warnings; каждый PR не должен добавлять новые нарушения в свой scope. Не выполнять массовый mechanical rewrite всей унаследованной кодовой базы в одном PR.
+
+#### Инструменты, которые нужно оценить и ввести поэтапно
+
+- **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для новых конфигураций. Старый TSLint 6.1.3 считать унаследованным инструментом: не добавлять его правила для новых модулей; заменить/удалить его после миграции соответствующих областей и сохранения требуемого покрытия.
+- **Prettier + eslint-config-prettier** — единый форматтер. ESLint отвечает за ошибки и risky patterns, Prettier — за форматирование; не дублировать спорные stylistic правила. Зафиксировать локальные версии и общий конфиг, подключить format:check в CI. Не форматировать всю legacy-кодовую базу автоматически первым PR.
+- **Knip** — анализ неиспользуемых файлов, exports/types, dependencies/devDependencies, binaries и scripts. Настроить корректные entry points для существующего plugin registry, dynamic imports, generated code, command-line tools, test fixtures и editor plugins: динамически загружаемый плагин нельзя удалять только потому, что его import не виден статически. Первый отчёт служит baseline; после исправления конфигурации ошибки вводятся как гейт по новым/изменяемым областям, затем расширяются на репозиторий.
+- **dependency-cruiser** — кандидат для контроля архитектурных границ, циклических импортов и запрещённых зависимостей. Требуемые правила: Core не импортирует editor/desktop UI; runtime game build не импортирует editor/MCP/server/test modules; editor/build-only dependencies не попадают в game runtime; новые запрещённые циклы не появляются. Конкретные правила задаются после фиксации реальной структуры репозитория.
+- **TypeScript compiler / project references** — сохранить tsc -b для существующей сборки там, где это нужно, плюс явная typecheck-команда для нового Core/API. Build success и typecheck должны возвращать ненулевой exit code при ошибке.
+- **Vitest** — кандидат для быстрых unit/integration тестов Core, schemas, serializers, services и adapters. Browser/UI acceptance сохраняет Playwright или подходящий существующий runner; MCP E2E не заменяет unit/typecheck/lint и не запускается как обязательный медленный гейт на каждый обычный PR в dev.
+- **TypeDoc** — генерация документации из TSDoc/JSDoc комментариев для публичного SDK после стабилизации входных точек.
+- **API Extractor** — рассмотреть позже, когда появятся публикуемые TypeScript packages и стабильный API surface: API report/rollup declarations помогают замечать непреднамеренные изменения публичных контрактов. Не добавлять его ради внутренних модулей до появления соответствующей задачи.
+- **tsd** или эквивалентный type-test инструмент — рассмотреть для compile-time tests публичных типов, когда API начнёт использоваться внешними проектами.
+
+Введение инструментов должно сопровождаться согласованной конфигурацией и не должно превращаться в коллекцию дублирующих линтеров. Не вводить ESLint stylistic, Prettier и Biome/oxlint одновременно для одной задачи без документированной причины. Не добавлять инструмент только потому, что он популярен: сначала подтвердить пробел и определить владельца конфигурации.
+
+#### Репозиторные команды и зависимости
+
+- Инструменты статического анализа и форматирования регистрируются в devDependencies соответствующего package (root/editor/workspace), не в production dependencies игры.
+- Сохранять существующую структуру двух npm packages до отдельного ADR: не вводить npm workspaces только ради запуска линтеров. Корневые scripts могут делегировать задачи в source/editor, либо инструменты могут запускаться в package-scope; стратегия должна быть едина и документирована.
+- Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
+- Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
+- Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
+
+#### Переход к CI без блокировки текущей разработки
+
+1. Снять baseline: проверить текущие TS configs/scripts, определить новые Codogma-owned code paths и инвентаризировать существующие TSLint errors.
+2. Добавить конфиги ESLint/Prettier/Knip и TypeScript strict profile для нового Core как отдельную, ограниченную область; не менять поведение runtime.
+3. Сначала запускать Knip/dependency-cruiser в report mode, исправить ошибочные entry points и сохранить baseline; удалять код/зависимости только после ручной проверки.
+4. Добавить typecheck, lint и formatting checks в быстрый CI для новых/изменяемых модулей; затем расширять scope по мере сокращения legacy baseline. Базовый fast-checks обязан оставаться быстрым.
+5. Только после достижения покрытия заменить TSLint и расширить гейты на весь поддерживаемый TypeScript scope. Любое исключение содержит ссылку/комментарий, владельца и условие пересмотра.
+
+Acceptance: новый engine module не принимается без strict typecheck, линтера, форматирования и unit tests, соответствующих его слою; новые forbidden dependencies/cycles и неиспользуемые dependencies в охваченном scope блокируют PR. Неописанные и ещё не реализованные scripts не должны указываться как уже существующие в README/CI.
+
+
 Публиковать npm-пакеты можно после стабилизации контрактов. Встроенные модули должны иметь явные зависимости/версии и быть независимыми от конкретной desktop-оболочки. Editor-only, build-only и runtime dependencies обязаны быть разведены.
 
 В перспективе extension API должен иметь документированные точки интеграции для:
@@ -627,7 +681,8 @@ Profiler должен сначала собирать воспроизводим
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
-- Editor TypeScript/compiler: сборка `npm run build` после установки зависимостей в корне и `source/editor`.
+- Editor TypeScript/compiler: сборка `npm run build` после установки зависимостей в корне и `source/editor`; новые Core/API areas проходят отдельные строгие typecheck.
+- TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
 - Server/MCP: серверный smoke и релевантный запуск `npm run test:e2e`.
 - Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures.
 - Engine API/ECS: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты на согласованность Phaser adapter.
