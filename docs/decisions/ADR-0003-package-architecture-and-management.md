@@ -25,7 +25,7 @@ Codogma Engine развивается из существующего редак
 - Корень исходников каждого самостоятельного Codogma package располагается в `packages/<name>/` и содержит собственный `package.json`, явные public exports, tests и документацию.
 - Целевой Core package `@codogma/cge` находится в `packages/cge/`. Он является Core/public API, а **не агрегирующим пакетом всего продукта**: не тянет Editor UI, desktop shell, MCP, build-only tools или platform SDK по умолчанию.
 - В `packages/editor-api/` планируется типизированный пакет публичных контрактов для расширения Editor Host с целевым именем `@codogma/editor-api`. Его точный API и зависимость от Core фиксируются через PoC; циклическая зависимость Editor → Core → Editor запрещена.
-- Примеры других возможных пакетов: `runtime-phaser`, `build-html5`, `platform-services`, `platform-yandex-games`, `tilemap-tools`. Список не является обещанием создать все эти пакеты сразу.
+- Примеры других возможных пакетов: `runtime-phaser`, `build-html5`, `platform-services`, `platform-yandex-games`, `package-manager`, `tilemap-tools`. Список не является обещанием создать все эти пакеты сразу.
 - Названия пакетов отражают ответственность. Обязательного префикса `plugin-` нет; package kind/targets определяются проверяемыми metadata и публичным контрактом.
 - Не создавать пакет на каждый класс. Подсистемы с тесной связью могут оставаться внутренними модулями одного package. Самостоятельная подключаемая возможность получает package boundary, когда это оправдано API, зависимостями, тестированием и жизненным циклом.
 - Наличие package source в монорепозитории не означает немедленной публичной публикации. Публикация в npm требует стабилизированных exports/API, SemVer/backward-compatibility policy, tests, docs, licence review и воспроизводимого release process.
@@ -63,7 +63,7 @@ Codogma Engine развивается из существующего редак
 
 ### 7. Package Manager Service
 
-- Editor UI и CLI используют один типизированный Package Manager Service; UI не запускает npm с произвольной логикой и не редактирует manifests независимо от CLI.
+- Package Manager Service — Node-side подсистема с целевыми исходниками в `packages/package-manager/`, используемая локальным server/backend и headless CLI. Браузерный Editor Host UI обращается к ней через типизированный HTTP/IPC contract; UI не запускает npm, не управляет filesystem напрямую и не редактирует manifests параллельной логикой.
 - Сервис координирует install/update/remove/list, запускает npm CLI с контролируемыми аргументами, ограничивает project root, поддерживает отмену/управление процессом, выдаёт structured results и понятную диагностику.
 - После неудачной операции сервис должен обнаруживать несогласованность manifest/lockfile и предоставлять тестируемое восстановление. Атомарность нельзя обещать без проверенного механизма.
 - Поддерживаемые источники — npm registry/scoped registry, local/file, Git и tarball поэтапно; для Git/tarball нужны pinning, безопасная работа с credentials и понятная диагностика. Токены не сохраняются в tracked project files.
