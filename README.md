@@ -244,31 +244,133 @@ Branch Rulesets require these exact status names:
 
 A successful server-side MCP test does not guarantee that every UI workflow, generated game or browser-rendering path works. Run and document additional acceptance checks when the change affects those areas.
 
-## Branches and Pull Requests
+## Branches, Pull Requests and Mandatory Development Rules
 
-Development follows three protected branches:
+The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
 
-- **<code>dev</code>** — integration branch for day-to-day development;
-- **<code>test</code>** — integration and acceptance branch;
-- **<code>main</code>** — stable branch and source of release artifacts.
+### Permanent branches
 
-Regular work should use a topic branch and a Pull Request into <code>dev</code>. The CI routing check accepts the prefixes <code>feat/*</code>, <code>feature/*</code>, <code>fix/*</code>, <code>refactor/*</code>, <code>test/*</code>, <code>docs/*</code>, <code>chore/*</code> and currently <code>hotfix/*</code> for that target. The intended promotion route is <code>dev → test → main</code>; emergency fixes use <code>hotfix/*</code> according to the release workflow/policy.
+| Branch | Purpose | What may be merged into it |
+|---|---|---|
+| `dev` | Daily integration branch | Topic branches through a PR; an explicitly justified hotfix integration when needed |
+| `test` | Acceptance branch for a release candidate | Only `dev` through a PR |
+| `main` | Stable branch and source of release archives | Only `test` or an emergency `hotfix/*` branch through a PR |
 
-| PR target | Expected source |
+The intended promotion route is **`topic branch → dev → test → main`**. Do not skip a stage for ordinary development work.
+
+### Non-negotiable rules
+
+1. **Never push changes directly to `dev`, `test` or `main`.** Create a branch and open a PR, including for documentation-only changes. The active GitHub Rulesets require PRs and passing status checks, block branch deletion and non-fast-forward updates, and do not allow bypassing the rules.
+2. **Never send routine feature or bug-fix branches directly to `test` or `main`.** Do not open `dev → main` or `test → dev` PRs. A routine release candidate must flow through `dev → test → main`.
+3. **Start ordinary work from the latest `dev`.** Do not create a new feature branch from a stale local branch, an unrelated topic branch or `test`/`main`.
+4. **Keep each PR focused on one coherent task.** Avoid unrelated refactors, speculative cleanup and unfinished partial work in the same PR. Split independently reviewable work into separate topic branches.
+5. **Do not promote a partial release candidate.** A `dev → test` PR means the changes proposed for that candidate are implemented, integrated and ready for acceptance—not that development needs to pause or that the entire long-term engine vision must be finished. Keep unfinished work in topic branches and merge it into `dev` when it is ready.
+6. **Do not bypass a failing check.** Do not disable a workflow, rename or remove a required status, weaken a test, or change the PR target solely to make a red check disappear. Fix the cause and rerun the checks, or document a genuine infrastructure failure and rerun the affected workflow.
+7. **Update tests and documentation with the change.** If behaviour, an API, generated code, a project format, setup, or a developer workflow changes, update the corresponding tests and documentation in the same PR. Never describe an unimplemented capability as complete.
+8. **Report evidence honestly.** List the commands run and their results. Explicitly call out checks not run and known limitations; do not mark skipped checks as passed.
+9. **Do not keep long-lived branches without a clear reason.** Keep topic branches aligned with the current integration work and remove them after they are no longer needed, subject to repository permissions and team coordination.
+
+### Creating a normal topic branch
+
+Start from an up-to-date `dev` and ensure your working tree is clean:
+
+~~~bash
+git status --short
+git switch dev
+git pull --ff-only origin dev
+git switch -c feat/<short-name>
+~~~
+
+Use a short, descriptive branch name and one of these prefixes:
+
+| Prefix | Use |
 |---|---|
-| <code>dev</code> | A topic branch with an accepted prefix |
-| <code>test</code> | <code>dev</code> |
-| <code>main</code> | <code>test</code> or <code>hotfix/*</code> |
+| `feat/*` or `feature/*` | New user-facing or engine functionality |
+| `fix/*` | Normal bug fix |
+| `refactor/*` | Internal restructuring without intended behaviour change |
+| `test/*` | Test coverage or test infrastructure |
+| `docs/*` | Documentation-only changes |
+| `chore/*` | Maintenance and tooling |
+| `hotfix/*` | Emergency fix for a release-blocking problem; not a substitute for an ordinary `fix/*` |
 
-Before opening a PR:
+Do not use branch names such as `work`, `changes` or `update` that do not communicate the change type. If a branch already contains changes based on an old `dev`, update it deliberately before opening the PR; do not silently change its base to another permanent branch.
 
-- describe the problem, implementation and any user-visible change;
-- run the build and the tests relevant to the change;
-- document checks that could not be run;
-- update tests and documentation when behaviour or developer workflow changes;
-- keep unrelated changes, generated build output and local artifacts out of the diff.
+### Allowed PR routes
 
-Use the repository's [Pull Request template](.github/pull_request_template.md). The active branch Rulesets require PRs and passing CI status checks; they do not require reviewer approval.
+| PR source → target | Status | Rule |
+|---|---|---|
+| `feat/*`, `feature/*`, `fix/*`, `refactor/*`, `test/*`, `docs/*`, `chore/*` → `dev` | Standard | Use for normal development; keep the PR scoped and ready to merge |
+| `dev → test` | Promotion | Only a complete, internally consistent acceptance candidate |
+| `test → main` | Release | Only after acceptance checks pass and the candidate is ready to become the stable version |
+| `hotfix/* → main` | Emergency exception | Only for a release-blocking defect that cannot wait for the normal promotion route; explain the urgency and test impact in the PR |
+| `hotfix/* → dev` | Exceptional integration | The routing workflow currently accepts this, but it is not the standard development route. Explain why a hotfix must be integrated this way |
+
+A hotfix merged directly into `main` must subsequently be integrated back into `dev` through a PR, unless the fix is already present there. Include the backport plan in the hotfix PR. Do not use an emergency route for ordinary feature work.
+
+### Promotion gates
+
+Before opening **`dev → test`**, verify all of the following:
+
+- Every change intended for this candidate is merged into `dev`; there are no known release-blocking defects in the candidate.
+- The editor build and server smoke checks pass.
+- The MCP integration check is expected to run on this PR and must pass.
+- Any affected UI, scene-authoring, generated-code or live-editor workflow has also been manually checked in the browser. The default MCP integration suite is not a substitute for UI acceptance testing.
+- Relevant tests, setup notes and user/developer documentation are updated.
+- The PR description states the candidate scope, acceptance evidence, and any known limitations.
+
+Before opening **`test → main`**, confirm the candidate has been accepted on `test`, required checks pass, no known release-blocking issue remains, and the release notes/documentation accurately describe the shipped behaviour. Do not merge a release candidate just because the branch has accumulated changes or because a release is desired.
+
+If a promotion gate fails, stop the promotion. Fix the issue in the appropriate topic branch, merge the fix to `dev`, and create a fresh promotion PR when the candidate is ready. Do not use a partial `dev → test` PR as a way to deploy incomplete work.
+
+### Local checks before a PR
+
+Run commands from the repository root. Root and editor dependencies are installed separately:
+
+~~~bash
+npm ci
+cd source/editor
+npm ci
+cd ../..
+npm run build
+~~~
+
+Then run checks relevant to the change:
+
+| Change type | Required local acceptance |
+|---|---|
+| Any change | Run `npm run build` before requesting merge; CI runs it as well |
+| Server, bridge or MCP tools | Start the server with `npm start`; in a second terminal run `npm run test:e2e` |
+| Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
+| Release candidate (`dev → test` or `test → main`) | Check the complete candidate in addition to the required CI integration test; document manual acceptance for any affected UI path |
+
+The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` (PowerShell: `$env:MCP_E2E_WITH_EDITOR = "1"` before running `npm run test:e2e`). They require the editor UI to be running and connected. The default CI E2E job does **not** enable that mode.
+
+### Pull Request description checklist
+
+Every PR must describe:
+
+- **Goal:** the problem being solved and why the change is needed.
+- **Scope:** the main implementation changes and any intentionally excluded work.
+- **Checks:** exact commands or manual checks completed, with results.
+- **Gaps:** checks not run, environmental constraints, risks and known limitations.
+- **Documentation:** what was updated, or why no documentation change is needed.
+- **Routing:** why this source and target branch are correct; for promotions, the candidate scope and acceptance evidence; for hotfixes, the urgency and backport plan.
+
+Use the repository's [Pull Request template](.github/pull_request_template.md).
+
+### CI status checks and merge requirements
+
+The required GitHub Actions status names are:
+
+| PR target | Required status checks |
+|---|---|
+| `dev` | `fast-checks` |
+| `test` | `fast-checks`, `mcp-integration` |
+| `main` | `fast-checks`, `mcp-integration` |
+
+`fast-checks` validates the branch route, installs locked dependencies, builds the editor client and smoke-tests the server/editor response. `mcp-integration` runs on PRs targeting `test` and `main`; it starts the server and MCP bridge and runs `npm run test:e2e`. Normal PRs into `dev` do not run this slower integration suite as a routine CI gate, so run it locally whenever the change touches MCP/server behaviour and run targeted browser acceptance for UI changes.
+
+The active Rulesets require PRs and successful checks, but **currently do not require reviewer approval**. That is a repository setting, not permission to bypass the PR, test, documentation or promotion rules in this section.
 
 ## Troubleshooting
 
@@ -303,6 +405,7 @@ Start the server first, then run <code>npm run test:e2e</code>. Inspect the firs
 - [Editor documentation](https://docs.codogma.com)
 - [Technical specification (RU)](docs/technical-specification.md)
 - [Roadmap (RU)](docs/roadmap.md)
+- [Technical reference catalog (RU)](docs/REFERENCE-SOURCES.md)
 - [CI Fast workflow](.github/workflows/ci.yml)
 - [MCP E2E workflow](.github/workflows/e2e.yml)
 - [Release workflow](.github/workflows/release.yml)
