@@ -114,6 +114,7 @@
 
 ### Задачи
 
+- [x] Зафиксировать baseline доставки Phaser 4.2.1 по `plugin.json`, root/editor manifests, declarations и Box2D ambient types; сверить с upstream tag `v4.2.1` и отличить модульную структуру исходников от текущего bundle-based подключения Codogma. Вывод и ссылки зафиксированы в ТЗ и каталоге источников; фактическое исключение Phaser-кода из production bundle остаётся отдельной проверкой этапа 4A.
 - [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP; сохранить результат в `docs/capability-matrix.md` с фактическими evidence/tests.
 - [ ] Включить отдельные workflow-строки для Sprite Editor (slicing/trim/pivot/collision shapes/sorting/9-slicing), Tilemap brushes/layouts/chunks, camera/coordinate conversion, input (mouse/keyboard/touch), audio lifecycle, UI layouts/text, particles/lighting, localization, save storage и Dev/Release build profiles.
 - [ ] Инвентаризировать TypeScript configs/project references, TS compiler options, scripts and lockfiles во всех packages, оценить совместимость обновления от TypeScript 5.3.3, текущий scope TSLint и generated/dynamic plugin entry points; не предполагать, что repo-wide checks уже существуют.
@@ -247,6 +248,7 @@
 - [ ] Инвентаризировать используемые builder/bundler-инструменты и расширять существующий pipeline, прежде чем вводить новый.
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
+- [ ] Проверить, можно ли заменить текущий вендорный Phaser bundle на совместимый upstream variant или воспроизводимую кастомную сборку; на fixture сравнить runtime/API coverage, raw/gzip size и фактическое inclusion/exclusion. Если модуль нельзя исключить проверяемо, зафиксировать ограничение и не заявлять селективную сборку только на основании feature metadata.
 - [ ] Ввести минимальный Feature/Capability Registry contract для встроенных функций и test fixture (stable feature IDs, provider, scopes/targets, declared requirements/conflicts); первая сборочная версия не должна зависеть от готовности UI Package Manager.
 - [ ] Хранить выбор необязательных features в версионируемой project/target configuration отдельно от установленного npm dependency tree; defaults и required features должны быть явными. На этапе 4A допускается встроенный registry и mock/fixture provider; интеграцию реальных package-provided descriptors через `codogma` metadata выполнить на этапе 8 после утверждения package metadata schema.
 - [ ] На основе выбранных features и target вычислять declared feature-dependency closure, проверять недостающих provider packages, конфликты и unsupported scopes/targets; выдавать machine-readable diagnostics, не устанавливая npm dependencies автоматически.
@@ -275,6 +277,7 @@
 - [ ] Feature Registry различает package installed, feature provided/available, feature enabled in project, target-included и runtime/editor-activated states; один статус не переключает другой автоматически. На этапе 4A package-installed/provider state разрешено проверять через тестовый fixture descriptor, не считая финальный package metadata contract уже утверждённым.
 - [ ] Fixture проверяет feature dependency closure, отсутствующий provider, несовместимую комбинацию/target и структурированную диагностику.
 - [ ] Повторная сборка с той же конфигурацией даёт стабильный список выбранных функций и эквивалентный состав bundle; tree-shaking claims подтверждаются измеримым bundle report, а не одним лишь описанием metadata.
+- [ ] В feature-build acceptance явно разделены логическое отключение функции и физическое исключение её runtime-кода; для Phaser-пути исключение считается доказанным только после проверки конечного bundle на fixture.
 
 ---
 
@@ -429,6 +432,7 @@
 - [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP или платформенных SDK.
 - [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`: kind, scopes/targets, совместимость с Engine/Editor API, explicit entry points и предоставляемые Feature/Capability descriptors (inline или явной ссылкой на декларативное описание). Metadata не дублирует npm dependency tree и не заменяет npm resolver.
 - [ ] Утвердить versioned Feature/Capability Registry contract для встроенных и package-provided capabilities: stable IDs, provider, scopes/targets, requirements/conflicts, required/optional/default policy и build/editor entry points. Неоднозначный выбор нескольких providers должен давать diagnostic, если явная multi-provider policy не утверждена. Точная schema и место хранения подтверждаются ADR/PoC.
+- [ ] Не дробить Phaser-подсистемы на формальные wrapper-пакеты ради видимости модульности: сначала доказать, что выбранный runtime packaging/build path действительно позволяет независимо выбирать эти подсистемы и исключать ненужный код.
 - [ ] Связать descriptors Registry с project feature configuration и target build profiles; зафиксировать отдельно installed/provided/available/enabled/target-included/activated states и обеспечить совместную валидацию для Editor Host, CLI и build.
 - [ ] Разделить package dependencies и feature dependencies: npm отвечает за installation/resolution; Registry проверяет требуемые engine capabilities, предлагает диагностируемое действие для недостающего provider, но не запускает собственную установку и не дублирует npm resolver.
 - [ ] Утвердить версионируемые TypeScript contracts для Editor Extension API и extension lifecycle; точную схему и API подтвердить через ADR/PoC до обещания публичной совместимости.
