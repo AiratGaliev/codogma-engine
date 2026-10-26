@@ -31,7 +31,7 @@ This direction does **not** mean every planned engine subsystem already exists. 
 | Scene authoring | Visual scene editing, inspectors, serialization and generated game code. |
 | Project assets | Asset Pack Editor and asset tools for textures, spritesheets, tilemaps and other supported asset types. |
 | Animation and components | Animation tools, User Components Editor and code editors. |
-| Phaser integration | Bundled Phaser 4.2.1 runtime files and TypeScript definitions, plus code-generation and API adaptations. |
+| Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
 | Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
 | Editable tilemaps | Tilemap authoring tools, layers, tilesets, painting operations and MCP tools for modifying tilemap data. |
 | Physics authoring | Arcade Physics-related scene tooling and Box2D body/world authoring and code generation. Box2D runtime setup may be needed in the game project separately. |
