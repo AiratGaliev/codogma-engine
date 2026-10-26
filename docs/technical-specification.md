@@ -369,6 +369,8 @@ Codogma предоставляет единый публичный Physics API �
 - Сначала использовать возможности Phaser и его renderer; собственный рендерер или низкоуровневую замену вводить только при подтверждённом архитектурном/производительном пробеле.
 - Встроить доступные метрики: frame time, draw calls/batches, число активных объектов, текстур/атласов и GPU-ресурсов — с обозначением ограничений конкретного browser/runtime backend.
 - Для динамической графической геометрии применять рост буферов по мере реальной потребности и повторное использование ресурсов там, где это подтверждается профилем; избегать крупных безусловных выделений для мелких объектов и циклов частого пересоздания буферов.
+- Где runtime даёт такую информацию, Profiler/Atlas Analyzer показывает rendered vs culled sprites, количество используемых/загруженных атласов, страниц/текстур и процент использования площади атласа; предупреждает о чрезмерно пустых страницах и атласах с одной текстурой без явного обоснования.
+- Для атласов предусмотреть preview упакованного результата, диагностику конфликтующих/повторно включённых спрайтов, управление rotation/tight packing и target-specific variants, если это поддерживает pipeline.
 - Автоматическая batching-оптимизация — предпочтительное поведение по умолчанию. Ручные static batching/merge инструменты добавляются только при измеренном выигрыше, корректной обработке изменений и наличии профайлера, объясняющего компромисс.
 
 **Дополнительные формы и 2D lighting (поздний этап)**
@@ -383,6 +385,7 @@ Codogma предоставляет единый публичный Physics API �
 - Контроллер должен описывать состояния, переходы, условия, параметры, события и правила начального состояния; проект должен валидироваться на недостижимые состояния, некорректные переходы и отсутствующие клипы.
 - Для направленных/вариативных анимаций предусмотреть blend-параметры/1D-2D blend, если прототип подтверждает ценность для 2D workflow. Не переносить 3D-centric pose graph целиком, если он не нужен.
 - Sprite-sheet animation — базовый workflow. Skeletal animation через Spine/DragonBones и другие форматы оформляется как отдельные adapters/extensions с проверкой лицензий, импортёров и совместимости с export.
+- Рассмотреть визуальный 2D bone rigging/skinning, attachment/slot setup и замену частей спрайта как отдельный P1/P2 authoring extension, если это подтверждено реальными сценариями; поддержка только проигрывания импортированного skeletal clip не должна ошибочно считаться полным rigging editor.
 
 **Tilemap Editor**
 - Поддержать квадратные сетки в базовом workflow; hexagonal/isometric layouts и пользовательские grid transforms добавить как расширение после обеспечения общей tilemap-модели.
@@ -390,6 +393,7 @@ Codogma предоставляет единый публичный Physics API �
 - Сохранять tile properties, object layers, animated tiles, collision data и пользовательские метаданные. Коллизии должны соответствовать runtime physics adapter и проверяться debug overlay.
 - Предусмотреть совместимый импорт (и экспорт там, где модель позволяет без потери данных) с Tiled: TMX/TSX и необходимые texture references. При неподдерживаемых свойствах импортёр обязан сообщать о потере/ограничениях, а не silently flatten the map.
 - Большие карты должны поддерживать chunking/culling и измеряемые обновления только изменившихся областей; не перестраивать весь tilemap при каждом изменении одной клетки без необходимости.
+- Tilemap Profiler должен по возможности различать число отображаемых tilemaps/chunks и время rendering, update/rebuild и collision processing. Это помогает отличать проблему рендера от дорогостоящего обновления сетки или коллизий.
 - Изменения тайлмапа должны отражаться в Project Model, сохраняться, участвовать в Undo/Redo и проходить runtime/build acceptance. Авторинг внутри Codogma и импорт внешнего формата должны опираться на одну согласованную модель, а не на две несовместимые копии.
 
 **UI Editor**
@@ -476,12 +480,14 @@ P0/P1/P2 — приоритеты требований, не обещание д
 
 ### 10.1. Требуемые возможности
 
-- Импорт, reimport и проверка типов/параметров ресурсов с сохранением метаданных импортёра и версии настроек.
+- Импорт, reimport и проверка типов/параметров ресурсов с сохранением метаданных импортёра и версии настроек; при изменении исходника или import settings производные данные перестраиваются предсказуемо, а ручные корректировки не сбрасываются молча.
 - Постоянные asset IDs и управляемые ссылки вместо привязки к пути как единственному идентификатору. Перемещение/переименование должно обновлять ссылки либо выдавать диагностическую ошибку.
 - Dependency graph для сцен, Prefabs, компонентов, скриптов, шрифтов, аудио, изображений, атласов, анимаций и Tilemap; обнаружение отсутствующих ссылок, циклов, дубликатов ID и неиспользуемых ресурсов, если это можно доказать безопасно.
 - Кеширование, освобождение ресурсов и определённый lifecycle загрузки/выгрузки. Не допускать бесконечного накопления временных текстур, аудио, buffers, event listeners или preview instances после restart/stop.
 - Bundles/resource groups и lazy loading там, где это полезно для стартового времени и размера загрузки; прогресс загрузки и понятная диагностика ошибок.
 - Создание атласов и обработка изображений/звуков/шрифтов через подходящие внешние инструменты, воспроизводимые в локальной разработке и CI.
+- Поддержать управляемые настройки texture compression и quality profiles по target/browser capabilities; для несовместимого формата нужен подходящий fallback, а не пустая текстура.
+- Генерировать atlas/texture variants разных размеров и форматов при подтверждённой потребности; в build report указывать выбранный вариант, итоговый размер и причины включения ресурса.
 - Отчёт о размере production bundle и отдельных ресурсных группах, обнаружение неожиданных крупных ресурсов и ненужных runtime-зависимостей.
 - Воспроизводимая HTML5-сборка с явным выходным каталогом, исходными картами или эквивалентом диагностики для dev build, понятными ошибками и зафиксированными build settings.
 - Сборка должна запускаться без editor UI. Команда в headless CLI/CI должна уметь валидировать проект, проверять ресурсные зависимости и собирать игру; диагностический результат не должен зависеть от открытой сцены в Studio.
@@ -489,7 +495,7 @@ P0/P1/P2 — приоритеты требований, не обещание д
 - Итоговую сборку можно запускать отдельным browser acceptance smoke test и проверять на целевых платформах.
 - Предусмотреть versioned build profiles как минимум для Development и Release; target-specific settings не должны неявно смешиваться с общими настройками проекта.
 - Development build сохраняет диагностические имена/source maps по возможности и может подключать profiler/debug overlay; Release build исключает editor/MCP/debug-only modules, минимизирует bundle и сообщает о компромиссах оптимизации.
-- Для Web отдельно проверяются стартовый download size, время до первого кадра, прогрессивная/отложенная загрузка ресурсов, кеширование и восстановление после сетевой ошибки. Compression/deployment headers (например, gzip/Brotli) должны быть задокументированы как ответственность build output или хостинга.
+- Для Web отдельно проверяются стартовый download size, время до первого кадра, прогрессивная/отложенная загрузка ресурсов, кеширование и восстановление после сетевой ошибки. Целевые профили учитывают различия desktop/mobile: размер atlas/texture variants, поддерживаемые форматы компрессии, DPR budget и лимиты памяти браузера. Compression/deployment headers (например, gzip/Brotli) должны быть задокументированы как ответственность build output или хостинга.
 - Для target/browser matrix фиксируются необходимые API и fallback-поведение. Нельзя заявлять поддержку WebGL/WebGPU, звукового формата или compressed texture format без реальной проверки.
 - Изменение build profile должно быть воспроизводимым: настройки сериализуются, попадают в отчёт и не зависят от последнего вручную открытого состояния Studio.
 
@@ -607,7 +613,9 @@ Unity Package Manager и модульный подход EVA.js полезны �
 - build hooks, target profiles и validation rules;
 - localization tables или специализированных gameplay authoring tools.
 
-Каждая точка интеграции должна иметь версию контракта, явные scopes (editor/runtime/build), проверку зависимостей и тестовый пример. Установка плагина не должна автоматически давать доступ ко всему filesystem или включать его runtime bundle в каждую игру. Поддержка hot reload пользовательских скриптов может быть добавлена после стабилизации component lifecycle; при невозможности безопасно сохранить runtime state допустим корректный restart preview с предупреждением.
+Каждая точка интеграции должна иметь версию контракта, явные scopes (editor/runtime/build), проверку зависимостей и тестовый пример.
+
+Для основной функциональности необходимо поддерживать несколько маленьких reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates. Они должны использовать публичный API, документировать ограничения runtime и регулярно проходить build/preview acceptance; примеры не должны зависеть от скрытых внутренних API или появляться в release bundle пользовательской игры без явного включения. Установка плагина не должна автоматически давать доступ ко всему filesystem или включать его runtime bundle в каждую игру. Поддержка hot reload пользовательских скриптов может быть добавлена после стабилизации component lifecycle; при невозможности безопасно сохранить runtime state допустим корректный restart preview с предупреждением.
 
 ## 13. Performance, QA и release gates
 
@@ -624,7 +632,7 @@ Profiler должен сначала собирать воспроизводим
 - Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures.
 - Engine API/ECS: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты на согласованность Phaser adapter.
 - Physics: contract tests для body lifecycle, collision filters, fixed timestep, contacts, supported joints, debug geometry и корректного освобождения ресурсов для каждого поддерживаемого backend.
-- 2D rendering/performance: измеримые fixtures для frame time, batching/texture/resource counts в пределах доступной instrumentation; тесты изменения/освобождения Graphics/particle resources и отсутствия ненужных повторных allocation loops.
+- 2D rendering/performance: измеримые fixtures для frame time, batching/texture/resource counts в пределах доступной instrumentation; тесты изменения/освобождения Graphics/particle resources и отсутствия ненужных повторных allocation loops. Atlas analysis покрывает rendered/culled sprites, page count и usage; Tilemap metrics отделяют render/update/collision processing.
 - Asset pipeline/CLI: validate/build без GUI, stable asset references, migration/import metadata, dependency graph, deterministic output и корректные exit codes.
 - Editor/runtime integration: полный browser scenario, включающий scene/Prefab, пользовательский компонент, Inspector и play mode.
 - Preview/debugger: управление lifecycle preview, обработка log/error, отсутствие зависших процессов и корректное связывание runtime entity с проектной моделью.
@@ -671,7 +679,7 @@ CI Fast сейчас не выполняет весь перечисленный
 - Feather Engine и Gideros Scene Editor — идеи embedded preview и 2D-editor workflow; проверять зрелость и лицензию перед заимствованием.
 - Phaser 4 и PixiJS — технические ориентиры текущего runtime и возможного альтернативного renderer adapter.
 - Tiled — reference для внешнего workflow авторинга tilemaps и совместимости импортируемых проектных данных.
-- Unity 6 / Unity 6.6 User Manual, 6000.6 — [2D overview](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d), [Sprites](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite), [Tilemaps](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/tilemaps), [2D Physics](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics), [2D Physics Core API](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics-api), [2D in URP](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-urp). Использовать как функциональную карту спрайтов, collision shapes, sorting, 9-slicing, tilemap palettes/brushes, profiler и 2D light/post-process workflows, не как требование копировать Unity packages или URP.
+- Unity 6 / Unity 6.6 User Manual, 6000.6 — [2D overview](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d), [Sprites](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite), [Tilemaps](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/tilemaps), [2D Physics](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics), [2D Physics Core API](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics-api), [2D in URP](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-urp), [2D Profiler](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/profiler-2d), [Sprite Atlas workflow](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/atlas/create-sprite-atlas). Использовать как функциональную карту спрайтов, collision shapes, sorting, 9-slicing, tilemap palettes/brushes, profiler и 2D light/post-process workflows, не как требование копировать Unity packages или URP.
 
 Полезные принципы, которые следует применить в Codogma после gap analysis:
 1. Physics API с зарегистрированными backend adapters и явной картой capabilities вместо жёсткого связывания пользовательского кода с конкретным solver.
