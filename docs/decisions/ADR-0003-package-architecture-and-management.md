@@ -87,6 +87,7 @@ Core не импортирует Editor, Colibri, desktop APIs, Phaser implement
 ## Открытые вопросы — не фиксировать без отдельного решения
 
 - Точное физическое размещение workspace roots и package manifests относительно `src/cge`, `packages/` и наследуемого `source/editor`.
+- Проверка доступности имени `@codogma/cge` и права публикации в npm scope `@codogma` до первого публичного релиза.
 - Какие логические слои останутся внутренними модулями, а какие станут npm-пакетами в первой версии.
 - Конкретная схема `codogma` metadata и точные package kinds/capabilities.
 - Минимальная поддерживаемая версия Node.js/npm и обновление существующих npm lockfiles.
