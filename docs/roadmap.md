@@ -14,12 +14,12 @@
 | 2 | Этап 1: ADR и toolchain pilot | **Блокирующий для нового Core** | Согласованы границы Project Model/Core/Phaser adapter/Preview Host; новый модуль проходит ограниченный strict typecheck, lint, format check и unit tests. Legacy Colibri массово не мигрируется. |
 | 3 | Этап 2: Project Model и минимальный Core | **P0 — основа** | Стабильные IDs, схема/сериализация/миграции, Transform, lifecycle, один пользовательский TypeScript-компонент и один Phaser adapter. Сначала законченный component-object vertical slice; data-oriented ECS — только по результатам сценария и измерений. |
 | 4 | Этап 3: Preview Host | **P0 — сквозной сценарий** | Запуск, остановка и повторный запуск, ошибки, реальная runtime-сущность и базовая live-инспекция связаны с проектной моделью. Browser preview не зависит от Tauri. |
-| 5 | Этап 4A: HTML5 build и asset validation | **P0 — выпускной фундамент** | Воспроизводимая сборка без открытого редактора, проверка схемы и asset references, понятные ошибки и подтверждение отсутствия editor-only кода в game bundle. |
+| 5 | Этап 4A: HTML5 build и asset validation | **P0 — выпускной фундамент** | Воспроизводимая сборка без открытого редактора, проверка схемы и asset references, выборочный feature build по проекту/target и отчёт о составе; editor-only код исключён из game bundle. |
 | 6 | Этап 5: пробелы 2D-редактора | **P0, по матрице capabilities** | После принятия Project Model/Preview contracts закрывать подтверждённые gaps базового workflow. Задачи можно выполнять отдельными vertical slices параллельно с build, но каждая затронутая функция должна пройти save/reopen → preview → build acceptance. P0 из ТЗ — очередь возможностей, а не один большой спринт. |
 | 7 | Этап 4B: Platform Services | **P1 после Core и базового build** | Сначала platform-neutral API и mock/local adapter, затем первая целевая интеграция **Yandex Games**. VK Mini Apps и VK Play — отдельные последующие задачи/targets, а не один недифференцированный адаптер. Platform SDK не должен блокировать редакторские vertical slices и независимую HTML5-сборку. |
 | 8 | Этап 6: QA, diagnostics и profiling | **Непрерывно; полный gate перед release** | Unit/type/lint checks появляются вместе с соответствующим кодом. Расширенный profiler, browser acceptance и release gates добавляются по мере появления измеряемых подсистем. |
 | 9 | Этап 7: Tauri desktop shell | **Не блокирует Web-first MVP** | Начинать после доказанного browser workflow и baseline. Небольшой throwaway PoC допустим раньше для снятия конкретного риска; полноценная упаковка не должна задерживать HTML5 build. |
-| 10 | Этап 8: npm-based Package Manager и экосистема расширений | **Отложенный этап реализации, архитектура закладывается сразу** | npm остаётся resolver/install/lockfile engine; сначала внутренние пакеты, manifests и clean-install fixture, затем общий Package Manager Service и UI. Собственный registry и feature sets — позже, по подтверждённой потребности. |
+| 10 | Этап 8: npm-based Package Manager и экосистема расширений | **Отложенный этап реализации, архитектура закладывается сразу** | npm остаётся resolver/install/lockfile engine; внутренние пакеты связываются с Feature/Capability Registry, Package Manager Service и UI. Собственный package registry и curated feature sets — позже, по подтверждённой потребности. |
 
 ### Что не следует делать параллельно «на всякий случай»
 
@@ -247,6 +247,10 @@
 - [ ] Инвентаризировать используемые builder/bundler-инструменты и расширять существующий pipeline, прежде чем вводить новый.
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
+- [ ] Ввести минимальный Feature/Capability Registry contract для build (stable feature IDs, provider, scopes/targets, declared requirements/conflicts) и fixture; не связывать его реализацию с готовностью UI Package Manager.
+- [ ] Хранить выбор необязательных features в версионируемой project/target configuration отдельно от установленного npm dependency tree; defaults и required features должны быть явными.
+- [ ] На основе выбранных features и target вычислять declared feature-dependency closure, проверять недостающих provider packages, конфликты и unsupported scopes/targets; выдавать machine-readable diagnostics, не устанавливая npm dependencies автоматически.
+- [ ] Включить состав selected features и причины inclusion/exclusion в build report; проверить на fixture, что выключенные/неподдерживаемые и editor-only contributions не попадают в production bundle там, где это доказуемо import graph/bundler.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
 - [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production; проверить возможность использования [Vite](https://vite.dev/guide/) только после сравнения с текущей сборкой.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
@@ -268,6 +272,9 @@
 - [ ] Недоступность платформенного SDK не приводит к падению базовой игры.
 - [ ] В тестах и документации разделены Yandex Games, VK Mini Apps и VK Play.
 - [ ] Runtime/build-only зависимости не попадают в лишние production bundles.
+- [ ] Feature Registry различает package installed, feature provided/available, feature enabled in project, target-included и runtime/editor-activated states; один статус не переключает другой автоматически.
+- [ ] Fixture проверяет feature dependency closure, отсутствующий provider, несовместимую комбинацию/target и структурированную диагностику.
+- [ ] Повторная сборка с той же конфигурацией даёт стабильный список выбранных функций и эквивалентный состав bundle; tree-shaking claims подтверждаются измеримым bundle report, а не одним лишь описанием metadata.
 
 ---
 
@@ -421,6 +428,9 @@
 - [ ] Настроить npm Workspaces для локальной разработки пакетов и проверить, что workspace linkage не приводит к установке всех пакетов как dependencies каждого потребительского проекта. После миграции редактора включить `src/editor` в согласованную workspace-схему.
 - [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP или платформенных SDK.
 - [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`: kind, scopes/targets, совместимость с Engine/Editor API и explicit entry points. Metadata не дублирует npm dependency tree и не заменяет npm resolver.
+- [ ] Утвердить versioned Feature/Capability Registry contract для встроенных и package-provided capabilities: stable IDs, provider, scopes/targets, requirements/conflicts, required/optional/default policy и build/editor entry points. Точная schema и место хранения подтверждаются ADR/PoC.
+- [ ] Связать descriptors Registry с project feature configuration и target build profiles; зафиксировать отдельно installed/provided/available/enabled/target-included/activated states и обеспечить совместную валидацию для Editor Host, CLI и build.
+- [ ] Разделить package dependencies и feature dependencies: npm отвечает за installation/resolution; Registry проверяет требуемые engine capabilities, предлагает диагностируемое действие для недостающего provider, но не запускает собственную установку и не дублирует npm resolver.
 - [ ] Утвердить версионируемые TypeScript contracts для Editor Extension API и extension lifecycle; точную схему и API подтвердить через ADR/PoC до обещания публичной совместимости.
 - [ ] Создать Node-side Package Manager Service с целевыми исходниками в `packages/package-manager/`: он использует npm CLI, а Editor Host UI обращается к нему через типизированный HTTP/IPC contract; headless CLI использует ту же реализацию сервиса. Структурированные результаты/ошибки и lifecycle операций общие, UI не запускает npm напрямую.
 - [ ] Реализовать и протестировать install/update/remove/list для npm dependencies, управление процессами и отмену, безопасную передачу аргументов, ограничение project root, журналирование и восстановление после неудачной операции.
@@ -429,6 +439,8 @@
 - [ ] Обеспечить package-level registrations для команд, меню/shortcuts, panels/views, settings, Inspector property editors, schema validators, asset import/reimport handlers, Scene Editor gizmos/brushes, profiler overlays, build hooks и target profiles.
 - [ ] Установку/обновление/удаление сопровождать проверкой metadata/API compatibility и понятной диагностикой. Добавить project-level activation/disable для editor extensions так, чтобы отключение не требовало изменения npm dependency tree и не повреждало проектные данные.
 - [ ] Проверить, что editor-only/build-only зависимости не попадают в production game bundle; build pipeline должен анализировать declared scopes/targets и фактический dependency graph.
+- [ ] Проверить, что выбранные в проекте features собираются только для совместимых targets, их обязательные feature dependencies включаются прозрачно, а выключенные features не подключаются скрыто.
+- [ ] Подготовить machine-readable report с feature IDs, участвующими packages/entry points, причинами включения и диагностикой; корректно обрабатывать dynamic imports и modules с side effects вместо обещаний автоматического удаления.
 - [ ] Поддержать источники по очереди: npm registry/scoped registry и local/file packages сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
 - [ ] Применить явную политику lifecycle scripts, лицензий, уязвимостей и provenance. Не считать сторонние editor extensions изолированными только по manifest metadata.
 - [ ] Рассмотреть curated feature sets как группы пакетов, устанавливаемые явным действием пользователя, а не как отдельный resolver или автоматический набор обязательных dependencies.
@@ -445,6 +457,7 @@
 - [ ] Несовместимый или ошибочный extension даёт диагностируемый результат и не приводит к необработанному падению редактора.
 - [ ] Отключение extension не повреждает project data и не требует удаления пакета из npm dependency tree.
 - [ ] Package Manager Service использует npm как единственный resolver/installer; собственного npm lockfile/resolver в Codogma нет.
+- [ ] Feature descriptors проходят schema/compatibility validation, а их источники явно зарегистрированы; случайное выполнение произвольного кода из `node_modules` не требуется для discovery.
 - [ ] Clean-install fixture проходит `npm ci` и build; Editor UI и CLI используют общий service contract.
 - [ ] Editor-only/build-only dependencies не попадают в production game bundle без явного разрешённого включения.
 - [ ] Credentials не записываются в tracked project files; политика lifecycle scripts и доверия описана.
