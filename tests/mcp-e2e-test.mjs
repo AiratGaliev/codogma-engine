@@ -6,11 +6,15 @@
  * MCP_E2E_WITH_EDITOR=1 node tests/mcp-e2e-test.mjs node server/mcp-launcher.mjs
  */
 import assert from "node:assert/strict"
+import { rm } from "node:fs/promises"
+import path from "node:path"
 import { spawn } from "node:child_process"
 
 const cmd = process.argv[2] || "node"
 const args = process.argv.slice(3)
 const cwd = process.env.MCP_E2E_CWD || process.cwd()
+const projectDir = path.resolve(process.env.PROJECT_DIR || path.join(process.cwd(), "tests", "workspace", "test-typescript"))
+let generatedScenePath
 
 const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], cwd })
 
@@ -118,6 +122,7 @@ async function main() {
     assert.ok(Array.isArray(initialScenes.scenes), "Ответ со сценами должен содержать массив scenes")
 
     const sceneName = `OfficialE2E-${process.pid}`
+    generatedScenePath = path.join(projectDir, "scenes", `${sceneName}.scene`)
     console.log("\n== ide-create-new-scene ==")
     await callTool("ide-create-new-scene", { name: sceneName })
 
@@ -162,6 +167,12 @@ main()
         console.error("MCP E2E FAIL:", error.stack || error.message)
         process.exitCode = 1
     })
-    .finally(() => {
+    .finally(async () => {
+        if (generatedScenePath) {
+            await rm(generatedScenePath, { force: true }).catch((error) => {
+                console.error("Не удалось удалить временную сцену:", error.message)
+                process.exitCode = 1
+            })
+        }
         if (child.exitCode === null && child.signalCode === null) child.kill()
     })
