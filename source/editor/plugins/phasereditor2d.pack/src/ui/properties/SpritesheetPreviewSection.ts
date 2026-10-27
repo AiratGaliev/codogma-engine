@@ -50,7 +50,7 @@ namespace phasereditor2d.pack.ui.properties {
             return this._imgControl ?? super.getImageControl();
         }
 
-        private async getSelectedFrame(): Promise<core.AssetPackImageFrame> {
+        private async getSelectedFrame(): Promise<core.AssetPackImageFrame | null> {
 
             const spritesheet = await this.getSelectedSpritesheet();
 
@@ -59,6 +59,12 @@ namespace phasereditor2d.pack.ui.properties {
                 const config = spritesheet.getFrameConfig();
                 const control = this.getImageControl();
                 const img = control.getImage();
+
+                if (!img) {
+
+                    return null;
+                }
+
                 const imgW = img.getWidth();
 
                 const cols = this.computeNumberOfColumns(imgW, config.frameWidth, config.margin, config.spacing);
@@ -71,17 +77,17 @@ namespace phasereditor2d.pack.ui.properties {
 
                 if (!cell) {
 
-                    return null as any;
+                    return null;
                 }
 
                 const cursorIndex = cols * cell.row + cell.col;
 
                 const frame = spritesheet.getFrames().find(f => Number(f.getName()) === cursorIndex);
 
-                return frame;
+                return frame ?? null;
             }
 
-            return null as any;
+            return null;
         }
 
         private registerSelectionListeners() {
@@ -242,6 +248,11 @@ namespace phasereditor2d.pack.ui.properties {
             const withinCellX = offsetX - col * totalCellWidth;
             const withinCellY = offsetY - row * totalCellHeight;
             const image = this._imgControl.getImage();
+
+            if (!image) {
+
+                return null;
+            }
 
             const cols = this.computeNumberOfColumns(image.getWidth(), frameWidth, margin, spacing);
             const rows = Math.floor((image.getHeight() - 2 * margin + spacing) / totalCellHeight);
