@@ -148,6 +148,8 @@ async function main() {
     await fs.mkdir(outsideDir, { recursive: true })
     await fs.writeFile(path.join(outsideDir, "secret.txt"), "outside-project-secret", "utf8")
     await fs.symlink(outsideDir, path.join(projectDir, "outside-link"), "dir")
+    await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
+    await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
 
     const port = await freePort()
     let bridgePort = await freePort()
@@ -208,6 +210,17 @@ async function main() {
         assert.equal(JSON.parse(symlinkWrite.body).error, "invalid path", "API writes must reject symlink escapes")
         await assert.rejects(fs.access(path.join(outsideDir, "created.txt")), /ENOENT/, "no file may be created outside the project")
 
+        const danglingWrite = await request(port, "/editor/api", {
+            method: "POST",
+            headers: { host, "content-type": "application/json" },
+            body: JSON.stringify({
+                method: "SetFileString",
+                body: { path: "dangling-file", content: "must not follow a dangling link" }
+            })
+        })
+        assert.equal(JSON.parse(danglingWrite.body).error, "invalid path", "dangling file symlinks must be rejected")
+        await assert.rejects(fs.access(path.join(outsideDir, "dangling-file.txt")), /ENOENT/, "dangling symlink writes must not create files outside the project")
+
         // Exercise the officially distributed MCP stdio package after the Zod override.
         mcp = createMcpClient(bridgePort, projectDir)
         const initialized = await mcp.request("initialize", {
@@ -231,7 +244,16 @@ async function main() {
         const toolText = (toolCall.result.content || []).filter(item => item.type === "text").map(item => item.text).join("\n")
         assert.ok(Array.isArray(JSON.parse(toolText).scenes), "scene-list tool should return valid scene data")
 
-        console.log("Security smoke checks passed: loopback/origin guard, symlink containment, and official MCP/Zod compatibility.")
+        const danglingMcpWrite = await mcp.request("tools/call", {
+            name: "ide-create-new-scene",
+            arguments: { name: "MustNotEscape", folder: "dangling-folder" }
+        })
+        assert.ok(danglingMcpWrite.result?.isError || danglingMcpWrite.error,
+            "MCP scene creation must reject a dangling symlink folder")
+        await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
+            "MCP scene creation must not create an outside folder through a dangling symlink")
+
+        console.log("Security smoke checks passed: loopback/origin guard, symlink containment, dangling-link protection, and official MCP/Zod compatibility.")
     } finally {
         if (mcp?.child && mcp.child.exitCode === null) mcp.child.kill()
         if (server.exitCode === null) server.kill()
