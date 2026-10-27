@@ -13,13 +13,26 @@ namespace phasereditor2d.pack.core {
         private getUrls(): string[] {
 
             const value: unknown = this.getData()["url"];
+            const entries = Array.isArray(value) ? value : [value];
+            const urls: string[] = [];
 
-            const urls = typeof value === "string"
-                ? [value]
-                : Array.isArray(value) ? value : [];
+            for (const entry of entries) {
 
-            return urls.filter((url): url is string =>
-                typeof url === "string" && url.trim().length > 0);
+                // Phaser accepts both URL strings and { type, url } format
+                // descriptors in video URL arrays.
+                const url = typeof entry === "string"
+                    ? entry
+                    : entry && typeof entry === "object" && "url" in entry
+                        ? (entry as { url?: unknown }).url
+                        : undefined;
+
+                if (typeof url === "string" && url.trim().length > 0) {
+
+                    urls.push(url);
+                }
+            }
+
+            return urls;
         }
 
         getFirstUrl(): string {
