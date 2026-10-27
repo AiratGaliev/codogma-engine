@@ -27,6 +27,24 @@ namespace phasereditor2d.pack {
             super("phasereditor2d.pack");
         }
 
+        buildSyncPackFinder(): core.PackFinder {
+
+            const files = ide.FileUtils.getAllFiles();
+
+            const reg = colibri.Platform.getWorkbench().getContentTypeRegistry();
+
+            const packFiles = files.filter(file => reg.getCachedContentType(file) === core.contentTypes.CONTENT_TYPE_ASSET_PACK);
+
+            const packs = packFiles.map(file => {
+
+                const str = ide.FileUtils.getFileString(file);
+
+                return new core.AssetPack(file, str);
+            });
+
+            return new core.PackFinder(...packs);
+        }
+
         getExtensions() {
 
             return this._extensions ??
@@ -288,7 +306,8 @@ namespace phasereditor2d.pack {
             reg.addExtension(new files.ui.views.FilePropertySectionExtension(
                 page => new ui.properties.AddFileToPackFileSection(page),
                 page => new ui.properties.AudioPreviewSection(page),
-                page => new ui.properties.VideoPreviewSection(page)
+                page => new ui.properties.VideoPreviewSection(page),
+                page => new ui.properties.ImportedImageFilesPreviewSection(page)
             ));
 
             // files view sections

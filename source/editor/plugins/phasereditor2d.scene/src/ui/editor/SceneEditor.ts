@@ -46,6 +46,9 @@ namespace phasereditor2d.scene.ui.editor {
         private _localCoords: boolean;
         private _cellRendererCache: CellRendererCache;
 
+        // this is for the ImportedImageFilesPreviewSection to show up the images in the inspector.
+        allowImagePreviewAssetsInInspector = true;
+
         constructor() {
             super("phasereditor2d.SceneEditor", SceneEditor.getFactory());
 

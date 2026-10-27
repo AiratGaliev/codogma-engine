@@ -7,6 +7,7 @@ namespace phasereditor2d.ide.ui.actions {
     export const CMD_PLAY_PROJECT = "phasereditor2d.ide.ui.actions.PlayProject";
     export const CMD_QUICK_PLAY_PROJECT = "phasereditor2d.ide.ui.actions.QuickPlayProject";
     export const CMD_OPEN_VSCODE = "phasereditor2d.ide.ui.actions.OpenVSCode";
+    export const CMD_OPEN_IN_TERMINAL = "phasereditor2d.ide.ui.actions.OpenInTerminal";
     export const CMD_ENABLE_OPEN_SOURCE_FILE_IN_EXTERNAL_EDITOR = "phasereditor2d.ide.ui.actions.EnableOpenCodeFileInExternalEditor";
     export const CMD_DISABLE_OPEN_SOURCE_FILE_IN_EXTERNAL_EDITOR = "phasereditor2d.ide.ui.actions.EnableOpenCodeFileInExternalEditor";
     export const CMD_OPEN_START_PAGE = "phasereditor2d.ide.OpenStartPage";
@@ -277,6 +278,57 @@ namespace phasereditor2d.ide.ui.actions {
                             }
 
                             const resp = await colibri.core.io.apiRequest("OpenFileManager", { file: file.getFullName() });
+
+                            if (resp.error) {
+
+                                alert(resp.error);
+                            }
+                        }
+                    }
+                });
+
+                // open in terminal
+
+                manager.add({
+                    command: {
+                        id: CMD_OPEN_IN_TERMINAL,
+                        category: CAT_PROJECT,
+                        name: "Open in Terminal",
+                        tooltip: "Open the selected folder in the OS Terminal app."
+                    },
+                    keys: {
+                        key: "KeyT",
+                        control: true,
+                        alt: true
+                    },
+                    handler: {
+                        executeFunc: async (args) => {
+
+                            let file = colibri.ui.ide.FileUtils.getRoot();
+
+                            const view = args.activePart;
+
+                            if (view instanceof files.ui.views.FilesView) {
+
+                                const sel = view.getSelection()[0] as io.FilePath;
+
+                                if (sel) {
+
+                                    file = sel;
+                                }
+                            }
+
+                            if (!file) {
+
+                                return;
+                            }
+
+                            if (file.isFile()) {
+
+                                file = file.getParent();
+                            }
+
+                            const resp = await colibri.core.io.apiRequest("OpenTerminal", { file: file.getFullName() });
 
                             if (resp.error) {
 

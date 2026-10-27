@@ -103,6 +103,12 @@ namespace phasereditor2d.ide.ui {
 
                     manager.addCommand(id, { showText: false });
                 }
+
+                for (const ext of colibri.Platform
+                    .getExtensions(DesignWindowToolbarExtension.POINT_ID) as DesignWindowToolbarExtension[]) {
+
+                    ext.fillToolbar(manager);
+                }
             }
 
             {
