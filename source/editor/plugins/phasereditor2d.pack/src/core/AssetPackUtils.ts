@@ -55,7 +55,7 @@ namespace phasereditor2d.pack.core {
             const packFolder = packOrFolder instanceof AssetPack ? packOrFolder.getFile().getParent() : packOrFolder;
 
             const root = ide.FileUtils.getPublicRoot(packFolder);
-            const rootPath = root.getFullName().replace(/\\/g, "/").replace(/\\/+$/, "");
+            const rootPath = root.getFullName().replace(/\\/g, "/").replace(/\/+$/, "");
             const filePath = file.getFullName().replace(/\\/g, "/");
 
             // Check a path-segment boundary, not just a string prefix:
