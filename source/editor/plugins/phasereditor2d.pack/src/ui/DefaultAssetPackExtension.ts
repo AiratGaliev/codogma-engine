@@ -14,6 +14,7 @@ namespace phasereditor2d.pack.ui {
         core.ASEPRITE_TYPE,
         core.BITMAP_FONT_TYPE,
         core.FONT_TYPE,
+        core.TEXTURE_TYPE,
         core.TILEMAP_CSV_TYPE,
         core.TILEMAP_IMPACT_TYPE,
         core.TILEMAP_TILED_JSON_TYPE,
@@ -50,6 +51,7 @@ namespace phasereditor2d.pack.ui {
         aseprite: "Aseprite",
         bitmapFont: "Bitmap Font",
         font: "Font",
+        texture: "Texture",
         tilemapCSV: "Tilemap CSV",
         tilemapImpact: "Tilemap Impact",
         tilemapTiledJSON: "Tilemap Tiled JSON",
@@ -112,6 +114,9 @@ namespace phasereditor2d.pack.ui {
 
                 case core.FONT_TYPE:
                     return new core.FontAssetPackItem(pack, data);
+
+                case core.TEXTURE_TYPE:
+                    return new core.TextureAssetPackItem(pack, data);
 
                 case core.TILEMAP_CSV_TYPE:
                     return new core.TilemapCSVAssetPackItem(pack, data);
@@ -226,6 +231,10 @@ namespace phasereditor2d.pack.ui {
                 new editor.properties.BitmapFontSection(page),
 
                 new editor.properties.FontSection(page),
+
+                new editor.properties.TextureSection(page),
+                new editor.properties.TextureAtlasSection(page),
+                new editor.properties.TextureMultiAtlasSection(page),
 
                 new editor.properties.TilemapCSVSection(page),
 
@@ -504,6 +513,8 @@ namespace phasereditor2d.pack.ui {
                 new importers.BitmapFontImporter(),
 
                 new importers.FontImporter(),
+
+                new importers.TextureImporter(),
 
                 new importers.AsepriteImporter(),
 

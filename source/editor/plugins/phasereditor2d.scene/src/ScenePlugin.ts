@@ -262,6 +262,12 @@ namespace phasereditor2d.scene {
                 ui.sceneobjects.FXShadowExtension.getInstance(),
                 ui.sceneobjects.FXBarrelExtension.getInstance(),
                 ui.sceneobjects.FXBlendExtension.getInstance(),
+
+                // shortcut: Premium FX (not in Phaser 4.2.1 runtime)
+                ui.sceneobjects.FXBloomExtension.getInstance(),
+                ui.sceneobjects.FXCircleExtension.getInstance(),
+                ui.sceneobjects.FXGradientExtension.getInstance(),
+                ui.sceneobjects.FXShineExtension.getInstance(),
                 ui.sceneobjects.FXBlockyExtension.getInstance(),
                 ui.sceneobjects.FXBlurExtension.getInstance(),
                 ui.sceneobjects.FXBokehExtension.getInstance(),
@@ -332,6 +338,12 @@ namespace phasereditor2d.scene {
                 page => new ui.sceneobjects.FXObjectSection(page),
                 page => new ui.sceneobjects.FXBarrelSection(page),
                 page => new ui.sceneobjects.FXBlendSection(page),
+
+                // shortcut: Premium FX (not in Phaser 4.2.1 runtime)
+                page => new ui.sceneobjects.FXBloomSection(page),
+                page => new ui.sceneobjects.FXCircleSection(page),
+                page => new ui.sceneobjects.FXGradientSection(page),
+                page => new ui.sceneobjects.FXShineSection(page),
                 page => new ui.sceneobjects.FXBlockySection(page),
                 page => new ui.sceneobjects.FXBlurSection(page),
                 page => new ui.sceneobjects.FXBokehSection(page),

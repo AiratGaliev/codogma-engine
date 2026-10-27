@@ -37,6 +37,11 @@ namespace phasereditor2d.pack.core {
     export const TILEMAP_TILED_JSON_TYPE = "tilemapTiledJSON";
     export const VIDEO_TYPE = "video";
     export const XML_TYPE = "xml";
+    export const TEXTURE_TYPE = "texture";
+
+    export const SUPPORTED_COMPRESSED_TEXTURE_FORMATS = [
+        "ETC", "ETC1", "ATC", "ASTC", "BPTC", "RGTC", "PVRTC", "S3TC", "S3TCSRGB"
+    ];
 
     export class AssetPack {
 

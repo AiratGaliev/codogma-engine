@@ -150,6 +150,12 @@ namespace phasereditor2d.pack {
 
             reg.addExtension(
                 new colibri.core.ContentTypeExtension(
+                    [new pack.core.contentTypes.TextureContentTypeResolver()],
+                    5
+                ));
+
+            reg.addExtension(
+                new colibri.core.ContentTypeExtension(
                     [new pack.core.contentTypes.AtlasXMLContentTypeResolver()],
                     5
                 ));
