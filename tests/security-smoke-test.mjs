@@ -59,6 +59,14 @@ async function waitForHttpServer(port, child, getLogs) {
     throw new Error(`Editor server did not start in time:\n${getLogs()}`)
 }
 
+async function stopChild(child) {
+    if (!child || child.exitCode !== null) return
+
+    const exited = once(child, "exit").catch(() => undefined)
+    child.kill()
+    await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2000))])
+}
+
 function createMcpClient(bridgePort, projectDir) {
     const child = spawn(process.execPath, [path.join(ROOT, "server", "mcp-launcher.mjs")], {
         cwd: ROOT,
@@ -147,9 +155,24 @@ async function main() {
     await fs.mkdir(projectDir, { recursive: true })
     await fs.mkdir(outsideDir, { recursive: true })
     await fs.writeFile(path.join(outsideDir, "secret.txt"), "outside-project-secret", "utf8")
-    await fs.symlink(outsideDir, path.join(projectDir, "outside-link"), "dir")
-    await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
-    await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
+
+    let symlinkChecksAvailable = true
+    try {
+        await fs.symlink(outsideDir, path.join(projectDir, "outside-link"), "dir")
+        await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
+        await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
+    } catch (error) {
+        const canSkipForWindows = process.platform === "win32"
+            && ["EPERM", "EACCES", "ENOTSUP"].includes(error.code)
+
+        if (!canSkipForWindows) throw error
+
+        symlinkChecksAvailable = false
+        for (const name of ["outside-link", "dangling-file", "dangling-folder"]) {
+            await fs.rm(path.join(projectDir, name), { force: true, recursive: true })
+        }
+        console.warn("Skipping symlink-specific checks: Windows does not permit creating symbolic links in this environment.")
+    }
 
     const port = await freePort()
     let bridgePort = await freePort()
@@ -188,38 +211,40 @@ async function main() {
         })
         assert.equal(hostileOrigin.status, 403, "cross-origin browser requests should be rejected")
 
-        const symlinkRead = await request(port, "/editor/project/outside-link/secret.txt", { headers: { host } })
-        assert.equal(symlinkRead.status, 403, "project static serving must reject a symlink escaping the project")
+        if (symlinkChecksAvailable) {
+            const symlinkRead = await request(port, "/editor/project/outside-link/secret.txt", { headers: { host } })
+            assert.equal(symlinkRead.status, 403, "project static serving must reject a symlink escaping the project")
 
-        const listing = await request(port, "/editor/api", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({ method: "GetProjectFiles" })
-        })
-        assert.equal(listing.status, 200)
-        assert.equal(listing.body.includes("outside-link"), false, "project listings must not follow symlink directories")
-
-        const symlinkWrite = await request(port, "/editor/api", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({
-                method: "SetFileString",
-                body: { path: "outside-link/created.txt", content: "should not escape" }
+            const listing = await request(port, "/editor/api", {
+                method: "POST",
+                headers: { host, "content-type": "application/json" },
+                body: JSON.stringify({ method: "GetProjectFiles" })
             })
-        })
-        assert.equal(JSON.parse(symlinkWrite.body).error, "invalid path", "API writes must reject symlink escapes")
-        await assert.rejects(fs.access(path.join(outsideDir, "created.txt")), /ENOENT/, "no file may be created outside the project")
+            assert.equal(listing.status, 200)
+            assert.equal(listing.body.includes("outside-link"), false, "project listings must not follow symlink directories")
 
-        const danglingWrite = await request(port, "/editor/api", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({
-                method: "SetFileString",
-                body: { path: "dangling-file", content: "must not follow a dangling link" }
+            const symlinkWrite = await request(port, "/editor/api", {
+                method: "POST",
+                headers: { host, "content-type": "application/json" },
+                body: JSON.stringify({
+                    method: "SetFileString",
+                    body: { path: "outside-link/created.txt", content: "should not escape" }
+                })
             })
-        })
-        assert.equal(JSON.parse(danglingWrite.body).error, "invalid path", "dangling file symlinks must be rejected")
-        await assert.rejects(fs.access(path.join(outsideDir, "dangling-file.txt")), /ENOENT/, "dangling symlink writes must not create files outside the project")
+            assert.equal(JSON.parse(symlinkWrite.body).error, "invalid path", "API writes must reject symlink escapes")
+            await assert.rejects(fs.access(path.join(outsideDir, "created.txt")), /ENOENT/, "no file may be created outside the project")
+
+            const danglingWrite = await request(port, "/editor/api", {
+                method: "POST",
+                headers: { host, "content-type": "application/json" },
+                body: JSON.stringify({
+                    method: "SetFileString",
+                    body: { path: "dangling-file", content: "must not follow a dangling link" }
+                })
+            })
+            assert.equal(JSON.parse(danglingWrite.body).error, "invalid path", "dangling file symlinks must be rejected")
+            await assert.rejects(fs.access(path.join(outsideDir, "dangling-file.txt")), /ENOENT/, "dangling symlink writes must not create files outside the project")
+        }
 
         // Exercise the officially distributed MCP stdio package after the Zod override.
         mcp = createMcpClient(bridgePort, projectDir)
@@ -244,33 +269,38 @@ async function main() {
         const toolText = (toolCall.result.content || []).filter(item => item.type === "text").map(item => item.text).join("\n")
         assert.ok(Array.isArray(JSON.parse(toolText).scenes), "scene-list tool should return valid scene data")
 
-        // Verify the built-in MCP dispatcher directly so this is testing the
-        // repository's safeJoin path, not optional-argument defaults in the
-        // third-party stdio adapter.
-        const danglingMcpWrite = await request(port, "/editor/mcp", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 2,
-                method: "tools/call",
-                params: {
-                    name: "ide-create-new-scene",
-                    arguments: { name: "MustNotEscape", folder: "dangling-folder" }
-                }
+        if (symlinkChecksAvailable) {
+            // Verify the built-in MCP dispatcher directly so this is testing the
+            // repository's safeJoin path, not optional-argument defaults in the
+            // third-party stdio adapter.
+            const danglingMcpWrite = await request(port, "/editor/mcp", {
+                method: "POST",
+                headers: { host, "content-type": "application/json" },
+                body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    id: 2,
+                    method: "tools/call",
+                    params: {
+                        name: "ide-create-new-scene",
+                        arguments: { name: "MustNotEscape", folder: "dangling-folder" }
+                    }
+                })
             })
-        })
-        const danglingMcpResponse = JSON.parse(danglingMcpWrite.body)
-        assert.ok(danglingMcpResponse.result?.isError || danglingMcpResponse.error
-            || /invalid folder|invalid path/i.test(JSON.stringify(danglingMcpResponse.result?.content || [])),
-            `Built-in MCP scene creation must reject a dangling symlink folder; response: ${danglingMcpWrite.body}`)
-        await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
-            "MCP scene creation must not create an outside folder through a dangling symlink")
+            const danglingMcpResponse = JSON.parse(danglingMcpWrite.body)
+            assert.ok(danglingMcpResponse.result?.isError || danglingMcpResponse.error
+                || /invalid folder|invalid path/i.test(JSON.stringify(danglingMcpResponse.result?.content || [])),
+                `Built-in MCP scene creation must reject a dangling symlink folder; response: ${danglingMcpWrite.body}`)
+            await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
+                "MCP scene creation must not create an outside folder through a dangling symlink")
+        }
 
-        console.log("Security smoke checks passed: loopback/origin guard, symlink containment, dangling-link protection, and official MCP/Zod compatibility.")
+        const symlinkSummary = symlinkChecksAvailable
+            ? "symlink containment and dangling-link protection"
+            : "symlink checks skipped (permissions unavailable)"
+        console.log(`Security smoke checks passed: loopback/origin guard, ${symlinkSummary}, and official MCP/Zod compatibility.`)
     } finally {
-        if (mcp?.child && mcp.child.exitCode === null) mcp.child.kill()
-        if (server.exitCode === null) server.kill()
+        await stopChild(mcp?.child)
+        await stopChild(server)
         await fs.rm(tempRoot, { recursive: true, force: true })
     }
 }
