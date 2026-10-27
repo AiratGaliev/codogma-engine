@@ -39,9 +39,36 @@ function textureKeyOf(args) {
 
 /* ============================== path helpers ============================== */
 
+function isWithinRealBase(base, target) {
+    const realBase = fs.realpathSync(base)
+    let candidate = target
+
+    while (true) {
+        try {
+            const realCandidate = fs.realpathSync(candidate)
+            return realCandidate === realBase || realCandidate.startsWith(realBase + path.sep)
+        } catch (error) {
+            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return false
+            const parent = path.dirname(candidate)
+            if (parent === candidate) return false
+            candidate = parent
+        }
+    }
+}
+
 function safeJoin(base, relPath) {
-    const p = path.resolve(base, "." + path.sep + String(relPath || "").replace(/^[\\/]+/, ""))
+    if (typeof relPath !== "string") return null
+
+    const p = path.resolve(base, "." + path.sep + relPath.replace(/^[\\/]+/, ""))
     if (p !== base && !p.startsWith(base + path.sep)) return null
+
+    // Prevent a project-local symlink from escaping the selected project root.
+    try {
+        if (!isWithinRealBase(base, p)) return null
+    } catch {
+        return null
+    }
+
     return p
 }
 
@@ -3065,18 +3092,56 @@ defTool(
 
 /* =============================== small utils ============================== */
 
+const MAX_MCP_BODY_BYTES = 32 * 1024 * 1024
+
 function readBody(req) {
     return new Promise((resolve, reject) => {
         const chunks = []
-        req.on("data", c => chunks.push(c))
-        req.on("end", () => {
+        let size = 0
+        let settled = false
+
+        const cleanup = () => {
+            req.off("data", onData)
+            req.off("end", onEnd)
+            req.off("error", onError)
+        }
+
+        const onData = chunk => {
+            if (settled) return
+            size += chunk.length
+            if (size > MAX_MCP_BODY_BYTES) {
+                settled = true
+                cleanup()
+                req.resume()
+                const error = new Error("Request body too large")
+                error.statusCode = 413
+                reject(error)
+                return
+            }
+            chunks.push(chunk)
+        }
+
+        const onEnd = () => {
+            if (settled) return
+            settled = true
+            cleanup()
             try {
                 resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"))
-            } catch (e) {
+            } catch {
                 reject(new Error("invalid JSON body"))
             }
-        })
-        req.on("error", reject)
+        }
+
+        const onError = error => {
+            if (settled) return
+            settled = true
+            cleanup()
+            reject(error)
+        }
+
+        req.on("data", onData)
+        req.on("end", onEnd)
+        req.on("error", onError)
     })
 }
 
