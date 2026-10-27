@@ -40,7 +40,7 @@ namespace phasereditor2d.pack.ui.properties {
             super.onSectionHidden();
 
             if (this._videoElement) {
-                this._videoElement.src = "";
+                this._videoElement.removeAttribute("src");
                 this._videoElement.load();
             }
         }
