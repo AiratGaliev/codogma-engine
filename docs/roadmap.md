@@ -1,36 +1,71 @@
 # Дорожная карта: Codogma Engine
 
-Дорожная карта строится вокруг требований [технического задания](technical-specification.md). Цель — не переписать всю IDE ради нового стека, а развивать самостоятельный Web-first 2D Engine: согласованные проектные данные, TypeScript API, runtime, визуальный редактор, live preview/debugging, asset/build pipeline и интеграции Yandex Games/VK.
+Дорожная карта строится вокруг требований [технического задания](technical-specification.md). **Ближайший большой исполнительский этап — модернизация существующего редактора в текущей кодовой базе `source/editor/`**: его UX/UI, основные 2D-workflows, качество изменяемого исходного кода и подтверждение runtime-поведения. Новый Core, перенос каталогов и полная смена UI-стека не должны вытеснять эту работу.
 
-Каждый этап должен завершаться проверяемым продуктовым результатом. Длинные этапы разбиваются на независимые задачи и PR. Схемы и библиотеки, помеченные как кандидат, не считаются утверждённой архитектурой до прохождения PoC.
+Unity 6 и Cocos Creator 4.0 используются как ориентиры по организации профессионального 2D-редактора и качеству рабочих процессов, а не как требование воспроизвести весь функционал больших движков. Цель — сделать Codogma визуально цельным, удобным и технически надёжным редактором, расширяя существующие подсистемы там, где это оправдано. Каждая задача должна давать работающий результат в коде; документация и матрицы — инструменты принятия решений и фиксации доказательств, а не самостоятельная цель исполнительского этапа.
+
+Каждый этап разбивается на независимые PR с воспроизводимыми критериями приёмки. Сохранять работающие подсистемы и переиспользовать существующие контракты — предпочтительнее переписывания; замену делать только после PoC, показывающего конкретное преимущество.
 
 ## Приоритеты и рекомендуемый порядок реализации
 
-Номера этапов обозначают крупные рабочие пакеты, но не означают, что все их пункты нужно делать одновременно. Практический порядок поставки — от снятия неопределённости к первому сквозному сценарию, затем к production-возможностям и только потом к необязательным направлениям.
+Очередность ниже определяет **что агент должен реализовывать первым в существующем репозитории**, а не порядок написания документов. Редакторные улучшения, которые не требуют нового Core, выполняются непосредственно на текущей базе. Архитектурные работы идут параллельно только при наличии отдельной законченной задачи и не должны отвлекать основной поток от редактора.
 
-| Очередь | Этапы roadmap | Приоритет | Измеримый результат / правило |
+| Очередь | Рабочий пакет | Приоритет | Измеримый результат / правило |
 |---|---|---|---|
-| 1 | Этап 1: аудит и baseline | **Блокирующий** | Фактическая карта текущих возможностей, зависимостей, качества и производительности. До этого не переписывать работающие подсистемы и не добавлять новые runtime-зависимости. |
-| 2 | Этап 1: ADR и toolchain pilot | **Блокирующий для нового Core** | Согласованы границы Project Model/Core/Phaser adapter/Preview Host; новый модуль проходит ограниченный strict typecheck, lint, format check и unit tests. Legacy Colibri массово не мигрируется. |
-| 3 | Этап 2: Project Model и минимальный Core | **P0 — основа** | Стабильные IDs, схема/сериализация/миграции, Transform, lifecycle, один пользовательский TypeScript-компонент и один Phaser adapter. Сначала законченный component-object vertical slice; data-oriented ECS — только по результатам сценария и измерений. |
-| 4 | Этап 3: Preview Host | **P0 — сквозной сценарий** | Запуск, остановка и повторный запуск, ошибки, реальная runtime-сущность и базовая live-инспекция связаны с проектной моделью. Browser preview не зависит от Tauri. |
-| 5 | Этап 4A: HTML5 build и asset validation | **P0 — выпускной фундамент** | Воспроизводимая сборка без открытого редактора, проверка схемы и asset references, выборочный feature build по проекту/target и отчёт о составе; editor-only код исключён из game bundle. |
-| 6 | Этап 5: пробелы 2D-редактора | **P0, по матрице capabilities** | После принятия Project Model/Preview contracts закрывать подтверждённые gaps базового workflow. Задачи можно выполнять отдельными vertical slices параллельно с build, но каждая затронутая функция должна пройти save/reopen → preview → build acceptance. P0 из ТЗ — очередь возможностей, а не один большой спринт. |
-| 7 | Этап 4B: Platform Services | **P1 после Core и базового build** | Сначала platform-neutral API и mock/local adapter, затем первая целевая интеграция **Yandex Games**. VK Mini Apps и VK Play — отдельные последующие задачи/targets, а не один недифференцированный адаптер. Platform SDK не должен блокировать редакторские vertical slices и независимую HTML5-сборку. |
-| 8 | Этап 6: QA, diagnostics и profiling | **Непрерывно; полный gate перед release** | Unit/type/lint checks появляются вместе с соответствующим кодом. Расширенный profiler, browser acceptance и release gates добавляются по мере появления измеряемых подсистем. |
-| 9 | Этап 7: Tauri desktop shell | **Не блокирует Web-first MVP** | Начинать после доказанного browser workflow и baseline. Небольшой throwaway PoC допустим раньше для снятия конкретного риска; полноценная упаковка не должна задерживать HTML5 build. |
-| 10 | Этап 8: npm-based Package Manager и экосистема расширений | **Отложенный этап реализации, архитектура закладывается сразу** | npm остаётся resolver/install/lockfile engine; внутренние пакеты связываются с Feature/Capability Registry, Package Manager Service и UI. Собственный package registry и curated feature sets — позже, по подтверждённой потребности. |
+| 1 | Инженерная база для изменений существующего редактора | **P0 — сразу** | Clean install, воспроизводимые build/typecheck, тесты для затрагиваемого кода, нужные lint/format checks в ограниченном scope. Не вводить массовый строгий gate для всего legacy-дерева. |
+| 2 | Этап 5: визуальная модернизация Editor UX/UI | **P0 — основной видимый результат** | Согласованные панели, toolbar, иерархия, Inspector, assets/workspace, визуальная плотность, типографика, состояния и темы; редактор воспринимается как цельная IDE, а не набор разрозненных legacy-панелей. |
+| 3 | Этап 5: стабилизация основных 2D authoring workflows | **P0 — основной функциональный результат** | Scene/Hierarchy/Transform, selection, Inspector/components, сохранение и повторное открытие, Undo/Redo, Prefabs, Asset Pack и существующие инструменты проходят адресные acceptance-проверки. Улучшать текущую реализацию до замены архитектуры. |
+| 4 | Этап 5: runtime acceptance и регрессии PR #10 | **P0 — подтверждение качества** | FX Circle/Bloom/Gradient/Shine, Box2D, Asset Pack/importers и codegen проверены в реальном browser/runtime; дефекты исправлены, regression tests добавлены. Зелёная сборка сама по себе недостаточна. |
+| 5 | Security fixes для файловых операций и optional mini-services | **P0 для соответствующих API/сервисов** | TOCTOU закрыт race-resistant способом до расширения write APIs/Package Manager; mini-services безопасны по умолчанию до сетевого/недоверенного запуска. Эти фиксы могут идти отдельными PR. |
+| 6 | Этап 1: адресное исследование и toolchain migration | **P0 — непрерывно** | Матрицы обновляются по мере реальной проверки; ESLint/Prettier/tests применяются к новому и изменяемому Codogma-owned scope. Полная инвентаризация всего legacy не блокирует исправление подтверждённого дефекта. |
+| 7 | Сравнительный PoC Svelte / UI toolchain | **P1 — параллельно, ограниченный scope** | Рабочий прототип на репрезентативной панели, сравнение с текущим Colibri/workbench, решение на evidence. До такого решения не переписывать редактор целиком; обычные улучшения текущего UI не ждут PoC. |
+| 8 | Этап 2: Project Model и минимальный Codogma Core | **P1 — после первой стабилизации редактора или отдельным независимым потоком** | Малый проверяемый Project/Scene/Node/Component slice без импорта legacy UI. Core contracts не должны задерживать улучшения, которые можно безопасно сделать на текущей модели. |
+| 9 | Этап 3–4A: Preview Host и headless HTML5 build | **P1 — следующие сквозные возможности** | Browser preview, live Inspector и воспроизводимая game build принимаются отдельно после готовности зависимых contracts; существующий `npm run build` не считать сборкой игры. |
+| 10 | Platform Services, Tauri, Package Manager и расширенная ecosystem | **P2 / по готовности зависимостей** | Yandex Games раньше последующих targets; Tauri, package ecosystem, PixiJS, дополнительные physics backends и advanced features не отвлекают от текущего редактора без конкретного обоснования. |
+
+## Текущее состояние и границы блокеров (27.10.2026)
+
+Текущая базовая точка `dev` — `754edaa1f7313409e99c3462a802d5fd430a9a01`. Документационный PR #5 и feature PR #10 уже слиты в `dev`. Старые формулировки, где PR #10 описывался как Draft/не часть ветки, считаются устаревшими; runtime follow-ups ниже остаются открытыми.
+
+### Можно начинать сейчас
+
+- **Сразу переходить к изменениям кода существующего редактора.** Матрица возможностей и архитектурные документы уже дают достаточную исходную точку. Дополнять их по мере реализации и проверок, а не превращать их полное заполнение в отдельный большой этап перед первой правкой.
+- **Первым потоком делать инженерную надёжность и UX/UI редактора:** необходимые проверки в существующих package roots, улучшение основных панелей и рабочих сценариев, единая визуальная система, темизация и иконки.
+- **Закрывать подтверждённые проблемы PR #10** отдельными функциональными задачами: FX, Box2D, Asset Pack, импорт ресурсов, генерация кода. Статус «работает» выставлять только после соответствующего runtime/browser acceptance.
+- **Параллельно закрывать security residuals**, не смешивая их с UI-рефакторингом. Race-resistant file API обязателен до новых файловых write paths/Package Manager; optional mini-services обязаны иметь безопасные настройки до запуска в недоверенной сети.
+- **Core pilot разрешён параллельно, но не должен быть основной целью ближайшей большой задачи.** Он должен быть изолирован и не блокировать исправление функций, уже реализуемых текущим редактором.
+- **Svelte/Vite/dockview/CodeMirror/Monaco исследуются через небольшой рабочий PoC.** Не нужно сначала устанавливать новый стек для всего приложения: сначала сравнить его на одной репрезентативной области, а текущий UI продолжать улучшать.
+
+### P0 — ближайшая исполнительская очередь
+
+1. Подготовить безопасный контур изменений: воспроизводимые clean-install/build/typecheck checks, тестовую инфраструктуру и точечные lint/format проверки для затрагиваемого кода. Новые инструменты внедрять совместимо с текущими root/editor package roots; не форсировать repo-wide строгий режим для legacy.
+2. Провести code-level triage по текущему редактору на основе `docs/capability-matrix.md`: выбрать самые заметные UX-пробелы и подтверждённые дефекты, указать файлы/контракты после изучения реализации и сразу приступать к исправлениям. Не заканчивать работу только обновлением таблицы.
+3. Модернизировать существующую оболочку/панели редактора: единый визуальный язык, иерархия, toolbar, работа с панелями и tabs, состояния loading/empty/error/disabled/selected, читаемая плотность интерфейса, keyboard navigation/shortcuts и согласованная работа светлой/тёмной тем. Сначала проверить возможности Colibri workbench и расширять их вместо создания конкурирующей оболочки.
+4. Реализовать централизованную систему иконок и theme-specific assets на основе закреплённого набора Godot Editor Icons. Инвентаризация IDs, выбор 2D-значков и проверка MIT notices — обязательные шаги реализации, но не основание отложить задачу без срока; итогом должны стать работающий код и визуальная проверка обеих тем.
+5. Закрыть основные workflows существующей базы: scene open/edit/save/reopen, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая изменённая возможность должна иметь regression test и ручной/browser acceptance там, где поведение визуальное.
+6. Закрыть runtime follow-ups PR #10: FX generated output vs editor preview, Box2D на 30/60/120 FPS и stop/restart/cleanup, Asset Pack/importer error paths и кодогенерацию. Добавить фикстуры для повторения дефектов.
+7. Устранить TOCTOU в файловой безопасности отдельным узким PR; усилить standalone mini-services до безопасных defaults и покрыть negative tests. Не включать новые файловые write operations до race-resistant исправления.
+8. Выполнить ограниченный Svelte PoC на реальной панели или редакторском workflow. Сравнить интеграцию, производительность, состояние, темизацию и стоимость bridge с текущим workbench. По результатам записать решение и переходить дальше; не ждать PoC для независимых исправлений текущих панелей.
+
+### Что не блокирует модернизацию текущего редактора
+
+- Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и всех legacy project configs. Эти сведения пополняются по мере работы и до публикации/массовой архитектурной миграции; они не должны задерживать изолированную исправимую задачу.
+- Реализация нового Project Model/Core, runtime adapter или оптимизированного ECS. Это следующий архитектурный поток, а не предусловие для каждой правки текущего Scene Editor, Inspector или Asset Pack.
+- Перенос `source/editor` → `src/editor` и npm Workspaces. Они потребуют отдельного миграционного PR до тесной интеграции Editor Host с новыми packages, но не нужны для первой серии UX/bug fixes на текущих путях.
+- Полное решение о Svelte. PoC необходимо, чтобы принять архитектурное решение; до результата можно и нужно улучшать текущий UI без необратимой переписи.
+- Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
+- Tauri, замена Phaser на PixiJS, второй ECS/runtime, дополнительные physics backends и public package registry. Они не входят в основной scope этого этапа.
 
 ### Что не следует делать параллельно «на всякий случай»
 
-- Не переносить существующий редактор на Svelte/новую UI-оболочку до capability audit и сравнительного PoC.
-- Не подключать EVA.js поверх Phaser как второй runtime, не создавать второй игровой цикл и не объявлять ECS ускорением без профиля.
-- Не начинать замену Phaser на PixiJS, не внедрять несколько physics backends и не добавлять полный набор инструментов Unity/Cocos до подтверждённого gap и ADR/PoC.
-- Не внедрять сразу весь набор линтеров/анализаторов во все legacy-пакеты. Сначала — отдельный строгий scope нового кода, корректные entry points и baseline.
-- Не начинать перенос Godot Editor Icons массово: сначала инвентаризация IDs, карта используемых команд, light/dark-варианты и проверка лицензии; иконки не должны блокировать Core или HTML5 pipeline.
-- Не делать Tauri, систему расширений, advanced lighting, сложные animation graphs и альтернативные runtime adapters обязательными для первого работоспособного сквозного сценария.
-
-**Правило приоритета:** если задача не разблокирует текущий зависимый этап и не исправляет подтверждённый дефект обязательного workflow, она не должна опережать блокирующие задачи только из-за привлекательности технологии или количества желаемых функций.
+- Не переписывать Colibri/Editor Host целиком и не переносить весь интерфейс на Svelte без сравнительного PoC и плана совместного существования подсистем.
+- Не останавливать исправление существующего редактора, пока проектируют идеальный Core. Для каждой задачи выбирать минимальный контракт, необходимый именно ей.
+- Не сводить модернизацию к замене цветов/иконок: визуальная работа должна включать и функциональные состояния, клавиатурный workflow, layout панелей и связанные пользовательские сценарии.
+- Не оставлять icon migration только в виде карты: после инвентаризации выполнить внедрение в согласованном UI scope, с отдельными light/dark variants и attribution.
+- Не вводить сразу строгий lint/format gate на все legacy-пакеты, не менять все lockfiles/путь editor и не переводить всё на Workspaces одной операцией.
+- Не заменять Phaser, не добавлять EVA.js как второй runtime и не вводить ECS-оптимизацию без доказанного gap, PoC и измерений.
+- Не отмечать runtime-функции завершёнными по одному лишь TypeScript build, наличию кнопки или генерации исходника.
+- Не добавлять зависимости «на будущее». У каждой зависимости должны быть используемая функция, лицензия, scope, критерии приёмки и доказательство, почему текущей реализации недостаточно.
 
 ## Принципы ведения roadmap
 
@@ -64,19 +99,30 @@
 
 ### С чего начинается реализация
 
-Первый исполнительский шаг — **Этап 1 (audit & decisions)**. Он не должен превращаться в большой кодовый рефакторинг. Его результат — семь проверяемых артефактов:
-- `docs/capability-matrix.md`: реализовано / частично / отсутствует / не подтверждено для редактора, runtime и export;
-- `docs/dependency-capability-matrix.md`: версия, лицензия, runtime/editor/build scope, ограничения и причина сохранения/замены каждой значимой зависимости;
-- `docs/decisions/ADR-0001-core-architecture.md`: границы Project Model/Core/Phaser adapter/Editor/Preview Host, lifecycle, time/input/scene contracts и открытые решения;
-- `docs/performance-baseline.md`: закреплённые fixtures, среда и фактические baseline measurements, без выдуманных порогов;
-- `docs/decisions/ADR-0002-typescript-toolchain.md`: решение по strict TS, lint/format/dead-code/architecture tooling и порядку миграции;
-- `docs/decisions/ADR-0003-package-architecture-and-management.md`: границы `@codogma/cge`, npm Workspaces, npm-based Package Manager, engine metadata, безопасность и открытые вопросы package layout;
-- `docs/code-quality-baseline.md`: текущие compiler/lint/unused-code findings, scope пилота, false-positive policy и правила постепенного усиления CI.
+**Первое агентное задание должно быть кодовым: модернизировать существующий Editor Host и его основные 2D-workflows на текущей базе.** Документы этого PR служат входным контекстом, а не очередным deliverable для агента. Не поручать исполнителю повторно собирать эти же матрицы/ADR до начала работы, кроме адресного уточнения конкретного спорного поведения.
 
-После приёмки этих артефактов следует выполнить Этап 2 как небольшой вертикальный срез: Project/Scene/Node → один пользовательский TypeScript-компонент → Inspector metadata → save/reopen → runtime preview → проверяемый build fixture. На этом шаге fixture доказывает связность сценария, но не заменяет отдельную приёмку полноценного headless HTML5 pipeline на Этапе 4. Не реализовывать все будущие подсистемы в одном PR и не добавлять конкурирующие runtime/renderer/physics зависимости до соответствующих ADR/PoC.
+Ожидаемый рабочий порядок:
+1. Проверить актуальный `dev`, установить проект согласно README, запустить доступные build/typecheck/smoke checks и зафиксировать фактический baseline.
+2. Выбрать конечную группу связанных UI/functional workflows (например, Scene Editor + Hierarchy/Inspector или Asset Pack) и начать с реального кода. Указанные в матрице runtime gaps PR #10 включать в ближайшие задачи, когда соответствующая подсистема затрагивается.
+3. Добавить/настроить tests и lint/format для изменяемого Codogma-owned scope. Не включать новые строгие правила на всё legacy-дерево без исправления/миграционного плана.
+4. Реализовать согласованную UI-систему и иконки как видимые продуктовые deliverables, включая светлую и тёмную тему. Провести browser acceptance на целевых размерах окна, приложить screenshots до/после или эквивалентные воспроизводимые результаты.
+5. Провести сравнительный Svelte PoC отдельным небольшим scope, не блокируя независимые исправления текущего workbench.
+6. Для каждого крупного набора изменений открыть отдельный PR с регрессионными тестами и перечислением фактически пройденных проверок; обновить соответствующие части матрицы/worklog по результатам.
+7. После первой стабилизации редактора выбрать следующий Core/Preview/HTML5 build slice на основе зависимостей, а не переписывать весь legacy editor заранее.
 
----
+Полная инвентаризация source tree, фактические performance measurements, migration `source/editor` → `src/editor` и npm Workspaces остаются отдельными задачами, необходимыми к соответствующим gates. Они не используются как повод откладывать независимую модернизацию редактора.
 
+### Подготовленные reference-документы — использовать, не пересоздавать
+
+Эти документы уже созданы как результат предыдущего этапа аудита. Они сохраняют свою актуальность как справочная база и уточняются вместе с кодом, когда меняется фактическое состояние. Агенту не поручается повторно генерировать их вместо реализации.
+
+- `docs/capability-matrix.md` — фактические возможности редактора/runtime/build, evidence, тесты и непроверенные gaps.
+- `docs/dependency-capability-matrix.md` — зависимости, версии, лицензии, scope и последствия для реализации.
+- `docs/decisions/ADR-0001-core-architecture.md` — границы будущих Project Model/Core/Phaser adapter/Preview Host; относится к будущей интеграции Core.
+- `docs/performance-baseline.md` — протокол и fixture для измерений; реальные результаты добавляются только после воспроизводимых прогонов.
+- `docs/decisions/ADR-0002-typescript-toolchain.md` — политика TypeScript, lint/format/test и постепенного усиления quality gates.
+- `docs/decisions/ADR-0003-package-architecture-and-management.md` — целевые package/workspace/extension boundaries и Package Manager; не блокирует изменения текущего editor UI.
+- `docs/code-quality-baseline.md` — исходное состояние compiler/build/security checks и ограничения того, что подтверждается CI.
 
 ## Этап 0 — базовая версия и текущая инфраструктура
 
@@ -102,20 +148,20 @@
 
 ## Этап 1 — аудит исходников, модель данных и архитектурные решения
 
-**Цель:** не начинать большой рефакторинг вслепую. Зафиксировать реальные возможности и выбрать минимальные границы между текущей IDE, проектными данными и будущим движком.
+**Цель:** дать достаточно фактов, чтобы безопасно модернизировать существующий Editor Host, а не превратить подготовительный этап в отдельный документационный проект. Основные матрицы, ADR и baseline-протоколы уже созданы; неизвестные области уточняются непосредственно перед изменением соответствующего кода.
 
 ### Внутренняя очередь выполнения
 
-1. **Сначала — факты:** capability audit, текущие TS configs/scripts/lockfiles, форматы проектных данных, реальные границы IFileStorage/HTTP/plugin registry/Undo-Redo, текущие тесты и измеряемый baseline.
-2. **Затем — матрицы:** записать найденные gaps, версии/лицензии/scope зависимостей и текущие compiler/lint/unused-code findings. Не переносить пожелания в колонку «реализовано» без evidence.
-3. **После baseline — решения:** оформить ADR по архитектуре и toolchain с альтернативами и последствиями. Инструменты оценивать как согласованный набор; сначала проверить конфликты версий и package scope, затем устанавливать.
-4. **Пилотировать новый код отдельно:** один минимальный Codogma-owned module с strict TypeScript, runtime validation границ данных, ESLint, Prettier, unit test, а Knip/dependency-cruiser — в report mode.
-5. **Gate этапа:** после фиксации baseline и принятых ADR согласовать контракт первого vertical slice. Перенос редактора `source/editor` → `src/editor` выполняется отдельным migration PR после аудита путей и до полноценного наращивания нового Core; не объединять его с реализацией Core или консолидацией npm Workspaces/lockfile. Не переписывать при этом весь legacy-код.
+1. **Начинать с текущего кода:** изучить выбранную подсистему, реальные UX/behavior gaps, существующие contracts, tests и runtime path. Для подтверждённой проблемы сразу формировать implementation PR, а не ждать полной инвентаризации всего репозитория.
+2. **Ввести необходимые quality checks в изменяемом scope:** clean install, TypeScript build, targeted tests, ESLint/Prettier для нового/изменяемого Codogma-owned кода; Knip/dependency-cruiser сначала работают в report mode. Не ломать массово legacy Colibri.
+3. **Пополнять матрицы по evidence:** фиксировать, что реализовано, что исправлено, какие тесты прошли и что осталось непроверенным. Документация обновляется вместе с соответствующим кодом и не заменяет его.
+4. **Оформлять архитектурные решения по необходимости:** strict toolchain pilot, Core contracts и migration plans нужны для новых модулей и тесной интеграции; они не являются gate для независимых UI/bug fixes существующего редактора.
+5. **Отдельный gate перед тесной интеграцией нового Core:** принять ADR-0001/0002, пройти toolchain pilot и contract tests. Перенос `source/editor` → `src/editor` и npm Workspaces выполнять отдельными проверяемыми миграционными PR до интеграции в общий Editor Host; не объединять миграцию с массовым рефакторингом.
 
 ### Задачи
 
 - [x] Зафиксировать baseline доставки Phaser 4.2.1 по `plugin.json`, root/editor manifests, declarations и Box2D ambient types; сверить с upstream tag `v4.2.1` и отличить модульную структуру исходников от текущего bundle-based подключения Codogma. Вывод и ссылки зафиксированы в ТЗ и каталоге источников; фактическое исключение Phaser-кода из production bundle остаётся отдельной проверкой этапа 4A.
-- [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP; сохранить результат в `docs/capability-matrix.md` с фактическими evidence/tests.
+- [x] Создать первоначальную статическую `docs/capability-matrix.md` с evidence и раздельными статусами реализации/автоматических проверок/runtime acceptance; остающиеся runtime gaps перечислены отдельными follow-ups. Обновлять строки по мере проверки функций.
 - [ ] Включить отдельные workflow-строки для Sprite Editor (slicing/trim/pivot/collision shapes/sorting/9-slicing), Tilemap brushes/layouts/chunks, camera/coordinate conversion, input (mouse/keyboard/touch), audio lifecycle, UI layouts/text, particles/lighting, localization, save storage и Dev/Release build profiles.
 - [ ] Инвентаризировать TypeScript configs/project references, TS compiler options, scripts and lockfiles во всех packages, оценить совместимость обновления от TypeScript 5.3.3, текущий scope TSLint и generated/dynamic plugin entry points; не предполагать, что repo-wide checks уже существуют.
 - [ ] Зафиксировать toolchain baseline и staged migration plan для strict TypeScript, ESLint/typescript-eslint, Prettier, Knip и dependency-cruiser; отметить точный initial scope для новых Codogma modules и текущие legacy findings.
@@ -123,20 +169,23 @@
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
 - [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
 - [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
-- [ ] Составить Dependency & Capability Matrix текущего форка: версия, лицензия, роль, browser/runtime/editor scope, ограничения и цена обновления; сохранить его в `docs/dependency-capability-matrix.md` и включить транзитивные runtime/build dependencies.
-- [ ] Указать developer tools в отдельной категории devDependencies, их package scope, scripts, lockfile, role, runtime exclusion и rationale; убрать дублирующие lint/format tools, если такие найдутся.
+- [x] Создать первоначальную `docs/dependency-capability-matrix.md` для текущих direct package roots, Phaser bundle и Box2D runtime path.
+- [ ] Завершить транзитивную dependency/SBOM, license и provenance инвентаризацию; проверить ограничения и стоимость обновления значимых зависимостей до публикации пакетов.
+- [ ] Для нового Core toolchain зафиксировать pinned devDependencies, scripts и lockfile; legacy TSLint dependency уже отсутствует, но `lint.sh`/`tslint.json` остаются неактивными артефактами. Удалить или заменить их отдельным cleanup после пилота.
 - [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
 - [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
-- [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri. Первое решение оформить как `docs/decisions/ADR-0001-core-architecture.md`, явно выделив принятые решения, открытые вопросы, альтернативы и последствия.
-- [ ] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile, выбор ESLint/Prettier/Knip/dependency-cruiser, интеграция TypeScript project references, legacy TSLint migration и CI ratchet plan.
+- [x] Зафиксировать решения первого vertical slice в `docs/decisions/ADR-0001-core-architecture.md`: Project Model, Component-object Core, runtime adapter и browser-first Preview Host. Детальные API signatures остаются test-driven реализационными задачами.
+- [x] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile и scope нового Core, ESLint/Prettier/Vitest, Knip/dependency-cruiser report mode и staged CI ratchet. Сам toolchain pilot ещё не реализован.
 - [ ] Поддерживать `docs/decisions/ADR-0003-package-architecture-and-management.md` как нормативное решение: целевые исходники Editor Host в `src/editor`, самостоятельные package roots в `packages/*`, `@codogma/cge` в `packages/cge`, npm Workspaces для локальной разработки, selective installation в пользовательские проекты и Extension API; точная metadata schema и детали migration/workspace tooling проходят PoC.
 - [ ] После фиксации capability/dependency baseline подготовить и выполнить отдельный migration PR `source/editor` → `src/editor`: сохранить внутреннюю структуру и TypeScript project references; обновить root scripts, server `EDITOR_DIR`, CI/cache paths, release archive, `BUILD.md` и README; проверить root/editor clean install, сборку, HTTP smoke и состав ZIP. Не объединять перенос каталога с workspace/lockfile migration.
-- [ ] Описать текущий baseline производительности и проверок в `docs/performance-baseline.md`; закрепить fixtures, браузер/ОС/железо и метод измерения, не ставить пороги без воспроизводимой методики.
+- [x] Создать `docs/performance-baseline.md` с fixtures и протоколом воспроизводимых измерений без выдуманных порогов.
+- [ ] Выполнить и сохранить фактические performance measurements на согласованном окружении; не вводить budgets до получения повторяемых raw samples.
 
 ### Критерии приёмки
 
-- [ ] Есть таблица фактического состояния `docs/capability-matrix.md`, а не дублированный перечень желаемых функций.
-- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/decisions/ADR-0003-package-architecture-and-management.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
+- [x] Есть первоначальная таблица статусов `docs/capability-matrix.md` с путями evidence, автотестами и оставшимися runtime-acceptance gaps.
+- [x] Созданы initial versions `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; `ADR-0003` уже существует. Неизвестные сведения помечены как непроверенные.
+- [ ] Закрывать содержательные остатки baseline-документов по потребности соответствующего PR и перед публикацией/массовыми архитектурными изменениями; они не блокируют отдельные безопасные UI/bug fixes существующего редактора.
 - [ ] Новый TypeScript pilot проходит strict typecheck, lint, format check и соответствующие unit tests; Knip/dependency-cruiser report scope и false-positive handling документированы.
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
@@ -283,13 +332,17 @@
 
 ## Этап 5 — качество существующего редактора и 2D-производственные инструменты
 
-**Цель:** развивать текущий редактор по матрице реальных пробелов, не дублируя уже имеющийся функционал.
+**Цель:** сделать текущую кодовую базу основой профессионального 2D-редактора, сопоставимого по качеству основных рабочих процессов и цельности интерфейса с Unity 6 и Cocos Creator 4.0. Это основной исполнительский этап: он должен приводить к изменениям в `source/editor/`, regression tests и проверяемому runtime-поведению, а не только к дополнительным документам.
 
-**Зависимости:** capability audit этапа 1 и контракты/модель этапов 2–3. Asset/build pipeline этапа 4 подключается по мере готовности. P0-задачи можно выполнять отдельными vertical slices, если затронутые контракты уже приняты. Не требуется заранее переписывать Colibri на Svelte.
+**Зависимости:** текущая реализация и её existing data/file/plugin/Undo-Redo contracts. Полная готовность нового Core, Preview Host, HTML5 pipeline, перенос `source/editor` → `src/editor` и npm Workspaces **не являются предусловиями** для задач, которые можно корректно выполнить на нынешней базе. Если функция действительно зависит от нового контракта, изолировать только эту подзадачу; не блокировать ею остальную модернизацию.
 
 ### Задачи
 
-- [ ] Для каждого текущего editor subsystem зафиксировать состояние, тесты и отличия от требуемого UX.
+- [ ] Сначала проверить существующие Colibri/workbench capabilities (панели, вкладки, dock/resize/layout, shortcuts, commands) и усиливать их вместо реализации конкурирующей оболочки.
+- [ ] Сформировать и реализовать согласованную визуальную систему редактора: типографика, spacing/density, размеры контролов, toolbar/menu patterns, focus/hover/disabled/selected/error/loading/empty states, keyboard navigation и базовые accessibility expectations.
+- [ ] Привести главную рабочую среду к профессиональному 2D-editor workflow: Scene/Game view, Hierarchy, Inspector, Assets/Pack и Console/diagnostics должны иметь понятную роль, согласованную визуальную иерархию и эффективный default layout. Не создавать фиктивные панели без работающего содержания.
+- [ ] Проверить поведение панелей при изменении размера окна/панелей, сохранение/восстановление рабочих раскладок и доступность ключевых команд через keyboard shortcuts; переиспользовать существующие механизмы, а новые добавлять только при доказанном gap.
+- [ ] Для каждой выбранной подсистемы фиксировать необходимые gaps, tests и acceptance вместе с реализацией, а не выполнять полную инвентаризацию всех файлов до первого исправления.
 - [ ] Усилить основной Scene Editor workflow: hierarchy, Transform, selection, multi-edit, Undo/Redo, безопасное сохранение.
 - [ ] Проверить Sprite Editor workflow: single/multiple import, sprite sheet slicing, trim/crop, pivot, generated/editable collision geometry, sorting layers/groups, 9-slicing и tiled draw mode.
 - [ ] Проверить atlas preview/analyzer: rendered vs culled sprite counts, atlas page count and utilization, duplicate/unused atlas assignments and target variants where instrumentation allows.
@@ -308,12 +361,13 @@
 - [ ] Улучшать graphics/audio/assets workflow на основе capability matrix и production pain points.
 - [ ] Провести отдельный аудит icon identifiers Colibri и подготовить карту перехода на [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons): оставить только значки общих UI-команд и поддерживаемых 2D-возможностей, исключить 3D-only icons.
 - [ ] Для отобранных значков подготовить и проверить отдельные варианты для светлой и тёмной тем, включая контраст и применимые UI-состояния; зафиксировать source commit, исходный файл, mapping и необходимые MIT notices. Не выполнять массовую замену до ревью карты и плановой задачи.
-- [ ] Решение о Svelte/Vite/dockview/CodeMirror/Monaco принимать после сравнительного прототипа; если текущий workbench подходит, расширять его.
-- [ ] Если новая UI оболочка доказано полезна, переносить views по одной; legacy и новый view сосуществуют только через явный bridge, а не два независимых источника данных.
+- [ ] Выполнить ограниченный Svelte PoC на одной существующей панели/workflow и сравнить с текущим Colibri/workbench; проверить совместимость с состоянием редактора, API, темизацией, сборкой, отладкой и стоимостью bridge.
+- [ ] По результатам PoC принять явное решение: продолжать текущий workbench, интегрировать Svelte для ограниченного слоя или постепенно мигрировать выбранные views. Полная миграция не является автоматическим результатом успешного PoC.
+- [ ] Если новая UI оболочка доказано полезна, переносить views по одной; legacy и новый view сосуществуют только через явный bridge и общий state/model, а не два независимых источника данных.
 
 ### Очередность внутри этапа
 
-**A — P0: базовый авторинг, только подтверждённые gaps по docs/capability-matrix.md.**
+**A — P0: модернизация рабочей среды и базовый authoring на существующей базе.**
 - Сохранение/повторное открытие сцены, hierarchy/Transform, безопасные Undo/Redo и согласованность Prefab/Component metadata с Project Model.
 - Input и преобразование координат (mouse/keyboard/touch, UI versus world, camera/viewport), focus loss и cleanup listeners.
 - Базовый Sprite workflow: импорт/slicing, trim/pivot, sorting и collision shapes; результат должен сохраняться и соответствовать runtime.
@@ -335,9 +389,9 @@
 - RTL/complex text shaping и расширенная accessibility — только после проверки ограничений текущего text/runtime backend.
 - Ручные renderer optimizations — только если profiler подтверждает конкретный bottleneck.
 
-**Отдельная UI-задача — иконки и темы.** После аудита identifiers и текущей theme system составить карту иконок Godot, выбрать только общие UI/поддерживаемые 2D-команды, исключить 3D-only assets, подготовить отдельные light/dark-варианты и сохранить source mapping/MIT notices. Это обязательное требование качества UI, но оно не блокирует проектную модель, runtime, preview или HTML5 build; массовую замену выполнять после ревью карты.
+**P0 — иконки и темы как часть модернизации редактора.** В рамках первого UI-modernization пакета составить mapping используемых IDs и команд, выбрать и внедрить подходящие Godot Editor Icons для общих UI-команд и существующих 2D-возможностей, исключить 3D-only assets, подготовить отдельные light/dark-варианты и сохранить source mapping/MIT notices. Карта — промежуточный шаг, а не завершение задачи: обязательны рабочая интеграция в интерфейс и browser acceptance в обеих темах. Это не требует остановить независимую работу над Core, но должно быть включено в ближайший объём реализации редактора.
 
-**Переписывание UI-стека — не P0.** Svelte/Vite/dockview/CodeMirror/Monaco сравнивать только отдельным прототипом после подтверждения конкретного ограничения текущего workbench. Если миграция оправдана, переносить views по одному, сохраняя единый источник данных и browser acceptance.
+**Полная перепись UI-стека — не P0; ограниченный PoC — P1.** Svelte/Vite/dockview/CodeMirror/Monaco сравнить на небольшой реальной панели или workflow, а не по абстрактным преимуществам. До завершения PoC продолжать улучшать текущий workbench. Если новый стек докажет преимущество, переносить views по одному через явный bridge и единый источник данных, сохраняя browser acceptance.
 
 ### Критерии приёмки
 
@@ -360,7 +414,7 @@
 - [ ] **Regression tests для данных и предпросмотра:** покрыть литералы `undefined` и spread-ключи в JSON/code printer; конфигурацию/удаление кадров Particle Emitter и fallback `__DEFAULT`; spritesheet frame lookup с margin/spacing и до/после загрузки изображения; все поддерживаемые формы Phaser audio/video URL (строка, массив и `{ type, url }`); неудачное чтение/сохранение thumbnail cache и освобождение `blob:` URL. Тесты должны ловить конкретные регрессии, а не только подтверждать отсутствие исключения при сборке.
 - [ ] **Server/API security:** сохранить regression tests для bind на loopback, проверки `Host`/`Origin`, лимитов JSON/multipart, файлового listing/read/write/upload, root `phasereditor2d.json`, dangling symlink и built-in/stdio MCP. Проверять, что при отказе не изменяется и не читается файл за пределами проекта. Smoke-тест MCP сейчас проверяет initialize, tools/list и один вызов scene-list tool; отдельно подтвердить совместимость принудительного Zod 4.6.7 override с остальными tool schemas, optional/nested arguments и типовыми ответами, чтобы успешный одиночный вызов не считался полной совместимостью. Если среда не разрешает создавать symlink, явно помечать соответствующую проверку skipped и обеспечивать отдельный runner, где она действительно выполняется.
 - [ ] **Закрыть TOCTOU в файловых операциях:** текущая схема real-path containment проверяет путь до последующей операции и не исключает гонку при одновременной замене symlink локальным процессом. Выбрать race-resistant механизм, гарантия которого относится к фактически открытому file handle/target, а не только к предварительной проверке pathname; не считать простую повторную проверку достаточной. Покрыть параллельную подмену ссылки тестом там, где ОС позволяет. Если гарантированную защиту нельзя обеспечить переносимым API, документировать точную границу угрозы и сохранить loopback-only exposure до явного решения по модели угроз. Не помечать риск устранённым только по прохождению текущего security smoke.
-- [ ] **Release evidence:** прикреплять к PR результаты ручной browser acceptance и адресных тестов; отдельно записывать, что `npm run test:e2e`/UI E2E или release workflow не запускались, когда это так. CI Fast успех на head PR #10 не подтверждает перечисленные runtime-сценарии и не заменяет обновлённый acceptance evidence на финальном commit.
+- [ ] **Release evidence:** прикреплять к PR результаты ручной browser acceptance и адресных тестов; отдельно записывать, что `npm run test:e2e`/UI E2E или release workflow не запускались, когда это так. Для PR #10 CI Fast прошёл на PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` перед слиянием в `dev` (`754edaa1f7313409e99c3462a802d5fd430a9a01`); отдельный запуск на merge commit не подтверждён в этом аудите. Это не закрывает runtime/security follow-ups и не заменяет acceptance evidence соответствующих функций.
 
 ### Критерий закрытия follow-up backlog
 

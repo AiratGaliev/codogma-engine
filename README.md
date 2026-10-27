@@ -12,7 +12,7 @@ The current implementation provides a browser-based authoring environment, a loc
 
 ## Project direction
 
-Codogma is being developed as its own engine, not as a feature-parity project for another editor. The existing codebase is a starting point that lets development continue while the engine's architecture and workflows are shaped around Codogma's needs.
+Codogma is being developed as its own engine. For the next major implementation stage, the priority is to modernize the existing editor and its source code in place: improve the visual system and workspace, strengthen core 2D authoring workflows, and prove runtime behaviour with focused tests. Unity 6 and Cocos Creator 4.0 are references for editor UX and common 2D workflows, not a promise to reproduce every feature or rewrite the current codebase. New Core/runtime architecture is developed in staged, independently testable slices and must not displace improvements that can be safely made in the existing editor.
 
 Development priorities:
 
@@ -415,6 +415,12 @@ Start the server first, then run <code>npm run test:e2e</code>. Inspect the firs
 - [Technical specification (RU)](docs/technical-specification.md)
 - [Roadmap (RU)](docs/roadmap.md)
 - [Technical reference catalog (RU)](docs/REFERENCE-SOURCES.md)
+- [Capability matrix (RU)](docs/capability-matrix.md)
+- [Dependency and capability matrix (RU)](docs/dependency-capability-matrix.md)
+- [Code quality baseline (RU)](docs/code-quality-baseline.md)
+- [Performance baseline protocol (RU)](docs/performance-baseline.md)
+- [Core architecture ADR (RU)](docs/decisions/ADR-0001-core-architecture.md)
+- [TypeScript toolchain ADR (RU)](docs/decisions/ADR-0002-typescript-toolchain.md)
 - [Package architecture and npm-based Package Manager ADR (RU)](docs/decisions/ADR-0003-package-architecture-and-management.md)
 - [CI Fast workflow](.github/workflows/ci.yml)
 - [MCP E2E workflow](.github/workflows/e2e.yml)
