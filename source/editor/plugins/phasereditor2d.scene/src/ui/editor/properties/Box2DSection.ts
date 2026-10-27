@@ -28,6 +28,9 @@ namespace phasereditor2d.scene.ui.editor.properties {
             this.createFloatField(comp, "box2dGravityY", "Gravity Y",
                 "The vertical gravity of the Box2D world. Use a positive value for a top-down-to-bottom gravity.");
 
+            this.createFloatField(comp, "box2dWorld_scale", "World Scale",
+                "Pixels per meter used when converting scene coordinates to Box2D units. Must be positive.", 0.01);
+
             this.createBooleanField(comp, "box2dAllowSleep",
 
                 this.createLabel(comp, "Allow Sleep",
@@ -35,17 +38,36 @@ namespace phasereditor2d.scene.ui.editor.properties {
 
             this.createBooleanField(comp, "box2dDebugDraw",
 
-                this.createLabel(comp, "Debug Draw",
-                    "If enabled, the Box2D world renders debug information."));
+                this.createLabel(comp, "Debug Draw (not generated yet)",
+                    "The setting is stored, but runtime debug-draw code is not emitted by the scene compiler yet."));
+
+            const libraryWarning = this.createLabel(comp,
+                "Box2D is enabled, but PhaserBox2D.js was not found in the project.",
+                "Copy the official PhaserBox2D.js release build into the game project so generated imports can resolve.");
+            libraryWarning.style.gridColumn = "span 2";
+
+            this.addUpdater(() => {
+
+                const settings = this.getSettings();
+                const files = colibri.ui.ide.FileUtils.getAllFiles();
+                const hasLibrary = files.some(file => file.isFile() && file.getName() === "PhaserBox2D.js");
+
+                libraryWarning.style.display = settings.box2dEnabled && !hasLibrary ? "block" : "none";
+            });
         }
 
-        private createFloatField(comp: HTMLElement, name: string, label: string, tooltip: string) {
+        private createFloatField(comp: HTMLElement, name: string, label: string, tooltip: string, min?: number) {
 
             const labelElement = this.createLabel(comp, label, tooltip);
 
             const textElement = this.createText(comp);
             textElement.type = "number";
             textElement.step = "any";
+
+            if (min !== undefined) {
+
+                textElement.min = String(min);
+            }
 
             this.addUpdater(() => {
 
@@ -60,7 +82,7 @@ namespace phasereditor2d.scene.ui.editor.properties {
 
                 const value = this.parseNumberExpression(textElement, false);
 
-                if (isNaN(value)) {
+                if (isNaN(value) || (min !== undefined && value < min)) {
 
                     this.updateWithSelection();
 
