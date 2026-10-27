@@ -311,7 +311,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 Box2DBodyComponent.addBox2DImport(unit, "RotFromRad", args.sceneFile);
 
-                bodyParts.push(`rotation: RotFromRad(${angle} * Math.PI / 180)`);
+                bodyParts.push(`rotation: RotFromRad(-${angle} * Math.PI / 180)`);
             }
 
             addPart(bodyParts, Box2DBodyComponent.fixedRotation, "fixedRotation", false);
