@@ -29,7 +29,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         }
 
         getPhaserFX(): any {
-            // Actions and Gradient store editor properties on this model; ColorMatrix uses a Filter Controller.
+            // Actions и Gradient хранят свойства редактора в этой модели; ColorMatrix использует контроллер фильтра.
             return this._phaserFX ?? this;
         }
 
