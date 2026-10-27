@@ -573,12 +573,13 @@ namespace phasereditor2d.scene.core.code {
         }
 
         /**
-         * The Box2D helper expects elapsed time in seconds, while Phaser's
-         * Scene update event supplies delta in milliseconds.
+         * Use a scene-local accumulator and the low-level fixed-step API:
+         * Phaser supplies delta in milliseconds, while Box2D uses seconds.
+         * Keeping the accumulator local avoids coupling concurrent worlds through
+         * the helper library's module-level WorldStep accumulator.
          *
-         * Registering an event handler avoids shadowing a user-defined update()
-         * method. The handler and world-sprite mapping are removed on shutdown
-         * so restarting the scene doesn't add duplicate listeners or stale bodies.
+         * Register an event handler instead of shadowing a user-defined update()
+         * method, then remove it and destroy the world on scene shutdown.
          */
         private buildBox2DWorldUpdateCode(body: CodeDOM[]) {
 
@@ -589,7 +590,7 @@ namespace phasereditor2d.scene.core.code {
                 return;
             }
 
-            for (const name of ["WorldStep", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"]) {
+            for (const name of ["b2World_Step", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"]) {
 
                 ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
             }
@@ -601,8 +602,17 @@ namespace phasereditor2d.scene.core.code {
             body.push(
                 new RawCodeDOM(""),
                 new RawCodeDOM("// box2d world update and cleanup"),
+                new RawCodeDOM("let box2dAccumulator = 0;"),
+                new RawCodeDOM("const box2dFixedTimeStep = 1 / 60;"),
+                new RawCodeDOM("const box2dSubStepCount = 4;"),
                 new RawCodeDOM(`const updateBox2DWorld = ${updateArgs} => {`),
-                new RawCodeDOM("    WorldStep({ worldId: box2dWorldId, deltaTime: delta / 1000 });"),
+                new RawCodeDOM("    box2dAccumulator = Math.min(box2dAccumulator + Math.max(0, delta) / 1000, box2dFixedTimeStep * 3);"),
+                new RawCodeDOM("    let box2dSteps = 0;"),
+                new RawCodeDOM("    while (box2dAccumulator >= box2dFixedTimeStep && box2dSteps < 3) {"),
+                new RawCodeDOM("        b2World_Step(box2dWorldId, box2dFixedTimeStep, box2dSubStepCount);"),
+                new RawCodeDOM("        box2dAccumulator -= box2dFixedTimeStep;"),
+                new RawCodeDOM("        box2dSteps++;"),
+                new RawCodeDOM("    }"),
                 new RawCodeDOM("    UpdateWorldSprites(box2dWorldId);"),
                 new RawCodeDOM("};"),
                 new RawCodeDOM(`this.events.on("update", updateBox2DWorld);`),
