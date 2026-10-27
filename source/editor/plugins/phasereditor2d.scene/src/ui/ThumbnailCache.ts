@@ -71,8 +71,17 @@ namespace phasereditor2d.scene.ui {
 
                     const newBlob = await controls.Controls.createBlobFromImage(element);
 
-                    await db.setItem(imageKey, newBlob);
-                    await db.setItem(hashKey, currentHash);
+                    try {
+
+                        await db.setItem(imageKey, newBlob);
+                        await db.setItem(hashKey, currentHash);
+
+                    } catch (error) {
+
+                        // Cache persistence is optional; keep the generated
+                        // thumbnail usable when IndexedDB is unavailable/full.
+                        console.warn("Unable to persist thumbnail cache:", error);
+                    }
                 }
 
                 return image;
