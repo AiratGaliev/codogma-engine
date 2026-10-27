@@ -206,7 +206,7 @@ async function main() {
             })
         })
         assert.equal(JSON.parse(symlinkWrite.body).error, "invalid path", "API writes must reject symlink escapes")
-        await assert.rejects(fs.access(path.join(outsideDir, "created.txt")), "no file may be created outside the project")
+        await assert.rejects(fs.access(path.join(outsideDir, "created.txt")), /ENOENT/, "no file may be created outside the project")
 
         // Exercise the officially distributed MCP stdio package after the Zod override.
         mcp = createMcpClient(bridgePort, projectDir)
