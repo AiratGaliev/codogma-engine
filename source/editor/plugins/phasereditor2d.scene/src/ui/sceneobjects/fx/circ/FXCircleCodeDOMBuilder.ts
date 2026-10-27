@@ -19,7 +19,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const call = new core.code.MethodCallCodeDOM("AddMaskShape", "Phaser.Actions");
 
             call.arg(parent);
-            call.arg(`{ shape: "circle", aspectRatio: 1, useInternal: true, region: new Phaser.Geom.Rectangle((${parent}.width ?? ${parent}.displayWidth ?? 128) * (1 - ${scale}) / 2, (${parent}.height ?? ${parent}.displayHeight ?? 128) * (1 - ${scale}) / 2, (${parent}.width ?? ${parent}.displayWidth ?? 128) * ${scale}, (${parent}.height ?? ${parent}.displayHeight ?? 128) * ${scale}), blurRadius: ${Math.max(0, obj.feather * 128)}, blurSteps: 4, blurQuality: 1, scaleMode: 0, padding: 0 }`);
+            call.arg(`{ shape: "circle", aspectRatio: 1, useInternal: true, region: new Phaser.Geom.Rectangle((${parent}.width ?? ${parent}.displayWidth ?? 128) * (1 - ${scale}) / 2, (${parent}.height ?? ${parent}.displayHeight ?? 128) * (1 - ${scale}) / 2, (${parent}.width ?? ${parent}.displayWidth ?? 128) * ${scale}, (${parent}.height ?? ${parent}.displayHeight ?? 128) * ${scale}), blurRadius: ${Math.max(0, obj.feather)} * Math.max(${parent}.width ?? ${parent}.displayWidth ?? 128, ${parent}.height ?? ${parent}.displayHeight ?? 128), blurSteps: 4, blurQuality: 1, scaleMode: 0, padding: 0 }`);
 
             return call;
         }

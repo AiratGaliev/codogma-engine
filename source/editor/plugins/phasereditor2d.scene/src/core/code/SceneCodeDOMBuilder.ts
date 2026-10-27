@@ -970,6 +970,7 @@ namespace phasereditor2d.scene.core.code {
                     "    " + varname + ".setRotation(" + parent + ".rotation ?? 0);",
                     "    " + varname + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
                     "    " + varname + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + varname + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
                     "    " + varname + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
                     "};",
                     "if (" + parent + ".parentContainer && " + varname + ".parentContainer !== " + parent + ".parentContainer) { " + parent + ".parentContainer.add(" + varname + "); }",

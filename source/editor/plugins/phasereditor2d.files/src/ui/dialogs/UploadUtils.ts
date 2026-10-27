@@ -151,7 +151,11 @@ namespace phasereditor2d.files.ui.dialogs {
 
             for (const entry of entries) {
 
-                await UploadUtils.readFileEntry(entry, files);
+                try {
+                    await UploadUtils.readFileEntry(entry, files);
+                } catch (error) {
+                    console.error("Не удалось прочитать файл при перетаскивании:", entry.fullPath, error);
+                }
             }
 
             return files;
