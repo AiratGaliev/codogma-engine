@@ -155,6 +155,7 @@ async function main() {
     await fs.mkdir(projectDir, { recursive: true })
     await fs.mkdir(outsideDir, { recursive: true })
     await fs.writeFile(path.join(outsideDir, "secret.txt"), "outside-project-secret", "utf8")
+    await fs.writeFile(path.join(outsideDir, "project-config.json"), JSON.stringify({ outsideSecret: "outside-project-config-secret" }), "utf8")
 
     let symlinkChecksAvailable = true
     try {
@@ -162,6 +163,7 @@ async function main() {
         await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
         await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
         await fs.symlink(path.join(outsideDir, "secret.txt"), path.join(projectDir, "upload-link.txt"), "file")
+        await fs.symlink(path.join(outsideDir, "project-config.json"), path.join(projectDir, "phasereditor2d.json"), "file")
     } catch (error) {
         const canSkipForWindows = process.platform === "win32"
             && ["EPERM", "EACCES", "ENOTSUP"].includes(error.code)
@@ -169,7 +171,7 @@ async function main() {
         if (!canSkipForWindows) throw error
 
         symlinkChecksAvailable = false
-        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt"]) {
+        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt", "phasereditor2d.json"]) {
             await fs.rm(path.join(projectDir, name), { force: true, recursive: true })
         }
         console.warn("Skipping symlink-specific checks: Windows does not permit creating symbolic links in this environment.")
@@ -213,6 +215,14 @@ async function main() {
         assert.equal(hostileOrigin.status, 403, "cross-origin browser requests should be rejected")
 
         if (symlinkChecksAvailable) {
+            const configRead = await request(port, "/editor/api", {
+                method: "POST",
+                headers: { host, "content-type": "application/json" },
+                body: JSON.stringify({ method: "GetProjectConfig" })
+            })
+            assert.deepEqual(JSON.parse(configRead.body), {},
+                "GetProjectConfig must not read a project-root symlink that points outside the project")
+
             const symlinkRead = await request(port, "/editor/project/outside-link/secret.txt", { headers: { host } })
             assert.equal(symlinkRead.status, 403, "project static serving must reject a symlink escaping the project")
 
