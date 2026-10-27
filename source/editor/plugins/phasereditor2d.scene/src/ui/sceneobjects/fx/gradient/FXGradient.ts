@@ -69,6 +69,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 gradient.setRotation(target.rotation ?? 0);
                 gradient.setScale(target.scaleX ?? 1, target.scaleY ?? 1);
                 gradient.setVisible(target.active !== false && target.visible !== false);
+                gradient.setAlpha(target.alpha ?? 1);
                 gradient.setScrollFactor(target.scrollFactorX ?? 1, target.scrollFactorY ?? 1);
                 gradient.setDepth((target.depth ?? 0) + 0.001);
                 if (target.parentContainer && gradient.parentContainer !== target.parentContainer) {
