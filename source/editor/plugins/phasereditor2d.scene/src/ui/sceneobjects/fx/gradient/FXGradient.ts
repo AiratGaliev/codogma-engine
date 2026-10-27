@@ -72,7 +72,10 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 gradient.setScrollFactor(target.scrollFactorX ?? 1, target.scrollFactorY ?? 1);
                 gradient.setDepth((target.depth ?? 0) + 0.001);
                 if (target.parentContainer && gradient.parentContainer !== target.parentContainer) {
-                    target.parentContainer.add(gradient);
+                    const container = target.parentContainer;
+                    // Keep the gradient adjacent to its parent, rather than
+                    // appending it above every other child in the container.
+                    container.addAt(gradient, Math.max(0, container.getIndex(target) + 1));
                 }
             };
             const parentDestroyed = () => this.removeFX();
