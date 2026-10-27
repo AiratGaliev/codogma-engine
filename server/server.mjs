@@ -534,8 +534,10 @@ async function handleAPI(req, res) {
                 })
 
             case "GetProjectConfig": {
-                const configPath = path.join(PROJECT_DIR, "phasereditor2d.json")
-                if (fs.existsSync(configPath)) {
+                // The project root can contain symlinks too. Keep this read under
+                // the same real-path containment policy as other project files.
+                const configPath = safeJoin(PROJECT_DIR, "phasereditor2d.json")
+                if (configPath && fs.existsSync(configPath)) {
                     try {
                         return sendJSON(res, JSON.parse(fs.readFileSync(configPath, "utf8")))
                     } catch (e) { /* fallthrough */ }
