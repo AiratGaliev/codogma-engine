@@ -13,6 +13,7 @@ namespace phasereditor2d.scene {
     export const SCENE_OBJECT_SCRIPT_CATEGORY = "Script";
     export const SCENE_OBJECT_FX_CATEGORY = "FX";
     export const SCENE_OBJECT_SPINE_CATEGORY = "Spine";
+    export const SCENE_OBJECT_PARTICLES_CATEGORY = "Particles";
 
     export const SCENE_OBJECT_CATEGORIES = [
         SCENE_OBJECT_IMAGE_CATEGORY,
@@ -23,6 +24,7 @@ namespace phasereditor2d.scene {
         SCENE_OBJECT_TILEMAP_CATEGORY,
         SCENE_OBJECT_INPUT_CATEGORY,
         SCENE_OBJECT_SPINE_CATEGORY,
+        SCENE_OBJECT_PARTICLES_CATEGORY,
         SCENE_OBJECT_SCRIPT_CATEGORY
     ];
 
@@ -357,7 +359,14 @@ namespace phasereditor2d.scene {
                 page => new ui.sceneobjects.FXVignetteSection(page),
                 page => new ui.sceneobjects.FXWipeSection(page),
                 page => new ui.sceneobjects.VideoSection(page),
-                page => new ui.sceneobjects.ParticleEmitterSection(page),
+                page => new ui.sceneobjects.ParticleEmitterPreviewSection(page),
+                page => new ui.sceneobjects.ParticleEmitterTransformSection(page),
+                page => new ui.sceneobjects.ParticleEmitterPhysicsSection(page),
+                page => new ui.sceneobjects.ParticleEmitterTimingSection(page),
+                page => new ui.sceneobjects.ParticleEmitterColorSection(page),
+                page => new ui.sceneobjects.ParticleEmitterSortingSection(page),
+                page => new ui.sceneobjects.ParticleEmitterFollowSection(page),
+                page => new ui.sceneobjects.ParticleEmitterTextureSection(page),
                 page => new ui.sceneobjects.BlendModeSection(page),
                 page => new ui.sceneobjects.TileSpriteSection(page),
                 page => new ui.sceneobjects.NineSliceSection(page),

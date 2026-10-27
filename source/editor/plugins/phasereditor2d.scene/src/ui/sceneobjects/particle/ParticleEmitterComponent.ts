@@ -1,299 +1,339 @@
 /// <reference path="../Component.ts" />
+/// <reference path="./ParticleEmitterConfig.ts" />
 
 namespace phasereditor2d.scene.ui.sceneobjects {
 
-    import write = colibri.core.json.write;
+    import code = core.code;
+
+    import read = colibri.core.json.read;
 
     export class ParticleEmitterComponent extends Component<ParticleEmitter> {
 
-        // editor data properties
+        static frame = SimpleConfigProperty("configFrame", [], "Frame", "The frames of the particles.");
+        static texture = SimpleConfigProperty("configTexture", undefined, "Texture", "The texture with the particles images.");
 
-        static texture: IProperty<ParticleEmitter> = {
-            name: "editorTexture",
-            label: "Texture Key",
-            tooltip: "The key of the texture used by the particles.",
-            defValue: "",
-            getValue: obj => obj.editorTexture,
-            setValue: (obj, value) => {
+        // transform
 
-                obj.editorTexture = value;
+        static x = makePropertySet("x", "X", "particleX");
+        static y = makePropertySet("y", "Y", "particleY");
+        static moveToX = makePropertySet("moveToX", "Move To X");
+        static moveToY = makePropertySet("moveToY", "Move To Y");
+        static scale = makePropertySet("scale", "Scale", "setParticleScale", ParticleEmitterEditorType.NUMBER, 0.01, 0, 2);
+        static scaleX = makePropertySet("scaleX", "Scale X", "particleScaleX", ParticleEmitterEditorType.NUMBER, 0.01, 0, 2);
+        static scaleY = makePropertySet("scaleY", "Scale Y", "particleScaleY", ParticleEmitterEditorType.NUMBER, 0.01, 0, 2);
+        static angle = makePropertySet("angle", "Angle", "particleAngle", ParticleEmitterEditorType.NUMBER, 1, 0, 360, ON_EMIT_ONLY_TYPES);
+        static rotate = makePropertySet("rotate", "Rotate", "particleRotate", ParticleEmitterEditorType.NUMBER, 1, 0, 360);
 
-                ParticleEmitterComponent.applyConfig(obj);
-            }
-        };
+        // physics
 
-        static frame: IProperty<ParticleEmitter> = {
-            name: "editorFrame",
-            label: "Frame",
-            tooltip: "The frame of the texture used by the particles.",
-            defValue: "",
-            getValue: obj => obj.editorFrame,
-            setValue: (obj, value) => {
+        static accelerationX = makePropertySet("accelerationX", "Acceleration X", "accelerationX");
+        static accelerationY = makePropertySet("accelerationY", "Acceleration Y", "accelerationY");
+        static maxVelocityX = makePropertySet("maxVelocityX", "Max Velocity X", "maxVelocityX");
+        static maxVelocityY = makePropertySet("maxVelocityY", "Max Velocity Y", "maxVelocityY");
+        static speed = makePropertySet("speed", "Speed", "speed", ParticleEmitterEditorType.NUMBER, 10, 0, undefined, ON_EMIT_ONLY_TYPES);
+        static speedX = makePropertySet("speedX", "Speed X", "speedX", ParticleEmitterEditorType.NUMBER, 10, undefined, undefined, ON_EMIT_ONLY_TYPES);
+        static speedY = makePropertySet("speedY", "Speed Y", "speedY", ParticleEmitterEditorType.NUMBER, 10, undefined, undefined, ON_EMIT_ONLY_TYPES);
+        static gravityX = SimpleObjConfigProperty("gravityX", 0, "Gravity X", undefined, undefined, 10);
+        static gravityY = SimpleObjConfigProperty("gravityY", 0, "Gravity Y", undefined, undefined, 10);
+        static radial = SimpleProperty("radial", true, "Radial", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.radial");
 
-                obj.editorFrame = value;
+        // timing
 
-                ParticleEmitterComponent.applyConfig(obj);
-            }
-        };
+        static delay = makePropertySet("delay", "Delay", undefined, ParticleEmitterEditorType.NUMBER, 1, 0, undefined, ON_EMIT_ONLY_TYPES);
+        static hold = makePropertySet("hold", "Hold", undefined, ParticleEmitterEditorType.NUMBER, 1, 0, undefined, ON_EMIT_ONLY_TYPES);
+        static lifespan = makePropertySet("lifespan", "Lifespan", undefined, ParticleEmitterEditorType.NUMBER, 1, 0, undefined, ON_EMIT_ONLY_TYPES);
+        static quantity = makePropertySet("quantity", "Quantity", undefined, ParticleEmitterEditorType.NUMBER, 1, 0, undefined, ON_EMIT_ONLY_TYPES);
+        static duration = SimpleObjConfigProperty("duration", 0, "Duration", undefined, undefined, 10, 0);
+        static stopAfter = SimpleObjConfigProperty("stopAfter", 0, "Stop After", undefined, undefined, 10, 0);
+        static frequency = SimpleObjConfigProperty("frequency", 0, "Frequency", undefined, undefined, 1, 0);
+        static timeScale = SimpleObjConfigProperty("timeScale", 1, "Time Scale", undefined, undefined, 0.01, 0);
+        static maxAliveParticles = SimpleObjConfigProperty("maxAliveParticles", 0, "Max Alive Particles", undefined, undefined, 1, 0);
+        static maxParticles = SimpleObjConfigProperty("maxParticles", 0, "Max Particles", undefined, undefined, 1, 0);
+        static advance = SimpleObjConfigProperty("advance", 0, "Advance",
+            "If you wish to 'fast forward' the emitter in time, set this value to a number representing the amount of ms the emitter should advance. Doing so implicitly sets `emitting` to `true`.",
+            undefined, 10, 0);
 
-        static animationKey: IProperty<ParticleEmitter> = {
-            name: "editorAnimationKey",
-            label: "Animation",
-            tooltip: "The key of the animation played by the particles.",
-            defValue: "",
-            getValue: obj => obj.editorAnimationKey,
-            setValue: (obj, value) => {
+        // color
 
-                obj.editorAnimationKey = value;
+        static tint = makePropertySet("tint", "Tint", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.particleTint", ParticleEmitterEditorType.COLOR);
+        static alpha = makePropertySet("alpha", "Alpha", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.particleAlpha", ParticleEmitterEditorType.NUMBER, 0.01, 0, 1);
+        static color = makePropertySet("color", "Color", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.particleColor", ParticleEmitterEditorType.COLOR, undefined, undefined, undefined, [ConfigValueType.None, ConfigValueType.Random]);
+        static colorEase = SimpleEnumObjConfigProperty("colorEase", "Linear", easeValues, easeValues, "Color Ease", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.colorEase");
+        static tintFill = SimpleObjConfigProperty("tintFill", false, "Tint Fill");
+        static blendMode = SimpleEnumObjConfigProperty("blendMode", "NORMAL", BLEND_MODE_NAMES, BLEND_MODE_NAMES, "Blend Mode", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.blendMode");
 
-                ParticleEmitterComponent.applyConfig(obj);
-            }
-        };
+        // sorting
 
-        static quantity: IProperty<ParticleEmitter> = {
-            name: "editorQuantity",
-            label: "Quantity",
-            tooltip: "The number of particles released at each emission.",
-            defValue: 1,
-            getValue: obj => obj.editorQuantity,
-            setValue: (obj, value) => {
+        static particleBringToTop = SimpleObjConfigProperty("particleBringToTop", false, "Particle Bring To Top");
+        static sortOrderAsc = SimpleObjConfigProperty("sortOrderAsc", true, "Sort Order Asc");
+        static sortProperty = SimpleObjConfigProperty("sortProperty", "", "Sort Property");
 
-                obj.editorQuantity = value;
+        // follow
 
-                ParticleEmitterComponent.applyConfig(obj);
-            }
-        };
+        static follow = SimpleObjConfigProperty("follow", "", "Follow");
+        static trackVisible = SimpleObjConfigProperty("trackVisible", false, "Track Visible");
 
-        // emitter configuration properties
+        // preview
 
-        static speedMin = SimpleProperty("speedMin", 0, "Min",
-            "The minimum speed of the particles.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
+        static previewAdvance = SimpleProperty("previewAdvance", 1000, "Preview Advance", "Advance the emitter in milliseconds. It is only applied in the editor.");
+        static previewActive = SimpleProperty("previewActive", true, "Preview Active", "Activate the emitter. It is only applied in the editor.");
 
-        static speedMax = SimpleProperty("speedMax", 0, "Max",
-            "The maximum speed of the particles.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
+        // our extra: keep the legacy animation feature of this fork. It is emitted with the
+        // `anim` code name, the config key the official editor dropped.
 
-        static speed: IPropertyXY = {
-            label: "Speed",
-            tooltip: "phaser:Phaser.Types.GameObjects.Particles.ParticleEmitterConfig.speed",
-            x: ParticleEmitterComponent.speedMin,
-            y: ParticleEmitterComponent.speedMax
-        };
+        static animationKey = SimpleObjConfigProperty("animationKey", "", "Animation", "phaser:Phaser.GameObjects.Particles.ParticleEmitter.anim");
 
-        static angleMin = SimpleProperty("angleMin", 0, "Min",
-            "The minimum angle of the particles.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
+        static {
+            this.tint.props.value.defValue = 0xffffff;
+            this.tint.props.start.defValue = 0xffffff;
+            this.tint.props.end.defValue = 0xffffff;
+            this.tint.props.min.defValue = 0xffffff;
+            this.tint.props.max.defValue = 0xffffff;
+            this.scale.props.randomArray.defValue = [1];
+            this.scaleX.props.randomArray.defValue = [1];
+            this.color.props.randomArray.defValue = [0xffffff];
 
-        static angleMax = SimpleProperty("angleMax", 360, "Max",
-            "The maximum angle of the particles.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
+            this.animationKey.codeName = "anim";
+        }
 
-        static angle: IPropertyXY = {
-            label: "Angle",
-            tooltip: "phaser:Phaser.Types.GameObjects.Particles.ParticleEmitterConfig.angle",
-            x: ParticleEmitterComponent.angleMin,
-            y: ParticleEmitterComponent.angleMax
-        };
+        static CONFIG_PROPS_SETS = [
+            this.x,
+            this.y,
+            this.moveToX,
+            this.moveToY,
+            this.scale,
+            this.scaleX,
+            this.scaleY,
+            this.angle,
+            this.rotate,
+            this.accelerationX,
+            this.accelerationY,
+            this.maxVelocityX,
+            this.maxVelocityY,
+            this.speed,
+            this.speedX,
+            this.speedY,
+            this.delay,
+            this.hold,
+            this.lifespan,
+            this.quantity,
+            this.tint,
+            this.alpha,
+            this.color,
+        ];
 
-        static gravityX = SimpleProperty("gravityX", 0, "X",
-            "The horizontal gravity applied to the particles.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
+        static SIMPLE_CONFIG_PROPS = [
+            this.blendMode,
+            this.colorEase,
+            this.tintFill,
+            this.duration,
+            this.stopAfter,
+            this.frequency,
+            this.timeScale,
+            this.gravityX,
+            this.gravityY,
+            this.radial,
+            this.maxAliveParticles,
+            this.maxParticles,
+            this.advance,
+            this.particleBringToTop,
+            this.sortOrderAsc,
+            this.sortProperty,
+            this.follow,
+            this.trackVisible,
+            this.animationKey
+        ];
 
-        static gravityY = SimpleProperty("gravityY", 0, "Y",
-            "The vertical gravity applied to the particles.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
+        static PREVIEW_PROPS = [
+            this.previewAdvance,
+            this.previewActive
+        ];
 
-        static gravity: IPropertyXY = {
-            label: "Gravity",
-            tooltip: "phaser:Phaser.Types.GameObjects.Particles.ParticleEmitterConfig.gravityX",
-            x: ParticleEmitterComponent.gravityX,
-            y: ParticleEmitterComponent.gravityY
-        };
-
-        static lifespanMin = SimpleProperty("lifespanMin", 1000, "Min",
-            "The minimum lifespan of the particles, in ms.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
-
-        static lifespanMax = SimpleProperty("lifespanMax", 1000, "Max",
-            "The maximum lifespan of the particles, in ms.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
-
-        static lifespan: IPropertyXY = {
-            label: "Lifespan",
-            tooltip: "phaser:Phaser.Types.GameObjects.Particles.ParticleEmitterConfig.lifespan",
-            x: ParticleEmitterComponent.lifespanMin,
-            y: ParticleEmitterComponent.lifespanMax
-        };
-
-        static scaleStart = SimpleProperty("scaleStart", 1, "Start",
-            "The scale of the particles at the start of their life.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
-
-        static scaleEnd = SimpleProperty("scaleEnd", 1, "End",
-            "The scale of the particles at the end of their life.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
-
-        static scale: IPropertyXY = {
-            label: "Scale",
-            tooltip: "phaser:Phaser.Types.GameObjects.Particles.ParticleEmitterConfig.scale",
-            x: ParticleEmitterComponent.scaleStart,
-            y: ParticleEmitterComponent.scaleEnd
-        };
-
-        static alphaStart = SimpleProperty("alphaStart", 1, "Start",
-            "The alpha of the particles at the start of their life.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
-
-        static alphaEnd = SimpleProperty("alphaEnd", 1, "End",
-            "The alpha of the particles at the end of their life.",
-            false, obj => ParticleEmitterComponent.applyConfig(obj));
-
-        static alpha: IPropertyXY = {
-            label: "Alpha",
-            tooltip: "phaser:Phaser.Types.GameObjects.Particles.ParticleEmitterConfig.alpha",
-            x: ParticleEmitterComponent.alphaStart,
-            y: ParticleEmitterComponent.alphaEnd
-        };
-
-        static allProperties = [
+        static ALL_CODE_PROPS = [
             ParticleEmitterComponent.texture,
             ParticleEmitterComponent.frame,
-            ParticleEmitterComponent.animationKey,
-            ParticleEmitterComponent.quantity,
-            ParticleEmitterComponent.speedMin,
-            ParticleEmitterComponent.speedMax,
-            ParticleEmitterComponent.angleMin,
-            ParticleEmitterComponent.angleMax,
-            ParticleEmitterComponent.gravityX,
-            ParticleEmitterComponent.gravityY,
-            ParticleEmitterComponent.lifespanMin,
-            ParticleEmitterComponent.lifespanMax,
-            ParticleEmitterComponent.scaleStart,
-            ParticleEmitterComponent.scaleEnd,
-            ParticleEmitterComponent.alphaStart,
-            ParticleEmitterComponent.alphaEnd
+            ...ParticleEmitterComponent.CONFIG_PROPS_SETS.flatMap(s => s.list),
+            ...ParticleEmitterComponent.SIMPLE_CONFIG_PROPS,
+        ];
+
+        static LEGACY_KEYS = [
+            "editorTexture",
+            "editorFrame",
+            "editorAnimationKey",
+            "editorQuantity",
+            "speedMin",
+            "speedMax",
+            "angleMin",
+            "angleMax",
+            "lifespanMin",
+            "lifespanMax",
+            "scaleStart",
+            "scaleEnd",
+            "alphaStart",
+            "alphaEnd",
+            "gravityX",
+            "gravityY"
         ];
 
         constructor(obj: ParticleEmitter) {
-            super(obj, ParticleEmitterComponent.allProperties);
+            super(obj, [
+                ...ParticleEmitterComponent.ALL_CODE_PROPS,
+                ...ParticleEmitterComponent.PREVIEW_PROPS
+            ]);
+
+            // init all the "virtual" fields with the default values
+            const properties = [
+                ...ParticleEmitterComponent.CONFIG_PROPS_SETS.flatMap(s => s.list),
+                ...ParticleEmitterComponent.SIMPLE_CONFIG_PROPS
+            ];
+
+            for (const prop of properties) {
+
+                obj[prop.name] = prop.defValue;
+            }
         }
 
-        /**
-         * Build the Phaser particle emitter configuration from the authored properties.
-         * The default values are skipped.
-         *
-         * @param obj The emitter.
-         * @returns The configuration object.
-         */
-        static buildConfig(obj: ParticleEmitter): Phaser.Types.GameObjects.Particles.ParticleEmitterConfig {
+        private migrateLegacyEditorData(data: Record<string, any>) {
 
-            const config = {} as Phaser.Types.GameObjects.Particles.ParticleEmitterConfig;
+            if (!ParticleEmitterComponent.LEGACY_KEYS.some(key => data[key] !== undefined)) {
 
-            // frame
-
-            if (obj.editorFrame) {
-
-                write(config, "frame", obj.editorFrame, "");
+                return;
             }
 
-            // animation
+            // legacy (pre-ConfigValueType) data used flat fields on the emitter
 
-            if (obj.editorAnimationKey) {
+            data["configTexture"] = read(data, "editorTexture", "");
 
-                write(config, "anim", obj.editorAnimationKey, "");
-            }
+            const legacyFrame = read(data, "editorFrame", "");
+            data["configFrame"] = legacyFrame === "" ? [] : [legacyFrame];
 
-            // speed
+            data["_animationKey"] = read(data, "editorAnimationKey", "");
 
-            if (obj.speedMin === obj.speedMax) {
+            data["quantity_type"] = ConfigValueType.Static;
+            data["quantity_value"] = read(data, "editorQuantity", 1);
 
-                write(config, "speed", obj.speedMin, 0);
+            const oldDefaults: Record<string, [any, any]> = {
+                speed: [0, 0],
+                angle: [0, 360],
+                lifespan: [1000, 1000],
+                scale: [1, 1],
+                alpha: [1, 1]
+            };
 
-            } else {
+            const flatPairs: Record<string, [string, string]> = {
+                speed: ["speedMin", "speedMax"],
+                angle: ["angleMin", "angleMax"],
+                lifespan: ["lifespanMin", "lifespanMax"],
+                scale: ["scaleStart", "scaleEnd"],
+                alpha: ["alphaStart", "alphaEnd"]
+            };
 
-                write(config, "speed", { min: obj.speedMin, max: obj.speedMax }, null);
-            }
+            for (const name of ["speed", "angle", "lifespan", "scale", "alpha"]) {
 
-            // angle: skip the default 0..360 range
+                const [k1, k2] = flatPairs[name];
+                const [d1, d2] = oldDefaults[name];
+                const a = read(data, k1, d1);
+                const b = read(data, k2, d2);
 
-            if (obj.angleMin !== 0 || obj.angleMax !== 360) {
+                if (a === b) {
 
-                if (obj.angleMin === obj.angleMax) {
+                    data[`${name}_type`] = ConfigValueType.Static;
+                    data[`${name}_value`] = a;
 
-                    write(config, "angle", obj.angleMin, 0);
+                } else if (name === "scale" || name === "alpha") {
+
+                    data[`${name}_type`] = ConfigValueType.StartEndRandom;
+                    data[`${name}_start`] = a;
+                    data[`${name}_end`] = b;
+                    data[`${name}_ease`] = "Linear";
+                    data[`${name}_randomFlag`] = false;
 
                 } else {
 
-                    write(config, "angle", { min: obj.angleMin, max: obj.angleMax }, null);
+                    data[`${name}_type`] = ConfigValueType.MinMax;
+                    data[`${name}_min`] = a;
+                    data[`${name}_max`] = b;
+                    data[`${name}_int`] = false;
                 }
             }
 
-            // lifespan
+            data["_gravityX"] = read(data, "gravityX", 0);
+            data["_gravityY"] = read(data, "gravityY", 0);
 
-            if (obj.lifespanMin === obj.lifespanMax) {
+            for (const key of ParticleEmitterComponent.LEGACY_KEYS) {
 
-                write(config, "lifespan", obj.lifespanMin, 1000);
-
-            } else {
-
-                write(config, "lifespan", { min: obj.lifespanMin, max: obj.lifespanMax }, null);
+                delete data[key];
             }
-
-            // scale
-
-            if (obj.scaleStart !== 1 || obj.scaleEnd !== 1) {
-
-                if (obj.scaleStart === obj.scaleEnd) {
-
-                    write(config, "scale", obj.scaleStart, 1);
-
-                } else {
-
-                    write(config, "scale", { start: obj.scaleStart, end: obj.scaleEnd }, null);
-                }
-            }
-
-            // alpha
-
-            if (obj.alphaStart !== 1 || obj.alphaEnd !== 1) {
-
-                if (obj.alphaStart === obj.alphaEnd) {
-
-                    write(config, "alpha", obj.alphaStart, 1);
-
-                } else {
-
-                    write(config, "alpha", { start: obj.alphaStart, end: obj.alphaEnd }, null);
-                }
-            }
-
-            // gravity
-
-            write(config, "gravityX", obj.gravityX, 0);
-            write(config, "gravityY", obj.gravityY, 0);
-
-            // emission
-
-            write(config, "quantity", obj.editorQuantity, 1);
-
-            return config;
         }
 
-        /**
-         * Apply the authored properties to the underlying Phaser emitter.
-         *
-         * @param obj The emitter.
-         */
-        static applyConfig(obj: ParticleEmitter) {
+        readJSON(ser: core.json.Serializer) {
 
-            obj.setConfig(ParticleEmitterComponent.buildConfig(obj));
+            const obj = this.getObject();
+
+            this.migrateLegacyEditorData(ser.getData() as any);
+
+            obj.disableUpdateConfig(true);
+
+            super.readJSON(ser);
+
+            obj.disableUpdateConfig(false);
+
+            obj.updateConfig();
+        }
+
+        writeJSON(ser: core.json.Serializer) {
+
+            super.writeJSON(ser);
+
+            // delete all properties of property sets that are type None
+
+            const data = ser.getData() as any;
+
+            for (const set of ParticleEmitterComponent.CONFIG_PROPS_SETS) {
+
+                const type = set.props.type.getValue(this.getObject());
+
+                if (type === ConfigValueType.None) {
+
+                    for (const prop of set.list) {
+
+                        delete data[prop.name];
+                    }
+                }
+            }
         }
 
         buildSetObjectPropertiesCodeDOM(args: ISetObjectPropertiesCodeDOMArgs): void {
 
-            // nothing, the emitter configuration is passed
-            // as an argument of the factory method call
+            const obj = this.getObject();
+            const objES = obj.getEditorSupport();
+
+            if (objES.isNestedPrefabInstance()) {
+
+                let unlocked = false;
+
+                for (const prop of ParticleEmitterComponent.ALL_CODE_PROPS) {
+
+                    if (objES.isUnlockedProperty(prop)) {
+
+                        unlocked = true;
+                        break;
+                    }
+                }
+
+                if (unlocked) {
+
+                    // don't use the compiler config for code because it only contains the unlocked properties,
+                    // for this case, we need all the properties
+                    const config = objES.generateConfig();
+
+                    const methodCallDom = new code.MethodCallCodeDOM("setConfig", args.objectVarName);
+
+                    methodCallDom.arg(code.stringifyJSON(config));
+
+                    args.statements.push(methodCallDom);
+                }
+            }
         }
     }
 }
