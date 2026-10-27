@@ -197,7 +197,11 @@ namespace phasereditor2d.files.ui.dialogs {
 
                     for (const child of children) {
 
-                        await UploadUtils.readFileEntry(child, files);
+                        try {
+                            await UploadUtils.readFileEntry(child, files);
+                        } catch (error) {
+                            console.error("Не удалось прочитать вложенный файл:", child.fullPath, error);
+                        }
                     }
                 }
             }
