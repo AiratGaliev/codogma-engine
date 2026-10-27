@@ -534,6 +534,8 @@ namespace phasereditor2d.scene.core.code {
 
             this.addFieldInitCode(body);
 
+            this.buildBox2DWorldUpdateCode(body);
+
             body.push(new RawCodeDOM(""));
             body.push(new RawCodeDOM(`this.events.emit("scene-awake");`));
 
@@ -568,6 +570,47 @@ namespace phasereditor2d.scene.core.code {
                     + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
                     + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
                 new RawCodeDOM(`const box2dWorldId = box2dWorld.worldId;`));
+        }
+
+        /**
+         * The Box2D helper expects elapsed time in seconds, while Phaser's
+         * Scene update event supplies delta in milliseconds.
+         *
+         * Registering an event handler avoids shadowing a user-defined update()
+         * method. The handler and world-sprite mapping are removed on shutdown
+         * so restarting the scene doesn't add duplicate listeners or stale bodies.
+         */
+        private buildBox2DWorldUpdateCode(body: CodeDOM[]) {
+
+            const settings = this._scene.getSettings();
+
+            if (this._scene.isPrefabSceneType() || !settings.box2dEnabled) {
+
+                return;
+            }
+
+            for (const name of ["WorldStep", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"]) {
+
+                ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
+            }
+
+            const updateArgs = settings.compilerOutputLanguage === "TYPE_SCRIPT"
+                ? "(_time: number, delta: number)"
+                : "(_time, delta)";
+
+            body.push(
+                new RawCodeDOM(""),
+                new RawCodeDOM("// box2d world update and cleanup"),
+                new RawCodeDOM(`const updateBox2DWorld = ${updateArgs} => {`),
+                new RawCodeDOM("    WorldStep({ worldId: box2dWorldId, deltaTime: delta / 1000 });"),
+                new RawCodeDOM("    UpdateWorldSprites(box2dWorldId);"),
+                new RawCodeDOM("};"),
+                new RawCodeDOM(`this.events.on("update", updateBox2DWorld);`),
+                new RawCodeDOM(`this.events.once("shutdown", () => {`),
+                new RawCodeDOM(`    this.events.off("update", updateBox2DWorld);`),
+                new RawCodeDOM("    ClearWorldSprites(box2dWorldId);"),
+                new RawCodeDOM("    b2DestroyWorld(box2dWorldId);"),
+                new RawCodeDOM("});"));
         }
 
         private addCreateAllPlainObjectCode(firstStatements: CodeDOM[], lazyStatements: CodeDOM[]) {
