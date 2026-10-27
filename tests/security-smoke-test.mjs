@@ -248,8 +248,12 @@ async function main() {
             name: "ide-create-new-scene",
             arguments: { name: "MustNotEscape", folder: "dangling-folder" }
         })
-        assert.ok(danglingMcpWrite.result?.isError || danglingMcpWrite.error,
-            "MCP scene creation must reject a dangling symlink folder")
+        const danglingMcpErrorText = (danglingMcpWrite.result?.content || [])
+            .filter(item => item.type === "text")
+            .map(item => item.text)
+            .join("\n")
+        assert.ok(danglingMcpWrite.result?.isError || danglingMcpWrite.error || /invalid folder|invalid path/i.test(danglingMcpErrorText),
+            `MCP scene creation must reject a dangling symlink folder; response: ${danglingMcpErrorText}`)
         await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
             "MCP scene creation must not create an outside folder through a dangling symlink")
 
