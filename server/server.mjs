@@ -696,8 +696,10 @@ async function handleUpload(req, res) {
                 const fileName = path.basename(fileMatch[1])
                 const dirFull = safeJoin(PROJECT_DIR, uploadTo)
                 if (!dirFull) return apiError(res, "invalid upload path")
+                const fileFull = safeJoin(PROJECT_DIR, path.join(uploadTo, fileName))
+                if (!fileFull) return apiError(res, "invalid upload path")
+
                 await fsp.mkdir(dirFull, { recursive: true })
-                const fileFull = path.join(dirFull, fileName)
                 await fsp.writeFile(fileFull, data)
                 const st = await fsp.stat(fileFull)
                 fileDataOut = {
