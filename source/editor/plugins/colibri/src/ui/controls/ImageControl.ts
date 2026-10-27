@@ -21,6 +21,7 @@ namespace colibri.ui.controls {
         private _cursorY: number;
         private _repaintCallback: () => any;
         private _inScrollMode = false;
+        private _panAndZoomEnabled = false;
         private _zoom = 1;
 
         constructor(padding: number = 0, ...classList: string[]) {
@@ -51,8 +52,12 @@ namespace colibri.ui.controls {
 
         setZoom(value: number) {
 
-            this._zoom = Math.max(0.1, value);
-            this._zoom = Math.min(10, value);
+            if (!Number.isFinite(value)) {
+
+                return;
+            }
+
+            this._zoom = Math.max(0.1, Math.min(10, value));
         }
 
         createZoomControls() {
@@ -83,6 +88,13 @@ namespace colibri.ui.controls {
         }
 
         enablePanAndZoom() {
+
+            if (this._panAndZoomEnabled) {
+
+                return;
+            }
+
+            this._panAndZoomEnabled = true;
 
             const canvas = this.getCanvas();
 
