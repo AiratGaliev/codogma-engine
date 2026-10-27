@@ -207,21 +207,34 @@ namespace phasereditor2d.files.ui.dialogs {
             }
         }
 
-        static getFilesFromFileList(fileList: FileList) {
+        static getFilesFromFileList(fileList: FileList | null) {
 
             const files: File[] = [];
+
+            if (!fileList) {
+
+                return files;
+            }
 
             for (let i = 0; i < fileList.length; i++) {
 
                 const file = fileList.item(i);
 
-                files.push(file);
+                if (file) {
+
+                    files.push(file);
+                }
             }
 
             return files;
         }
 
         static async uploadFiles(uploadFolder: io.FilePath, files: FileInfo[]) {
+
+            if (!uploadFolder || files.length === 0) {
+
+                return;
+            }
 
             const cancelFlag = {
                 canceled: false
