@@ -921,7 +921,7 @@ namespace phasereditor2d.scene.core.code {
                     syncName + "();",
                     varname + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
                     parent + ".once('destroy', () => { " + sceneExpr + ".events.off('update', " + syncName + "); " + varname + ".destroy(); });"
-                ].join("\\n");
+                ].join("\n");
 
                 createMethodDecl.getBody().push(new RawCodeDOM(syncCode));
             }
