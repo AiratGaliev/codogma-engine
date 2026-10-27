@@ -12,7 +12,7 @@ The current implementation provides a browser-based authoring environment, a loc
 
 ## Project direction
 
-Codogma is being developed as its own engine, not as a feature-parity project for another editor. The existing codebase is a starting point that lets development continue while the engine's architecture and workflows are shaped around Codogma's needs.
+Codogma is being developed as its own engine. For the next major implementation stage, the priority is to modernize the existing editor and its source code in place: improve the visual system and workspace, strengthen core 2D authoring workflows, and prove runtime behaviour with focused tests. Unity 6 and Cocos Creator 4.0 are references for editor UX and common 2D workflows, not a promise to reproduce every feature or rewrite the current codebase. New Core/runtime architecture is developed in staged, independently testable slices and must not displace improvements that can be safely made in the existing editor.
 
 Development priorities:
 
