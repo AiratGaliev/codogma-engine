@@ -52,6 +52,13 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return comp;
         }
 
+        createPropertyObjectVar(parent: HTMLElement, prop: IProperty<T>) {
+
+            this.createLock(parent, prop);
+            this.createLabel(parent, prop.label, PhaserHelp(prop.tooltip));
+            this.createObjectVarField(parent, prop);
+        }
+
         createLock(parent: HTMLElement, ...properties: Array<IProperty<T>>) {
 
             const mutableIcon = new controls.IconControl();

@@ -10,7 +10,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             },
             setValue: (obj, value) => {
 
-                prop.setValue(obj.getPhaserFX(), value);
+                const target = obj.getPhaserFX();
+                prop.setValue(target, value);
+                if (target === obj) {
+                    obj.onEditorPropertyChanged();
+                }
             },
         };
     };
@@ -31,7 +35,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             },
             setValue: (obj, value) => {
 
-                prop.setValue(obj.getPhaserFX(), value);
+                const target = obj.getPhaserFX();
+                prop.setValue(target, value);
+                if (target === obj) {
+                    obj.onEditorPropertyChanged();
+                }
             },
             values: prop.values,
             getEnumValues: object => prop.getEnumValues(object.getPhaserFX()),

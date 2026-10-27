@@ -13,6 +13,7 @@ namespace phasereditor2d.scene {
     export const SCENE_OBJECT_SCRIPT_CATEGORY = "Script";
     export const SCENE_OBJECT_FX_CATEGORY = "FX";
     export const SCENE_OBJECT_SPINE_CATEGORY = "Spine";
+    export const SCENE_OBJECT_PARTICLES_CATEGORY = "Particles";
 
     export const SCENE_OBJECT_CATEGORIES = [
         SCENE_OBJECT_IMAGE_CATEGORY,
@@ -23,6 +24,7 @@ namespace phasereditor2d.scene {
         SCENE_OBJECT_TILEMAP_CATEGORY,
         SCENE_OBJECT_INPUT_CATEGORY,
         SCENE_OBJECT_SPINE_CATEGORY,
+        SCENE_OBJECT_PARTICLES_CATEGORY,
         SCENE_OBJECT_SCRIPT_CATEGORY
     ];
 
@@ -182,6 +184,7 @@ namespace phasereditor2d.scene {
             reg.addExtension(
                 new ui.sceneobjects.ImageLoaderExtension(),
                 new ui.sceneobjects.BitmapFontLoaderUpdater(),
+                new ui.sceneobjects.FontLoaderUpdater(),
                 new ui.sceneobjects.TilemapLoaderUpdater(),
                 new ui.sceneobjects.SpineLoaderUpdater()
             );
@@ -259,6 +262,12 @@ namespace phasereditor2d.scene {
                 ui.sceneobjects.FXShadowExtension.getInstance(),
                 ui.sceneobjects.FXBarrelExtension.getInstance(),
                 ui.sceneobjects.FXBlendExtension.getInstance(),
+
+                // shortcut: Premium FX (not in Phaser 4.2.1 runtime)
+                ui.sceneobjects.FXBloomExtension.getInstance(),
+                ui.sceneobjects.FXCircleExtension.getInstance(),
+                ui.sceneobjects.FXGradientExtension.getInstance(),
+                ui.sceneobjects.FXShineExtension.getInstance(),
                 ui.sceneobjects.FXBlockyExtension.getInstance(),
                 ui.sceneobjects.FXBlurExtension.getInstance(),
                 ui.sceneobjects.FXBokehExtension.getInstance(),
@@ -329,10 +338,23 @@ namespace phasereditor2d.scene {
                 page => new ui.sceneobjects.FXObjectSection(page),
                 page => new ui.sceneobjects.FXBarrelSection(page),
                 page => new ui.sceneobjects.FXBlendSection(page),
+
+                // shortcut: Premium FX (not in Phaser 4.2.1 runtime)
+                page => new ui.sceneobjects.FXBloomSection(page),
+                page => new ui.sceneobjects.FXCircleSection(page),
+                page => new ui.sceneobjects.FXGradientSection(page),
+                page => new ui.sceneobjects.FXShineSection(page),
                 page => new ui.sceneobjects.FXBlockySection(page),
                 page => new ui.sceneobjects.FXBlurSection(page),
                 page => new ui.sceneobjects.FXBokehSection(page),
                 page => new ui.sceneobjects.FXColorMatrixSection(page),
+                page => new ui.sceneobjects.FXColorMatrixPresetSection(page),
+                page => new ui.sceneobjects.FXColorMatrixBrightnessSection(page),
+                page => new ui.sceneobjects.FXColorMatrixSaturateSection(page),
+                page => new ui.sceneobjects.FXColorMatrixHueSection(page),
+                page => new ui.sceneobjects.FXColorMatrixGrayscaleSection(page),
+                page => new ui.sceneobjects.FXColorMatrixContrastSection(page),
+                page => new ui.sceneobjects.FXColorMatrixNightSection(page),
                 page => new ui.sceneobjects.FXCombineColorMatrixSection(page),
                 page => new ui.sceneobjects.FXDisplacementSection(page),
                 page => new ui.sceneobjects.FXGradientMapSection(page),
@@ -350,7 +372,14 @@ namespace phasereditor2d.scene {
                 page => new ui.sceneobjects.FXVignetteSection(page),
                 page => new ui.sceneobjects.FXWipeSection(page),
                 page => new ui.sceneobjects.VideoSection(page),
-                page => new ui.sceneobjects.ParticleEmitterSection(page),
+                page => new ui.sceneobjects.ParticleEmitterPreviewSection(page),
+                page => new ui.sceneobjects.ParticleEmitterTransformSection(page),
+                page => new ui.sceneobjects.ParticleEmitterPhysicsSection(page),
+                page => new ui.sceneobjects.ParticleEmitterTimingSection(page),
+                page => new ui.sceneobjects.ParticleEmitterColorSection(page),
+                page => new ui.sceneobjects.ParticleEmitterSortingSection(page),
+                page => new ui.sceneobjects.ParticleEmitterFollowSection(page),
+                page => new ui.sceneobjects.ParticleEmitterTextureSection(page),
                 page => new ui.sceneobjects.BlendModeSection(page),
                 page => new ui.sceneobjects.TileSpriteSection(page),
                 page => new ui.sceneobjects.NineSliceSection(page),
@@ -389,6 +418,7 @@ namespace phasereditor2d.scene {
                 page => new ui.sceneobjects.ColliderSection(page),
                 page => new ui.sceneobjects.KeyboardKeySection(page),
                 page => new ui.sceneobjects.TextureSection(page),
+                page => new ui.sceneobjects.SceneSpritesheetPreviewSection(page),
                 page => new ui.sceneobjects.FXObjectSection(page),
                 page => new ui.sceneobjects.FXGlowSection(page),
                 page => new ui.sceneobjects.FXShadowSection(page),
@@ -436,6 +466,8 @@ namespace phasereditor2d.scene {
             // asset pack renderer extension
 
             reg.addExtension(new ui.sceneobjects.SpineAssetPackCellRendererExtension());
+
+            reg.addExtension(new ui.sceneobjects.VideoAssetCellRendererExtension());
 
             // asset pack preview extension
 

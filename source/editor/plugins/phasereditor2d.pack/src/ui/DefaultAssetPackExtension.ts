@@ -13,6 +13,8 @@ namespace phasereditor2d.pack.ui {
         core.ANIMATION_TYPE,
         core.ASEPRITE_TYPE,
         core.BITMAP_FONT_TYPE,
+        core.FONT_TYPE,
+        core.TEXTURE_TYPE,
         core.TILEMAP_CSV_TYPE,
         core.TILEMAP_IMPACT_TYPE,
         core.TILEMAP_TILED_JSON_TYPE,
@@ -48,6 +50,8 @@ namespace phasereditor2d.pack.ui {
         animation: "Animation",
         aseprite: "Aseprite",
         bitmapFont: "Bitmap Font",
+        font: "Font",
+        texture: "Texture",
         tilemapCSV: "Tilemap CSV",
         tilemapImpact: "Tilemap Impact",
         tilemapTiledJSON: "Tilemap Tiled JSON",
@@ -107,6 +111,12 @@ namespace phasereditor2d.pack.ui {
 
                 case core.BITMAP_FONT_TYPE:
                     return new core.BitmapFontAssetPackItem(pack, data);
+
+                case core.FONT_TYPE:
+                    return new core.FontAssetPackItem(pack, data);
+
+                case core.TEXTURE_TYPE:
+                    return new core.TextureAssetPackItem(pack, data);
 
                 case core.TILEMAP_CSV_TYPE:
                     return new core.TilemapCSVAssetPackItem(pack, data);
@@ -184,7 +194,7 @@ namespace phasereditor2d.pack.ui {
 
             return [
 
-                new editor.properties.BlocksSection(page),
+                new editor.properties.AssetPackSettingsSection(page),
 
                 new editor.properties.ItemSection(page),
 
@@ -206,6 +216,8 @@ namespace phasereditor2d.pack.ui {
 
                 new editor.properties.SpritesheetFrameSection(page),
 
+                new ui.properties.SpritesheetPreviewSection(page),
+
                 new editor.properties.SimpleURLSection(page,
                     "phasereditor2d.pack.ui.editor.properties.AnimationsSection",
                     "Animations",
@@ -217,6 +229,12 @@ namespace phasereditor2d.pack.ui {
                 new editor.properties.AsepriteSection(page),
 
                 new editor.properties.BitmapFontSection(page),
+
+                new editor.properties.FontSection(page),
+
+                new editor.properties.TextureSection(page),
+                new editor.properties.TextureAtlasSection(page),
+                new editor.properties.TextureMultiAtlasSection(page),
 
                 new editor.properties.TilemapCSVSection(page),
 
@@ -332,6 +350,10 @@ namespace phasereditor2d.pack.ui {
                 new ui.properties.AnimationsPreviewSection(page),
 
                 new ui.properties.AnimationPreviewSection(page),
+
+                new ui.properties.AudioPreviewSection(page),
+
+                new ui.properties.VideoPreviewSection(page),
 
                 ...exts.flatMap(ext => ext.getSections(page))
             ];
@@ -489,6 +511,10 @@ namespace phasereditor2d.pack.ui {
                 new importers.SpineAtlasImporter(),
 
                 new importers.BitmapFontImporter(),
+
+                new importers.FontImporter(),
+
+                new importers.TextureImporter(),
 
                 new importers.AsepriteImporter(),
 

@@ -372,11 +372,19 @@ namespace colibri.ui.controls {
         }
     
         static createImageFromBlob(blob: Blob) {
-    
+
             const img = document.createElement("img");
-    
-            img.src = URL.createObjectURL(blob);
-    
+            const objectURL = URL.createObjectURL(blob);
+
+            // Blob URLs hold browser-managed resources. Release them after
+            // decoding succeeds or fails, rather than accumulating URLs
+            // while browsing cached asset thumbnails.
+            const releaseObjectURL = () => URL.revokeObjectURL(objectURL);
+
+            img.addEventListener("load", releaseObjectURL, { once: true });
+            img.addEventListener("error", releaseObjectURL, { once: true });
+            img.src = objectURL;
+
             return img;
         }
     }

@@ -123,6 +123,8 @@ namespace phasereditor2d.scene.ui.editor {
                 }
             }
 
+            this.createMuteAction(groupToolbar);
+
             this._editor.getCanvasContainer().appendChild(pane);
 
             this._pane = pane;
@@ -140,6 +142,44 @@ namespace phasereditor2d.scene.ui.editor {
 
                 parent.removeChild(parent.firstChild)
             }
+        }
+
+        // shortcut: mute icons are inline SVGs, the fork's resources atlas has no mute-on/mute-off keys.
+        private createMuteIcon(muted: boolean): controls.DefaultImage {
+
+            const svg = muted
+                ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d4d4d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z" fill="#d4d4d4"/><path d="M16 9l6 6M22 15l-6-6"/></svg>`
+                : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d4d4d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z" fill="#d4d4d4"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>`;
+
+            const img = document.createElement("img");
+
+            img.src = "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+
+            return new controls.DefaultImage(img, muted ? "mute-on" : "mute-off");
+        }
+
+        private createMuteAction(toolbar: controls.ToolbarManager) {
+
+            const manager = this._editor.getSoundManager();
+
+            const muteAction = toolbar.addAction({
+                icon: this.createMuteIcon(manager.isMute()),
+                showText: false,
+                tooltip: "Global mute.",
+                callback: () => {
+
+                    manager.setMute(!manager.isMute());
+                }
+            });
+
+            const updateIcon = () => {
+
+                muteAction.setIcon(this.createMuteIcon(manager.isMute()));
+            };
+
+            updateIcon();
+
+            manager.eventMuteChanged.addListener(updateIcon);
         }
 
         private showGroupToolbar(parent: HTMLDivElement, group: string, extensions: layout.LayoutExtension<layout.ILayoutExtensionConfig>[]): void {

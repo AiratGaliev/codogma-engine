@@ -71,6 +71,8 @@ Open **http://localhost:3000/editor/**.
 
 The server should respond at that address, and product metadata should be available at [http://localhost:3000/editor/product.json](http://localhost:3000/editor/product.json).
 
+**Security boundary:** the editor server and MCP bridge bind to IPv4 loopback (`127.0.0.1`) and are intended for local development, not direct public-network exposure. Browser requests with a mismatched `Origin` or `Host` are rejected. File operations also reject paths that escape the chosen project through symbolic links, and request bodies have explicit size limits. These checks are defense-in-depth, not a substitute for keeping your machine and project files trusted.
+
 ### Select a game project
 
 By default, the server opens the test project in <code>tests/workspace/test-typescript</code>. This is useful for local development and CI, but it is not intended to be your own game project. Point <code>PROJECT_DIR</code> at the directory you want to edit.
@@ -109,6 +111,7 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>server/server.mjs</code> | Local HTTP server, editor/project APIs, file operations, play-mode serving, AI Chat endpoint and MCP bridge. |
 | <code>server/mcp-launcher.mjs</code> | Starts the official MCP package when installed; otherwise falls back to the built-in stdio implementation. |
 | <code>server/mcp-stdio.mjs</code> | Built-in stdio MCP entry point. |
+| <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and official MCP package compatibility. |
 | <code>source/editor/</code> | Browser-based editor client, TypeScript sources, plugins, assets, product metadata and client build configuration. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
@@ -330,10 +333,13 @@ Run commands from the repository root. Root and editor dependencies are installe
 
 ~~~bash
 npm ci
+npm audit --audit-level=low
 cd source/editor
 npm ci
+npm audit --audit-level=low
 cd ../..
 npm run build
+npm run test:security
 ~~~
 
 Then run checks relevant to the change:
@@ -341,7 +347,8 @@ Then run checks relevant to the change:
 | Change type | Required local acceptance |
 |---|---|
 | Any change | Run `npm run build` before requesting merge; CI runs it as well |
-| Server, bridge or MCP tools | Start the server with `npm start`; in a second terminal run `npm run test:e2e` |
+| Dependencies | Run `npm audit --audit-level=low` from the root and `source/editor`; CI blocks any reported vulnerability |
+| Server, bridge or MCP tools | Run `npm run test:security`; start the server with `npm start`; in a second terminal run `npm run test:e2e` |
 | Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
 | Release candidate (`dev → test` or `test → main`) | Check the complete candidate in addition to the required CI integration test; document manual acceptance for any affected UI path |
 

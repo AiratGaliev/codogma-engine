@@ -48,6 +48,7 @@ namespace phasereditor2d.scene.ui.editor.commands {
     export const CMD_MOVE_OBJECT_DOWN = "phasereditor2d.scene.ui.editor.commands.MoveObjectDown";
     export const CMD_FIX_SCENE_FILES_ID = "phasereditor2d.scene.ui.editor.commands.FixSceneFilesID";
     export const CMD_DUPLICATE_SCENE_FILE = "phasereditor2d.scene.ui.editor.commands.DuplicateSceneFile";
+    export const CMD_DUPLICATE_OBJECT = "phasereditor2d.scene.ui.editor.commands.DuplicateObject";
     export const CMD_CLEAR_SCENE_THUMBNAIL_CACHE = "phasereditor2d.scene.ui.editor.commands.ClearSceneThumbnailCache";
     export const CMD_MIGRATE_AND_BUILD_ALL_SCENE_FILES = "phasereditor2d.scene.ui.editor.commands.MigrateAndBuildAllSceneFiles";
     export const CMD_OPEN_SCENE_FILE = "phasereditor2d.scene.ui.editor.commands.OpenSceneFile";
@@ -1490,15 +1491,15 @@ namespace phasereditor2d.scene.ui.editor.commands {
                 command: {
                     id: CMD_OPEN_SCENE_FILE,
                     category: CAT_SCENE_EDITOR,
-                    name: "Go To Scene",
-                    tooltip: "Quick dialog to open a scene file."
+                    name: "Go To...",
+                    tooltip: "Quick dialog to open scenes, prefabs, scripts, asset packs, animations, or user components."
                 },
                 handler: {
                     testFunc: args => colibri.Platform.getWorkbench().getActiveWindow() instanceof ide.ui.DesignWindow,
                     executeFunc: args => {
 
-                        const dlg = new dialogs.OpenSceneFileDialog();
-                        dlg.create();
+                        const dlg = new dialogs.GoToDialog();
+                        dlg.create(true);
                     }
                 },
                 keys: {
@@ -1859,6 +1860,32 @@ namespace phasereditor2d.scene.ui.editor.commands {
         }
 
         static registerEditCommands(manager: colibri.ui.ide.commands.CommandManager) {
+
+            // duplicate
+
+            manager.add({
+                command: {
+                    id: CMD_DUPLICATE_OBJECT,
+                    name: "Duplicate Object",
+                    tooltip: "Duplicate the selected objects.",
+                    category: CAT_SCENE_EDITOR
+                },
+                keys: {
+                    control: true,
+                    key: "KeyD"
+                },
+                handler: {
+                    testFunc: args => isSceneScope(args) && args.activeEditor.getSelection().length > 0,
+                    executeFunc: args => {
+                        const clipboard = (args.activeEditor as SceneEditor).getClipboardManager();
+                        const current = ClipboardManager.getClipboard();
+                        clipboard.copy();
+                        clipboard.paste(true);
+                        // the clipboard should still hold what the user copied
+                        ClipboardManager.setClipboard(current);
+                    }
+                }
+            });
 
             // copy
 

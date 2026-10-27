@@ -22,6 +22,10 @@ namespace phasereditor2d.scene.ui.editor {
             return this._clipboard;
         }
 
+        static setClipboard(items: IClipboardItem[]) {
+            this._clipboard = items;
+        }
+
         static getClipboardCopy(): IClipboardItem[] {
 
             return this._clipboard.map(obj => JSON.parse(JSON.stringify(obj)));

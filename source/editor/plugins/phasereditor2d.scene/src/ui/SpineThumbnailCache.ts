@@ -1,4 +1,9 @@
+/// <reference path="./ThumbnailCache.ts"/>
+
 namespace phasereditor2d.scene.ui {
+
+    import controls = colibri.ui.controls;
+    import pack = phasereditor2d.pack;
 
     export class SpineThumbnailCache extends ThumbnailCache<pack.core.SpineSkinItem> {
 
@@ -6,7 +11,7 @@ namespace phasereditor2d.scene.ui {
             super("phasereditor2d.scene.ui.SpineThumbnailCache");
         }
 
-        createObjectImage(obj: pack.core.SpineSkinItem): SceneThumbnailImage {
+        createObjectImage(obj: pack.core.SpineSkinItem): controls.IImage {
 
             return ScenePlugin.getInstance().buildSpineSkinThumbnailImage(obj);
         }

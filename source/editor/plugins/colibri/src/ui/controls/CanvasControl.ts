@@ -7,6 +7,7 @@ namespace colibri.ui.controls {
         protected _canvas: HTMLCanvasElement;
         protected _context: CanvasRenderingContext2D;
         private _padding: number;
+        private _minHeight = 0;
 
         constructor(padding: number = 0, ...classList: string[]) {
             super("canvas", "CanvasControl", ...classList);
@@ -14,6 +15,16 @@ namespace colibri.ui.controls {
             this._padding = padding;
             this._canvas = this.getElement() as HTMLCanvasElement;
             this.initContext();
+        }
+
+        setMinHeight(value: number) {
+
+            this._minHeight = value;
+        }
+
+        getMinHeight() {
+
+            return this._minHeight;
         }
 
         getCanvas() {
@@ -27,8 +38,8 @@ namespace colibri.ui.controls {
 
             const b = parent.getBoundingClientRect();
 
-            this.style.width = Math.floor(b.width - this._padding * 2) + "px";
-            this.style.height = Math.floor(b.height - this._padding * 2) + "px";
+            this.style.width = Math.max(0, Math.floor(b.width - this._padding * 2)) + "px";
+            this.style.height = Math.max(this._minHeight, Math.floor(b.height - this._padding * 2)) + "px";
 
             this.repaint();
         }

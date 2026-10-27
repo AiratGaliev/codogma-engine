@@ -2,38 +2,30 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
     export class ParticleEmitter extends Phaser.GameObjects.Particles.ParticleEmitter implements ISceneGameObject {
 
-        // authored properties of the emitter configuration.
-        // they are plain fields so the properties can read/write them directly.
+        // authored properties: texture + frames of the particles
 
-        public speedMin = 0;
-        public speedMax = 0;
-        public angleMin = 0;
-        public angleMax = 360;
-        public gravityX = 0;
-        public gravityY = 0;
-        public lifespanMin = 1000;
-        public lifespanMax = 1000;
-        public scaleStart = 1;
-        public scaleEnd = 1;
-        public alphaStart = 1;
-        public alphaEnd = 1;
-
-        // editor data: texture, frame, animation and emission quantity
-
-        public editorTexture = "";
-        public editorFrame = "";
-        public editorAnimationKey = "";
-        public editorQuantity = 1;
+        public configTexture: string;
+        public configFrame: any[];
 
         private _editorSupport: ParticleEmitterEditorSupport;
+        private _disableUpdateConfig: boolean;
+        private _previewAdvance: number;
+        private _previewActive: boolean;
 
-        constructor(scene: Scene, x: number, y: number, texture?: string, config?: object) {
-            super(scene, x, y, texture || undefined, config as any);
+        constructor(scene: Scene, x: number, y: number, texture?: string) {
+            super(scene, x, y, texture);
+
+            this.configTexture = texture;
+            this.configFrame = [];
+
+            this._disableUpdateConfig = false;
+            this._previewAdvance = 1000;
+            this._previewActive = true;
 
             // the hand-written Phaser type defs lack width/height on ParticleEmitter,
             // so we set a default size for picking and rendering purposes.
 
-            if (!texture) {
+            if (texture === undefined) {
 
                 (this as any).width = 32;
                 (this as any).height = 32;
@@ -42,9 +34,79 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             this._editorSupport = new ParticleEmitterEditorSupport(this, scene);
         }
 
+        get previewAdvance() {
+
+            return this._previewAdvance;
+        }
+
+        set previewAdvance(value: number) {
+
+            this._previewAdvance = value;
+
+            this.fastForward(value);
+        }
+
+        get previewActive() {
+
+            return this._previewActive;
+        }
+
+        set previewActive(value: boolean) {
+
+            this._previewActive = value;
+
+            this.active = value;
+        }
+
         getEditorSupport(): ParticleEmitterEditorSupport {
 
             return this._editorSupport;
+        }
+
+        // emitters have no meaningful display origin, particles render from the emitter position
+        get displayOriginX() {
+
+            return 0;
+        }
+
+        get displayOriginY() {
+
+            return 0;
+        }
+
+        disableUpdateConfig(disable: boolean) {
+
+            this._disableUpdateConfig = disable;
+        }
+
+        updateConfig(config?: any): this {
+
+            if (config !== undefined) {
+
+                // passthrough call of the runtime API, our editor config always covers it
+                return super.updateConfig(config);
+            }
+
+            if (this._disableUpdateConfig) {
+
+                return this;
+            }
+
+            const editorConfig = this._editorSupport.generateConfig();
+
+            if (this._previewActive) {
+
+                this.setConfig(editorConfig);
+
+            } else {
+
+                this.active = true;
+                this.setConfig(editorConfig);
+                this.fastForward(this._previewAdvance);
+                this.active = false;
+            }
+
+            return this;
         }
     }
 }

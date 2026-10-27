@@ -13,6 +13,11 @@ namespace phasereditor2d.pack.core {
             return this.getData().url;
         }
 
+        getFrameConfig() {
+
+            return this.getData().frameConfig;
+        }
+
         getCompressedVariants(): ICompressedTextureVariant[] {
 
             return CompressedTextureVariants.getVariants(this.getData());

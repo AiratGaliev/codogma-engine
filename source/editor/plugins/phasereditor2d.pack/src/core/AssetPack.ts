@@ -19,6 +19,7 @@ namespace phasereditor2d.pack.core {
     export const AUDIO_SPRITE_TYPE = "audioSprite";
     export const BINARY_TYPE = "binary";
     export const BITMAP_FONT_TYPE = "bitmapFont";
+    export const FONT_TYPE = "font";
     export const CSS_TYPE = "css";
     export const GLSL_TYPE = "glsl";
     export const HTML_TYPE = "html";
@@ -36,12 +37,18 @@ namespace phasereditor2d.pack.core {
     export const TILEMAP_TILED_JSON_TYPE = "tilemapTiledJSON";
     export const VIDEO_TYPE = "video";
     export const XML_TYPE = "xml";
+    export const TEXTURE_TYPE = "texture";
+
+    export const SUPPORTED_COMPRESSED_TEXTURE_FORMATS = [
+        "ETC", "ETC1", "ATC", "ASTC", "BPTC", "RGTC", "PVRTC", "S3TC", "S3TCSRGB"
+    ];
 
     export class AssetPack {
 
         private _file: core.io.FilePath;
         private _items: AssetPackItem[];
         private _showAllFilesInBlocks: boolean;
+        private _visible: boolean = true;
 
         constructor(file: core.io.FilePath, content: string) {
             this._file = file;
@@ -58,6 +65,8 @@ namespace phasereditor2d.pack.core {
                     if (data.meta) {
 
                         this._showAllFilesInBlocks = data.meta.showAllFilesInBlocks || false;
+
+                        this._visible = data.meta.visible ?? true;
                     }
 
                 } catch (e) {
@@ -76,6 +85,16 @@ namespace phasereditor2d.pack.core {
         setShowAllFilesInBlocks(showAllFilesInBlocks) {
 
             this._showAllFilesInBlocks = showAllFilesInBlocks;
+        }
+
+        isVisible() {
+
+            return this._visible;
+        }
+
+        setVisible(visible: boolean) {
+
+            this._visible = visible;
         }
 
         computeUsedFiles(files: Set<io.FilePath> = new Set()) {
@@ -100,7 +119,8 @@ namespace phasereditor2d.pack.core {
                     contentType: pack.core.contentTypes.CONTENT_TYPE_ASSET_PACK,
                     url: "https://codogma.com",
                     version: 2,
-                    showAllFilesInBlocks: this._showAllFilesInBlocks
+                    showAllFilesInBlocks: this._showAllFilesInBlocks,
+                    visible: this._visible
                 }
             };
         }

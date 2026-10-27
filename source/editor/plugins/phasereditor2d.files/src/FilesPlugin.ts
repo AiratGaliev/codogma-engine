@@ -32,6 +32,11 @@ namespace phasereditor2d.files {
                 ui.viewers.StyledFileLabelProviderExtension.POINT_ID);
         }
 
+        override async started(): Promise<void> {
+
+            ui.dialogs.UploadUtils.installGlobalHandler();
+        }
+
         public registerExtensions(reg: colibri.ExtensionRegistry) {
 
             // new files

@@ -46,6 +46,10 @@ namespace phasereditor2d.scene.ui.editor {
         private _localCoords: boolean;
         private _cellRendererCache: CellRendererCache;
 
+        // this is for the ImportedImageFilesPreviewSection to show up the images in the inspector.
+        allowImagePreviewAssetsInInspector = true;
+        private _soundManager: SoundManager;
+
         constructor() {
             super("phasereditor2d.SceneEditor", SceneEditor.getFactory());
 
@@ -57,6 +61,12 @@ namespace phasereditor2d.scene.ui.editor {
             this._menuCreator = new SceneEditorMenuCreator(this);
             this._localCoords = true;
             this._cellRendererCache = new CellRendererCache();
+            this._soundManager = new SoundManager(this);
+        }
+
+        getSoundManager() {
+
+            return this._soundManager;
         }
 
         getMenuCreator() {
@@ -815,7 +825,22 @@ namespace phasereditor2d.scene.ui.editor {
 
             super.onPartActivated();
 
+            this._soundManager.editorActivated();
+
             await this.updateWithExternalChanges();
+        }
+
+        override onPartDeactivated() {
+
+            super.onPartDeactivated();
+
+            const selEditor = colibri.Platform.getWorkbench().getActiveWindow()
+                .getEditorArea().getSelectedEditor();
+
+            if (selEditor !== this) {
+
+                this._soundManager.editorDeactivated();
+            }
         }
 
         protected onFileStorageChanged(change: io.FileStorageChange): void {
