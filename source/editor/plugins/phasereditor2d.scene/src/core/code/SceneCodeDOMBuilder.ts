@@ -925,9 +925,19 @@ namespace phasereditor2d.scene.core.code {
 
             const varname = formatToValidVarName(objES.getLabel());
 
-            if (obj instanceof ui.sceneobjects.FXColorMatrix || obj instanceof ui.sceneobjects.FXGradient) {
+            if (obj instanceof ui.sceneobjects.FXColorMatrix
+                || obj instanceof ui.sceneobjects.FXGradient
+                || obj instanceof ui.sceneobjects.FXCircle) {
+
                 createObjectMethodCall.setDeclareReturnToVar(true);
                 createObjectMethodCall.setReturnToVar(varname);
+
+                if (obj instanceof ui.sceneobjects.FXCircle) {
+
+                    // AddMaskShape returns an array of masks, not a single Mask.
+                    // Keep the result so the generated resize handler can replace it.
+                    createObjectMethodCall.setExplicitType("Phaser.Filters.Mask[]");
+                }
             }
 
             createMethodDecl.getBody().push(createObjectMethodCall);
@@ -977,15 +987,25 @@ namespace phasereditor2d.scene.core.code {
                 const heightExpr = parent + ".height ?? " + parent + ".displayHeight ?? 128";
                 const scale = Math.max(0.01, circle.scale);
                 const thickness = Math.max(0.01, circle.thickness);
+                const feather = Math.max(0, circle.feather);
                 const backgroundColor = "0x" + circle.backgroundColor.replace("#", "");
                 const ringColor = "0x" + circle.color.replace("#", "");
                 const syncCode = [
                     "const " + backgroundName + " = " + sceneExpr + ".add.rectangle(" + parent + ".x ?? 0, " + parent + ".y ?? 0, " + widthExpr + ", " + heightExpr + ", " + backgroundColor + ", 0.4);",
                     "const " + ringName + " = " + sceneExpr + ".add.graphics();",
+                    "let lastWidth = Math.max(1, " + widthExpr + ");",
+                    "let lastHeight = Math.max(1, " + heightExpr + ");",
                     "const " + syncName + " = () => {",
                     "    if (!" + parent + ".active) { " + backgroundName + ".setVisible(false); " + ringName + ".setVisible(false); return; }",
                     "    const width = Math.max(1, " + widthExpr + ");",
                     "    const height = Math.max(1, " + heightExpr + ");",
+                    "    if (width !== lastWidth || height !== lastHeight) {",
+                    "        const previousMask = " + varname + "[0];",
+                    "        if (previousMask && " + parent + ".filters?.internal) { " + parent + ".filters.internal.remove(previousMask); }",
+                    "        " + varname + "[0] = Phaser.Actions.AddMaskShape(" + parent + ", { shape: \"circle\", aspectRatio: 1, useInternal: true, region: new Phaser.Geom.Rectangle(width * (1 - " + scale + ") / 2, height * (1 - " + scale + ") / 2, width * " + scale + ", height * " + scale + "), blurRadius: " + feather + " * Math.max(width, height), blurSteps: 4, blurQuality: 1, scaleMode: 0, padding: 0 })[0];",
+                    "        lastWidth = width;",
+                    "        lastHeight = height;",
+                    "    }",
                     "    " + backgroundName + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
                     "    " + backgroundName + ".setSize(width, height);",
                     "    " + backgroundName + ".setOrigin(" + parent + ".originX ?? 0.5, " + parent + ".originY ?? 0.5);",
