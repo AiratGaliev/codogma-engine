@@ -53,6 +53,12 @@ namespace phasereditor2d.ide.core.code {
             return data.substring(6);
         }
 
+        // The output is JavaScript-like code, not strict JSON: undefined is a
+        // valid expression and must not disappear from arrays or object values.
+        if (data === undefined) {
+            return "undefined";
+        }
+
         return JSON.stringify(data);
     }
 }
