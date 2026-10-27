@@ -1491,15 +1491,15 @@ namespace phasereditor2d.scene.ui.editor.commands {
                 command: {
                     id: CMD_OPEN_SCENE_FILE,
                     category: CAT_SCENE_EDITOR,
-                    name: "Go To Scene",
-                    tooltip: "Quick dialog to open a scene file."
+                    name: "Go To...",
+                    tooltip: "Quick dialog to open scenes, prefabs, scripts, asset packs, animations, or user components."
                 },
                 handler: {
                     testFunc: args => colibri.Platform.getWorkbench().getActiveWindow() instanceof ide.ui.DesignWindow,
                     executeFunc: args => {
 
-                        const dlg = new dialogs.OpenSceneFileDialog();
-                        dlg.create();
+                        const dlg = new dialogs.GoToDialog();
+                        dlg.create(true);
                     }
                 },
                 keys: {
