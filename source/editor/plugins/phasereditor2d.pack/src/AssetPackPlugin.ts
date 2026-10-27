@@ -310,6 +310,11 @@ namespace phasereditor2d.pack {
                 page => new ui.properties.ImportedImageFilesPreviewSection(page)
             ));
 
+            reg.addExtension(new files.ui.views.FilePropertySectionExtension(
+                page => new ui.properties.ImageFilePreviewSection(page),
+                page => new ui.properties.ManyImageFilePreviewSection(page)
+            ));
+
             // files view sections
 
             reg.addExtension(phasereditor2d.files.ui.views.ContentTypeSectionExtension.withSection(

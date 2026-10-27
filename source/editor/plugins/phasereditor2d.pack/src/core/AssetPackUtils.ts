@@ -41,7 +41,7 @@ namespace phasereditor2d.pack.core {
 
                 const pack = await AssetPack.createFromFile(file);
 
-                if (pack) {
+                if (pack && pack.isVisible()) {
 
                     packs.push(pack);
                 }

@@ -42,6 +42,7 @@ namespace phasereditor2d.pack.core {
         private _file: core.io.FilePath;
         private _items: AssetPackItem[];
         private _showAllFilesInBlocks: boolean;
+        private _visible: boolean = true;
 
         constructor(file: core.io.FilePath, content: string) {
             this._file = file;
@@ -58,6 +59,8 @@ namespace phasereditor2d.pack.core {
                     if (data.meta) {
 
                         this._showAllFilesInBlocks = data.meta.showAllFilesInBlocks || false;
+
+                        this._visible = data.meta.visible ?? true;
                     }
 
                 } catch (e) {
@@ -76,6 +79,16 @@ namespace phasereditor2d.pack.core {
         setShowAllFilesInBlocks(showAllFilesInBlocks) {
 
             this._showAllFilesInBlocks = showAllFilesInBlocks;
+        }
+
+        isVisible() {
+
+            return this._visible;
+        }
+
+        setVisible(visible: boolean) {
+
+            this._visible = visible;
         }
 
         computeUsedFiles(files: Set<io.FilePath> = new Set()) {
@@ -100,7 +113,8 @@ namespace phasereditor2d.pack.core {
                     contentType: pack.core.contentTypes.CONTENT_TYPE_ASSET_PACK,
                     url: "https://codogma.com",
                     version: 2,
-                    showAllFilesInBlocks: this._showAllFilesInBlocks
+                    showAllFilesInBlocks: this._showAllFilesInBlocks,
+                    visible: this._visible
                 }
             };
         }

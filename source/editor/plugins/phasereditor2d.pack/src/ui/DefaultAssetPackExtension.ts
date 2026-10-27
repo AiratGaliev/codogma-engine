@@ -184,7 +184,7 @@ namespace phasereditor2d.pack.ui {
 
             return [
 
-                new editor.properties.BlocksSection(page),
+                new editor.properties.AssetPackSettingsSection(page),
 
                 new editor.properties.ItemSection(page),
 
