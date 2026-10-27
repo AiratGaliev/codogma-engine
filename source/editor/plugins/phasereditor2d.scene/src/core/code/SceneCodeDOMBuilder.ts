@@ -613,6 +613,9 @@ namespace phasereditor2d.scene.core.code {
                 new RawCodeDOM("        box2dAccumulator -= box2dFixedTimeStep;"),
                 new RawCodeDOM("        box2dSteps++;"),
                 new RawCodeDOM("    }"),
+                // SetWorldScale is global in Phaser Box2D; reapply this scene's scale
+                // before converting body transforms back to pixels.
+                new RawCodeDOM(`    SetWorldScale(${settings.box2dWorld_scale});`),
                 new RawCodeDOM("    UpdateWorldSprites(box2dWorldId);"),
                 new RawCodeDOM("};"),
                 new RawCodeDOM(`this.events.on("update", updateBox2DWorld);`),
