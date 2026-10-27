@@ -244,16 +244,26 @@ async function main() {
         const toolText = (toolCall.result.content || []).filter(item => item.type === "text").map(item => item.text).join("\n")
         assert.ok(Array.isArray(JSON.parse(toolText).scenes), "scene-list tool should return valid scene data")
 
-        const danglingMcpWrite = await mcp.request("tools/call", {
-            name: "ide-create-new-scene",
-            arguments: { name: "MustNotEscape", folder: "dangling-folder" }
+        // Verify the built-in MCP dispatcher directly so this is testing the
+        // repository's safeJoin path, not optional-argument defaults in the
+        // third-party stdio adapter.
+        const danglingMcpWrite = await request(port, "/editor/mcp", {
+            method: "POST",
+            headers: { host, "content-type": "application/json" },
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 2,
+                method: "tools/call",
+                params: {
+                    name: "ide-create-new-scene",
+                    arguments: { name: "MustNotEscape", folder: "dangling-folder" }
+                }
+            })
         })
-        const danglingMcpErrorText = (danglingMcpWrite.result?.content || [])
-            .filter(item => item.type === "text")
-            .map(item => item.text)
-            .join("\n")
-        assert.ok(danglingMcpWrite.result?.isError || danglingMcpWrite.error || /invalid folder|invalid path/i.test(danglingMcpErrorText),
-            `MCP scene creation must reject a dangling symlink folder; response: ${danglingMcpErrorText}`)
+        const danglingMcpResponse = JSON.parse(danglingMcpWrite.body)
+        assert.ok(danglingMcpResponse.result?.isError || danglingMcpResponse.error
+            || /invalid folder|invalid path/i.test(JSON.stringify(danglingMcpResponse.result?.content || [])),
+            `Built-in MCP scene creation must reject a dangling symlink folder; response: ${danglingMcpWrite.body}`)
         await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
             "MCP scene creation must not create an outside folder through a dangling symlink")
 
