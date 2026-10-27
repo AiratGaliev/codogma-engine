@@ -21,7 +21,14 @@ namespace phasereditor2d.pack.ui.properties {
             comp.appendChild(audioElement);
 
             this.addUpdater(() => {
-                audioElement.src = this.getSelectedAudioUrl();
+                const url = this.getSelectedAudioUrl();
+
+                if (url) {
+                    audioElement.src = url;
+                } else {
+                    audioElement.removeAttribute("src");
+                }
+
                 audioElement.load();
             });
 
@@ -32,12 +39,12 @@ namespace phasereditor2d.pack.ui.properties {
             super.onSectionHidden();
 
             if (this._audioElement) {
-                this._audioElement.src = "";
+                this._audioElement.removeAttribute("src");
                 this._audioElement.load();
             }
         }
 
-        private getSelectedAudioUrl(): string {
+        private getSelectedAudioUrl(): string | null {
 
             const obj = this.getSelectionFirstElement();
 
