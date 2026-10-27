@@ -1038,7 +1038,7 @@ namespace phasereditor2d.scene.core.code {
                     "    " + varname + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
                     "    " + varname + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
                     "};",
-                    "if (" + parent + ".parentContainer && " + varname + ".parentContainer !== " + parent + ".parentContainer) { " + parent + ".parentContainer.add(" + varname + "); }",
+                    "if (" + parent + ".parentContainer && " + varname + ".parentContainer !== " + parent + ".parentContainer) { const container = " + parent + ".parentContainer; container.addAt(" + varname + ", Math.max(0, container.getIndex(" + parent + ") + 1)); }",
                     sceneExpr + ".events.on('update', " + syncName + ");",
                     syncName + "();",
                     varname + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
