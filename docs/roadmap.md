@@ -112,6 +112,18 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 Полная инвентаризация source tree, фактические performance measurements, migration `source/editor` → `src/editor` и npm Workspaces остаются отдельными задачами, необходимыми к соответствующим gates. Они не используются как повод откладывать независимую модернизацию редактора.
 
+### Подготовленные reference-документы — использовать, не пересоздавать
+
+Эти документы уже созданы как результат предыдущего этапа аудита. Они сохраняют свою актуальность как справочная база и уточняются вместе с кодом, когда меняется фактическое состояние. Агенту не поручается повторно генерировать их вместо реализации.
+
+- `docs/capability-matrix.md` — фактические возможности редактора/runtime/build, evidence, тесты и непроверенные gaps.
+- `docs/dependency-capability-matrix.md` — зависимости, версии, лицензии, scope и последствия для реализации.
+- `docs/decisions/ADR-0001-core-architecture.md` — границы будущих Project Model/Core/Phaser adapter/Preview Host; относится к будущей интеграции Core.
+- `docs/performance-baseline.md` — протокол и fixture для измерений; реальные результаты добавляются только после воспроизводимых прогонов.
+- `docs/decisions/ADR-0002-typescript-toolchain.md` — политика TypeScript, lint/format/test и постепенного усиления quality gates.
+- `docs/decisions/ADR-0003-package-architecture-and-management.md` — целевые package/workspace/extension boundaries и Package Manager; не блокирует изменения текущего editor UI.
+- `docs/code-quality-baseline.md` — исходное состояние compiler/build/security checks и ограничения того, что подтверждается CI.
+
 ## Этап 0 — базовая версия и текущая инфраструктура
 
 **Статус: реализованная исходная база.** Используется для сравнения и регрессионной проверки, а не как свидетельство готовности будущих subsystem-ов.
