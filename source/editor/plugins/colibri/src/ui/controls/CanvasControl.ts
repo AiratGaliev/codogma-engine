@@ -38,7 +38,7 @@ namespace colibri.ui.controls {
 
             const b = parent.getBoundingClientRect();
 
-            this.style.width = Math.max(this._minHeight, Math.floor(b.width - this._padding * 2)) + "px";
+            this.style.width = Math.max(0, Math.floor(b.width - this._padding * 2)) + "px";
             this.style.height = Math.max(this._minHeight, Math.floor(b.height - this._padding * 2)) + "px";
 
             this.repaint();
