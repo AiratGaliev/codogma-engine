@@ -240,21 +240,19 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const deleteBtn = this.createButton(buttonsPane, "Delete", async () => this.onDeleteFrame(viewer));
 
-            this.addUpdater(() => {
+            const updateButtons = () => {
 
-                deleteBtn.disabled = true;
-                addButton.disabled = !this.isUnlocked(ParticleEmitterComponent.frame);
-            });
+                const canModify = this.isUnlocked(ParticleEmitterComponent.frame);
+                const selection = viewer.getSelection();
 
-            viewer.eventSelectionChanged.addListener(() => {
+                addButton.disabled = !canModify;
+                deleteBtn.disabled = !canModify
+                    || selection.length === 0
+                    || !selection.every(item => item instanceof pack.AssetPackImageFrame);
+            };
 
-                if (!this.isUnlocked(ParticleEmitterComponent.frame)) {
-
-                    return;
-                }
-
-                deleteBtn.disabled = viewer.getSelection().length === 0;
-            });
+            this.addUpdater(updateButtons);
+            viewer.eventSelectionChanged.addListener(updateButtons);
 
             viewer.getElement().addEventListener("keydown", (e: KeyboardEvent) => {
 
@@ -311,7 +309,9 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const sel = viewer.getSelection() as any[];
 
-            if (sel.length === 0) {
+            if (!this.isUnlocked(ParticleEmitterComponent.frame)
+                || sel.length === 0
+                || !sel.every(frame => frame instanceof pack.AssetPackImageFrame)) {
 
                 return;
             }
