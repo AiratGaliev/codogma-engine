@@ -31,7 +31,7 @@ This direction does **not** mean every planned engine subsystem already exists. 
 | Scene authoring | Visual scene editing, inspectors, serialization and generated game code. |
 | Project assets | Asset Pack Editor and asset tools for textures, spritesheets, tilemaps and other supported asset types. |
 | Animation and components | Animation tools, User Components Editor and code editors. |
-| Phaser integration | Bundled Phaser 4.2.1 runtime files and TypeScript definitions, plus code-generation and API adaptations. |
+| Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
 | Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
 | Editable tilemaps | Tilemap authoring tools, layers, tilesets, painting operations and MCP tools for modifying tilemap data. |
 | Physics authoring | Arcade Physics-related scene tooling and Box2D body/world authoring and code generation. Box2D runtime setup may be needed in the game project separately. |
@@ -118,6 +118,8 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>.github/workflows/release.yml</code> | Build, smoke-test and ZIP artifact workflow for <code>main</code>. |
 | <code>BUILD.md</code> | Additional build notes. |
 | <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
+
+**Target package architecture (planned):** the Editor Host is intended to move from `source/editor/` to `src/editor/`, while independently addressable package sources will live under `packages/*` and be developed with npm Workspaces. Consumer projects will declare only selected packages and their required transitive dependencies; `node_modules/` is an install output, not a source directory. A planned Feature/Capability Registry will describe engine capabilities, feature-level dependencies and project/target build selection independently of npm package installation. Packages that extend the editor will integrate through a versioned Extension API, not by patching Editor Host sources. These target capabilities are not implemented in the current checkout. Until the dedicated migration and workspace changes are merged, the paths and commands in this README describe the current `source/editor/` layout.
 
 ## Daily development commands
 
@@ -242,7 +244,7 @@ Branch Rulesets require these exact status names:
 | <code>test</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 | <code>main</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 
-A successful server-side MCP test does not guarantee that every UI workflow, generated game or browser-rendering path works. Run and document additional acceptance checks when the change affects those areas.
+A successful server-side MCP test, TypeScript build or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. Run and document additional acceptance checks when the change affects those areas. The pending runtime and security follow-ups for the Scene Editor, FX/Box2D code generation, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md); do not treat a green Fast CI run as browser acceptance evidence.
 
 ## Branches, Pull Requests and Mandatory Development Rules
 
@@ -403,6 +405,10 @@ Start the server first, then run <code>npm run test:e2e</code>. Inspect the firs
 
 - [Build guide](BUILD.md)
 - [Editor documentation](https://docs.codogma.com)
+- [Technical specification (RU)](docs/technical-specification.md)
+- [Roadmap (RU)](docs/roadmap.md)
+- [Technical reference catalog (RU)](docs/REFERENCE-SOURCES.md)
+- [Package architecture and npm-based Package Manager ADR (RU)](docs/decisions/ADR-0003-package-architecture-and-management.md)
 - [CI Fast workflow](.github/workflows/ci.yml)
 - [MCP E2E workflow](.github/workflows/e2e.yml)
 - [Release workflow](.github/workflows/release.yml)
