@@ -333,6 +333,10 @@ namespace phasereditor2d.pack.ui {
 
                 new ui.properties.AnimationPreviewSection(page),
 
+                new ui.properties.AudioPreviewSection(page),
+
+                new ui.properties.VideoPreviewSection(page),
+
                 ...exts.flatMap(ext => ext.getSections(page))
             ];
         }

@@ -15,6 +15,8 @@ namespace phasereditor2d.pack.ui.properties {
             sections.push(new pack.ui.properties.AnimationPreviewSection(page));
             sections.push(new pack.ui.properties.BitmapFontPreviewSection(page));
             sections.push(new pack.ui.properties.ManyBitmapFontPreviewSection(page));
+            sections.push(new pack.ui.properties.AudioPreviewSection(page));
+            sections.push(new pack.ui.properties.VideoPreviewSection(page));
             sections.push(new pack.ui.properties.TilemapTiledSection(page));
 
             const provider = new files.ui.views.FilePropertySectionProvider();

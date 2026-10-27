@@ -286,7 +286,9 @@ namespace phasereditor2d.pack {
                 new ui.dialogs.NewAssetPackFileWizardExtension());
 
             reg.addExtension(new files.ui.views.FilePropertySectionExtension(
-                page => new ui.properties.AddFileToPackFileSection(page)
+                page => new ui.properties.AddFileToPackFileSection(page),
+                page => new ui.properties.AudioPreviewSection(page),
+                page => new ui.properties.VideoPreviewSection(page)
             ));
 
             // files view sections
