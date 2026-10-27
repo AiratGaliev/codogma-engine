@@ -102,14 +102,32 @@ function log(...args) {
 
 function isWithinRealBase(base, target) {
     const realBase = fs.realpathSync(base)
+    const isInside = candidate => candidate === realBase || candidate.startsWith(realBase + path.sep)
     let candidate = target
 
     while (true) {
         try {
-            const realCandidate = fs.realpathSync(candidate)
-            return realCandidate === realBase || realCandidate.startsWith(realBase + path.sep)
+            // lstat sees the link itself, unlike realpath. A dangling symlink
+            // must fail closed instead of being treated as a missing leaf
+            // under an otherwise trusted parent directory.
+            const linkOrFile = fs.lstatSync(candidate)
+
+            if (linkOrFile.isSymbolicLink()) {
+                return isInside(fs.realpathSync(candidate))
+            }
+
+            return isInside(fs.realpathSync(candidate))
         } catch (error) {
             if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return false
+
+            // realpath(2) also reports ENOENT for a dangling symlink. Detect
+            // that case before walking up to a parent that may be in-base.
+            try {
+                if (fs.lstatSync(candidate).isSymbolicLink()) return false
+            } catch (lstatError) {
+                if (lstatError.code !== "ENOENT" && lstatError.code !== "ENOTDIR") return false
+            }
+
             const parent = path.dirname(candidate)
             if (parent === candidate) return false
             candidate = parent
