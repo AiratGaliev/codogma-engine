@@ -244,7 +244,7 @@ Branch Rulesets require these exact status names:
 | <code>test</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 | <code>main</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 
-A successful server-side MCP test does not guarantee that every UI workflow, generated game or browser-rendering path works. Run and document additional acceptance checks when the change affects those areas.
+A successful server-side MCP test, TypeScript build or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. Run and document additional acceptance checks when the change affects those areas. The pending runtime and security follow-ups for the Scene Editor, FX/Box2D code generation, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md); do not treat a green Fast CI run as browser acceptance evidence.
 
 ## Branches, Pull Requests and Mandatory Development Rules
 
