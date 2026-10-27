@@ -64,10 +64,15 @@ namespace phasereditor2d.pack.ui.properties {
                 const x = control.getCursorX() - control.getImageScrollX();
                 const y = control.getCursorY() - control.getImageScrollY();
 
-                const { col, row } = this.findColumnRow(
+                const cell = this.findColumnRow(
                     x, y, config.frameWidth, config.frameHeight, config.margin, config.spacing);
 
-                const cursorIndex = cols * row + col;
+                if (!cell) {
+
+                    return null as any;
+                }
+
+                const cursorIndex = cols * cell.row + cell.col;
 
                 const frame = spritesheet.getFrames().find(f => Number(f.getName()) === cursorIndex);
 
@@ -175,22 +180,25 @@ namespace phasereditor2d.pack.ui.properties {
 
                     if (dx >= 0 && dy >= 0 && dx < imgW * zoom && dy < imgH * zoom) {
 
-                        const { col, row } = this.findColumnRow(
+                        const cell = this.findColumnRow(
                             dx, dy, config.frameWidth, config.frameHeight, margin, config.spacing);
 
-                        const cellWidth = config.frameWidth + spacing;
-                        const cellHeight = config.frameHeight + spacing;
+                        if (cell) {
 
-                        const cellX = config.margin + col * cellWidth;
-                        const cellY = config.margin + row * cellHeight;
+                            const cellWidth = config.frameWidth + spacing;
+                            const cellHeight = config.frameHeight + spacing;
 
-                        ctx.strokeStyle = "black";
-                        ctx.strokeRect(imgX + cellX * zoom - 1, imgY + cellY * zoom - 1,
-                            config.frameWidth * zoom + 2, config.frameHeight * zoom + 2);
+                            const cellX = config.margin + cell.col * cellWidth;
+                            const cellY = config.margin + cell.row * cellHeight;
 
-                        ctx.strokeStyle = "white";
-                        ctx.strokeRect(imgX + cellX * zoom, imgY + cellY * zoom,
-                            config.frameWidth * zoom, config.frameHeight * zoom);
+                            ctx.strokeStyle = "black";
+                            ctx.strokeRect(imgX + cellX * zoom - 1, imgY + cellY * zoom - 1,
+                                config.frameWidth * zoom + 2, config.frameHeight * zoom + 2);
+
+                            ctx.strokeStyle = "white";
+                            ctx.strokeRect(imgX + cellX * zoom, imgY + cellY * zoom,
+                                config.frameWidth * zoom, config.frameHeight * zoom);
+                        }
                     }
                 }
 
@@ -209,7 +217,7 @@ namespace phasereditor2d.pack.ui.properties {
         }
 
         private findColumnRow(x: number, y: number,
-            frameWidth: number, frameHeight: number, margin: number, spacing: number) {
+            frameWidth: number, frameHeight: number, margin: number, spacing: number): { col: number, row: number } | null {
 
             const zoom = this._imgControl.getZoom();
 
@@ -218,11 +226,30 @@ namespace phasereditor2d.pack.ui.properties {
 
             const totalCellWidth = frameWidth + spacing;
             const totalCellHeight = frameHeight + spacing;
-            const startX = margin;
-            const startY = margin;
+            const offsetX = x - margin;
+            const offsetY = y - margin;
 
-            const col = Math.floor((x - startX) / totalCellWidth);
-            const row = Math.floor((y - startY) / totalCellHeight);
+            if (frameWidth <= 0 || frameHeight <= 0 || totalCellWidth <= 0 || totalCellHeight <= 0
+                || offsetX < 0 || offsetY < 0) {
+
+                return null;
+            }
+
+            const col = Math.floor(offsetX / totalCellWidth);
+            const row = Math.floor(offsetY / totalCellHeight);
+            const withinCellX = offsetX - col * totalCellWidth;
+            const withinCellY = offsetY - row * totalCellHeight;
+            const image = this._imgControl.getImage();
+
+            const cols = this.computeNumberOfColumns(image.getWidth(), frameWidth, margin, spacing);
+            const rows = Math.floor((image.getHeight() - 2 * margin + spacing) / totalCellHeight);
+
+            // Ignore margin, spacing and any partial cell outside the image bounds.
+            if (withinCellX >= frameWidth || withinCellY >= frameHeight
+                || col >= cols || row >= rows) {
+
+                return null;
+            }
 
             return { col, row };
         }
