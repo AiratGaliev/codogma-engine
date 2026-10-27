@@ -160,6 +160,14 @@ namespace phasereditor2d.pack.ui.properties {
 
                 // paint image border
                 const img = control.getImage();
+
+                if (!img) {
+
+                    ctx.restore();
+
+                    return;
+                }
+
                 const imgX = control.getImageScrollX();
                 const imgY = control.getImageScrollY();
                 const imgW = img.getWidth();
