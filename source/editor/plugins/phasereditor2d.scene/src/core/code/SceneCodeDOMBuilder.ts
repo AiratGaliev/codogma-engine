@@ -565,11 +565,20 @@ namespace phasereditor2d.scene.core.code {
             body.push(
                 new RawCodeDOM(""),
                 new RawCodeDOM("// box2d world creation"),
-                new RawCodeDOM(`SetWorldScale(${settings.box2dWorld_scale});`),
+                new RawCodeDOM(`SetWorldScale(${this.getBox2DWorldScale()});`),
                 new RawCodeDOM(`const box2dWorld = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
                     + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
                     + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
                 new RawCodeDOM(`const box2dWorldId = box2dWorld.worldId;`));
+        }
+
+        private getBox2DWorldScale(): number {
+
+            const scale = this._scene.getSettings().box2dWorld_scale;
+
+            return typeof scale === "number" && Number.isFinite(scale) && scale > 0
+                ? scale
+                : 30;
         }
 
         /**
@@ -615,7 +624,7 @@ namespace phasereditor2d.scene.core.code {
                 new RawCodeDOM("    }"),
                 // SetWorldScale is global in Phaser Box2D; reapply this scene's scale
                 // before converting body transforms back to pixels.
-                new RawCodeDOM(`    SetWorldScale(${settings.box2dWorld_scale});`),
+                new RawCodeDOM(`    SetWorldScale(${this.getBox2DWorldScale()});`),
                 new RawCodeDOM("    UpdateWorldSprites(box2dWorldId);"),
                 new RawCodeDOM("};"),
                 new RawCodeDOM(`this.events.on("update", updateBox2DWorld);`),
