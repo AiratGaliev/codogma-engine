@@ -33,7 +33,7 @@
 
 | Приоритет | Gap | Минимальное действие | Gate |
 |---|---|---|---|
-| P0 | Новый Core ещё не имеет проверяемого quality toolchain | Изолированный Core pilot: strict TS config, ESLint/typescript-eslint, Prettier check, unit test и locked dependencies | Не расширять production Core, пока pilot не проходит clean install/check |
+| P0 | Для нового и целенаправленно изменяемого Codogma-owned кода нет воспроизводимого quality loop | Ограниченный toolchain pilot: strict TS для новых модулей, ESLint/typescript-eslint, Prettier check, адресные unit/regression tests и locked dependencies; применять к editor modernization scope по мере внедрения | Не расширять соответствующий новый/изменяемый scope, пока его clean install/check/tests не проходят; не запускать массовый lint rewrite всего legacy дерева |
 | P0 | Файловая проверка и фактическая операция не атомарны | Выбрать race-resistant подход, основанный на реальном открытом target/file handle или эквивалентной OS-гарантии; добавить race regression и описать поддерживаемые платформы | До новых server write APIs / Package Manager file operations |
 | P0 перед отдельным запуском mini-services | Два optional мини-сервиса открыты по всем интерфейсам без аутентификации/лимитов | `mini-services/phaser-editor-mcp/index.mjs` вызывает `server.listen(PORT)` без host, отдаёт `Access-Control-Allow-Origin: *` и не лимитирует body; endpoint без auth проксирует инструменты подключённому редактору. `mini-services/ai-chat/index.mjs` также вызывает `.listen(3031)` без host, принимает неограниченное тело и передаёт messages в LLM SDK без auth/rate-limit. Обычный security smoke эти entry points не проверяет | Не запускать эти отдельные сервисы на недоверенной/сетевой среде до loopback-by-default binding, size/time limits, CORS/Origin policy и regression tests. Это не блокирует основной editor server, который явно bind-ится к loopback |
 | P0 | Несколько изменённых codegen/runtime функций не имеют browser acceptance | FX/Box2D/asset/codegen regression fixtures и журнал ручной проверки | До закрытия соответствующих пунктов backlog и заявления о готовности этих функций |
@@ -45,7 +45,7 @@
 
 ## Правила обновления baseline
 
-1. Новый Core и новые packages имеют собственные строгие config/quality gates; не делать массовый lint/format rewrite legacy editor.
+1. Новый Core и новые packages имеют собственные строгие config/quality gates. Для модернизации существующего editor quality checks добавляются поэтапно в новом/изменяемом Codogma-owned scope; не делать массовый lint/format rewrite legacy editor.
 2. Knip/dependency-cruiser первоначально работают в report mode. Настроить generated output, dynamic plugin registry и scripts entry points до включения blocking check.
 3. Локальные и CI результаты фиксировать вместе с точным commit SHA и командами. Если проверка не запускалась или была skipped, указывать это явно.
 4. Успешные сборка/typecheck/server smoke не заменяют unit tests, browser acceptance, security regression или production build evidence.
