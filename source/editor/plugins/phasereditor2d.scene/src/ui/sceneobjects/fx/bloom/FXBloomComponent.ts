@@ -1,41 +1,24 @@
 /// <reference path="../FXProperty.ts" />
 namespace phasereditor2d.scene.ui.sceneobjects {
-
     export class FXBloomComponent extends Component<FXBloom> {
-
-        static color = FXProperty(NumberColorProperty("color", "#ffffff", "Color", "phaser:Phaser.FX.Bloom.color"));
-        static offsetX = FXProperty(SimpleProperty("offsetX", 1, "Offset X", "phaser:Phaser.FX.Bloom.offsetX", false, undefined, 1));
-        static offsetY = FXProperty(SimpleProperty("offsetY", 1, "Offset Y", "phaser:Phaser.FX.Bloom.offsetY", false, undefined, 1));
-        static blurStrength = FXProperty(SimpleProperty("blurStrength", 1, "Blur Strength", "phaser:Phaser.FX.Bloom.blurStrength", false, undefined, 0.01));
-        static strength = FXProperty(SimpleProperty("strength", 1, "Strength", "phaser:Phaser.FX.Bloom.strength", false, undefined, 0.01));
-        static steps = FXProperty(SimpleProperty("steps", 4, "Steps", "phaser:Phaser.FX.Bloom.steps", false, undefined, 1));
+        static threshold = FXProperty(SimpleProperty("threshold", 0.5, "Threshold", "phaser:Phaser.Types.Actions.AddEffectBloomConfig.threshold", false, undefined, 0.01, 0, 1));
+        static blurRadius = FXProperty(SimpleProperty("blurRadius", 2, "Blur Radius", "phaser:Phaser.Types.Actions.AddEffectBloomConfig.blurRadius", false, undefined, 0.1, 0));
+        static blurSteps = FXProperty(SimpleProperty("blurSteps", 4, "Blur Steps", "phaser:Phaser.Types.Actions.AddEffectBloomConfig.blurSteps", false, undefined, 1, 1));
+        static blurQuality = FXProperty(SimpleProperty("blurQuality", 0, "Blur Quality (0–2)", "phaser:Phaser.Types.Actions.AddEffectBloomConfig.blurQuality", false, undefined, 1, 0, 2));
+        static blendAmount = FXProperty(SimpleProperty("blendAmount", 1, "Blend Amount", "phaser:Phaser.Types.Actions.AddEffectBloomConfig.blendAmount", false, undefined, 0.05, 0));
 
         constructor(obj: FXBloom) {
             super(obj, [
-                FXBloomComponent.color,
-                FXBloomComponent.offsetX,
-                FXBloomComponent.offsetY,
-                FXBloomComponent.blurStrength,
-                FXBloomComponent.strength,
-                FXBloomComponent.steps
+                FXBloomComponent.threshold,
+                FXBloomComponent.blurRadius,
+                FXBloomComponent.blurSteps,
+                FXBloomComponent.blurQuality,
+                FXBloomComponent.blendAmount
             ]);
         }
 
         buildSetObjectPropertiesCodeDOM(args: ISetObjectPropertiesCodeDOMArgs): void {
-
-            const objES = this.getObject().getEditorSupport();
-
-            if (objES.isNestedPrefabInstance()) {
-
-                this.buildSetObjectPropertyCodeDOM_FloatProperty(args,
-                    FXBloomComponent.color,
-                    FXBloomComponent.offsetX,
-                    FXBloomComponent.offsetY,
-                    FXBloomComponent.blurStrength,
-                    FXBloomComponent.strength,
-                    FXBloomComponent.steps
-                );
-            }
+            // Конфигурация передаётся в Phaser.Actions.AddEffectBloom при создании эффекта.
         }
     }
 }

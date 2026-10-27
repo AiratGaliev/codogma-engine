@@ -860,6 +860,11 @@ namespace phasereditor2d.scene.core.code {
 
             const varname = formatToValidVarName(objES.getLabel());
 
+            if (obj instanceof ui.sceneobjects.FXColorMatrix || obj instanceof ui.sceneobjects.FXGradient) {
+                createObjectMethodCall.setDeclareReturnToVar(true);
+                createObjectMethodCall.setReturnToVar(varname);
+            }
+
             createMethodDecl.getBody().push(createObjectMethodCall);
 
             // script nodes are not added to the scene this way
@@ -893,6 +898,33 @@ namespace phasereditor2d.scene.core.code {
             lazyStatements.push(...result.lazyStatements);
 
             createMethodDecl.getBody().push(...result.statements);
+
+            if (obj instanceof ui.sceneobjects.FXGradient && parentVarName) {
+
+                const sceneExpr = this._scene.isPrefabSceneType() ? "scene" : "this";
+                const parent = parentVarName;
+                const syncName = varname + "Sync";
+                const syncCode = [
+                    "const " + syncName + " = () => {",
+                    "    if (!" + parent + ".active) { " + varname + ".setVisible(false); return; }",
+                    "    " + varname + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
+                    "    " + varname + ".setSize(Math.max(1, " + parent + ".width ?? " + parent + ".displayWidth ?? 128), Math.max(1, " + parent + ".height ?? " + parent + ".displayHeight ?? 128));",
+                    "    " + varname + ".setOrigin(" + parent + ".originX ?? 0.5, " + parent + ".originY ?? 0.5);",
+                    "    " + varname + ".setRotation(" + parent + ".rotation ?? 0);",
+                    "    " + varname + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
+                    "    " + varname + ".setAlpha((" + parent + ".alpha ?? 1) * " + obj.alpha + ");",
+                    "    " + varname + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + varname + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
+                    "};",
+                    "if (" + parent + ".parentContainer && " + varname + ".parentContainer !== " + parent + ".parentContainer) { " + parent + ".parentContainer.add(" + varname + "); }",
+                    sceneExpr + ".events.on('update', " + syncName + ");",
+                    syncName + "();",
+                    varname + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
+                    parent + ".once('destroy', () => { " + sceneExpr + ".events.off('update', " + syncName + "); " + varname + ".destroy(); });"
+                ].join("\\n");
+
+                createMethodDecl.getBody().push(new RawCodeDOM(syncCode));
+            }
 
             // the script nodes are not added to the parent this way
             if (objParent && objES.isDisplayObject()) {

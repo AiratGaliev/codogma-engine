@@ -13,7 +13,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         constructor() {
             super({
                 typeName: "Circle",
-                phaserTypeName: "Phaser.FX.Circle",
+                phaserTypeName: "Phaser.Filters.Mask",
                 category: SCENE_OBJECT_FX_CATEGORY,
                 icon: resources.getIconDescriptor(resources.ICON_FX)
             });

@@ -13,7 +13,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         constructor() {
             super({
                 typeName: "Gradient",
-                phaserTypeName: "Phaser.FX.Gradient",
+                phaserTypeName: "Phaser.GameObjects.Gradient",
                 category: SCENE_OBJECT_FX_CATEGORY,
                 icon: resources.getIconDescriptor(resources.ICON_FX)
             });

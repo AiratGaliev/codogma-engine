@@ -13,7 +13,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         constructor() {
             super({
                 typeName: "Bloom",
-                phaserTypeName: "Phaser.FX.Bloom",
+                phaserTypeName: "Phaser.Filters.Controller",
                 category: SCENE_OBJECT_FX_CATEGORY,
                 icon: resources.getIconDescriptor(resources.ICON_FX)
             });
