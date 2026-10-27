@@ -113,7 +113,20 @@ namespace colibri.ui.controls {
                 return;
             }
 
-            this.setZoom(this._zoom + e.deltaY * -0.01);
+            if (!Number.isFinite(e.deltaY) || e.deltaY === 0) {
+
+                return;
+            }
+
+            // Wheel deltas are platform-dependent (often around 100 per notch).
+            // Multiplicative zoom is symmetric in both directions and avoids
+            // jumping straight to the 0.1 minimum on a single downward notch.
+            if (e.cancelable) {
+
+                e.preventDefault();
+            }
+
+            this.setZoom(this._zoom * Math.exp(-e.deltaY * 0.001));
 
             this.repaint();
         }
