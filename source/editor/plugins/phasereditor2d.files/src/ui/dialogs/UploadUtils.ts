@@ -142,7 +142,9 @@ namespace phasereditor2d.files.ui.dialogs {
 
                         const file = item.getAsFile();
 
-                        files.push(new FileInfo(file, file.name));
+                        if (file) {
+                            files.push(new FileInfo(file, file.name));
+                        }
                     }
                 }
             }
@@ -165,7 +167,7 @@ namespace phasereditor2d.files.ui.dialogs {
 
                 const file = await new Promise<File>((resolve, reject) => {
 
-                    entryFile.file((file: File) => resolve(file));
+                    entryFile.file((file: File) => resolve(file), reject);
                 });
 
                 files.push(new FileInfo(file, entry.fullPath));
@@ -176,16 +178,23 @@ namespace phasereditor2d.files.ui.dialogs {
 
                 console.log("Reading dir entry: " + entry.fullPath);
 
-                const children = await new Promise<any[]>((resolve, reject) => {
+                // DirectoryReader выдаёт содержимое каталога частями.
+                const reader = entryDir.createReader();
 
-                    const reader = entryDir.createReader();
+                while (true) {
 
-                    reader.readEntries((entries: any[]) => resolve(entries));
-                });
+                    const children = await new Promise<any[]>((resolve, reject) => {
+                        reader.readEntries((entries: any[]) => resolve(entries), reject);
+                    });
 
-                for (const child of children) {
+                    if (children.length === 0) {
+                        break;
+                    }
 
-                    await UploadUtils.readFileEntry(child, files);
+                    for (const child of children) {
+
+                        await UploadUtils.readFileEntry(child, files);
+                    }
                 }
             }
         }
@@ -280,7 +289,7 @@ namespace phasereditor2d.files.ui.dialogs {
 
                 } catch (error) {
 
-                    break;
+                    console.error("Не удалось загрузить файл:", fileInfo.fullPath, error);
                 }
 
                 i++;

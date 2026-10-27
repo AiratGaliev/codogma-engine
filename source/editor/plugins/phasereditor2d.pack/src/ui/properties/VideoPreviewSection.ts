@@ -49,7 +49,7 @@ namespace phasereditor2d.pack.ui.properties {
 
             if (obj instanceof core.VideoAssetPackItem) {
 
-                const url = obj.getData()?.url as string;
+                const url = obj.getFirstUrl();
 
                 if (url) {
 
