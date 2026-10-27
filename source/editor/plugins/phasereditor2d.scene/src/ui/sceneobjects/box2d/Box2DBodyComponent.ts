@@ -274,11 +274,10 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 return;
             }
 
-            // Generates the Phaser Box2D v3 C-API (SetWorldScale/CreateWorld/
-            // b2CreateBody/pxm, see the official v4.11.2 emitter, bundle
-            // 50536-50560 + 70700-70930). The editor Y points down, the
-            // physics world Y points up: the body position negates Y.
-            // The body is synced with the sprite via AddSpriteToWorld.
+            // Generates calls against the Phaser Box2D v3 C API.
+            // Editor coordinates have Y pointing down, while the physics
+            // world has Y pointing up, so the generated body position negates Y.
+            // AddSpriteToWorld links the created body to its display object.
 
             const unit = args.unit;
 
