@@ -153,12 +153,17 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const libFile = colibri.ui.ide.FileUtils.getAllFiles()
                 .find(file => file.getName() === libName);
 
-            if (libFile) {
+            if (!libFile) {
 
-                const { importPath } = code.getImportPath(sceneFile, libFile);
-
-                unit.addImport(elementName, importPath, false);
+                throw new Error(
+                    `Cannot generate Box2D code: "${libName}" is missing from the project. `
+                    + "Add the Phaser Box2D library before generating a scene with Box2D enabled."
+                );
             }
+
+            const { importPath } = code.getImportPath(sceneFile, libFile);
+
+            unit.addImport(elementName, importPath, false);
         }
 
         static isBodyEnabled(obj: ISceneGameObject) {
