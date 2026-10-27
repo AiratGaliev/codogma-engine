@@ -25,44 +25,72 @@ namespace phasereditor2d.scene.ui {
 
         async preload(): Promise<controls.PreloadResult> {
 
-            console.log("VideoImage.preload " + this._file.getName());
-
             const video = document.createElement("video");
 
             video.setAttribute("playsinline", "playsinline");
-            video.setAttribute("preload", "auto");
+            video.preload = "auto";
             video.setAttribute("disablePictureInPicture", "true");
-            video.setAttribute("autoplay", "autoplay");
             video.muted = true;
             video.defaultMuted = true;
 
-            return new Promise<controls.PreloadResult>((resolve, reject) => {
+            return new Promise<controls.PreloadResult>(resolve => {
 
-                video.addEventListener("loadeddata", () => {
+                const cleanup = () => {
 
-                    const canvas = this.getImageElement() as HTMLCanvasElement;
-
-                    const ctx = canvas.getContext("2d");
-
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
+                    video.removeEventListener("loadeddata", onLoadedData);
+                    video.removeEventListener("error", onError);
                     video.pause();
                     video.removeAttribute("src");
                     video.load();
+                };
 
-                    resolve(controls.PreloadResult.RESOURCES_LOADED);
-                });
+                const finish = (result: controls.PreloadResult) => {
 
-                video.addEventListener("error", () => {
+                    cleanup();
+                    resolve(result);
+                };
 
-                    resolve(controls.PreloadResult.NOTHING_LOADED);
-                });
+                const onLoadedData = () => {
+
+                    try {
+
+                        const canvas = this.getImageElement() as HTMLCanvasElement;
+                        const ctx = canvas.getContext("2d");
+
+                        if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) {
+
+                            finish(controls.PreloadResult.NOTHING_LOADED);
+
+                            return;
+                        }
+
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                        finish(controls.PreloadResult.RESOURCES_LOADED);
+
+                    } catch (error) {
+
+                        console.error("Unable to create video thumbnail:", this._file.getName(), error);
+                        finish(controls.PreloadResult.NOTHING_LOADED);
+                    }
+                };
+
+                const onError = () => finish(controls.PreloadResult.NOTHING_LOADED);
+
+                video.addEventListener("loadeddata", onLoadedData, { once: true });
+                video.addEventListener("error", onError, { once: true });
 
                 const url = this._file.getExternalUrl();
 
-                video.src = url;
+                if (!url) {
 
-                video.play();
+                    finish(controls.PreloadResult.NOTHING_LOADED);
+
+                    return;
+                }
+
+                video.src = url;
+                video.load();
             });
         }
     }
