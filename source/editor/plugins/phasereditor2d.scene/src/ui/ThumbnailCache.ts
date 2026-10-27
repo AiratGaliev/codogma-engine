@@ -69,17 +69,17 @@ namespace phasereditor2d.scene.ui {
                 // whose codec is unsupported) as a valid cache entry.
                 if (preloadResult === controls.PreloadResult.RESOURCES_LOADED && element) {
 
-                    const newBlob = await controls.Controls.createBlobFromImage(element);
-
                     try {
 
+                        // Both blob creation and IndexedDB persistence are optional:
+                        // an image that rendered successfully must still be shown
+                        // if canvas export or cache storage fails.
+                        const newBlob = await controls.Controls.createBlobFromImage(element);
                         await db.setItem(imageKey, newBlob);
                         await db.setItem(hashKey, currentHash);
 
                     } catch (error) {
 
-                        // Cache persistence is optional; keep the generated
-                        // thumbnail usable when IndexedDB is unavailable/full.
                         console.warn("Unable to persist thumbnail cache:", error);
                     }
                 }
