@@ -63,7 +63,7 @@ namespace phasereditor2d.scene.ui {
 
                 await image.preload();
 
-                const element = image.getImageElement();
+                const element = (image as any).getImageElement?.();
 
                 if (element) {
 
@@ -77,6 +77,6 @@ namespace phasereditor2d.scene.ui {
             });
         }
 
-        abstract createObjectImage(obj: TObject): SceneThumbnailImage;
+        abstract createObjectImage(obj: TObject): controls.IImage;
     }
 }

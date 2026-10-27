@@ -454,6 +454,8 @@ namespace phasereditor2d.scene {
 
             reg.addExtension(new ui.sceneobjects.SpineAssetPackCellRendererExtension());
 
+            reg.addExtension(new ui.sceneobjects.VideoAssetCellRendererExtension());
+
             // asset pack preview extension
 
             reg.addExtension(new pack.ui.AssetPackPreviewPropertyProviderExtension(
