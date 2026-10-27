@@ -15,5 +15,10 @@
   "license": "MIT",
   "dependencies": {
     "@phaserjs/editor-mcp-server": "^1.0.6"
+  },
+  "overrides": {
+    "@phaserjs/editor-mcp-server": {
+      "zod": "4.6.7"
+    }
   }
 }
