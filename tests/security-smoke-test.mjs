@@ -260,7 +260,7 @@ async function main() {
                 "attempted-overwrite",
                 `--${boundary}--`,
                 ""
-            ].join("\\r\\n")
+            ].join("\r\n")
 
             const symlinkUpload = await request(port, "/editor/upload", {
                 method: "POST",
