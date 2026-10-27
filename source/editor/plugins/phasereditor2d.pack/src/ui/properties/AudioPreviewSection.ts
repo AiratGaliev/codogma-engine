@@ -48,13 +48,22 @@ namespace phasereditor2d.pack.ui.properties {
 
             if (obj instanceof core.AudioAssetPackItem) {
 
-                const url = obj.getData()?.url as string;
+                const value: unknown = obj.getData()?.url;
+                const urls = typeof value === "string"
+                    ? [value]
+                    : Array.isArray(value) ? value : [];
 
-                if (url) {
+                for (const url of urls) {
+
+                    if (typeof url !== "string" || url.trim().length === 0) {
+
+                        continue;
+                    }
 
                     const file = core.AssetPackUtils.getFileFromPackUrl(obj.getPack(), url);
 
                     if (file) {
+
                         return file.getUrl();
                     }
                 }
