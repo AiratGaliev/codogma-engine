@@ -309,7 +309,9 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             if (angle !== 0) {
 
-                bodyParts.push(`rotation: RotFromRad(Phaser.Math.DegToRad(${angle}))`);
+                Box2DBodyComponent.addBox2DImport(unit, "RotFromRad", args.sceneFile);
+
+                bodyParts.push(`rotation: RotFromRad(${angle} * Math.PI / 180)`);
             }
 
             addPart(bodyParts, Box2DBodyComponent.fixedRotation, "fixedRotation", false);
