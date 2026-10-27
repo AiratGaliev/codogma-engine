@@ -44,6 +44,8 @@ const ROOT = path.resolve(__dirname, "..")
 
 const PORT = Number(process.env.PORT || 3000)
 const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "tests", "workspace", "test-typescript"))
+const MAX_API_BODY_BYTES = 32 * 1024 * 1024
+const MAX_UPLOAD_BODY_BYTES = 128 * 1024 * 1024
 const EDITOR_DIR = path.resolve(process.env.EDITOR_DIR || path.join(ROOT, "source", "editor"))
 const PLUGINS_DIR = path.join(EDITOR_DIR, "plugins")
 const DEV_MODE = process.env.DEV_MODE === "1"
@@ -98,12 +100,82 @@ function log(...args) {
 
 /* ============================== file helpers ============================== */
 
+function isWithinRealBase(base, target) {
+    const realBase = fs.realpathSync(base)
+    let candidate = target
+
+    while (true) {
+        try {
+            const realCandidate = fs.realpathSync(candidate)
+            return realCandidate === realBase || realCandidate.startsWith(realBase + path.sep)
+        } catch (error) {
+            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return false
+            const parent = path.dirname(candidate)
+            if (parent === candidate) return false
+            candidate = parent
+        }
+    }
+}
+
 function safeJoin(base, relPath) {
+    if (typeof relPath !== "string") return null
+
     const p = path.resolve(base, "." + path.sep + relPath.replace(/^[\\/]+/, ""))
-    if (p !== base && !p.startsWith(base + path.sep)) {
+    if (p !== base && !p.startsWith(base + path.sep)) return null
+
+    // A lexical prefix check alone allows paths through symlinks inside the
+    // project to read or modify files elsewhere on the user's machine.
+    try {
+        if (!isWithinRealBase(base, p)) return null
+    } catch {
         return null
     }
+
     return p
+}
+
+function isLoopbackAddress(address) {
+    const value = String(address || "").toLowerCase()
+    return value === "127.0.0.1" || value === "::1" || value.startsWith("::ffff:127.")
+}
+
+function isLoopbackHost(hostHeader) {
+    if (typeof hostHeader !== "string" || hostHeader.length === 0) return false
+
+    try {
+        const hostname = new URL("http://" + hostHeader).hostname.toLowerCase().replace(/\\.$/, "")
+        return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
+    } catch {
+        return false
+    }
+}
+
+function rejectNonLocalRequest(req, res) {
+    const host = req.headers.host
+    const originHeader = req.headers.origin
+    let allowed = isLoopbackAddress(req.socket.remoteAddress) && isLoopbackHost(host)
+
+    // CLI/MCP requests generally omit Origin; browser requests must be same-origin.
+    if (allowed && originHeader !== undefined) {
+        try {
+            const origin = new URL(originHeader)
+            allowed = origin.protocol === "http:"
+                && isLoopbackHost(origin.host)
+                && origin.host.toLowerCase() === host.toLowerCase()
+        } catch {
+            allowed = false
+        }
+    }
+
+    if (allowed) return false
+
+    res.writeHead(403, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Vary": "Origin"
+    })
+    res.end("Forbidden")
+    return true
 }
 
 function walkTree(dirPath, relPrefix, files, folders) {
@@ -350,10 +422,58 @@ ${scripts.map(s => `    <script src="${s}"></script>`).join("\n")}
 
 /* =============================== API layer =============================== */
 
+function readRequestBuffer(req, maxBytes) {
+    return new Promise((resolve, reject) => {
+        const chunks = []
+        let size = 0
+        let settled = false
+
+        const cleanup = () => {
+            req.off("data", onData)
+            req.off("end", onEnd)
+            req.off("error", onError)
+        }
+
+        const onData = chunk => {
+            if (settled) return
+            size += chunk.length
+
+            if (size > maxBytes) {
+                settled = true
+                cleanup()
+                req.resume()
+                const error = new Error("Request body too large")
+                error.statusCode = 413
+                reject(error)
+                return
+            }
+
+            chunks.push(chunk)
+        }
+
+        const onEnd = () => {
+            if (settled) return
+            settled = true
+            cleanup()
+            resolve(Buffer.concat(chunks))
+        }
+
+        const onError = error => {
+            if (settled) return
+            settled = true
+            cleanup()
+            reject(error)
+        }
+
+        req.on("data", onData)
+        req.on("end", onEnd)
+        req.on("error", onError)
+    })
+}
+
 async function readBodyJSON(req) {
-    const chunks = []
-    for await (const chunk of req) chunks.push(chunk)
-    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")
+    const body = await readRequestBuffer(req, MAX_API_BODY_BYTES)
+    return JSON.parse(body.toString("utf8") || "{}")
 }
 
 function sendJSON(res, data) {
@@ -365,8 +485,13 @@ function sendJSON(res, data) {
     res.end(body)
 }
 
-function apiError(res, message) {
-    sendJSON(res, { error: message || "unknown error" })
+function apiError(res, message, statusCode = 200) {
+    const body = JSON.stringify({ error: message || "unknown error" })
+    res.writeHead(statusCode, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+    })
+    res.end(body)
 }
 
 async function handleAPI(req, res) {
@@ -510,7 +635,7 @@ async function handleAPI(req, res) {
         }
     } catch (e) {
         log("api error:", method, e.message)
-        return apiError(res, e.message)
+        return apiError(res, e.message, e.statusCode || 200)
     }
 }
 
@@ -523,9 +648,7 @@ async function handleUpload(req, res) {
         if (!m) return apiError(res, "no boundary")
         const boundary = "--" + (m[1] || m[2])
 
-        const chunks = []
-        for await (const chunk of req) chunks.push(chunk)
-        const buffer = Buffer.concat(chunks)
+        const buffer = await readRequestBuffer(req, MAX_UPLOAD_BODY_BYTES)
 
         const parts = []
         let start = buffer.indexOf(boundary)
@@ -574,7 +697,7 @@ async function handleUpload(req, res) {
         return sendJSON(res, { file: fileDataOut })
     } catch (e) {
         log("upload error:", e.message)
-        return apiError(res, e.message)
+        return apiError(res, e.message, e.statusCode || 200)
     }
 }
 
@@ -634,6 +757,8 @@ function serveFile(req, res, absPath, cacheControl) {
 /* ================================ server ================================= */
 
 const server = http.createServer(async (req, res) => {
+
+    if (rejectNonLocalRequest(req, res)) return
 
     let urlPath
     try {
@@ -928,7 +1053,7 @@ async function handleAiChat(req, res) {
     try {
         body = await readBodyJSON(req)
     } catch (e) {
-        return apiError(res, "invalid JSON body")
+        return apiError(res, e.statusCode === 413 ? e.message : "invalid JSON body", e.statusCode || 400)
     }
 
     const userMessages = (Array.isArray(body.messages) ? body.messages : [])
@@ -1066,7 +1191,7 @@ async function handleAiChat(req, res) {
 
 const MCP_BRIDGE_PORT = Number(process.env.MCP_BRIDGE_PORT || 1902)
 
-server.listen(PORT, () => {
+server.listen(PORT, "127.0.0.1", () => {
     log(`Codogma Engine server running at http://localhost:${PORT}/editor/`)
     log(`  project:  ${PROJECT_DIR}`)
     log(`  editor:   ${EDITOR_DIR}`)
@@ -1076,6 +1201,8 @@ server.listen(PORT, () => {
 })
 
 const bridgeServer = http.createServer(async (req, res) => {
+
+    if (rejectNonLocalRequest(req, res)) return
 
     if (req.method === "OPTIONS") {
         res.writeHead(204, {
@@ -1100,7 +1227,7 @@ const bridgeServer = http.createServer(async (req, res) => {
     }
 })
 
-bridgeServer.listen(MCP_BRIDGE_PORT, () => {
+bridgeServer.listen(MCP_BRIDGE_PORT, "127.0.0.1", () => {
     log(`  mcp bridge: http://127.0.0.1:${MCP_BRIDGE_PORT} (official @phaserjs/editor-mcp-server contract)`)
 })
 
