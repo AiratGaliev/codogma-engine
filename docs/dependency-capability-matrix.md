@@ -17,7 +17,7 @@
 | Editor/runtime artifacts | Phaser runtime bundle | `4.2.1` (вендорный) | `scripts/phaser.min.js` production и `scripts/phaser.js` development, подключаются через editor plugin | Phaser не входит в root/editor npm dependency graph; TypeScript declarations не поставляют runtime; feature-pruned bundle не доказан |
 | Сгенерированные игровые проекты | `PhaserBox2D.js` | Внешний runtime-файл | Box2D API/runtime, ожидаемый codegen | Не считать ambient `phaser-box2d.ts` поставкой runtime; нужен check/diagnostic и acceptance в exported game |
 | Legacy editor client | Colibri / Phaser Editor 2D-derived source | Вендорный/сохранённый source tree | `source/editor/plugins/colibri` и `phasereditor2d.*` plugins | Сохранять исходные notices и license compliance; не считать такую vendor dependency управляемой как обычный npm package |
-| New Codogma Core | Strict TS, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, test runner | Не внедрено в baseline | Целевой toolchain для нового кода | Внедрять сначала в отдельном Core pilot; не включать repo-wide lint gate на всю legacy-редактуру |
+| New/modified Codogma-owned code (editor modernization first; Core later) | Strict TS where appropriate, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, test runner | Не внедрено в baseline | Toolchain для нового и целенаправленно изменяемого кода редактора/будущих пакетов | Внедрять постепенно в отдельном pilot и применимом изменяемом scope; не включать repo-wide lint gate на всё legacy-дерево |
 
 ## Lockfiles и установка
 
@@ -29,7 +29,7 @@
 
 ## Отложенные решения / обязательные gates
 
-1. Перед Core/toolchain pilot сверить совместимые версии TypeScript, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser и Vitest на Node.js 22, установить lockfile и проверить clean install.
+1. Перед toolchain pilot для нового/изменяемого Codogma-owned scope сверить совместимые версии TypeScript, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser и Vitest на Node.js 22, установить lockfile и проверить clean install. Не требуется ждать начала Core, чтобы применить проверки к отдельной editor-модернизации.
 2. Не подменять `npm audit` лицензионным/provenance review: это разные проверки.
 3. Проверить root override Zod 4.6.7 на все используемые схемы MCP прежде, чем обновлять официальный пакет или Zod.
 4. Перед решением о Phaser modularization сделать один воспроизводимый build fixture: сравнить API coverage, runtime dependencies и raw/gzip размер, проверить generated game без editor UI.
