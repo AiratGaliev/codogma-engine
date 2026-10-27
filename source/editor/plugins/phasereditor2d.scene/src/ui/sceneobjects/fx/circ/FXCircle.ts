@@ -12,7 +12,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         padding = 0;
 
         constructor(scene: Scene, parent: ISceneGameObject, preFX: boolean) {
-            super(scene, FXCircleExtension.getInstance().getTypeName(), parent, preFX);
+            super(scene, FXCircleExtension.getInstance().getTypeName(), parent, true);
             this._editorSupport = new FXCircleEditorSupport(this, scene);
             this.refreshFX();
         }
@@ -23,11 +23,16 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             if (!parent) {
                 return;
             }
+            const width = Math.max(1, parent.width ?? parent.displayWidth ?? 128);
+            const height = Math.max(1, parent.height ?? parent.displayHeight ?? 128);
+
             const mask = Phaser.Actions.AddMaskShape(parent, {
                 shape: this.shape,
                 aspectRatio: this.aspectRatio,
                 invert: this.invert,
-                useInternal: this.isPreFX(),
+                // Для маски отдельного объекта нужен размер объекта, а не размер всего viewport.
+                useInternal: true,
+                region: new Phaser.Geom.Rectangle(0, 0, width, height),
                 blurRadius: Math.max(0, this.blurRadius),
                 blurSteps: Math.max(1, Math.round(this.blurSteps)),
                 blurQuality: Math.max(0, Math.min(2, Math.round(this.blurQuality))),
@@ -37,7 +42,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             this.setFXCleanup(() => {
                 const target = this.getParent() as any;
                 if (target && target.filters && mask) {
-                    (this.isPreFX() ? target.filters.internal : target.filters.external).remove(mask);
+                    target.filters.internal.remove(mask);
                 }
             });
         }

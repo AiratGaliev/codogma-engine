@@ -912,7 +912,6 @@ namespace phasereditor2d.scene.core.code {
                     "    " + varname + ".setOrigin(" + parent + ".originX ?? 0.5, " + parent + ".originY ?? 0.5);",
                     "    " + varname + ".setRotation(" + parent + ".rotation ?? 0);",
                     "    " + varname + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
-                    "    " + varname + ".setAlpha((" + parent + ".alpha ?? 1) * " + obj.alpha + ");",
                     "    " + varname + ".setVisible(" + parent + ".visible ?? true);",
                     "    " + varname + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
                     "};",

@@ -12,12 +12,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const comp = this.createGridElement(parent, 3);
 
-            this.createNumberProperty(comp, FXBloomComponent.color);
-            this.createNumberProperty(comp, FXBloomComponent.offsetX);
-            this.createNumberProperty(comp, FXBloomComponent.offsetY);
-            this.createNumberProperty(comp, FXBloomComponent.blurStrength);
-            this.createNumberProperty(comp, FXBloomComponent.strength);
-            this.createNumberProperty(comp, FXBloomComponent.steps);
+            this.createNumberProperty(comp, FXBloomComponent.threshold);
+            this.createNumberProperty(comp, FXBloomComponent.blurRadius);
+            this.createNumberProperty(comp, FXBloomComponent.blurSteps);
+            this.createNumberProperty(comp, FXBloomComponent.blurQuality);
+            this.createNumberProperty(comp, FXBloomComponent.blendAmount);
         }
 
         canEdit(obj: any, n: number): boolean {

@@ -12,10 +12,12 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const comp = this.createGridElement(parent, 3);
 
-            this.createNumberProperty(comp, FXShineComponent.speed);
-            this.createNumberProperty(comp, FXShineComponent.lineWidth);
-            this.createNumberProperty(comp, FXShineComponent.gradient);
-            this.createNumberProperty(comp, FXShineComponent.reveal);
+            this.createNumberProperty(comp, FXShineComponent.radius);
+            this.createNumberProperty(comp, FXShineComponent.direction);
+            this.createNumberProperty(comp, FXShineComponent.scale);
+            this.createNumberProperty(comp, FXShineComponent.duration);
+            this.createPropertyBoolean(comp, FXShineComponent.reveal);
+            this.createPropertyBoolean(comp, FXShineComponent.yoyo);
         }
 
         canEdit(obj: any, n: number): boolean {

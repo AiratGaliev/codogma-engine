@@ -11,7 +11,8 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const obj = args.obj as FXCircle;
             const call = new core.code.MethodCallCodeDOM("AddMaskShape", "Phaser.Actions");
             call.arg(args.parentVarName);
-            call.arg(`{ shape: ${JSON.stringify(obj.shape)}, aspectRatio: ${obj.aspectRatio}, invert: ${obj.invert}, useInternal: ${obj.isPreFX()}, blurRadius: ${Math.max(0, obj.blurRadius)}, blurSteps: ${Math.max(1, Math.round(obj.blurSteps))}, blurQuality: ${Math.max(0, Math.min(2, Math.round(obj.blurQuality)))}, scaleMode: ${obj.scaleMode}, padding: ${Math.max(0, obj.padding)} }`);
+            const parent = args.parentVarName;
+            call.arg(`{ shape: ${JSON.stringify(obj.shape)}, aspectRatio: ${obj.aspectRatio}, invert: ${obj.invert}, useInternal: true, region: new Phaser.Geom.Rectangle(0, 0, ${parent}.width ?? ${parent}.displayWidth ?? 128, ${parent}.height ?? ${parent}.displayHeight ?? 128), blurRadius: ${Math.max(0, obj.blurRadius)}, blurSteps: ${Math.max(1, Math.round(obj.blurSteps))}, blurQuality: ${Math.max(0, Math.min(2, Math.round(obj.blurQuality)))}, scaleMode: ${obj.scaleMode}, padding: ${Math.max(0, obj.padding)} }`);
             return call;
         }
     }

@@ -5,18 +5,21 @@ namespace phasereditor2d.scene.ui.sceneobjects {
     export class FXCircleSection extends SceneGameObjectSection<FXCircle> {
 
         constructor(page: controls.properties.PropertyPage) {
-            super(page, "phasereditor2d.scene.ui.sceneobjects.FXCircleSection", "Circle", false, false);
+            super(page, "phasereditor2d.scene.ui.sceneobjects.FXCircleSection", "Circle Mask", false, false);
         }
 
         createForm(parent: HTMLDivElement) {
 
             const comp = this.createGridElement(parent, 3);
 
-            this.createNumberProperty(comp, FXCircleComponent.thickness);
-            this.createPropertyColorRow(comp, FXCircleComponent.color, false);
-            this.createPropertyColorRow(comp, FXCircleComponent.backgroundColor, false);
-            this.createNumberProperty(comp, FXCircleComponent.scale);
-            this.createNumberProperty(comp, FXCircleComponent.feather);
+            this.createPropertyStringRow(comp, FXCircleComponent.shape);
+            this.createNumberProperty(comp, FXCircleComponent.aspectRatio);
+            this.createPropertyBoolean(comp, FXCircleComponent.invert);
+            this.createNumberProperty(comp, FXCircleComponent.blurRadius);
+            this.createNumberProperty(comp, FXCircleComponent.blurSteps);
+            this.createNumberProperty(comp, FXCircleComponent.blurQuality);
+            this.createNumberProperty(comp, FXCircleComponent.scaleMode);
+            this.createNumberProperty(comp, FXCircleComponent.padding);
         }
 
         canEdit(obj: any, n: number): boolean {

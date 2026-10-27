@@ -10,8 +10,12 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         buildCreateObjectWithFactoryCodeDOM(args: IBuildObjectFactoryCodeDOMArgs): core.code.MethodCallCodeDOM {
             const obj = args.obj as FXGradient;
             const parent = args.parentVarName;
+            const colorToRGBA = (value: string): string => {
+                const color = parseInt(value.replace("#", ""), 16);
+                return `[${((color >> 16) & 0xff) / 255}, ${((color >> 8) & 0xff) / 255}, ${(color & 0xff) / 255}, ${obj.alpha}]`;
+            };
             const call = new core.code.MethodCallCodeDOM("gradient", `${args.sceneExpr}.add`);
-            call.arg(`{ bands: [{ colorStart: 0x${obj.color1.replace("#", "")}, colorEnd: 0x${obj.color2.replace("#", "")}, size: ${obj.size > 0 ? obj.size : 1} }], start: { x: ${obj.fromX}, y: ${obj.fromY} }, shape: { x: ${obj.toX - obj.fromX}, y: ${obj.toY - obj.fromY} }, dither: true }`);
+            call.arg(`{ bands: [{ colorStart: ${colorToRGBA(obj.color1)}, colorEnd: ${colorToRGBA(obj.color2)}, size: ${obj.size > 0 ? obj.size : 1} }], start: { x: ${obj.fromX}, y: ${obj.fromY} }, shape: { x: ${obj.toX - obj.fromX}, y: ${obj.toY - obj.fromY} }, dither: true }`);
             if (parent) {
                 call.arg(`${parent}.x ?? 0`);
                 call.arg(`${parent}.y ?? 0`);

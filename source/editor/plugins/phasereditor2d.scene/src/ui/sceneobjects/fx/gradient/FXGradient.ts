@@ -17,11 +17,23 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             this.refreshFX();
         }
 
+        private colorToRGBA(value: string): [number, number, number, number] {
+
+            const color = parseInt(value.replace("#", ""), 16);
+
+            return [
+                ((color >> 16) & 0xff) / 255,
+                ((color >> 8) & 0xff) / 255,
+                (color & 0xff) / 255,
+                this.alpha
+            ];
+        }
+
         private getGradientConfig(): any {
             return {
                 bands: [{
-                    colorStart: parseInt(this.color1.replace("#", ""), 16),
-                    colorEnd: parseInt(this.color2.replace("#", ""), 16),
+                    colorStart: this.colorToRGBA(this.color1),
+                    colorEnd: this.colorToRGBA(this.color2),
                     size: this.size > 0 ? this.size : 1
                 }],
                 start: { x: this.fromX, y: this.fromY },
@@ -56,7 +68,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 gradient.setOrigin(target.originX ?? 0.5, target.originY ?? 0.5);
                 gradient.setRotation(target.rotation ?? 0);
                 gradient.setScale(target.scaleX ?? 1, target.scaleY ?? 1);
-                gradient.setAlpha((target.alpha ?? 1) * this.alpha);
                 gradient.setVisible(target.active !== false && target.visible !== false);
                 gradient.setDepth((target.depth ?? 0) + 0.001);
                 if (target.parentContainer && gradient.parentContainer !== target.parentContainer) {
