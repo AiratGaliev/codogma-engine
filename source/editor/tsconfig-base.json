@@ -4,6 +4,9 @@
             "DOM",
             "ESNext"
         ],
+        // no ambient @types: the editor brings its own .d.ts via references
+        // (an unrelated @types package on the walk-up path breaks the build)
+        "types": [],
         "target": "ESNext",
         "composite": true,
         "declaration": true,
