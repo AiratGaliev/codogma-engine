@@ -206,6 +206,8 @@ namespace phasereditor2d.pack.ui {
 
                 new editor.properties.SpritesheetFrameSection(page),
 
+                new ui.properties.SpritesheetPreviewSection(page),
+
                 new editor.properties.SimpleURLSection(page,
                     "phasereditor2d.pack.ui.editor.properties.AnimationsSection",
                     "Animations",
