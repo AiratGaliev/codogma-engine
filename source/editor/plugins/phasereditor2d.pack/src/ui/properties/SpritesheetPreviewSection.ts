@@ -45,7 +45,9 @@ namespace phasereditor2d.pack.ui.properties {
 
         protected getImageControl(): controls.ImageControl {
 
-            return this._imgControl;
+            // During createForm(), the superclass initializes its own control
+            // before this subclass stores the reference for later callbacks.
+            return this._imgControl ?? super.getImageControl();
         }
 
         private async getSelectedFrame(): Promise<core.AssetPackImageFrame> {
