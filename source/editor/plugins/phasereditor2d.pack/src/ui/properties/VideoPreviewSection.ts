@@ -22,7 +22,14 @@ namespace phasereditor2d.pack.ui.properties {
             comp.appendChild(videoElement);
 
             this.addUpdater(() => {
-                videoElement.src = this.getSelectedVideoUrl();
+                const url = this.getSelectedVideoUrl();
+
+                if (url) {
+                    videoElement.src = url;
+                } else {
+                    videoElement.removeAttribute("src");
+                }
+
                 videoElement.load();
             });
 
@@ -38,7 +45,7 @@ namespace phasereditor2d.pack.ui.properties {
             }
         }
 
-        private getSelectedVideoUrl(): string {
+        private getSelectedVideoUrl(): string | null {
 
             const obj = this.getSelectionFirstElement();
 
