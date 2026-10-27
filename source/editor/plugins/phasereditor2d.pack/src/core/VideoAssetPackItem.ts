@@ -10,22 +10,36 @@ namespace phasereditor2d.pack.core {
             super(pack, data);
         }
 
+        private getUrls(): string[] {
+
+            const value: unknown = this.getData()["url"];
+
+            const urls = typeof value === "string"
+                ? [value]
+                : Array.isArray(value) ? value : [];
+
+            return urls.filter((url): url is string =>
+                typeof url === "string" && url.trim().length > 0);
+        }
+
         getFirstUrl(): string {
 
-            const url = this.getData()["url"] as string[];
-
-            return url ? url[0] : null;
+            return this.getUrls()[0] ?? null;
         }
 
         getVideoFile(): colibri.core.io.FilePath {
 
-            const url = this.getFirstUrl();
-
-            if (url) {
+            // Asset Pack allows both a single URL and an array of format fallbacks.
+            // Skip malformed or missing paths instead of treating a string as an array
+            // and returning only its first character.
+            for (const url of this.getUrls()) {
 
                 const file = this.getFileFromAssetUrl(url);
 
-                return file;
+                if (file) {
+
+                    return file;
+                }
             }
 
             return null;
