@@ -49,6 +49,11 @@ namespace phasereditor2d.scene.ui.editor {
 
             this._mute = mute;
 
+            if (this.sound) {
+
+                this.sound.setMute(mute);
+            }
+
             window.localStorage.setItem(
                 "phasereditor2d.scene.ui.editor.SoundManager.mute", mute ? "1" : "0");
 
