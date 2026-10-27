@@ -144,6 +144,23 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             Box2DBodyComponent._bodyVarCounter = 0;
         }
 
+        // the generated code references plain functions of the phaser-box2d
+        // library; the named imports resolve only when the project contains
+        // the library file (as the official editor does).
+        static addBox2DImport(unit: core.code.UnitCodeDOM, elementName: string,
+            sceneFile: colibri.core.io.FilePath, libName = "PhaserBox2D.js") {
+
+            const libFile = colibri.ui.ide.FileUtils.getAllFiles()
+                .find(file => file.getName() === libName);
+
+            if (libFile) {
+
+                const { importPath } = code.getImportPath(sceneFile, libFile);
+
+                unit.addImport(elementName, importPath, false);
+            }
+        }
+
         static isBodyEnabled(obj: ISceneGameObject) {
 
             return Box2DBodyComponent.enabled.getValue(obj) === true;
@@ -257,26 +274,113 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 return;
             }
 
-            // const box2dBody = box2dWorld.createBody({ ... });
+            // Generates the Phaser Box2D v3 C-API (SetWorldScale/CreateWorld/
+            // b2CreateBody/pxm, see the official v4.11.2 emitter, bundle
+            // 50536-50560 + 70700-70930). The editor Y points down, the
+            // physics world Y points up: the body position negates Y.
+            // The body is synced with the sprite via AddSpriteToWorld.
+
+            const unit = args.unit;
+
+            const bodyParts = ["...b2DefaultBodyDef()"];
+            const shapeParts = ["...b2DefaultShapeDef()"];
+
+            const addPart = (parts: string[], prop: IProperty<ISceneGameObject>, b2Name: string, b2DefValue: any) => {
+
+                const value = prop.getValue(obj);
+
+                if (value !== b2DefValue) {
+
+                    parts.push(`${b2Name}: ${value}`);
+                }
+            };
+
+            // b2BodyType: 0 = b2_staticBody, 1 = b2_kinematicBody, 2 = b2_dynamicBody
+
+            const bodyType = Box2DBodyComponent.getBodyType(obj);
+
+            bodyParts.push(`type: ${bodyType === "static" ? 0 : bodyType === "kinematic" ? 1 : 2}`);
+
+            const x = (obj as any).x ?? 0;
+            const y = (obj as any).y ?? 0;
+
+            bodyParts.push(`position: pxmVec2(${x}, ${-y})`);
+
+            const angle = (obj as any).angle ?? 0;
+
+            if (angle !== 0) {
+
+                bodyParts.push(`rotation: RotFromRad(Phaser.Math.DegToRad(${angle}))`);
+            }
+
+            addPart(bodyParts, Box2DBodyComponent.fixedRotation, "fixedRotation", false);
+            addPart(bodyParts, Box2DBodyComponent.bullet, "isBullet", false);
+            addPart(bodyParts, Box2DBodyComponent.allowSleep, "enableSleep", true);
+            addPart(bodyParts, Box2DBodyComponent.linearDamping, "linearDamping", 0);
+            addPart(bodyParts, Box2DBodyComponent.angularDamping, "angularDamping", 0.1);
+            addPart(bodyParts, Box2DBodyComponent.gravityScale, "gravityScale", 1);
+
+            addPart(shapeParts, Box2DBodyComponent.density, "density", 1);
+            addPart(shapeParts, Box2DBodyComponent.friction, "friction", 0.6);
+            addPart(shapeParts, Box2DBodyComponent.restitution, "restitution", 0.1);
+
+            for (const name of ["b2CreateBody", "b2DefaultBodyDef", "b2DefaultShapeDef",
+                "pxm", "pxmVec2", "AddSpriteToWorld"]) {
+
+                Box2DBodyComponent.addBox2DImport(unit, name, args.sceneFile);
+            }
 
             const varName = this.buildBodyVarName();
 
-            const createBodyCall = new code.MethodCallCodeDOM("createBody", "box2dWorld");
+            const createBodyCall = new code.MethodCallCodeDOM("b2CreateBody");
 
             createBodyCall.setDeclareReturnToVar(true);
             createBodyCall.setReturnToVar(varName);
-            createBodyCall.arg(this.buildBodyConfigLiteral());
+            createBodyCall.arg("box2dWorldId");
+            createBodyCall.arg(`{ ${bodyParts.join(", ")} }`);
 
             args.statements.push(createBodyCall);
 
-            // box2dBody.createFixture(new Phaser.Box2D.Box(w, h), { ... });
+            if (Box2DBodyComponent.isCircleShape(obj)) {
 
-            const fixtureCall = new code.MethodCallCodeDOM("createFixture", varName);
+                Box2DBodyComponent.addBox2DImport(unit, "b2CreateCircleShape", args.sceneFile);
+                Box2DBodyComponent.addBox2DImport(unit, "b2Circle", args.sceneFile);
+                Box2DBodyComponent.addBox2DImport(unit, "b2Vec2", args.sceneFile);
 
-            fixtureCall.arg(this.buildShapeLiteral());
-            fixtureCall.arg(this.buildFixtureConfigLiteral());
+                const radius = Box2DBodyComponent.computeShapeRadius(obj);
 
-            args.statements.push(fixtureCall);
+                const shapeCall = new code.MethodCallCodeDOM("b2CreateCircleShape");
+
+                shapeCall.arg(varName);
+                shapeCall.arg(`{ ${shapeParts.join(", ")} }`);
+                shapeCall.arg(`new b2Circle(new b2Vec2(0, 0), pxm(${radius}))`);
+
+                args.statements.push(shapeCall);
+
+            } else {
+
+                Box2DBodyComponent.addBox2DImport(unit, "b2CreatePolygonShape", args.sceneFile);
+                Box2DBodyComponent.addBox2DImport(unit, "b2MakeBox", args.sceneFile);
+
+                const halfWidth = Box2DBodyComponent.computeShapeWidth(obj) / 2;
+                const halfHeight = Box2DBodyComponent.computeShapeHeight(obj) / 2;
+
+                const shapeCall = new code.MethodCallCodeDOM("b2CreatePolygonShape");
+
+                shapeCall.arg(varName);
+                shapeCall.arg(`{ ${shapeParts.join(", ")} }`);
+                shapeCall.arg(`b2MakeBox(pxm(${halfWidth}), pxm(${halfHeight}))`);
+
+                args.statements.push(shapeCall);
+            }
+
+            const addSpriteToWorld = new code.MethodCallCodeDOM("AddSpriteToWorld");
+
+            addSpriteToWorld.arg("box2dWorldId");
+            addSpriteToWorld.arg(args.objectVarName);
+            addSpriteToWorld.arg(`{ bodyId: ${varName} }`);
+
+            args.statements.push(addSpriteToWorld);
         }
 
         private buildBodyVarName(): string {
@@ -284,54 +388,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const count = ++Box2DBodyComponent._bodyVarCounter;
 
             return count === 1 ? "box2dBody" : `box2dBody_${count - 1}`;
-        }
-
-        private buildBodyConfigLiteral(): string {
-
-            const obj = this.getObject();
-
-            const x = (obj as any).x ?? 0;
-            const y = (obj as any).y ?? 0;
-
-            const bodyType = Box2DBodyComponent.getBodyType(obj);
-            const fixedRotation = Box2DBodyComponent.fixedRotation.getValue(obj);
-            const bullet = Box2DBodyComponent.bullet.getValue(obj);
-            const allowSleep = Box2DBodyComponent.allowSleep.getValue(obj);
-            const linearDamping = Box2DBodyComponent.linearDamping.getValue(obj);
-            const angularDamping = Box2DBodyComponent.angularDamping.getValue(obj);
-            const gravityScale = Box2DBodyComponent.gravityScale.getValue(obj);
-
-            return `{ type: "${bodyType}", position: { x: ${x}, y: ${y} }, `
-                + `fixedRotation: ${fixedRotation}, bullet: ${bullet}, allowSleep: ${allowSleep}, `
-                + `linearDamping: ${linearDamping}, angularDamping: ${angularDamping}, gravityScale: ${gravityScale} }`;
-        }
-
-        private buildShapeLiteral(): string {
-
-            const obj = this.getObject();
-
-            if (Box2DBodyComponent.isCircleShape(obj)) {
-
-                const radius = Box2DBodyComponent.computeShapeRadius(obj);
-
-                return `new Phaser.Box2D.Circle(${radius})`;
-            }
-
-            const width = Box2DBodyComponent.computeShapeWidth(obj);
-            const height = Box2DBodyComponent.computeShapeHeight(obj);
-
-            return `new Phaser.Box2D.Box(${width}, ${height})`;
-        }
-
-        private buildFixtureConfigLiteral(): string {
-
-            const obj = this.getObject();
-
-            const density = Box2DBodyComponent.density.getValue(obj);
-            const friction = Box2DBodyComponent.friction.getValue(obj);
-            const restitution = Box2DBodyComponent.restitution.getValue(obj);
-
-            return `{ density: ${density}, friction: ${friction}, restitution: ${restitution} }`;
         }
     }
 }

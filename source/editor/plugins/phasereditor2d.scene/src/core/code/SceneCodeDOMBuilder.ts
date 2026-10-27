@@ -549,18 +549,25 @@ namespace phasereditor2d.scene.core.code {
                 return;
             }
 
-            const worldDom = new MethodCallCodeDOM("World", "Phaser.Box2D");
+            for (const name of ["SetWorldScale", "CreateWorld", "b2DefaultWorldDef", "b2Vec2"]) {
 
-            worldDom.setConstructor(true);
-            worldDom.setDeclareReturnToVar(true);
-            worldDom.setReturnToVar("box2dWorld");
-            worldDom.arg("this");
-            worldDom.arg(`{ gravity: { x: ${settings.box2dGravityX}, y: ${settings.box2dGravityY} }, `
-                + `allowSleep: ${settings.box2dAllowSleep}, debugDraw: ${settings.box2dDebugDraw} }`);
+                ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
+            }
 
-            body.push(new RawCodeDOM(""));
-            body.push(new RawCodeDOM("// box2d world"));
-            body.push(worldDom);
+            // shortcut: the debugDraw setting is not emitted yet, it needs the
+            // PhaserDebugDraw.js project-file plumbing of the official editor
+
+            // the editor Y points down, the Box2D world Y points up
+            const gravityY = -settings.box2dGravityY;
+
+            body.push(
+                new RawCodeDOM(""),
+                new RawCodeDOM("// box2d world creation"),
+                new RawCodeDOM(`SetWorldScale(${settings.box2dWorld_scale});`),
+                new RawCodeDOM(`const box2dWorld = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
+                    + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
+                    + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
+                new RawCodeDOM(`const box2dWorldId = box2dWorld.worldId;`));
         }
 
         private addCreateAllPlainObjectCode(firstStatements: CodeDOM[], lazyStatements: CodeDOM[]) {

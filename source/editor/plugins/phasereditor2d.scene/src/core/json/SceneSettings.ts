@@ -34,7 +34,8 @@ namespace phasereditor2d.scene.core.json {
             public box2dGravityX = 0,
             public box2dGravityY = 10,
             public box2dAllowSleep = true,
-            public box2dDebugDraw = false
+            public box2dDebugDraw = false,
+            public box2dWorld_scale = 30
         ) {
 
         }
@@ -72,6 +73,7 @@ namespace phasereditor2d.scene.core.json {
             write(data, "box2dGravityY", this.box2dGravityY, 10);
             write(data, "box2dAllowSleep", this.box2dAllowSleep, true);
             write(data, "box2dDebugDraw", this.box2dDebugDraw, false);
+            write(data, "box2dWorld_scale", this.box2dWorld_scale, 30);
 
             return data;
         }
@@ -107,6 +109,7 @@ namespace phasereditor2d.scene.core.json {
             this.box2dGravityY = read(data, "box2dGravityY", 10);
             this.box2dAllowSleep = read(data, "box2dAllowSleep", true);
             this.box2dDebugDraw = read(data, "box2dDebugDraw", false);
+            this.box2dWorld_scale = read(data, "box2dWorld_scale", 30);
         }
     }
 }
