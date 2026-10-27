@@ -161,6 +161,7 @@ async function main() {
         await fs.symlink(outsideDir, path.join(projectDir, "outside-link"), "dir")
         await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
         await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
+        await fs.symlink(path.join(outsideDir, "secret.txt"), path.join(projectDir, "upload-link.txt"), "file")
     } catch (error) {
         const canSkipForWindows = process.platform === "win32"
             && ["EPERM", "EACCES", "ENOTSUP"].includes(error.code)
@@ -168,7 +169,7 @@ async function main() {
         if (!canSkipForWindows) throw error
 
         symlinkChecksAvailable = false
-        for (const name of ["outside-link", "dangling-file", "dangling-folder"]) {
+        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt"]) {
             await fs.rm(path.join(projectDir, name), { force: true, recursive: true })
         }
         console.warn("Skipping symlink-specific checks: Windows does not permit creating symbolic links in this environment.")
@@ -244,6 +245,33 @@ async function main() {
             })
             assert.equal(JSON.parse(danglingWrite.body).error, "invalid path", "dangling file symlinks must be rejected")
             await assert.rejects(fs.access(path.join(outsideDir, "dangling-file.txt")), /ENOENT/, "dangling symlink writes must not create files outside the project")
+
+            // Multipart uploads must validate the final file target, not only its parent directory.
+            const boundary = "----codogma-upload-security-boundary"
+            const multipartBody = [
+                `--${boundary}`,
+                `Content-Disposition: form-data; name="uploadTo"`,
+                "",
+                "",
+                `--${boundary}`,
+                `Content-Disposition: form-data; name="file"; filename="upload-link.txt"`,
+                "Content-Type: text/plain",
+                "",
+                "attempted-overwrite",
+                `--${boundary}--`,
+                ""
+            ].join("\\r\\n")
+
+            const symlinkUpload = await request(port, "/editor/upload", {
+                method: "POST",
+                headers: { host, "content-type": `multipart/form-data; boundary=${boundary}` },
+                body: multipartBody
+            })
+
+            assert.equal(JSON.parse(symlinkUpload.body).error, "invalid upload path",
+                "multipart uploads must reject a file symlink escaping the project")
+            assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
+                "multipart uploads must not overwrite a file outside the project")
         }
 
         // Exercise the officially distributed MCP stdio package after the Zod override.
