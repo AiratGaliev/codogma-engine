@@ -232,7 +232,7 @@ function buildRootFileData(projectDir) {
     const children = []
     const entries = fs.readdirSync(projectDir, { withFileTypes: true })
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue
         const full = path.join(projectDir, entry.name)
         const st = fs.statSync(full)
         if (st.isDirectory()) {
@@ -249,7 +249,7 @@ function buildRootFileData(projectDir) {
 function buildFolderData(dirPath, relPrefix, node) {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true })
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue
         const rel = relPrefix + "/" + entry.name
         const full = path.join(dirPath, entry.name)
         const st = fs.statSync(full)
@@ -956,11 +956,12 @@ function normalizeAttachmentPath(rawPath) {
 
     if (parts.length === 0 || parts.some(p => p === "..")) return null
 
-    const abs = path.resolve(PROJECT_DIR, ...parts)
+    const rel = parts.join("/")
+    const abs = safeJoin(PROJECT_DIR, rel)
 
-    if (!abs.startsWith(PROJECT_DIR + path.sep)) return null
+    if (!abs) return null
 
-    return { abs, rel: parts.join("/") }
+    return { abs, rel }
 }
 
 function attachmentFence(relPath) {
