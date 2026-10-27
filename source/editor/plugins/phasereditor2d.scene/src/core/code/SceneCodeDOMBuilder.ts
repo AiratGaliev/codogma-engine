@@ -899,6 +899,63 @@ namespace phasereditor2d.scene.core.code {
 
             createMethodDecl.getBody().push(...result.statements);
 
+
+            if (obj instanceof ui.sceneobjects.FXCircle && parentVarName) {
+
+                const circle = obj as ui.sceneobjects.FXCircle;
+                const sceneExpr = this._scene.isPrefabSceneType() ? "scene" : "this";
+                const parent = parentVarName;
+                const backgroundName = varname + "Background";
+                const ringName = varname + "Ring";
+                const syncName = varname + "CircleSync";
+                const widthExpr = parent + ".width ?? " + parent + ".displayWidth ?? 128";
+                const heightExpr = parent + ".height ?? " + parent + ".displayHeight ?? 128";
+                const scale = Math.max(0.01, circle.scale);
+                const thickness = Math.max(0.01, circle.thickness);
+                const backgroundColor = "0x" + circle.backgroundColor.replace("#", "");
+                const ringColor = "0x" + circle.color.replace("#", "");
+                const syncCode = [
+                    "const " + backgroundName + " = " + sceneExpr + ".add.rectangle(" + parent + ".x ?? 0, " + parent + ".y ?? 0, " + widthExpr + ", " + heightExpr + ", " + backgroundColor + ", 0.4);",
+                    "const " + ringName + " = " + sceneExpr + ".add.graphics();",
+                    "const " + syncName + " = () => {",
+                    "    if (!" + parent + ".active) { " + backgroundName + ".setVisible(false); " + ringName + ".setVisible(false); return; }",
+                    "    const width = Math.max(1, " + widthExpr + ");",
+                    "    const height = Math.max(1, " + heightExpr + ");",
+                    "    " + backgroundName + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
+                    "    " + backgroundName + ".setSize(width, height);",
+                    "    " + backgroundName + ".setOrigin(" + parent + ".originX ?? 0.5, " + parent + ".originY ?? 0.5);",
+                    "    " + backgroundName + ".setRotation(" + parent + ".rotation ?? 0);",
+                    "    " + backgroundName + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
+                    "    " + backgroundName + ".setAlpha((" + parent + ".alpha ?? 1) * 0.4);",
+                    "    " + backgroundName + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + backgroundName + ".setDepth((" + parent + ".depth ?? 0) - 0.001);",
+                    "    " + backgroundName + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
+                    "    " + ringName + ".clear();",
+                    "    " + ringName + ".lineStyle(" + thickness + ", " + ringColor + ", 1);",
+                    "    " + ringName + ".strokeEllipse(-(" + parent + ".originX ?? 0.5) * width + (width - width * " + scale + ") / 2, -(" + parent + ".originY ?? 0.5) * height + (height - height * " + scale + ") / 2, width * " + scale + ", height * " + scale + ");",
+                    "    " + ringName + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
+                    "    " + ringName + ".setRotation(" + parent + ".rotation ?? 0);",
+                    "    " + ringName + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
+                    "    " + ringName + ".setAlpha(" + parent + ".alpha ?? 1);",
+                    "    " + ringName + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + ringName + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
+                    "    " + ringName + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
+                    "    if (" + parent + ".parentContainer) {",
+                    "        const container = " + parent + ".parentContainer;",
+                    "        if (" + backgroundName + ".parentContainer !== container) { container.addAt(" + backgroundName + ", Math.max(0, container.getIndex(" + parent + "))); }",
+                    "        if (" + ringName + ".parentContainer !== container) { container.addAt(" + ringName + ", container.getIndex(" + parent + ") + 1); }",
+                    "    }",
+                    "};",
+                    sceneExpr + ".events.on('update', " + syncName + ");",
+                    syncName + "();",
+                    backgroundName + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
+                    ringName + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
+                    parent + ".once('destroy', () => { " + sceneExpr + ".events.off('update', " + syncName + "); " + backgroundName + ".destroy(); " + ringName + ".destroy(); });"
+                ].join("\n");
+
+                createMethodDecl.getBody().push(new RawCodeDOM(syncCode));
+            }
+
             if (obj instanceof ui.sceneobjects.FXGradient && parentVarName) {
 
                 const sceneExpr = this._scene.isPrefabSceneType() ? "scene" : "this";
