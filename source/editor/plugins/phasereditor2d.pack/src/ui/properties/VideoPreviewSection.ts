@@ -56,16 +56,9 @@ namespace phasereditor2d.pack.ui.properties {
 
             if (obj instanceof core.VideoAssetPackItem) {
 
-                const url = obj.getFirstUrl();
+                const file = obj.getVideoFile();
 
-                if (url) {
-
-                    const file = core.AssetPackUtils.getFileFromPackUrl(obj.getPack(), url);
-
-                    if (file) {
-                        return file.getUrl();
-                    }
-                }
+                return file ? file.getUrl() : null;
             }
 
             return null;
