@@ -56,11 +56,16 @@ namespace phasereditor2d.pack.ui.properties {
             if (obj instanceof core.AudioAssetPackItem) {
 
                 const value: unknown = obj.getData()?.url;
-                const urls = typeof value === "string"
-                    ? [value]
-                    : Array.isArray(value) ? value : [];
+                const entries = Array.isArray(value) ? value : [value];
 
-                for (const url of urls) {
+                for (const entry of entries) {
+
+                    // Phaser accepts URL strings and { type, url } descriptors.
+                    const url = typeof entry === "string"
+                        ? entry
+                        : entry && typeof entry === "object" && "url" in entry
+                            ? (entry as { url?: unknown }).url
+                            : undefined;
 
                     if (typeof url !== "string" || url.trim().length === 0) {
 
