@@ -102,7 +102,8 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const texture = ParticleEmitterComponent.texture.getValue(obj as any);
 
-            call.argLiteral(texture || "_MISSING");
+            // Match the prefab-constructor fallback and Phaser's default texture key.
+            call.argLiteral(texture || "__DEFAULT");
         }
     }
 }
