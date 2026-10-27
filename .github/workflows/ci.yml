@@ -79,8 +79,15 @@ jobs:
       - name: Install locked dependencies (root)
         run: npm ci
 
+      - name: Audit root dependencies
+        run: npm audit --audit-level=low
+
       - name: Install locked dependencies (editor client)
         run: npm ci
+        working-directory: source/editor
+
+      - name: Audit editor dependencies
+        run: npm audit --audit-level=low
         working-directory: source/editor
 
       - name: Build editor client (typecheck)
@@ -94,5 +101,8 @@ jobs:
           SRV=$!
           sleep 3
           curl -sf http://localhost:3100/editor/product.json | tee /dev/stderr | grep -q "Codogma Engine"
-          curl -sf -o /dev/null http://localhost:3100/editor/
+          curl -sf -o /dev/null http://127.0.0.1:3100/editor/
           kill $SRV
+
+      - name: Security smoke tests (local access, symlinks, MCP compatibility)
+        run: npm run test:security
