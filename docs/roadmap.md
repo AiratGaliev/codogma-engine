@@ -10,7 +10,7 @@
 
 | Очередь | Этапы roadmap | Приоритет | Измеримый результат / правило |
 |---|---|---|---|
-| 1 | Этап 1: аудит и baseline | **Блокирующий** | Фактическая карта текущих возможностей, зависимостей, качества и производительности. До этого не переписывать работающие подсистемы и не добавлять новые runtime-зависимости. |
+| 1 | Этап 1: аудит и initial baseline | **Блокирующий для архитектурных решений и новых runtime-зависимостей** | Зафиксировать факты перед переписыванием/сменой runtime. Изолированный dev-toolchain pilot разрешён параллельно; численные performance budgets устанавливаются только после измерений и не блокируют первый функциональный Core slice. |
 | 2 | Этап 1: ADR и toolchain pilot | **Блокирующий для нового Core** | Согласованы границы Project Model/Core/Phaser adapter/Preview Host; новый модуль проходит ограниченный strict typecheck, lint, format check и unit tests. Legacy Colibri массово не мигрируется. |
 | 3 | Этап 2: Project Model и минимальный Core | **P0 — основа** | Стабильные IDs, схема/сериализация/миграции, Transform, lifecycle, один пользовательский TypeScript-компонент и один Phaser adapter. Сначала законченный component-object vertical slice; data-oriented ECS — только по результатам сценария и измерений. |
 | 4 | Этап 3: Preview Host | **P0 — сквозной сценарий** | Запуск, остановка и повторный запуск, ошибки, реальная runtime-сущность и базовая live-инспекция связаны с проектной моделью. Browser preview не зависит от Tauri. |
@@ -20,6 +20,33 @@
 | 8 | Этап 6: QA, diagnostics и profiling | **Непрерывно; полный gate перед release** | Unit/type/lint checks появляются вместе с соответствующим кодом. Расширенный profiler, browser acceptance и release gates добавляются по мере появления измеряемых подсистем. |
 | 9 | Этап 7: Tauri desktop shell | **Не блокирует Web-first MVP** | Начинать после доказанного browser workflow и baseline. Небольшой throwaway PoC допустим раньше для снятия конкретного риска; полноценная упаковка не должна задерживать HTML5 build. |
 | 10 | Этап 8: npm-based Package Manager и экосистема расширений | **Отложенный этап реализации, архитектура закладывается сразу** | npm остаётся resolver/install/lockfile engine; внутренние пакеты связываются с Feature/Capability Registry, Package Manager Service и UI. Собственный package registry и curated feature sets — позже, по подтверждённой потребности. |
+
+## Текущее состояние и границы блокеров (27.10.2026)
+
+Текущая базовая точка `dev` — `754edaa1f7313409e99c3462a802d5fd430a9a01`. Документационный PR #5 и feature PR #10 уже слиты в `dev`. Старые формулировки, где PR #10 описывался как Draft/не часть ветки, считаются устаревшими; runtime follow-ups ниже остаются открытыми.
+
+### Можно начинать сейчас
+
+- **Этап 1 и изолированный Core pilot:** создаются матрицы возможностей/зависимостей, ADR-0001/0002, baseline качества и протокол performance measurements. Начальный статический baseline создан в текущем документационном PR; неизвестное поведение намеренно оставлено как «не подтверждено».
+- **Первый Core vertical slice** можно начинать после прохождения отдельного strict TypeScript toolchain pilot и подтверждения acceptance contract из ADR-0001. Он должен быть изолирован от legacy editor и не требует сначала переписать все 2D-инструменты.
+- **Legacy editor и PR #10 follow-ups** можно исправлять отдельными узкими PR параллельно с Core, если каждый PR содержит собственные regression/acceptance evidence и не меняет незакреплённые Core contracts.
+
+### P0 — следующая очередь
+
+1. Провести clean-install strict TypeScript pilot: typecheck, ESLint, Prettier check, unit tests; Knip и dependency-cruiser пока только в report mode.
+2. Реализовать первый сценарий Project → Scene → Node/Transform → пользовательский Component → save/reopen → Phaser adapter/preview fixture. Не добавлять оптимизированный ECS или дополнительные runtime одновременно.
+3. Устранить два server-side security gaps отдельными узкими PR: (a) race-resistant file API, закрывающий TOCTOU до добавления новых write paths/extensions/Package Manager file operations; (b) безопасный default запуска optional `mini-services/phaser-editor-mcp` и `mini-services/ai-chat` — loopback binding, request-size/time limits и Origin/auth policy. Второй пункт не блокирует основной editor server или независимый Core, но обязателен до отдельного запуска этих сервисов в недоверенной сети.
+4. Отдельно закрывать PR #10 residuals: FX/Box2D runtime acceptance и regression tests codegen/Asset Pack. До подтверждения не помечать эти функции как production-accepted, даже если TypeScript build зелёный.
+5. Сформировать первый воспроизводимый headless game-build fixture и проверить asset references / editor-only exclusions на Этапе 4A; существующий `npm run build` собирает редактор, а не игру.
+
+### Что не является блокером для первого Core slice
+
+- Фактические performance numbers нужны до введения budgets и заявлений об оптимизации, но отсутствие измерений не запрещает начать функциональный Core pilot.
+- Миграция `source/editor` → `src/editor` остаётся отдельной задачей Этапа 1. Её нужно завершить **до тесной интеграции нового Core с Editor Host и до workspace/lockfile migration**, но не нужно блокировать на ней изолированный Core package/test fixture.
+- Полный browser acceptance ранее добавленных editor capabilities не блокирует независимую работу над Project Model. Он блокирует закрытие соответствующих feature tasks и заявления о корректности FX/Box2D/Asset Pack runtime.
+- Tauri, PixiJS, альтернативные physics backends, public package registry и расширенная plugin ecosystem не входят в критический путь MVP.
+
+**Жёсткий gate перед расширением Core:** приняты ADR-0001/0002; отдельный strict toolchain pilot проходит clean install/typecheck/lint/format/tests; проектный формат/IDs/serialization и minimal lifecycle покрыты tests. Этап 1 остаётся открытым, пока не закрыты его остальные критерии; это не запрещает завершённый независимый pilot, но нельзя объявлять аудит/миграцию завершёнными раньше времени.
 
 ### Что не следует делать параллельно «на всякий случай»
 
@@ -68,12 +95,12 @@
 - `docs/capability-matrix.md`: реализовано / частично / отсутствует / не подтверждено для редактора, runtime и export;
 - `docs/dependency-capability-matrix.md`: версия, лицензия, runtime/editor/build scope, ограничения и причина сохранения/замены каждой значимой зависимости;
 - `docs/decisions/ADR-0001-core-architecture.md`: границы Project Model/Core/Phaser adapter/Editor/Preview Host, lifecycle, time/input/scene contracts и открытые решения;
-- `docs/performance-baseline.md`: закреплённые fixtures, среда и фактические baseline measurements, без выдуманных порогов;
+- `docs/performance-baseline.md`: протокол, fixtures и параметры среды; фактические baseline measurements записываются после воспроизводимых прогонов и пока остаются открытыми;
 - `docs/decisions/ADR-0002-typescript-toolchain.md`: решение по strict TS, lint/format/dead-code/architecture tooling и порядку миграции;
 - `docs/decisions/ADR-0003-package-architecture-and-management.md`: границы `@codogma/cge`, npm Workspaces, npm-based Package Manager, engine metadata, безопасность и открытые вопросы package layout;
 - `docs/code-quality-baseline.md`: текущие compiler/lint/unused-code findings, scope пилота, false-positive policy и правила постепенного усиления CI.
 
-После приёмки этих артефактов следует выполнить Этап 2 как небольшой вертикальный срез: Project/Scene/Node → один пользовательский TypeScript-компонент → Inspector metadata → save/reopen → runtime preview → проверяемый build fixture. На этом шаге fixture доказывает связность сценария, но не заменяет отдельную приёмку полноценного headless HTML5 pipeline на Этапе 4. Не реализовывать все будущие подсистемы в одном PR и не добавлять конкурирующие runtime/renderer/physics зависимости до соответствующих ADR/PoC.
+Первоначальные версии capability/dependency matrices и ADR-0001/0002 уже подготовлены; в этой точке можно начинать отдельный strict TypeScript toolchain pilot. После его успешной проверки и подтверждения контрактов ADR-0001 выполняется небольшой вертикальный срез Этапа 2: Project/Scene/Node → один пользовательский TypeScript-компонент → Inspector metadata → save/reopen → runtime preview → проверяемый build fixture. Этот минимальный gate **не означает, что Этап 1 закрыт**: полная инвентаризация форматов/dependencies, реальные performance measurements и отдельная миграция `source/editor` → `src/editor` остаются открытыми. Миграция пути обязательна до тесной интеграции с Editor Host и до workspace/lockfile migration, но не должна задерживать независимый Core package/test fixture. На первом срезе fixture доказывает связность сценария, но не заменяет отдельную приёмку headless HTML5 pipeline на Этапе 4. Не реализовывать будущие подсистемы одним большим PR и не добавлять конкурирующие runtime/renderer/physics dependencies до соответствующих ADR/PoC.
 
 ---
 
@@ -110,12 +137,12 @@
 2. **Затем — матрицы:** записать найденные gaps, версии/лицензии/scope зависимостей и текущие compiler/lint/unused-code findings. Не переносить пожелания в колонку «реализовано» без evidence.
 3. **После baseline — решения:** оформить ADR по архитектуре и toolchain с альтернативами и последствиями. Инструменты оценивать как согласованный набор; сначала проверить конфликты версий и package scope, затем устанавливать.
 4. **Пилотировать новый код отдельно:** один минимальный Codogma-owned module с strict TypeScript, runtime validation границ данных, ESLint, Prettier, unit test, а Knip/dependency-cruiser — в report mode.
-5. **Gate этапа:** после фиксации baseline и принятых ADR согласовать контракт первого vertical slice. Перенос редактора `source/editor` → `src/editor` выполняется отдельным migration PR после аудита путей и до полноценного наращивания нового Core; не объединять его с реализацией Core или консолидацией npm Workspaces/lockfile. Не переписывать при этом весь legacy-код.
+5. **Gate перед реализацией Core:** зафиксировать initial capability/dependency baseline, принять ADR-0001/0002 и пройти strict TypeScript toolchain pilot. Это позволяет начать изолированный Core slice. Перенос редактора `source/editor` → `src/editor` остаётся отдельным migration PR и обязателен до тесной интеграции Core с Editor Host и до npm Workspaces/lockfile migration; не объединять его с Core implementation и не переписывать при этом весь legacy-код.
 
 ### Задачи
 
 - [x] Зафиксировать baseline доставки Phaser 4.2.1 по `plugin.json`, root/editor manifests, declarations и Box2D ambient types; сверить с upstream tag `v4.2.1` и отличить модульную структуру исходников от текущего bundle-based подключения Codogma. Вывод и ссылки зафиксированы в ТЗ и каталоге источников; фактическое исключение Phaser-кода из production bundle остаётся отдельной проверкой этапа 4A.
-- [ ] Составить capability matrix для Scene Editor, Inspector, Prefabs, user components, Undo/Redo, Tilemap, Animation, Physics, Assets, code generation, play mode и MCP; сохранить результат в `docs/capability-matrix.md` с фактическими evidence/tests.
+- [x] Создать первоначальную статическую `docs/capability-matrix.md` с evidence и раздельными статусами реализации/автоматических проверок/runtime acceptance; остающиеся runtime gaps перечислены отдельными follow-ups. Обновлять строки по мере проверки функций.
 - [ ] Включить отдельные workflow-строки для Sprite Editor (slicing/trim/pivot/collision shapes/sorting/9-slicing), Tilemap brushes/layouts/chunks, camera/coordinate conversion, input (mouse/keyboard/touch), audio lifecycle, UI layouts/text, particles/lighting, localization, save storage и Dev/Release build profiles.
 - [ ] Инвентаризировать TypeScript configs/project references, TS compiler options, scripts and lockfiles во всех packages, оценить совместимость обновления от TypeScript 5.3.3, текущий scope TSLint и generated/dynamic plugin entry points; не предполагать, что repo-wide checks уже существуют.
 - [ ] Зафиксировать toolchain baseline и staged migration plan для strict TypeScript, ESLint/typescript-eslint, Prettier, Knip и dependency-cruiser; отметить точный initial scope для новых Codogma modules и текущие legacy findings.
@@ -123,20 +150,23 @@
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
 - [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
 - [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
-- [ ] Составить Dependency & Capability Matrix текущего форка: версия, лицензия, роль, browser/runtime/editor scope, ограничения и цена обновления; сохранить его в `docs/dependency-capability-matrix.md` и включить транзитивные runtime/build dependencies.
-- [ ] Указать developer tools в отдельной категории devDependencies, их package scope, scripts, lockfile, role, runtime exclusion и rationale; убрать дублирующие lint/format tools, если такие найдутся.
+- [x] Создать первоначальную `docs/dependency-capability-matrix.md` для текущих direct package roots, Phaser bundle и Box2D runtime path.
+- [ ] Завершить транзитивную dependency/SBOM, license и provenance инвентаризацию; проверить ограничения и стоимость обновления значимых зависимостей до публикации пакетов.
+- [ ] Для нового Core toolchain зафиксировать pinned devDependencies, scripts и lockfile; legacy TSLint dependency уже отсутствует, но `lint.sh`/`tslint.json` остаются неактивными артефактами. Удалить или заменить их отдельным cleanup после пилота.
 - [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
 - [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
-- [ ] Зафиксировать ключевые ADR: компонентная модель/ECS, единая модель данных, Runtime Adapter API, Game Preview Host и роль Tauri. Первое решение оформить как `docs/decisions/ADR-0001-core-architecture.md`, явно выделив принятые решения, открытые вопросы, альтернативы и последствия.
-- [ ] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile, выбор ESLint/Prettier/Knip/dependency-cruiser, интеграция TypeScript project references, legacy TSLint migration и CI ratchet plan.
+- [x] Зафиксировать решения первого vertical slice в `docs/decisions/ADR-0001-core-architecture.md`: Project Model, Component-object Core, runtime adapter и browser-first Preview Host. Детальные API signatures остаются test-driven реализационными задачами.
+- [x] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile и scope нового Core, ESLint/Prettier/Vitest, Knip/dependency-cruiser report mode и staged CI ratchet. Сам toolchain pilot ещё не реализован.
 - [ ] Поддерживать `docs/decisions/ADR-0003-package-architecture-and-management.md` как нормативное решение: целевые исходники Editor Host в `src/editor`, самостоятельные package roots в `packages/*`, `@codogma/cge` в `packages/cge`, npm Workspaces для локальной разработки, selective installation в пользовательские проекты и Extension API; точная metadata schema и детали migration/workspace tooling проходят PoC.
 - [ ] После фиксации capability/dependency baseline подготовить и выполнить отдельный migration PR `source/editor` → `src/editor`: сохранить внутреннюю структуру и TypeScript project references; обновить root scripts, server `EDITOR_DIR`, CI/cache paths, release archive, `BUILD.md` и README; проверить root/editor clean install, сборку, HTTP smoke и состав ZIP. Не объединять перенос каталога с workspace/lockfile migration.
-- [ ] Описать текущий baseline производительности и проверок в `docs/performance-baseline.md`; закрепить fixtures, браузер/ОС/железо и метод измерения, не ставить пороги без воспроизводимой методики.
+- [x] Создать `docs/performance-baseline.md` с fixtures и протоколом воспроизводимых измерений без выдуманных порогов.
+- [ ] Выполнить и сохранить фактические performance measurements на согласованном окружении; не вводить budgets до получения повторяемых raw samples.
 
 ### Критерии приёмки
 
-- [ ] Есть таблица фактического состояния `docs/capability-matrix.md`, а не дублированный перечень желаемых функций.
-- [ ] Созданы `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/decisions/ADR-0003-package-architecture-and-management.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; неизвестные сведения помечены как непроверенные, а не придуманы.
+- [x] Есть первоначальная таблица статусов `docs/capability-matrix.md` с путями evidence, автотестами и оставшимися runtime-acceptance gaps.
+- [x] Созданы initial versions `docs/dependency-capability-matrix.md`, `docs/decisions/ADR-0001-core-architecture.md`, `docs/decisions/ADR-0002-typescript-toolchain.md`, `docs/performance-baseline.md` и `docs/code-quality-baseline.md`; `ADR-0003` уже существует. Неизвестные сведения помечены как непроверенные.
+- [ ] Закрыть содержательные остатки этих baseline-документов: transitive licenses/SBOM, все индивидуальные TS project configs и фактические performance measurements.
 - [ ] Новый TypeScript pilot проходит strict typecheck, lint, format check и соответствующие unit tests; Knip/dependency-cruiser report scope и false-positive handling документированы.
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
@@ -360,7 +390,7 @@
 - [ ] **Regression tests для данных и предпросмотра:** покрыть литералы `undefined` и spread-ключи в JSON/code printer; конфигурацию/удаление кадров Particle Emitter и fallback `__DEFAULT`; spritesheet frame lookup с margin/spacing и до/после загрузки изображения; все поддерживаемые формы Phaser audio/video URL (строка, массив и `{ type, url }`); неудачное чтение/сохранение thumbnail cache и освобождение `blob:` URL. Тесты должны ловить конкретные регрессии, а не только подтверждать отсутствие исключения при сборке.
 - [ ] **Server/API security:** сохранить regression tests для bind на loopback, проверки `Host`/`Origin`, лимитов JSON/multipart, файлового listing/read/write/upload, root `phasereditor2d.json`, dangling symlink и built-in/stdio MCP. Проверять, что при отказе не изменяется и не читается файл за пределами проекта. Smoke-тест MCP сейчас проверяет initialize, tools/list и один вызов scene-list tool; отдельно подтвердить совместимость принудительного Zod 4.6.7 override с остальными tool schemas, optional/nested arguments и типовыми ответами, чтобы успешный одиночный вызов не считался полной совместимостью. Если среда не разрешает создавать symlink, явно помечать соответствующую проверку skipped и обеспечивать отдельный runner, где она действительно выполняется.
 - [ ] **Закрыть TOCTOU в файловых операциях:** текущая схема real-path containment проверяет путь до последующей операции и не исключает гонку при одновременной замене symlink локальным процессом. Выбрать race-resistant механизм, гарантия которого относится к фактически открытому file handle/target, а не только к предварительной проверке pathname; не считать простую повторную проверку достаточной. Покрыть параллельную подмену ссылки тестом там, где ОС позволяет. Если гарантированную защиту нельзя обеспечить переносимым API, документировать точную границу угрозы и сохранить loopback-only exposure до явного решения по модели угроз. Не помечать риск устранённым только по прохождению текущего security smoke.
-- [ ] **Release evidence:** прикреплять к PR результаты ручной browser acceptance и адресных тестов; отдельно записывать, что `npm run test:e2e`/UI E2E или release workflow не запускались, когда это так. CI Fast успех на head PR #10 не подтверждает перечисленные runtime-сценарии и не заменяет обновлённый acceptance evidence на финальном commit.
+- [ ] **Release evidence:** прикреплять к PR результаты ручной browser acceptance и адресных тестов; отдельно записывать, что `npm run test:e2e`/UI E2E или release workflow не запускались, когда это так. Для PR #10 CI Fast прошёл на PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` перед слиянием в `dev` (`754edaa1f7313409e99c3462a802d5fd430a9a01`); отдельный запуск на merge commit не подтверждён в этом аудите. Это не закрывает runtime/security follow-ups и не заменяет acceptance evidence соответствующих функций.
 
 ### Критерий закрытия follow-up backlog
 

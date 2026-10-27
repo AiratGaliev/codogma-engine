@@ -60,7 +60,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
 | AI/MCP | Есть MCP-интеграция и отдельный необязательный AI Chat service |
 | CI | `fast-checks` проверяет маршрутизацию PR, сборку редактора и server smoke test; `mcp-integration` выполняет MCP E2E при продвижении в `test` и `main` |
-| TypeScript / lint baseline | В `source/editor/package.json` указаны TypeScript 5.3.3 и legacy TSLint 6.1.3; `build` использует TypeScript project references (`tsc -b`). Новая инженерная политика должна усиливать типы и static analysis постепенно, без массовой ломки унаследованного editor code |
+| TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
 Эта база содержит значительное количество существующего UI и логики. Поэтому **нельзя начинать развитие с автоматического переписывания Colibri или всей редакторской системы на новый UI-фреймворк**. Сначала надо определить реальные пробелы и границы связанности, затем заменять только то, что мешает целевому продукту.
@@ -94,9 +94,9 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 #### Отдельный baseline проверки изменений PR #10 (снимок на 27.10.2026)
 
-[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. На момент фиксации baseline PR остаётся Draft в ветке `feat/editor-capabilities`; до слияния его код нельзя считать частью `dev`.
+[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. PR был слит в `dev` 27.10.2026; текущая базовая точка `dev` — `754edaa1f7313409e99c3462a802d5fd430a9a01`. Поэтому изменения PR #10 входят в текущий baseline, а перечисленные ниже runtime/security follow-ups остаются открытыми.
 
-На head `3c96dde67eb865a0ee70fdbd5134ab995f846443` CI Fast завершился успешно ([run #40472189614](https://github.com/AiratGaliev/codogma-engine/actions/runs/40472189614)): обе установки зависимостей и `npm audit --audit-level=low`, сборка/typecheck редактора, server smoke и security smoke прошли; audit на этом зафиксированном lockfile сообщил 0 уязвимостей. Это подтверждает только выполнение перечисленных проверок в момент запуска, но не является подтверждением визуального поведения, полного runtime lifecycle или отсутствия неизвестных уязвимостей.
+На PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` CI Fast завершился успешно ([run #40472189614](https://github.com/AiratGaliev/codogma-engine/actions/runs/40472189614)): обе установки зависимостей и `npm audit --audit-level=low`, сборка/typecheck редактора, server smoke и security smoke прошли; audit на этом lockfile сообщил 0 уязвимостей. После слияния в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01` отдельный повторный запуск CI именно на merge commit в этом аудите не подтверждён. Успешный PR CI подтверждает только перечисленные проверки на PR head, но не visual/runtime correctness или отсутствие неизвестных уязвимостей.
 
 Остаются неподтверждёнными и должны пройти отдельную приёмку:
 
@@ -697,7 +697,7 @@ codogma-engine/
 
 #### Инструменты, которые нужно оценить и ввести поэтапно
 
-- **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для новых конфигураций. Старый TSLint 6.1.3 считать унаследованным инструментом: не добавлять его правила для новых модулей; заменить/удалить его после миграции соответствующих областей и сохранения требуемого покрытия.
+- **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для нового scope. TSLint dependency уже удалена из editor manifest, но `source/editor/tslint.json` и `source/editor/lint.sh` ещё существуют; считать их неактивными остатками, а не доступным lint toolchain. Не возвращать TSLint ради новых модулей.
 - **Prettier + eslint-config-prettier** — единый форматтер. ESLint отвечает за ошибки и risky patterns, Prettier — за форматирование; не дублировать спорные stylistic правила. Зафиксировать локальные версии и общий конфиг, подключить format:check в CI. Не форматировать всю legacy-кодовую базу автоматически первым PR.
 - **Knip** — анализ неиспользуемых файлов, exports/types, dependencies/devDependencies, binaries и scripts. Настроить корректные entry points для существующего plugin registry, dynamic imports, generated code, command-line tools, test fixtures и editor plugins: динамически загружаемый плагин нельзя удалять только потому, что его import не виден статически. Первый отчёт служит baseline; после исправления конфигурации ошибки вводятся как гейт по новым/изменяемым областям, затем расширяются на репозиторий.
 - **dependency-cruiser** — кандидат для контроля архитектурных границ, циклических импортов и запрещённых зависимостей. Требуемые правила: Core не импортирует editor/desktop UI; runtime game build не импортирует editor/MCP/server/test modules; editor/build-only dependencies не попадают в game runtime; новые запрещённые циклы не появляются. Конкретные правила задаются после фиксации реальной структуры репозитория.
@@ -719,11 +719,11 @@ codogma-engine/
 
 #### Переход к CI без блокировки текущей разработки
 
-1. Снять baseline: проверить текущие TS configs/scripts, определить новые Codogma-owned code paths и инвентаризировать существующие TSLint errors.
+1. Снять baseline: проверить TS configs/scripts, определить новые Codogma-owned code paths, зафиксировать отсутствие TSLint dependency и оценить оставшиеся `tslint.json`/`lint.sh`. Отдельно инвентаризировать legacy type/lint findings.
 2. Добавить конфиги ESLint/Prettier/Knip и TypeScript strict profile для нового Core как отдельную, ограниченную область; не менять поведение runtime.
 3. Сначала запускать Knip/dependency-cruiser в report mode, исправить ошибочные entry points и сохранить baseline; удалять код/зависимости только после ручной проверки.
 4. Добавить typecheck, lint и formatting checks в быстрый CI для новых/изменяемых модулей; затем расширять scope по мере сокращения legacy baseline. Базовый fast-checks обязан оставаться быстрым.
-5. Только после достижения покрытия заменить TSLint и расширить гейты на весь поддерживаемый TypeScript scope. Любое исключение содержит ссылку/комментарий, владельца и условие пересмотра.
+5. Не описывать TSLint как активный gate: его npm dependency отсутствует уже в текущем manifest. После пилота решить судьбу остаточных `tslint.json`/`lint.sh`; расширять ESLint gates на legacy scope только после отчёта, проверки dynamic plugin entry points и оценки стоимости исправлений. Любое исключение содержит ссылку/комментарий, владельца и условие пересмотра.
 
 Acceptance: новый engine module не принимается без strict typecheck, линтера, форматирования и unit tests, соответствующих его слою; новые forbidden dependencies/cycles и неиспользуемые dependencies в охваченном scope блокируют PR. Неописанные и ещё не реализованные scripts не должны указываться как уже существующие в README/CI.
 
