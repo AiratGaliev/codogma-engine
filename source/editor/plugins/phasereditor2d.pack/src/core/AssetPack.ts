@@ -19,6 +19,7 @@ namespace phasereditor2d.pack.core {
     export const AUDIO_SPRITE_TYPE = "audioSprite";
     export const BINARY_TYPE = "binary";
     export const BITMAP_FONT_TYPE = "bitmapFont";
+    export const FONT_TYPE = "font";
     export const CSS_TYPE = "css";
     export const GLSL_TYPE = "glsl";
     export const HTML_TYPE = "html";
