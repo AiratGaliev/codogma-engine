@@ -15,13 +15,7 @@ import {
     LocalizationParseResult,
     LocalizationTableV1
 } from "./contract.js";
-
-/**
- * Simplified BCP 47 check: language subtag plus optional `-`-separated
- * subtags (region/script/variants), e.g. `ru`, `en-US`, `pt-BR`.
- * Underscore forms like `ru_RU` are rejected with a hint.
- */
-const LOCALE_TAG_PATTERN = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/;
+import { canonicalLocaleTag } from "./locale-tag.js";
 
 /** Stable message ids must not contain whitespace or leading/trailing spaces. */
 const MESSAGE_ID_PATTERN = /^\S+$/;
@@ -154,12 +148,19 @@ export function parseLocalizationTable(
         addDiagnostic(diagnostics, diagnostic);
     }
 
-    // --- locale --------------------------------------------------------------
+    // --- locale ----------------------------------------------------------------
 
+    // Locale case policy: only canonical forms are accepted; a case variant
+    // like "en-us" is rejected with the canonical form in the message, so the
+    // runtime never silently treats it as a different (or the same) locale.
     const localeValue = data["locale"];
     let locale: string | undefined;
 
-    if (typeof localeValue !== "string" || !LOCALE_TAG_PATTERN.test(localeValue)) {
+    const canonicalLocale = typeof localeValue === "string"
+        ? canonicalLocaleTag(localeValue)
+        : undefined;
+
+    if (canonicalLocale === undefined) {
 
         const hint = typeof localeValue === "string" && localeValue.includes("_")
             ? " Use \"-\" instead of \"_\" in the locale tag."
@@ -169,6 +170,22 @@ export function parseLocalizationTable(
             code: "LOC_INVALID_LOCALE",
             severity: "error",
             message: `Invalid locale tag: ${JSON.stringify(localeValue)}.${hint}`
+        };
+
+        if (file !== undefined) {
+            diagnostic.file = file;
+        }
+
+        addDiagnostic(diagnostics, diagnostic);
+
+    } else if (canonicalLocale !== localeValue) {
+
+        const diagnostic: LocalizationDiagnostic = {
+            code: "LOC_INVALID_LOCALE",
+            severity: "error",
+            message: `Invalid locale tag case: ${JSON.stringify(localeValue)}.`
+                + ` Use the canonical form "${canonicalLocale}"`
+                + " (language lowercase, region uppercase, script Titlecase)."
         };
 
         if (file !== undefined) {

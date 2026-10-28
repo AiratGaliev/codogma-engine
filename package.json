@@ -14,10 +14,12 @@
     "test:e2e": "node tests/mcp-e2e-test.mjs node server/mcp-launcher.mjs",
     "test:security": "node tests/security-smoke-test.mjs",
     "test:localization": "cd packages/localization && npm test",
+    "test:localization:project": "npm run build:localization && node packages/localization/bin/validate-localization.mjs tests/workspace/test-typescript --fallback en-US",
     "test:localization:acceptance": "npm run build:localization && node tests/localization-acceptance.mjs"
   },
   "license": "MIT",
   "dependencies": {
+    "@codogma/localization": "file:packages/localization",
     "@phaserjs/editor-mcp-server": "^1.0.6"
   },
   "overrides": {

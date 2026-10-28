@@ -289,6 +289,39 @@ describe("LocalizationService: deterministic fallback", () => {
     })
 })
 
+describe("Locale case policy (COD-64)", () => {
+
+    it("accepts a canonical table and rejects a non-canonical duplicate", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["a", "A"]])],
+            locale: "en-US"
+        })
+
+        assert.equal(service.t("a"), "A")
+
+        // Non-canonical tag is rejected at registration time.
+        service.registerTable({
+            schemaVersion: 1,
+            locale: "ru-ru",
+            messages: [{ id: "a", text: "А" }]
+        })
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_INVALID_LOCALE"])
+    })
+
+    it("matches active locale exactly by canonical case", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-GB", [["a", "GB"]]), table("en-US", [["a", "US"]])],
+            locale: "en-GB",
+            fallbackLocale: "en-US"
+        })
+
+        assert.equal(service.t("a"), "GB")
+        assert.equal(service.getLocale(), "en-GB")
+    })
+})
+
 describe("LocalizationService: diagnostic deduplication", () => {
 
     it("reports a missing translation once per locale and key", () => {
@@ -364,5 +397,46 @@ describe("parse + service integration", () => {
 
         assert.equal(service.t("menu.play"), "[[menu.play]]")
         assert.deepEqual(codes(service.getDiagnostics()), ["LOC_UNKNOWN_LOCALE", "LOC_MISSING_TRANSLATION"])
+    })
+})
+
+describe("Placeholder inheritance regression (COD-64)", () => {
+
+    it("ignores inherited toString and constructor properties", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["label.greet", "Hello, {name}!"]])],
+            locale: "en-US"
+        })
+
+        // Empty object has `toString` and `constructor` on its prototype.
+        assert.equal(service.t("label.greet", {}), "Hello, {name}!")
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_MISSING_PARAM"])
+        assert.equal(service.getDiagnostics()[0].messageId, "label.greet")
+    })
+
+    it("treats an inherited property as missing, not a value", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["label.info", "Info: {value}"]])],
+            locale: "en-US"
+        })
+
+        const obj = Object.create({ value: "polluted" })
+
+        assert.equal(service.t("label.info", obj), "Info: {value}")
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_MISSING_PARAM"])
+    })
+
+    it("substitutes explicitly provided parameters, including falsy ones", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["label.score", "Score: {score}"]])],
+            locale: "en-US"
+        })
+
+        assert.equal(service.t("label.score", { score: 0 }), "Score: 0")
+        assert.equal(service.t("label.score", { score: "" }), "Score: ")
+        assert.deepEqual(codes(service.getDiagnostics()), [])
     })
 })

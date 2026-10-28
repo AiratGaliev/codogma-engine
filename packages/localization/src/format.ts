@@ -35,8 +35,11 @@ export function extractPlaceholders(text: string): string[] {
  *
  * A placeholder without a matching parameter stays visible in the output and
  * must be reported by the caller as a `LOC_MISSING_PARAM` diagnostic, so the
- * problem is never silent. Parameter values are converted with `String()`;
- * no HTML/markup escaping is performed.
+ * problem is never silent. A parameter counts as provided only when `params`
+ * has an **own** property with that name: inherited prototype properties
+ * (`toString`, `constructor`, ...) are never substituted into game text.
+ * Parameter values are converted with `String()`; no HTML/markup escaping is
+ * performed.
  */
 export function formatMessage(text: string, params: LocalizationParams | undefined): {
 
@@ -46,7 +49,8 @@ export function formatMessage(text: string, params: LocalizationParams | undefin
 
     const missingParams: string[] = [];
 
-    if (params === undefined) {
+    // Also covers `null` passed from non-TypeScript callers.
+    if (params === undefined || params === null) {
 
         for (const name of extractPlaceholders(text)) {
             missingParams.push(name);
@@ -57,9 +61,12 @@ export function formatMessage(text: string, params: LocalizationParams | undefin
 
     const result = text.replace(PLACEHOLDER_PATTERN, (whole, name: string) => {
 
-        const value = params[name];
+        // Own properties only: inherited names like "toString" must not leak
+        // prototype members into the translated text.
+        const provided = Object.prototype.hasOwnProperty.call(params, name);
+        const value = provided ? params[name] : undefined;
 
-        if (value === undefined) {
+        if (typeof value !== "string" && typeof value !== "number") {
 
             if (!missingParams.includes(name)) {
                 missingParams.push(name);

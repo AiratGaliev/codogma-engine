@@ -74,6 +74,26 @@ npm run test:localization:acceptance    # boots the editor server, loads fixture
                                         # the compiled runtime service
 ~~~
 
+## Integration and public entry point (COD-64)
+
+The package is installed as a dependency of the root repository (`file:` link);
+its compiled `dist/` is produced by the documented build command. A clean
+checkout must run `npm run build:localization` (or `npm ci` followed by
+`npm run prepare` in the package directory) before importing from
+`@codogma/localization`.
+
+Project-level diagnostics entry point:
+
+~~~bash
+npm run build:localization
+node packages/localization/bin/validate-localization.mjs <projectDir> --fallback <locale>
+~~~
+
+This entry point reads `<projectDir>/locale/*.json`, applies the structural
+parser (`parseLocalizationTable` with the file path preserved in diagnostics),
+then runs cross-locale validation (`validateLocalizationSources`). Errors block;
+warnings (missing keys, fallback usage, placeholder mismatches) do not.
+
 ## Test fixtures
 
 - `tests/workspace/test-typescript/locale/` — valid fixture tables of the game

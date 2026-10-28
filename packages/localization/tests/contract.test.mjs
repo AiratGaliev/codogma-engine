@@ -255,4 +255,29 @@ describe("parseLocalizationTable: locale tags", () => {
             assert.equal(result.table.locale, locale)
         }
     })
+
+    it("rejects a non-canonical case variant with the canonical form in the message", () => {
+
+        const result = parseLocalizationTable(JSON.stringify({
+            schemaVersion: 1,
+            locale: "en-us",
+            messages: [{ id: "a", text: "A" }]
+        }), "locale/en-us.json")
+
+        assert.equal(result.table, undefined)
+        assert.deepEqual(codes(result.diagnostics), ["LOC_INVALID_LOCALE"])
+        assert.match(result.diagnostics[0].message, /canonical form "en-US"/)
+    })
+
+    it("accepts a canonical script subtag in Titlecase", () => {
+
+        const result = parseLocalizationTable(JSON.stringify({
+            schemaVersion: 1,
+            locale: "zh-Hans",
+            messages: [{ id: "a", text: "A" }]
+        }))
+
+        assert.equal(result.table?.locale, "zh-Hans")
+        assert.deepEqual(codes(result.diagnostics), [])
+    })
 })

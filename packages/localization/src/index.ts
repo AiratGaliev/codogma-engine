@@ -19,7 +19,15 @@ export {
 
 export { extractPlaceholders, formatMessage, type LocalizationParams } from "./format.js";
 
+export { canonicalLocaleTag } from "./locale-tag.js";
+
 export { parseLocalizationTable } from "./parse.js";
+
+export {
+    validateLocalizationSources,
+    type LocalizationProjectValidationResult,
+    type LocalizationSourceFile
+} from "./project.js";
 
 export { LocalizationService, type LocalizationServiceOptions } from "./service.js";
 

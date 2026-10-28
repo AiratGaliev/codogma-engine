@@ -21,6 +21,7 @@
 
 import { LocalizationDiagnostic, LocalizationTableV1 } from "./contract.js";
 import { extractPlaceholders, formatMessage, LocalizationParams } from "./format.js";
+import { canonicalLocaleTag } from "./locale-tag.js";
 
 export interface LocalizationServiceOptions {
 
@@ -104,6 +105,25 @@ export class LocalizationService {
      * warning, so re-sent data can never silently replace loaded translations.
      */
     private addTable(table: LocalizationTableV1): void {
+
+        // Locale case policy: runtime matching is exact, so a non-canonical
+        // tag (e.g. "en-us") is never registered — it cannot silently collide
+        // with or bypass a registered canonical table like "en-US".
+        const canonical = canonicalLocaleTag(table.locale);
+
+        if (canonical === undefined || canonical !== table.locale) {
+
+            this.pushDiagnostic({
+                code: "LOC_INVALID_LOCALE",
+                severity: "error",
+                message: `Table locale "${table.locale}" is not a canonical locale tag`
+                    + (canonical === undefined ? "." : `; use "${canonical}".`)
+                    + " The table is not registered.",
+                locale: String(table.locale)
+            });
+
+            return;
+        }
 
         if (this._tables.has(table.locale)) {
 

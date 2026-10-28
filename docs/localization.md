@@ -170,6 +170,10 @@ label.setText(localization.t("menu.play"))
 # сборка + unit/contract/validation/fixture tests (node:test)
 npm run test:localization
 
+# проектная диагностика: структурный парсер + кросс-локальная валидация
+# с выводом file/locale/messageId для каждой ошибки/предупреждения
+npm run test:localization:project
+
 # runtime acceptance: поднимает сервер, забирает таблицы через /editor/external/,
 # прогоняет реальный скомпилированный сервис
 npm run test:localization:acceptance
@@ -193,7 +197,18 @@ npm run test:localization:acceptance
 | Стабильность диагностики (нет потока дублей) | `service.test.mjs`, acceptance |
 | Детерминизм повторных прогонов | `service.test.mjs`, `validation.test.mjs` |
 
-## 8. Ограничения и не заявленные возможности
+## 8. Политика locale-тегов (COD-64)
+
+Locale-теги сравниваются в канонической форме в соответствии с упрощенным BCP 47 (см. `packages/localization/src/locale-tag.ts`):
+
+- язык в нижнем регистре (`en`);
+- регион (2 буквы) в верхнем (`US`);
+- скрипт (4 буквы) в заглавном регистре (`Hans`);
+- остальные под-теги в нижнем.
+
+Неканонические формы (`en-us`, `EN-US`, `zh-hans`) отклоняются с явным указанием канонической формы в `LOC_INVALID_LOCALE`. Это гарантирует, что парсер, регистрация в `LocalizationService`, переключение активной локали и проверка дубликатов не могут разойтись из-за регистра или написания.
+
+## 9. Ограничения и не заявленные возможности
 
 Следующие возможности **не заявляются поддерживаемыми** в рамках этой задачи (ТЗ, раздел 9.2):
 
