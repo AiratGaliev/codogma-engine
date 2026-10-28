@@ -836,8 +836,12 @@ function serveArchive(req, res, name) {
 
     let st
     try {
-        st = fs.statSync(path.join(ROOT, name))
-        if (!st.isFile()) throw Object.assign(new Error("Archive is not a regular file"), { code: "ENOENT" })
+        // lstat deliberately rejects a matching archive name that is a symlink;
+        // this endpoint serves only archives created as regular root-level files.
+        st = fs.lstatSync(path.join(ROOT, name))
+        if (st.isSymbolicLink() || !st.isFile()) {
+            throw Object.assign(new Error("Archive is not a regular file"), { code: "ENOENT" })
+        }
     } catch (e) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
         res.end(req.method === "HEAD" ? undefined : "Archive not found — GET /archive/ lists the newest snapshot")
