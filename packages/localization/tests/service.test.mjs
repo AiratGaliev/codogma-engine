@@ -330,7 +330,35 @@ describe("Locale case policy (COD-64)", () => {
 
         service.setLocale("en-us")
         assert.equal(service.getLocale(), "en-US")
-        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_UNKNOWN_LOCALE"])
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_INVALID_LOCALE"])
+    })
+
+    it("rejects a non-canonical initial locale and chooses a registered locale explicitly", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["a", "A"]]), table("ru-RU", [["a", "А"]])],
+            locale: "en-us"
+        })
+
+        assert.equal(service.getLocale(), "en-US")
+        assert.equal(service.t("a"), "A")
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_INVALID_LOCALE"])
+    })
+
+    it("disables a non-canonical fallback locale with an error diagnostic", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["a", "A"]]), table("ru-RU", [])],
+            locale: "ru-RU",
+            fallbackLocale: "en-us"
+        })
+
+        assert.equal(service.getFallbackLocale(), null)
+        assert.equal(service.t("a"), "[[a]]")
+        assert.deepEqual(codes(service.getDiagnostics()), [
+            "LOC_INVALID_LOCALE",
+            "LOC_MISSING_TRANSLATION"
+        ])
     })
 })
 

@@ -210,6 +210,16 @@ describe("validateLocalizationProject: configuration errors", () => {
         assert.equal(diagnostics[0].severity, "error")
     })
 
+    it("rejects a non-canonical fallback locale explicitly", () => {
+
+        const diagnostics = validateLocalizationProject([
+            entry({ table: table("en-US", [["a", "A"]]) })
+        ], { fallbackLocale: "en-us" })
+
+        assert.deepEqual(codes(diagnostics), ["LOC_INVALID_LOCALE"])
+        assert.equal(diagnostics[0].severity, "error")
+    })
+
     it("accepts an empty project", () => {
 
         const diagnostics = validateLocalizationProject([])

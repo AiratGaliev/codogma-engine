@@ -2,7 +2,14 @@
 
 ## Codogma Engine 1.0
 
-### Unreleased (COD-62)
+### Unreleased (COD-62 / COD-64)
+
+- Acceptance imports `@codogma/localization` through the public package entry point.
+- Added CI execution and automated CLI tests for project localization diagnostics, including structured file-system errors.
+- Applied canonical locale validation to service initialization, locale switching, fallback configuration and project validation.
+- Added `LOC_FILE_ERROR` to the diagnostic contract and corrected documentation for placeholder mismatch severity and unverified browser integration.
+
+### Previous COD-62 notes
 
 * Adds optional localization support: `@codogma/localization` in `packages/localization/`
   with a versioned localization tables contract (schema version 1: `schemaVersion`,

@@ -103,7 +103,9 @@ export type LocalizationDiagnosticCode =
     /** A translation was taken from the fallback locale. */
     | "LOC_FALLBACK_USED"
     /** A `{param}` placeholder has no matching parameter value. */
-    | "LOC_MISSING_PARAM";
+    | "LOC_MISSING_PARAM"
+    /** A project localization file/directory could not be read by the validation CLI. */
+    | "LOC_FILE_ERROR";
 
 /** Severity order helper: errors are reported before warnings by validation. */
 export type LocalizationSeverity = LocalizationDiagnostic["severity"];

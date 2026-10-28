@@ -69,29 +69,72 @@ export class LocalizationService {
             this.addTable(table);
         }
 
-        this._locale = options.locale;
-        this._fallbackLocale = options.fallbackLocale ?? null;
+        const requestedFallback = options.fallbackLocale ?? null;
+        const canonicalFallback = requestedFallback === null
+            ? null
+            : canonicalLocaleTag(requestedFallback);
 
-        if (this._fallbackLocale !== null && !this._tables.has(this._fallbackLocale)) {
+        if (requestedFallback !== null
+            && (canonicalFallback === undefined || canonicalFallback !== requestedFallback)) {
 
+            this._fallbackLocale = null;
             this.pushDiagnostic({
-                code: "LOC_UNKNOWN_FALLBACK_LOCALE",
-                severity: "warning",
-                message: `Configured fallback locale "${this._fallbackLocale}" has no localization table;`
-                    + " fallback becomes active when its table is registered.",
-                locale: this._fallbackLocale
+                code: "LOC_INVALID_LOCALE",
+                severity: "error",
+                message: `Configured fallback locale "${requestedFallback}" is not a canonical locale tag`
+                    + (canonicalFallback === undefined ? "." : `; use "${canonicalFallback}".`)
+                    + " Fallback is disabled.",
+                locale: requestedFallback
             });
+
+        } else {
+
+            this._fallbackLocale = requestedFallback;
+
+            if (this._fallbackLocale !== null && !this._tables.has(this._fallbackLocale)) {
+
+                this.pushDiagnostic({
+                    code: "LOC_UNKNOWN_FALLBACK_LOCALE",
+                    severity: "warning",
+                    message: `Configured fallback locale "${this._fallbackLocale}" has no localization table;`
+                        + " fallback becomes active when its table is registered.",
+                    locale: this._fallbackLocale
+                });
+            }
         }
 
-        if (!this._tables.has(this._locale)) {
+        const canonicalLocale = canonicalLocaleTag(options.locale);
+
+        if (canonicalLocale === undefined || canonicalLocale !== options.locale) {
+
+            const firstRegisteredLocale = this._tables.keys().next().value;
+            this._locale = firstRegisteredLocale ?? options.locale;
 
             this.pushDiagnostic({
-                code: "LOC_UNKNOWN_LOCALE",
-                severity: "warning",
-                message: `Initial locale "${this._locale}" has no localization table;`
-                    + " translations will fall back or be marked missing.",
-                locale: this._locale
+                code: "LOC_INVALID_LOCALE",
+                severity: "error",
+                message: `Initial locale "${options.locale}" is not a canonical locale tag`
+                    + (canonicalLocale === undefined ? "." : `; use "${canonicalLocale}".`)
+                    + (firstRegisteredLocale === undefined
+                        ? " No registered locale is available."
+                        : ` Using the first registered locale "${firstRegisteredLocale}".`),
+                locale: options.locale
             });
+
+        } else {
+
+            this._locale = options.locale;
+
+            if (!this._tables.has(this._locale)) {
+
+                this.pushDiagnostic({
+                    code: "LOC_UNKNOWN_LOCALE",
+                    severity: "warning",
+                    message: `Initial locale "${this._locale}" has no localization table;`
+                        + " translations will fall back or be marked missing.",
+                    locale: this._locale
+                });
+            }
         }
     }
 
@@ -152,6 +195,21 @@ export class LocalizationService {
      * the switch never silently selects data that does not exist.
      */
     setLocale(locale: string): void {
+
+        const canonical = typeof locale === "string" ? canonicalLocaleTag(locale) : undefined;
+
+        if (canonical === undefined || canonical !== locale) {
+
+            this.pushDiagnostic({
+                code: "LOC_INVALID_LOCALE",
+                severity: "error",
+                message: `Locale "${String(locale)}" is not a canonical locale tag`
+                    + (canonical === undefined ? "." : `; use "${canonical}".`),
+                locale: String(locale)
+            });
+
+            return;
+        }
 
         if (!this._tables.has(locale)) {
 

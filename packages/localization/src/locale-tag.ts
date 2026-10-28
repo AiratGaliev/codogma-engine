@@ -19,7 +19,7 @@ const LOCALE_TAG_PATTERN = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/;
  */
 export function canonicalLocaleTag(tag: string): string | undefined {
 
-    if (!LOCALE_TAG_PATTERN.test(tag)) {
+    if (typeof tag !== "string" || !LOCALE_TAG_PATTERN.test(tag)) {
         return undefined;
     }
 

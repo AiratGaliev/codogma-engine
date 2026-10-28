@@ -63,8 +63,9 @@ try {
     localeDir = path.join(projectDir, "locale")
 
     if (!existsSync(localeDir) || !statSync(localeDir).isDirectory()) {
-        console.error(`No locale directory: ${localeDir}`)
-        process.exit(2)
+        const error = new Error(`No locale directory: ${localeDir}`)
+        error.file = localeDir
+        throw error
     }
 
     const files = readdirSync(localeDir)
@@ -107,10 +108,8 @@ try {
 
     if (diagnostics.some(item => item.severity === "error")) {
         console.error("Localization tables have errors; they must not be loaded as valid translations.")
-        process.exit(1)
-    }
-
-    if (!asJson) {
+        process.exitCode = 1
+    } else if (!asJson) {
         console.log("Localization tables are valid (warnings do not block).")
     }
 
@@ -132,5 +131,5 @@ try {
         console.error(`[error] LOC_FILE_ERROR: Failed to read or process locale directory: ${message}`)
     }
 
-    process.exit(2)
+    process.exitCode = 2
 }

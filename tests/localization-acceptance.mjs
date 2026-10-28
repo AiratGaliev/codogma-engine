@@ -27,7 +27,7 @@ import {
     LocalizationService,
     parseLocalizationTable,
     validateLocalizationProject
-} from "../packages/localization/dist/index.js"
+} from "@codogma/localization"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const PROJECT_DIR = path.join(ROOT, "tests", "workspace", "test-typescript")

@@ -13,6 +13,7 @@
 
 import { LocalizationDiagnostic, LocalizationTableV1 } from "./contract.js";
 import { extractPlaceholders } from "./format.js";
+import { canonicalLocaleTag } from "./locale-tag.js";
 
 /** One validated project table with its optional source file path. */
 export interface LocalizationProjectTable {
@@ -86,6 +87,21 @@ export function validateLocalizationProject(
 
         const { table, file } = entry;
         const { locale } = table;
+        const canonicalLocale = canonicalLocaleTag(locale);
+
+        if (canonicalLocale === undefined || canonicalLocale !== locale) {
+
+            diagnostics.push(diagnostic({
+                code: "LOC_INVALID_LOCALE",
+                severity: "error",
+                message: `Locale "${locale}" is not a canonical locale tag`
+                    + (canonicalLocale === undefined ? "." : `; use "${canonicalLocale}".`),
+                locale,
+                file
+            }));
+
+            continue;
+        }
 
         if (localesInOrder.includes(locale)) {
 
@@ -112,6 +128,24 @@ export function validateLocalizationProject(
     // --- fallback configuration ------------------------------------------------
 
     const fallbackLocale = options.fallbackLocale;
+
+    if (fallbackLocale !== undefined) {
+
+        const canonicalFallback = canonicalLocaleTag(fallbackLocale);
+
+        if (canonicalFallback === undefined || canonicalFallback !== fallbackLocale) {
+
+            diagnostics.push(diagnostic({
+                code: "LOC_INVALID_LOCALE",
+                severity: "error",
+                message: `Fallback locale "${fallbackLocale}" is not a canonical locale tag`
+                    + (canonicalFallback === undefined ? "." : `; use "${canonicalFallback}".`),
+                locale: fallbackLocale
+            }));
+
+            return diagnostics;
+        }
+    }
 
     if (fallbackLocale !== undefined && !localesInOrder.includes(fallbackLocale)) {
 

@@ -13,7 +13,7 @@ documented in [`docs/localization.md`](../../docs/localization.md).
 
 - Pure TypeScript, zero runtime dependencies; strict compiler profile per
   `docs/decisions/ADR-0002-typescript-toolchain.md`.
-- Runs in Node (validation, tests, tooling) and in the browser (game runtime).
+- The ESM runtime module has no Node-only or DOM dependencies. The root Node consumer, CLI, and tests are covered. Importing the bare specifier from a browser game project is not yet wired through an import map/bundler or verified by browser acceptance; do not treat browser integration as complete.
 - Optional: games that do not use localization are not affected; the editor
   serialization and text components are unchanged by this module.
 - RTL, complex text shaping, ICU message format and pluralization are **not**
@@ -91,8 +91,10 @@ node packages/localization/bin/validate-localization.mjs <projectDir> --fallback
 
 This entry point reads `<projectDir>/locale/*.json`, applies the structural
 parser (`parseLocalizationTable` with the file path preserved in diagnostics),
-then runs cross-locale validation (`validateLocalizationSources`). Errors block;
-warnings (missing keys, fallback usage, placeholder mismatches) do not.
+then runs cross-locale validation (`validateLocalizationSources`). Error diagnostics,
+including invalid structure, invalid/unknown fallback configuration and placeholder
+mismatches, produce exit code 1. Missing/extra-key warnings are non-blocking and
+produce exit code 0. File-system/CLI failures produce exit code 2.
 
 ## Test fixtures
 
