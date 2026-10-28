@@ -355,6 +355,7 @@ Then run checks relevant to the change:
 | Dependencies | Run `npm audit --audit-level=low` from the root and `source/editor`; CI blocks any reported vulnerability |
 | Server, bridge or MCP tools | Run `npm run test:security`; start the server with `npm start`; in a second terminal run `npm run test:e2e` |
 | Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
+| Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |
 | Release candidate (`dev → test` or `test → main`) | Check the complete candidate in addition to the required CI integration test; document manual acceptance for any affected UI path |
 
 The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` (PowerShell: `$env:MCP_E2E_WITH_EDITOR = "1"` before running `npm run test:e2e`). They require the editor UI to be running and connected. The default CI E2E job does **not** enable that mode.
@@ -390,7 +391,7 @@ The required GitHub Actions status names are:
 | `test` | `fast-checks`, `mcp-integration` |
 | `main` | `fast-checks`, `mcp-integration` |
 
-`fast-checks` validates the branch route, installs locked dependencies, builds the editor client and smoke-tests the server/editor response. `mcp-integration` runs on PRs targeting `test` and `main`; it starts the server and MCP bridge and runs `npm run test:e2e`. Normal PRs into `dev` do not run this slower integration suite as a routine CI gate, so run it locally whenever the change touches MCP/server behaviour and run targeted browser acceptance for UI changes.
+`fast-checks` validates the branch route, installs and audits the locked root/editor/localization dependencies, builds the editor client, runs unit regression and security checks, smoke-tests the server/editor response, and runs localization package tests, project diagnostics and runtime acceptance. `mcp-integration` runs on PRs targeting `test` and `main`; it starts the server and MCP bridge and runs `npm run test:e2e`. Normal PRs into `dev` do not run this slower MCP integration suite as a routine CI gate, so run it locally whenever the change touches MCP/server behaviour and run targeted browser acceptance for UI changes.
 
 The active Rulesets require PRs and successful checks, but **currently do not require reviewer approval**. That is a repository setting, not permission to bypass the PR, test, documentation or promotion rules in this section.
 
