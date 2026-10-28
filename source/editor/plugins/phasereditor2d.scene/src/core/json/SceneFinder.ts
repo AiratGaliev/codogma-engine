@@ -44,6 +44,34 @@ namespace phasereditor2d.scene.core.json {
         file: io.FilePath;
     }
 
+    /**
+     * Minimal structural validation before a scene is admitted to the project
+     * index. A syntactically valid but malformed JSON file must not abort
+     * indexing for every other scene.
+     */
+    export function isValidSceneData(data: unknown): data is ISceneData {
+
+        if (!data || typeof data !== "object" || Array.isArray(data)) {
+
+            return false;
+        }
+
+        const scene = data as ISceneData;
+
+        if (!Array.isArray(scene.displayList)) {
+
+            return false;
+        }
+
+        if (scene.settings !== undefined
+            && (!scene.settings || typeof scene.settings !== "object" || Array.isArray(scene.settings))) {
+
+            return false;
+        }
+
+        return true;
+    }
+
     export class SceneFinder {
 
         private _prefabObjectId_ObjectData_Map: Map<string, IObjectData>;
@@ -220,7 +248,12 @@ namespace phasereditor2d.scene.core.json {
 
                 try {
 
-                    const data = JSON.parse(content) as ISceneData;
+                    const data = JSON.parse(content) as unknown;
+
+                    if (!isValidSceneData(data)) {
+
+                        throw new Error("invalid scene structure: expected displayList array and optional settings object");
+                    }
 
                     parsedFiles.push({ file, data });
 
@@ -248,8 +281,9 @@ namespace phasereditor2d.scene.core.json {
                     if (sceneIdSet.has(data.id)) {
 
                         const mappedFile = prefabId_File_Map.get(data.id);
+                        const previousFile = mappedFile ? mappedFile.getFullName() : "another scene file";
 
-                        alert(`ERROR! File ${mappedFile.getFullName()} has a duplicated ID ${data.id}. Run the command Fix Duplicated Scenes ID.`);
+                        alert(`ERROR! File ${previousFile} has a duplicated ID ${data.id}. Run the command Fix Duplicated Scenes ID.`);
 
                     } else {
 

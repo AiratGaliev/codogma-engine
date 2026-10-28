@@ -21,6 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const ICONS_DIR = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/icons")
 const DARK_DIR = path.join(ICONS_DIR, "dark/godot")
 const LIGHT_DIR = path.join(ICONS_DIR, "light/godot")
+const COLIBRI_PLUGIN = path.join(ROOT, "source/editor/plugins/colibri/src/Plugin.ts")
 
 // Mirrors phasereditor2d.resources.GODOT_ICON_NAMES (ResourcesPlugin.ts).
 const GODOT_ICON_NAMES = [
@@ -124,4 +125,13 @@ test("the Godot icons MIT license file is shipped", () => {
     const text = fs.readFileSync(license, "utf8")
     assert.match(text, /Godot Engine contributors/, "license must credit Godot Engine contributors")
     assert.match(text, /Permission is hereby granted, free of charge/, "license must be the MIT grant")
+})
+
+
+test("SVG icon loader requests existing theme-specific asset paths", () => {
+    const source = fs.readFileSync(COLIBRI_PLUGIN, "utf8")
+    assert.ok(source.includes('? `${theme}/${name}.svg`'),
+        "SVG icon paths must include dark/ or light/ before the registered icon name")
+    assert.ok(source.includes('darkImage = this.getThemeIcon(name, "dark");'))
+    assert.ok(source.includes('lightImage = this.getThemeIcon(name, "light");'))
 })

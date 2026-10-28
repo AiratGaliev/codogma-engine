@@ -30,6 +30,7 @@ const json = globalThis.colibri.core.json
 const coreJson = globalThis.phasereditor2d.scene.core.json
 const coreCode = globalThis.phasereditor2d.scene.core.code
 const migrations = globalThis.phasereditor2d.scene.core.migrations
+const isValidSceneData = coreJson.isValidSceneData
 
 /* ===================== property serialization ===================== */
 
@@ -248,4 +249,17 @@ test("stringifyJSON formats scene data deterministically", () => {
     // __extends keys become spread entries (prefab inheritance support):
     const spread = coreCode.stringifyJSON({ __extends: "PREFAB_PARENT", y: 2 })
     assert.match(spread, /\.\.\.PREFAB_PARENT/, "__extends entries must be emitted as spreads")
+})
+
+
+test("SceneFinder rejects syntactically valid but structurally invalid scene data", () => {
+    assert.equal(isValidSceneData(null), false)
+    assert.equal(isValidSceneData([]), false)
+    assert.equal(isValidSceneData({ id: "missing-display-list" }), false)
+    assert.equal(isValidSceneData({ displayList: {} }), false)
+    assert.equal(isValidSceneData({ displayList: [], settings: null }), false)
+    assert.equal(isValidSceneData({ displayList: [], settings: [] }), false)
+
+    assert.equal(isValidSceneData({ displayList: [] }), true)
+    assert.equal(isValidSceneData({ displayList: [], settings: {} }), true)
 })

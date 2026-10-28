@@ -102,19 +102,10 @@ namespace colibri {
 
             if (this._svgIcons.has(name)) {
 
-                // Vector icons registered by the plugin (e.g. the bundled Godot
-                // editor icons): light/dark variant files live as standalone
-                // SVGs, independent from the PNG atlas pipeline.
-                if (common) {
-
-                    darkImage = this.getThemeIcon(name, "common");
-                    lightImage = darkImage;
-
-                } else {
-
-                    darkImage = this.getThemeIcon(name, "dark");
-                    lightImage = this.getThemeIcon(name, "light");
-                }
+                // SVG assets are stored under icons/dark/ and icons/light/.
+                // They deliberately keep their theme-specific colors.
+                darkImage = this.getThemeIcon(name, "dark");
+                lightImage = this.getThemeIcon(name, "light");
 
             } else if (this._loadIconsFromAtlas) {
 
@@ -175,7 +166,7 @@ namespace colibri {
         private getThemeIcon(name: string, theme: "dark" | "light" | "common") {
 
             const iconPath = this._svgIcons.has(name)
-                ? `${name}.svg`
+                ? `${theme}/${name}.svg`
                 : this.getIconsAtlasFrameName(name, theme);
 
             const url = this.getPluginURL(`icons/${iconPath}`);

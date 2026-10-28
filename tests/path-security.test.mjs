@@ -12,7 +12,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -149,6 +149,45 @@ test("safeJoin is stable for paths that do not exist anywhere", () => {
         assert.equal(safeJoin(t.base, "a/b/../../../x"), null)
         // repeated separators and trailing slashes are normalized
         assert.equal(safeJoin(t.base, "assets//hero.png/"), path.join(t.base, "assets", "hero.png"))
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+
+test("writeFileSafely creates and overwrites only regular files inside the project", () => {
+    const t = createTempTree()
+    try {
+        assert.equal(writeFileSafely(t.base, path.join(t.base, "file.txt"), "replacement"), true)
+        assert.equal(fs.readFileSync(path.join(t.base, "file.txt"), "utf8"), "replacement")
+
+        const created = path.join(t.base, "assets", "new.txt")
+        assert.equal(writeFileSafely(t.base, created, "new content"), true)
+        assert.equal(fs.readFileSync(created, "utf8"), "new content")
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("writeFileSafely rejects a final symlink without truncating its target", () => {
+    const t = createTempTree()
+    try {
+        withSymlinks(t, () => {
+            assert.equal(writeFileSafely(t.base, path.join(t.base, "outside-file-link"), "destroy"), false)
+            assert.equal(fs.readFileSync(path.join(t.outside, "secret.txt"), "utf8"), "secret")
+        })
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("writeFileSafely rejects a symlinked parent and preserves outside content", () => {
+    const t = createTempTree()
+    try {
+        withSymlinks(t, () => {
+            assert.equal(writeFileSafely(t.base, path.join(t.base, "outside-link", "secret.txt"), "destroy"), false)
+            assert.equal(fs.readFileSync(path.join(t.outside, "secret.txt"), "utf8"), "secret")
+        })
     } finally {
         fs.rmSync(t.root, { recursive: true, force: true })
     }

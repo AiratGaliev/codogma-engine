@@ -14,6 +14,7 @@
 
 import fs from "fs"
 import path from "path"
+import fsp from "fs/promises"
 
 /**
  * True when `target`'s real location is the base itself or inside it.
@@ -82,4 +83,158 @@ export function safeJoin(base, relPath) {
     }
 
     return p
+}
+
+
+function safeWriteContext(base, target) {
+    if (typeof target !== "string") return null
+
+    const lexicalBase = path.resolve(base)
+    const full = path.resolve(target)
+    if (!isInsideBase(lexicalBase, full) || full === lexicalBase) return null
+
+    try {
+        if (!isWithinRealBase(base, full)) return null
+    } catch {
+        return null
+    }
+
+    let existedBefore = false
+    try {
+        const entry = fs.lstatSync(full)
+        if (entry.isSymbolicLink() || !entry.isFile()) return null
+        existedBefore = true
+    } catch (error) {
+        if (error.code !== "ENOENT") return null
+    }
+
+    const flags = fs.constants.O_WRONLY
+        | (fs.constants.O_NOFOLLOW ?? 0)
+        | (existedBefore ? 0 : fs.constants.O_CREAT | fs.constants.O_EXCL)
+
+    return { full, existedBefore, flags }
+}
+
+/**
+ * Verify an opened write descriptor before any truncation or write occurs.
+ * Comparing descriptor identity to the current path helps detect a
+ * parent-directory swap between path resolution and open().
+ */
+export function isSafeOpenFileHandle(base, target, fd) {
+    try {
+        const lexicalBase = path.resolve(base)
+        const full = path.resolve(target)
+        if (!isInsideBase(lexicalBase, full) || full === lexicalBase) return false
+
+        const realBase = fs.realpathSync(base)
+        const opened = fs.fstatSync(fd)
+        if (!opened.isFile()) return false
+
+        // On Linux, verify the actual file referenced by the open descriptor.
+        if (process.platform === "linux") {
+            const fdPath = fs.readlinkSync(`/proc/self/fd/${fd}`)
+            if (fdPath.endsWith(" (deleted)") || !isInsideBase(realBase, path.resolve(fdPath))) {
+                return false
+            }
+        }
+
+        const entry = fs.lstatSync(full)
+        if (entry.isSymbolicLink() || !entry.isFile()) return false
+
+        const resolved = fs.realpathSync(full)
+        if (!isInsideBase(realBase, resolved)) return false
+
+        const current = fs.statSync(full)
+        return current.dev === opened.dev && current.ino === opened.ino
+    } catch {
+        return false
+    }
+}
+
+function removeCreatedFileIfStillOwned(full, fd) {
+    let opened
+    try {
+        opened = fs.fstatSync(fd)
+    } catch {
+        return
+    }
+
+    const candidates = []
+    if (process.platform === "linux") {
+        try {
+            const fdPath = fs.readlinkSync(`/proc/self/fd/${fd}`)
+            if (!fdPath.endsWith(" (deleted)")) candidates.push(fdPath)
+        } catch {
+            // Fall back to the requested path if the descriptor path is unavailable.
+        }
+    }
+    candidates.push(full)
+
+    for (const candidate of candidates) {
+        try {
+            const entry = fs.lstatSync(candidate)
+            if (entry.isSymbolicLink() || !entry.isFile()) continue
+            const current = fs.statSync(candidate)
+            if (current.dev !== opened.dev || current.ino !== opened.ino) continue
+            fs.unlinkSync(candidate)
+            return
+        } catch {
+            // Best-effort cleanup only. Never remove a different file.
+        }
+    }
+}
+
+/**
+ * Open a project file for writing without truncating it. The caller MUST
+ * truncate only after this function returns a verified handle.
+ * Parent directories should be created by the caller first.
+ */
+export async function openSafeProjectFileForWrite(base, target) {
+    const context = safeWriteContext(base, target)
+    if (!context) return null
+
+    let handle
+    try {
+        // No O_TRUNC here: failed validation must never destroy existing data.
+        handle = await fsp.open(context.full, context.flags, 0o666)
+    } catch {
+        return null
+    }
+
+    if (!isSafeOpenFileHandle(base, context.full, handle.fd)) {
+        if (!context.existedBefore) removeCreatedFileIfStillOwned(context.full, handle.fd)
+        await handle.close().catch(() => {})
+        return null
+    }
+
+    return handle
+}
+
+/**
+ * Synchronous equivalent for MCP tools whose write pipeline is synchronous.
+ * Returns false for an unsafe target and preserves the target's old contents.
+ */
+export function writeFileSafely(base, target, content) {
+    const context = safeWriteContext(base, target)
+    if (!context) return false
+
+    let fd
+    try {
+        fd = fs.openSync(context.full, context.flags, 0o666)
+    } catch {
+        return false
+    }
+
+    try {
+        if (!isSafeOpenFileHandle(base, context.full, fd)) {
+            if (!context.existedBefore) removeCreatedFileIfStillOwned(context.full, fd)
+            return false
+        }
+
+        fs.ftruncateSync(fd, 0)
+        fs.writeFileSync(fd, content)
+        return true
+    } finally {
+        fs.closeSync(fd)
+    }
 }

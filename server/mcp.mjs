@@ -21,6 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
+import { writeFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -140,7 +141,10 @@ function writeSceneFile(rel, data) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full) throw new Error("invalid scene path: " + rel)
     fs.mkdirSync(path.dirname(full), { recursive: true })
-    fs.writeFileSync(full, JSON.stringify(data, null, 4), "utf8")
+    const serialized = JSON.stringify(data, null, 4)
+    if (!writeFileSafely(PROJECT_DIR, full, serialized)) {
+        throw new Error("invalid scene path: " + rel)
+    }
     notifyFilesChanged()
 }
 
@@ -2794,7 +2798,9 @@ defTool(
         pack[sectionName] = pack[sectionName] || { files: [] }
         if (pack[sectionName].files.some(f => f.key === key)) throw new Error(`Key "${key}" already exists in ${rel}`)
         pack[sectionName].files.push({ key, type: "font", url, family })
-        fs.writeFileSync(full, JSON.stringify(pack, null, 4), "utf8")
+        if (!writeFileSafely(PROJECT_DIR, full, JSON.stringify(pack, null, 4))) {
+            throw new Error("invalid asset pack path: " + rel)
+        }
         notifyFilesChanged()
         return text(`Font "${key}" (${family}) added to ${rel}.`)
     }

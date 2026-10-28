@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForWrite } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -107,80 +107,10 @@ function log(...args) {
  * stays here because it depends on the server's PROJECT_DIR.
  */
 
-const O_NOFOLLOW = fs.constants?.O_NOFOLLOW ?? 0
-
 function realBaseOrNull() {
     try {
         return fs.realpathSync(PROJECT_DIR)
     } catch {
-        return null
-    }
-}
-
-function fdKernelPath(fd) {
-    if (process.platform !== "linux") return null
-    try {
-        return fs.readlinkSync(`/proc/self/fd/${fd}`)
-    } catch {
-        return null
-    }
-}
-
-/**
- * Open a project file for writing while closing the check-then-use (TOCTOU)
- * gap that remains after safeJoin():
- *
- *  1. O_NOFOLLOW makes the open itself fail when the final path component was
- *     swapped for a symlink between the check and the open (ELOOP → null).
- *  2. After the open, the kernel-reported path of the open file (Linux
- *     /proc/self/fd) is re-verified against the project's real base, so a
- *     parent directory swapped for an outside symlink in the same window
- *     cannot redirect the write outside the project. When the file was newly
- *     created by this call, the stray artifact is removed again.
- *
- * On platforms without /proc the second check is a no-op and the O_NOFOLLOW
- * guard plus the safeJoin() pre-check remain (documented residual).
- *
- * Returns a FileHandle the caller must close, or null when the target must
- * be treated as an invalid path.
- */
-async function openProjectFileForWrite(full) {
-    const realBase = realBaseOrNull()
-    if (!realBase) return null
-
-    let existedBefore = false
-    try {
-        existedBefore = fs.lstatSync(full).isFile()
-    } catch (e) {
-        if (e.code !== "ENOENT") return null
-    }
-
-    const flags = fs.constants.O_WRONLY | fs.constants.O_TRUNC | O_NOFOLLOW
-        | (existedBefore ? 0 : fs.constants.O_CREAT)
-
-    let handle
-    try {
-        handle = await fsp.open(full, flags, 0o666)
-    } catch (e) {
-        // ELOOP: final component is a symlink (O_NOFOLLOW). EISDIR and the
-        // rest: not a writable project file either way.
-        return null
-    }
-
-    try {
-        const kernelPath = fdKernelPath(handle.fd)
-        if (kernelPath && !isInsideBase(realBase, kernelPath)) {
-            // The write would have landed outside the project. Remove exactly
-            // the file this call created; never a pre-existing file.
-            if (!existedBefore) {
-                try { fs.unlinkSync(kernelPath) } catch { /* best effort */ }
-            }
-            await handle.close().catch(() => { })
-            return null
-        }
-        return handle
-    } catch (e) {
-        await handle.close().catch(() => { })
         return null
     }
 }
@@ -631,10 +561,11 @@ async function handleAPI(req, res) {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
                 await fsp.mkdir(path.dirname(full), { recursive: true })
-                const handle = await openProjectFileForWrite(full)
+                const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
                 if (!handle) return apiError(res, "invalid path")
                 let st
                 try {
+                    await handle.truncate(0)
                     await handle.writeFile(body.content ?? "", "utf8")
                     st = await handle.stat()
                 } finally {
@@ -843,10 +774,11 @@ async function handleUpload(req, res) {
                 await fsp.mkdir(dirFull, { recursive: true })
                 // Same TOCTOU discipline as SetFileString: O_NOFOLLOW at open,
                 // kernel-path re-verification after the open.
-                const handle = await openProjectFileForWrite(fileFull)
+                const handle = await openSafeProjectFileForWrite(PROJECT_DIR, fileFull)
                 if (!handle) return apiError(res, "invalid upload path")
                 let st
                 try {
+                    await handle.truncate(0)
                     await handle.writeFile(data)
                     st = await handle.stat()
                 } finally {
