@@ -315,6 +315,7 @@ describe("parseLocalizationTable: locale tags", () => {
             "en-u-a",
             "en-x",
             "en-a-foo-A-bar",
+            "sl-rozaj-rozaj",
             `en-${"a".repeat(9)}`
         ]) {
 
