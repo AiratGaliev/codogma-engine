@@ -107,17 +107,24 @@ export class LocalizationService {
 
         if (canonicalLocale === undefined || canonicalLocale !== options.locale) {
 
-            const firstRegisteredLocale = this._tables.keys().next().value;
-            this._locale = firstRegisteredLocale ?? options.locale;
+            // Never infer the initial locale from Map insertion order. A
+            // configured fallback is the only deterministic recovery choice;
+            // without a registered fallback, retain the invalid request so
+            // lookups remain visibly missing until the caller fixes config.
+            const recoveryLocale = this._fallbackLocale !== null && this._tables.has(this._fallbackLocale)
+                ? this._fallbackLocale
+                : undefined;
+
+            this._locale = recoveryLocale ?? options.locale;
 
             this.pushDiagnostic({
                 code: "LOC_INVALID_LOCALE",
                 severity: "error",
                 message: `Initial locale "${options.locale}" is not a canonical locale tag`
                     + (canonicalLocale === undefined ? "." : `; use "${canonicalLocale}".`)
-                    + (firstRegisteredLocale === undefined
-                        ? " No registered locale is available."
-                        : ` Using the first registered locale "${firstRegisteredLocale}".`),
+                    + (recoveryLocale === undefined
+                        ? " No registered configured fallback locale is available; the requested value remains active."
+                        : ` Using configured fallback locale "${recoveryLocale}".`),
                 locale: options.locale
             });
 
