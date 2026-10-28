@@ -6,7 +6,7 @@
 
 - Acceptance imports `@codogma/localization` through the public package entry point.
 - Added CI execution and automated CLI tests for project localization diagnostics, including structured file-system errors.
-- Applied canonical locale validation to service initialization, locale switching, fallback configuration and project validation.
+- Applied position-aware BCP 47 subset validation to parsing, service initialization, locale switching and project validation; malformed region/variant/extension forms are rejected, and invalid initial locales no longer depend on table insertion order.
 - Added `LOC_FILE_ERROR` to the diagnostic contract and corrected documentation for placeholder mismatch severity and unverified browser integration.
 
 * Adds optional localization support: `@codogma/localization` in `packages/localization/`
