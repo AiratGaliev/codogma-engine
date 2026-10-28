@@ -26,10 +26,14 @@ const PRIVATE_USE_SUBTAG_PATTERN = /^[A-Za-z0-9]{1,8}$/;
 const EXTENSION_SINGLETON_PATTERN = /^[0-9A-WY-Za-wy-z]$/;
 
 /**
- * Returns the canonical form of a locale tag, or `undefined` when the tag
- * is outside the supported BCP 47 subset. Callers reject tags whose returned
- * canonical form differs from the original, rather than silently rewriting
- * project data or creating case-insensitive runtime collisions.
+ * Returns the canonical-casing form of a locale tag, or `undefined` when
+ * its structure is outside the supported BCP 47 subset. Callers reject tags
+ * whose returned form differs from the original, rather than silently
+ * rewriting project data or creating case-insensitive runtime collisions.
+ *
+ * This is syntax/casing validation, not a registry lookup: it does not verify
+ * that every language/script/region/variant value is assigned by IANA, rewrite
+ * deprecated aliases to Preferred-Value forms, or reorder extension sequences.
  */
 export function canonicalLocaleTag(tag: string): string | undefined {
 
