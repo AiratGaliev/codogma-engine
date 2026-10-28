@@ -220,6 +220,18 @@ describe("validateLocalizationProject: configuration errors", () => {
         assert.equal(diagnostics[0].severity, "error")
     })
 
+
+    it("rejects structurally invalid locale tags in project tables", () => {
+
+        const diagnostics = validateLocalizationProject([
+            entry({ table: table("en-A1", [["a", "A"]]), file: "locale/en-A1.json" })
+        ])
+
+        assert.deepEqual(codes(diagnostics), ["LOC_INVALID_LOCALE"])
+        assert.equal(diagnostics[0].severity, "error")
+        assert.equal(diagnostics[0].file, "locale/en-A1.json")
+    })
+
     it("accepts an empty project", () => {
 
         const diagnostics = validateLocalizationProject([])
