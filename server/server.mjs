@@ -830,16 +830,17 @@ function listArchiveSnapshots() {
 function serveArchive(req, res, name) {
     if (!ARCHIVE_NAME_PATTERN.test(name) || path.dirname(path.join(ROOT, name)) !== ROOT) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
-        res.end("Invalid archive name")
+        res.end(req.method === "HEAD" ? undefined : "Invalid archive name")
         return
     }
 
     let st
     try {
         st = fs.statSync(path.join(ROOT, name))
+        if (!st.isFile()) throw Object.assign(new Error("Archive is not a regular file"), { code: "ENOENT" })
     } catch (e) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
-        res.end("Archive not found — GET /archive/ lists the newest snapshot")
+        res.end(req.method === "HEAD" ? undefined : "Archive not found — GET /archive/ lists the newest snapshot")
         return
     }
 
@@ -849,6 +850,12 @@ function serveArchive(req, res, name) {
         "Content-Disposition": `attachment; filename="${name}"`,
         "Cache-Control": "no-store"
     })
+
+    if (req.method === "HEAD") {
+        res.end()
+        return
+    }
+
     fs.createReadStream(path.join(ROOT, name)).pipe(res)
 }
 
