@@ -62,7 +62,7 @@ duplicate ids are always detectable.
 cd packages/localization
 npm ci          # locked dev dependencies (TypeScript 5.3.3)
 npm run build   # strict typecheck + emit dist/
-npm test        # build + node --test contract/service/validation/fixture tests
+npm test        # build + node --test contract/service/validation/fixture/CLI tests
 ~~~
 
 Repository-level commands (from the root):

@@ -9,8 +9,6 @@
 - Applied canonical locale validation to service initialization, locale switching, fallback configuration and project validation.
 - Added `LOC_FILE_ERROR` to the diagnostic contract and corrected documentation for placeholder mismatch severity and unverified browser integration.
 
-### Previous COD-62 notes
-
 * Adds optional localization support: `@codogma/localization` in `packages/localization/`
   with a versioned localization tables contract (schema version 1: `schemaVersion`,
   `locale`, explicit `messages: [{ id, text }]` entries), a runtime service with key

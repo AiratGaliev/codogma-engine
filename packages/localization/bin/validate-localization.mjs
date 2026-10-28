@@ -123,7 +123,7 @@ try {
                 code: "LOC_FILE_ERROR",
                 severity: "error",
                 message: `Failed to read or process locale directory: ${message}`,
-                file: localeDir ?? projectDir
+                file: localeDir === undefined ? "." : "locale/"
             }],
             validLocales: []
         }, null, 4))

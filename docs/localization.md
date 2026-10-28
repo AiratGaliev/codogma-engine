@@ -56,9 +56,11 @@
 Скомпилированный модуль — ESM без runtime-зависимостей, а внутренний API не зависит от DOM/Node. Проверены Node-пути потребления (unit tests, CLI, acceptance). Однако bare import `@codogma/localization` из браузерного игрового проекта пока не подключён через import map/bundler и не подтверждён браузерным acceptance: не считать интеграцию с игровым runtime завершённой до отдельной проверки.
 
 ~~~js
+// API illustration only: browser-project resolution of the bare package specifier
+// is not wired or acceptance-tested in the current branch.
 import { LocalizationService, parseLocalizationTable } from "@codogma/localization"
 
-// 1. Загрузить и разобрать таблицы (браузер: fetch; Phaser: this.load.json)
+// 1. Load and parse tables using the game project's chosen resource loader.
 const en = parseLocalizationTable(await (await fetch("locale/en-US.json")).text(), "locale/en-US.json")
 const ru = parseLocalizationTable(await (await fetch("locale/ru-RU.json")).text(), "locale/ru-RU.json")
 
@@ -138,10 +140,10 @@ service.clearDiagnostics()
 
 ## 6. Интеграция с игрой: ключ отдельно от отображаемого текста
 
-Требование ТЗ: хранить ключ локализации отдельно от текущей отображаемой строки. Минимальный путь для игровой логики — использовать сервис в пользовательском компоненте/сцене и вычислять видимый текст в runtime:
+Требование ТЗ: хранить ключ локализации отдельно от текущей отображаемой строки. Следующий фрагмент показывает целевой способ использования API, но **не является готовой browser-integration инструкцией**: bare import `@codogma/localization` ещё не разрешается автоматически в игровом проекте и не подтверждён browser acceptance. Подключение к игровому runtime должно быть отдельным проверенным follow-up.
 
 ~~~js
-// пользовательский скрипт игры (TypeScript или JS)
+// Illustrative target API; browser package resolution is not wired yet.
 import { LocalizationService } from "@codogma/localization"
 
 // сервис создаётся один раз при старте игры из таблиц проекта
@@ -167,7 +169,7 @@ label.setText(localization.t("menu.play"))
 ### Команды
 
 ~~~bash
-# сборка + unit/contract/validation/fixture tests (node:test)
+# сборка + unit/contract/validation/fixture/CLI tests (node:test)
 npm run test:localization
 
 # проектная диагностика: структурный парсер + кросс-локальная валидация

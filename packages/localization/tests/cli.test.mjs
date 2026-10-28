@@ -100,6 +100,7 @@ describe("validate-localization CLI (COD-64)", () => {
         const output = JSON.parse(result.stdout)
         assert.equal(output.diagnostics[0].code, "LOC_FILE_ERROR")
         assert.equal(output.diagnostics[0].severity, "error")
+        assert.equal(output.diagnostics[0].file, "locale/")
         assert.equal(output.validLocales.length, 0)
     })
 
