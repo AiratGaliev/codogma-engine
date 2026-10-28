@@ -1,0 +1,22 @@
+{
+    "schemaVersion": 1,
+    "locale": "ru-RU",
+    "messages": [
+        {
+            "id": "menu.play",
+            "text": "Играть"
+        },
+        {
+            "id": "menu.settings",
+            "text": "Настройки"
+        },
+        {
+            "id": "profile.welcome",
+            "text": "Привет, {name}!"
+        },
+        {
+            "id": "score.display",
+            "text": "Счёт: {score}"
+        }
+    ]
+}

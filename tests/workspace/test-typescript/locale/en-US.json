@@ -1,0 +1,22 @@
+{
+    "schemaVersion": 1,
+    "locale": "en-US",
+    "messages": [
+        {
+            "id": "menu.play",
+            "text": "Play"
+        },
+        {
+            "id": "menu.settings",
+            "text": "Settings"
+        },
+        {
+            "id": "profile.welcome",
+            "text": "Hello, {name}!"
+        },
+        {
+            "id": "score.display",
+            "text": "Score: {score}"
+        }
+    ]
+}

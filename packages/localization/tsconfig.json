@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        /* Codogma strict TypeScript profile (ADR-0002, ТЗ раздел 12.1). */
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "forceConsistentCasingInFileNames": true,
+        /* Pure, DOM-free ES module output: consumable by Node tests and browser games. */
+        "target": "ES2020",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "lib": ["ES2020"],
+        "types": [],
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "outDir": "dist",
+        "rootDir": "src",
+        "newLine": "lf"
+    },
+    "include": ["src/**/*.ts"]
+}

@@ -9,9 +9,12 @@
     "mcp": "node server/mcp-launcher.mjs",
     "mcp:builtin": "node server/mcp-stdio.mjs",
     "build": "cd source/editor && npm run build",
+    "build:localization": "cd packages/localization && npm run build",
     "watch": "cd source/editor && npm start",
     "test:e2e": "node tests/mcp-e2e-test.mjs node server/mcp-launcher.mjs",
-    "test:security": "node tests/security-smoke-test.mjs"
+    "test:security": "node tests/security-smoke-test.mjs",
+    "test:localization": "cd packages/localization && npm test",
+    "test:localization:acceptance": "npm run build:localization && node tests/localization-acceptance.mjs"
   },
   "license": "MIT",
   "dependencies": {
