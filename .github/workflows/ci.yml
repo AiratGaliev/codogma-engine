@@ -31,6 +31,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             source/editor/package-lock.json
+            packages/localization/package-lock.json
 
       - name: Validate pull request routing
         if: github.event_name == 'pull_request'
@@ -109,3 +110,20 @@ jobs:
 
       - name: Security smoke tests (local access, symlinks, MCP compatibility)
         run: npm run test:security
+
+      - name: Install locked dependencies (localization package)
+        run: npm ci
+        working-directory: packages/localization
+
+      - name: Audit localization dependencies
+        run: npm audit --audit-level=low
+        working-directory: packages/localization
+
+      - name: Build and test localization package (COD-62/COD-64)
+        run: npm run test:localization
+
+      - name: Localization project diagnostics CLI (COD-64)
+        run: npm run test:localization:project
+
+      - name: Localization runtime acceptance (server + fixture tables)
+        run: npm run test:localization:acceptance
