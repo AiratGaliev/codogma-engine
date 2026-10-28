@@ -469,6 +469,21 @@ async function main() {
             assert.equal(archiveHead.headers["content-length"], String(Buffer.byteLength(smokeArchiveBody)))
             assert.equal(archiveHead.body, "", "HEAD must not return the archive body")
 
+            // A matching filename must not make an arbitrary symlink target
+            // downloadable through this development-only archive endpoint.
+            const symlinkArchiveName = "codogma-engine-linktest-20260101-0000-dev+0commits.zip"
+            const symlinkArchivePath = path.join(ROOT, symlinkArchiveName)
+            try {
+                await fs.symlink(path.join(ROOT, "package.json"), symlinkArchivePath)
+                const archiveSymlink = await request(port, "/archive/" + encodeURIComponent(symlinkArchiveName))
+                assert.equal(archiveSymlink.status, 404, "symlinked archives must not be served")
+            } catch (error) {
+                if (!["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP"].includes(error.code)) throw error
+                console.warn("Skipping archive symlink check: this environment does not permit creating symbolic links.")
+            } finally {
+                await fs.rm(symlinkArchivePath, { force: true })
+            }
+
             const archiveTraversal = await request(port, "/archive/..%2Fpackage.json")
             assert.equal(archiveTraversal.status, 400, "traversal names must be rejected")
 
