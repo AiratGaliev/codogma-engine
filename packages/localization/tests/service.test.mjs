@@ -333,6 +333,25 @@ describe("Locale case policy (COD-64)", () => {
         assert.deepEqual(codes(service.getDiagnostics()), ["LOC_INVALID_LOCALE"])
     })
 
+
+    it("rejects structurally invalid locales during registration and switching", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["a", "A"]])],
+            locale: "en-US"
+        })
+
+        service.registerTable(table("en-A1", [["a", "Invalid"]]))
+        service.setLocale("en-12")
+
+        assert.equal(service.hasLocale("en-A1"), false)
+        assert.equal(service.getLocale(), "en-US")
+        assert.deepEqual(codes(service.getDiagnostics()), [
+            "LOC_INVALID_LOCALE",
+            "LOC_INVALID_LOCALE"
+        ])
+    })
+
     it("rejects a non-canonical initial locale without choosing by table order", () => {
 
         const tables = [table("en-US", [["a", "A"]]), table("ru-RU", [["a", "А"]])]
