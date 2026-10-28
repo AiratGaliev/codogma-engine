@@ -1,0 +1,24 @@
+{
+    "name": "@codogma/localization",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Optional Codogma Engine localization module: versioned locale tables, deterministic fallback and structured diagnostics.",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "prepare": "npm run build",
+        "test": "npm run build && node --test tests/*.test.mjs"
+    },
+    "devDependencies": {
+        "typescript": "5.3.3"
+    },
+    "license": "MIT"
+}

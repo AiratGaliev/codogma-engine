@@ -486,6 +486,8 @@ Codogma предоставляет единый публичный Physics API �
 - Учитывать изменение длины строк, fallback fonts и UTF-8 glyph coverage; RTL/complex text shaping не объявлять поддерживаемыми без проверки конкретного rendering/text backend.
 - Localization service может быть внутренним модулем и со временем вынесен в extension; не делать подключение сервиса обязательным для минимальной игры.
 
+**Статус реализации локализации (COD-62, 28.10.2026):** минимальный опциональный модуль `@codogma/localization` в `packages/localization/` реализует версионированный контракт таблиц (schema version 1: `schemaVersion`/`locale`/`messages` в форме явных записей `{ id, text }`), runtime-сервис с детерминированным fallback (активная локаль → настроенная fallback-локаль → видимый маркер `[[id]]`) и структурированную диагностику с дедупликацией. Валидатор отклоняет некорректный JSON, отсутствующие/неподдерживаемые версии, дублирующиеся ID, некорректные записи и репортит расхождения ключей и несовпадающие placeholders между локалями. Фикстура — `tests/workspace/test-typescript/locale/`; проверки — `npm run test:localization` и `npm run test:localization:acceptance`, обе входят в CI Fast. RTL/complex shaping/ICU-плюрализация не заявляются поддерживаемыми; сериализация сцен и текстовые компоненты редактора этим scope не изменялись. CLI project validation проверяется отдельными unit/integration tests и CI command `npm run test:localization:project`. Browser/game-project import по bare specifier пока не подтверждён: подключение к редакторскому/игровому runtime и текстовым компонентам остаётся отдельным integration follow-up. Фактический контракт, API, правила fallback и ограничения описаны в [docs/localization.md](localization.md).
+
 **Viewport, scaling и display**
 - Настройки проекта должны включать базовое/целевое разрешение, правила fit/fill/letterbox или эквивалентные scaling policies, поведение aspect ratio, fullscreen и ограничение device pixel ratio.
 - Предусмотреть профили/настройки DPR (например, автоматический разумный предел и явные уровни качества), а также режим pixel-art с чётким масштабированием без нежелательного размытия.
@@ -510,7 +512,7 @@ Codogma предоставляет единый публичный Physics API �
 - Tilemap Editor с Tiled import/export, brush presets, auto-tiling, collision editing и профилированием больших карт; hex/isometric support после основного grid workflow;
 - Particle Editor и стабильный lifecycle preview;
 - Audio workflow с группами/бусами, preview и корректным browser lifecycle;
-- опциональная Localization service и versioned local save/storage API;
+- Опциональная Localization service и versioned local save/storage API; проверен интеграционный entry point (`packages/localization/bin/validate-localization.mjs`), locale case policy (`canonicalLocaleTag`) и регрессионная защита placeholder (`Object.prototype.hasOwnProperty`).
 - расширенные importers для Aseprite/PSD как подключаемые инструменты, а также bundles/atlas variants;
 - skeletal animation (например, Spine/DragonBones) как отдельные extensions;
 - build profiles для development/release и target-aware asset/build optimization.

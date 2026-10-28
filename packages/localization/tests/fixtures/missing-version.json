@@ -1,0 +1,6 @@
+{
+  "locale": "en-US",
+  "messages": [
+    { "id": "menu.play", "text": "Play" }
+  ]
+}

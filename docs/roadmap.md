@@ -380,6 +380,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - Расширенный Tilemap: reusable brushes, rule tiles/auto-tiling, object/collision layers, Tiled import/export с сообщениями о потерях, затем измерения chunking/culling и большие карты.
 - Audio groups/buses, preview и browser focus/autoplay lifecycle; базовые particles с безопасным повторным запуском preview.
 - Versioned local storage/save migrations и localization tables/fallbacks, если востребованы первыми реальными проектами.
+  - [x] **COD-62 — localization tables/fallback:** версионированный контракт таблиц (v1), runtime-сервис с детерминированным fallback и структурированной диагностикой, валидация (дубликаты ID, версии, расхождения ключей и placeholders), фикстура `tests/workspace/test-typescript/locale/` и проверки `npm run test:localization` / `npm run test:localization:acceptance` в CI Fast. Контракт и ограничения — [docs/localization.md](docs/localization.md); RTL/complex shaping не заявляются.
 - PSD/Aseprite importers, atlas variants/advanced analysis и skeletal animation — отдельными PR, по одному импортеру/формату с license review.
 - Дополнительные UI layouts и production authoring tools — по capability matrix, а не для формального feature parity.
 
