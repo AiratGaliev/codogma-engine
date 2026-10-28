@@ -458,10 +458,16 @@ async function main() {
                 String(archiveRedirect.headers.location || "").includes(encodeURIComponent(smokeArchiveName)),
                 "/archive/ must redirect to the newest codogma-engine-*.zip")
 
-            const archiveFetch = await request(port, "/archive/" + encodeURIComponent(smokeArchiveName))
+            const archiveUrl = "/archive/" + encodeURIComponent(smokeArchiveName)
+            const archiveFetch = await request(port, archiveUrl)
             assert.equal(archiveFetch.status, 200, "a valid archive name must be served")
             assert.equal(archiveFetch.headers["content-type"], "application/zip")
             assert.equal(archiveFetch.body, smokeArchiveBody, "the served bytes must match the file")
+
+            const archiveHead = await request(port, archiveUrl, { method: "HEAD" })
+            assert.equal(archiveHead.status, 200, "HEAD must return archive metadata")
+            assert.equal(archiveHead.headers["content-length"], String(Buffer.byteLength(smokeArchiveBody)))
+            assert.equal(archiveHead.body, "", "HEAD must not return the archive body")
 
             const archiveTraversal = await request(port, "/archive/..%2Fpackage.json")
             assert.equal(archiveTraversal.status, 400, "traversal names must be rejected")
