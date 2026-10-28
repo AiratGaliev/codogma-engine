@@ -57,6 +57,39 @@ MCP robustness, and regression suites for every defect found along the way.
 
 ## Codogma Engine 1.0
 
+### Unreleased (COD-62 / COD-64)
+
+- Acceptance imports `@codogma/localization` through the public package entry point.
+- Added CI execution and automated CLI tests for project localization diagnostics, including structured file-system errors.
+- Applied position-aware BCP 47 subset validation to parsing, service initialization, locale switching and project validation; malformed region/variant/extension forms are rejected, and invalid initial locales no longer depend on table insertion order.
+- Added `LOC_FILE_ERROR` to the diagnostic contract and corrected documentation for placeholder mismatch severity and unverified browser integration.
+
+* Adds optional localization support: `@codogma/localization` in `packages/localization/`
+  with a versioned localization tables contract (schema version 1: `schemaVersion`,
+  `locale`, explicit `messages: [{ id, text }]` entries), a runtime service with key
+  lookup, named parameter substitution and deterministic fallback
+  (active locale → configured fallback locale → visible `[[id]]` marker), and
+  structured `LocalizationDiagnostic` reporting with deduplication.
+* Adds a localization validator that rejects broken JSON, missing/unsupported schema
+  versions, invalid entries/ids/texts and duplicate message ids, and reports
+  missing/extra keys and mismatched placeholders between locales
+  (`validateLocalizationProject`).
+* Adds the fixture locale tables `tests/workspace/test-typescript/locale/`
+  (`en-US`, `ru-RU`, sparse `en-GB` for the fallback path) and the acceptance check
+  `tests/localization-acceptance.mjs` that loads them through the play-mode HTTP route
+  and exercises the compiled runtime service.
+* Adds root scripts `test:localization` and `test:localization:acceptance`, and wires
+  both into CI Fast as extra steps (install/audit/build/test of the new package).
+* Documents the implemented contract, fallback rules, validation semantics and known
+  limitations (RTL/complex shaping/ICU not claimed) in `docs/localization.md`, and
+  updates the technical specification, capability matrix and roadmap (COD-62).
+* Review fixes: a fallback locale registered later via `registerTable` becomes active
+  (previously stayed disabled), duplicate table registration warns
+  (`LOC_DUPLICATE_REGISTRATION`) and keeps the first table, placeholder validation skips
+  keys missing in the reference locale (no spurious blocking error), parse errors no
+  longer misuse the `messageId` field, and runtime placeholder-mismatch wording matches
+  the actual behavior.
+
 First release under the Codogma Engine name. Rebranded from Phaser Editor 2D (open-source v3 client fork) with version 1.0 (`source/editor/product.json`).
 
 * Rebranding of all user-facing surfaces: browser/page titles, About dialog, Start page,
