@@ -190,9 +190,21 @@ The local server exposes editor routes including:
 - <code>/editor/project/...</code> — project file access used by editor components;
 - <code>/editor/external/...</code> — project files for play mode;
 - <code>/editor/upload</code> — uploads;
-- <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint.
+- <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint;
+- <code>/archive/</code> and <code>/archive/&lt;filename&gt;</code> — development-only download of a prepared full-project snapshot (see below).
 
 The server also listens on the MCP bridge port (default <code>1902</code>) for the contract used by the official MCP package. Keep the HTTP port and MCP bridge port distinct.
+
+### Full-project development snapshots
+
+The <code>/archive/</code> endpoint is a development hand-off mechanism for retrieving an archive of the current project snapshot. It is separate from the Release workflow's <code>codogma-engine-release</code> artifact: this endpoint serves a prepared full-project archive from the repository root, including the files captured by the development snapshot process.
+
+- <code>GET /archive/</code> selects the most recently modified matching archive in the repository root and responds with a redirect to its download URL.
+- <code>GET /archive/&lt;filename&gt;</code> downloads a specific snapshot by name. <code>HEAD</code> is supported for metadata checks without downloading the body.
+- Accepted filenames match <code>codogma-engine-&lt;snapshot-id&gt;.zip</code> or <code>codogma-engine-&lt;snapshot-id&gt;.tar.gz</code>, where the snapshot ID contains only letters, digits, <code>+</code>, <code>.</code>, <code>_</code> and <code>-</code>. The endpoint does not build an archive itself; the snapshot must already exist as a regular file in the repository root.
+- If no matching snapshot exists, <code>/archive/</code> responds with <code>404</code>. An invalid filename is rejected; unsupported HTTP methods return <code>405</code>.
+
+**Access boundary:** snapshots may contain the complete source tree, development fixtures and documentation, so treat this as a trusted development endpoint, not a public artifact distribution service. The server binds to loopback and the route goes through the same Host/Origin guard as other HTTP routes. If access is provided through a reverse proxy, allow only the required trusted hosts and browser origins; do not expose this endpoint to an untrusted network or use wildcard proxy allow-lists in shared/public environments. Do not commit generated snapshots to the repository.
 
 ## MCP and AI tooling
 
