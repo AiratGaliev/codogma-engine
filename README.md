@@ -142,6 +142,7 @@ Run these commands from the repository root unless noted otherwise.
 | <code>npm run mcp</code> | Start the MCP launcher for a connected MCP client. The editor server must be running. |
 | <code>npm run mcp:builtin</code> | Start the built-in stdio MCP implementation. |
 | <code>npm run test:e2e</code> | Run the MCP integration test driver. Start the editor server first. |
+| <code>npm run test:all</code> | Run unit, security, mini-service, localization, project-diagnostics, localization-runtime acceptance and MCP E2E checks. Install dependencies in each package first and start the editor server for MCP E2E. |
 
 For a typical local code change:
 
@@ -334,12 +335,16 @@ If a promotion gate fails, stop the promotion. Fix the issue in the appropriate 
 
 ### Local checks before a PR
 
-Run commands from the repository root. Root and editor dependencies are installed separately:
+Run commands from the repository root. Root, editor and localization dependencies are installed separately:
 
 ~~~bash
 npm ci
 npm audit --audit-level=low
 cd source/editor
+npm ci
+npm audit --audit-level=low
+cd ../..
+cd packages/localization
 npm ci
 npm audit --audit-level=low
 cd ../..
