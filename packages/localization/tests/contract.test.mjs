@@ -280,4 +280,52 @@ describe("parseLocalizationTable: locale tags", () => {
         assert.equal(result.table?.locale, "zh-Hans")
         assert.deepEqual(codes(result.diagnostics), [])
     })
+
+
+    it("accepts canonical variants, numeric regions, extensions, and private-use subtags", () => {
+
+        for (const locale of [
+            "zh-cmn-Hans-CN",
+            "de-CH-1901",
+            "en-419",
+            "sl-rozaj-biske",
+            "en-u-ca-gregory",
+            "en-x-game"
+        ]) {
+
+            const result = parseLocalizationTable(JSON.stringify({
+                schemaVersion: 1,
+                locale,
+                messages: []
+            }))
+
+            assert.deepEqual(codes(result.diagnostics), [], `locale ${locale} must be accepted`)
+            assert.equal(result.table?.locale, locale)
+        }
+    })
+
+    it("rejects malformed BCP 47 subtags, invalid ordering, and duplicate extensions", () => {
+
+        for (const locale of [
+            "en-A1",
+            "en-12",
+            "en-US-12",
+            "en-US-Latn",
+            "en-u",
+            "en-u-a",
+            "en-x",
+            "en-a-foo-A-bar",
+            `en-${"a".repeat(9)}`
+        ]) {
+
+            const result = parseLocalizationTable(JSON.stringify({
+                schemaVersion: 1,
+                locale,
+                messages: []
+            }))
+
+            assert.equal(result.table, undefined, `locale ${locale} must be rejected`)
+            assert.deepEqual(codes(result.diagnostics), ["LOC_INVALID_LOCALE"], `locale ${locale}`)
+        }
+    })
 })
