@@ -333,16 +333,45 @@ describe("Locale case policy (COD-64)", () => {
         assert.deepEqual(codes(service.getDiagnostics()), ["LOC_INVALID_LOCALE"])
     })
 
-    it("rejects a non-canonical initial locale and chooses a registered locale explicitly", () => {
+    it("rejects a non-canonical initial locale without choosing by table order", () => {
 
+        const tables = [table("en-US", [["a", "A"]]), table("ru-RU", [["a", "А"]])]
+        const service = new LocalizationService({ tables, locale: "en-us" })
+        const reversed = new LocalizationService({ tables: [...tables].reverse(), locale: "en-us" })
+
+        for (const instance of [service, reversed]) {
+            assert.equal(instance.getLocale(), "en-us")
+            assert.equal(instance.t("a"), "[[a]]")
+            assert.deepEqual(codes(instance.getDiagnostics()), [
+                "LOC_INVALID_LOCALE",
+                "LOC_MISSING_TRANSLATION"
+            ])
+        }
+
+        assert.deepEqual(service.getDiagnostics(), reversed.getDiagnostics())
+    })
+
+    it("uses only a registered configured fallback to recover from an invalid initial locale", () => {
+
+        const tables = [table("ru-RU", [["a", "А"]]), table("en-US", [["a", "A"]])]
         const service = new LocalizationService({
-            tables: [table("en-US", [["a", "A"]]), table("ru-RU", [["a", "А"]])],
-            locale: "en-us"
+            tables,
+            locale: "en-us",
+            fallbackLocale: "en-US"
+        })
+        const reversed = new LocalizationService({
+            tables: [...tables].reverse(),
+            locale: "en-us",
+            fallbackLocale: "en-US"
         })
 
-        assert.equal(service.getLocale(), "en-US")
-        assert.equal(service.t("a"), "A")
-        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_INVALID_LOCALE"])
+        for (const instance of [service, reversed]) {
+            assert.equal(instance.getLocale(), "en-US")
+            assert.equal(instance.t("a"), "A")
+            assert.deepEqual(codes(instance.getDiagnostics()), ["LOC_INVALID_LOCALE"])
+        }
+
+        assert.deepEqual(service.getDiagnostics(), reversed.getDiagnostics())
     })
 
     it("disables a non-canonical fallback locale with an error diagnostic", () => {
