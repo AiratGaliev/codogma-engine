@@ -75,10 +75,6 @@ function parseErrorDiagnostic(sourceText: string, error: unknown, file: string |
         diagnostic.file = file;
     }
 
-    if (line !== undefined && column !== undefined) {
-        diagnostic.messageId = `${line}:${column}`;
-    }
-
     return diagnostic;
 }
 

@@ -7,7 +7,8 @@
  * Fallback policy (deterministic, see docs/localization.md):
  *
  * 1. Look up the message id in the active locale table.
- * 2. If absent, look it up in the configured fallback locale (when set).
+ * 2. If absent, look it up in the configured fallback locale (when set and
+ *    registered; a lazily registered fallback becomes active automatically).
  * 3. If still absent, return the visible marker `[[<id>]]` and record a
  *    `LOC_MISSING_TRANSLATION` diagnostic.
  * 4. Structurally invalid tables are rejected at parse time and are never
@@ -64,12 +65,7 @@ export class LocalizationService {
     constructor(options: LocalizationServiceOptions) {
 
         for (const table of options.tables) {
-
-            if (this._tables.has(table.locale)) {
-                continue;
-            }
-
-            this._tables.set(table.locale, indexTable(table));
+            this.addTable(table);
         }
 
         this._locale = options.locale;
@@ -81,11 +77,9 @@ export class LocalizationService {
                 code: "LOC_UNKNOWN_FALLBACK_LOCALE",
                 severity: "warning",
                 message: `Configured fallback locale "${this._fallbackLocale}" has no localization table;`
-                    + " fallback is disabled until a table is registered.",
+                    + " fallback becomes active when its table is registered.",
                 locale: this._fallbackLocale
             });
-
-            this._fallbackLocale = null;
         }
 
         if (!this._tables.has(this._locale)) {
@@ -102,8 +96,25 @@ export class LocalizationService {
 
     /** Registers an additional parsed table at runtime (e.g. a lazily loaded locale). */
     registerTable(table: LocalizationTableV1): void {
+        this.addTable(table);
+    }
+
+    /**
+     * Registers one table; a repeated locale keeps the first table with a
+     * warning, so re-sent data can never silently replace loaded translations.
+     */
+    private addTable(table: LocalizationTableV1): void {
 
         if (this._tables.has(table.locale)) {
+
+            this.pushDiagnostic({
+                code: "LOC_DUPLICATE_REGISTRATION",
+                severity: "warning",
+                message: `A table for locale "${table.locale}" was registered more than once;`
+                    + " the first table is kept.",
+                locale: table.locale
+            });
+
             return;
         }
 
@@ -138,7 +149,7 @@ export class LocalizationService {
         this._locale = locale;
     }
 
-    /** Configured fallback locale, or `null` when fallback is disabled. */
+    /** Configured fallback locale, or `null` when no fallback is configured. */
     getFallbackLocale(): string | null {
         return this._fallbackLocale;
     }

@@ -167,6 +167,23 @@ describe("validateLocalizationProject: placeholder consistency", () => {
 
         assert.deepEqual(codes(diagnostics), [])
     })
+
+    it("does not compare placeholders of keys missing in the reference locale", () => {
+
+        // Such keys are already reported as LOC_EXTRA_KEY warnings; comparing
+        // their placeholders against the absent reference entry would add a
+        // blocking LOC_PLACEHOLDER_MISMATCH error for a consistent table set.
+        const diagnostics = validateLocalizationProject([
+            entry({ table: table("en-US", [["menu.play", "Play"]]) }),
+            entry({ table: table("ru-RU", [["menu.play", "Играть"], ["score.display", "Счёт: {score}"]]) }),
+            entry({ table: table("en-GB", [["menu.play", "Play"], ["score.display", "Score: {score}"]]) })
+        ], { fallbackLocale: "en-US" })
+
+        assert.deepEqual(
+            pairs(diagnostics),
+            ["LOC_EXTRA_KEY:ru-RU:score.display", "LOC_EXTRA_KEY:en-GB:score.display"]
+        )
+    })
 })
 
 describe("validateLocalizationProject: configuration errors", () => {

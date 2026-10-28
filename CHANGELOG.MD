@@ -23,6 +23,12 @@
 * Documents the implemented contract, fallback rules, validation semantics and known
   limitations (RTL/complex shaping/ICU not claimed) in `docs/localization.md`, and
   updates the technical specification, capability matrix and roadmap (COD-62).
+* Review fixes: a fallback locale registered later via `registerTable` becomes active
+  (previously stayed disabled), duplicate table registration warns
+  (`LOC_DUPLICATE_REGISTRATION`) and keeps the first table, placeholder validation skips
+  keys missing in the reference locale (no spurious blocking error), parse errors no
+  longer misuse the `messageId` field, and runtime placeholder-mismatch wording matches
+  the actual behavior.
 
 First release under the Codogma Engine name. Rebranded from Phaser Editor 2D (open-source v3 client fork) with version 1.0 (`source/editor/product.json`).
 

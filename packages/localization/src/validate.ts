@@ -246,7 +246,13 @@ export function validateLocalizationProject(
         }
 
         const referenceSet = sets.get(referenceLocale);
-        const referenceSignature = JSON.stringify([...(referenceSet ?? [])].sort());
+
+        // Keys absent from the reference are already reported as LOC_EXTRA_KEY.
+        if (referenceSet === undefined) {
+            continue;
+        }
+
+        const referenceSignature = JSON.stringify([...referenceSet].sort());
 
         for (const locale of localesInOrder) {
 
@@ -268,7 +274,8 @@ export function validateLocalizationProject(
                     message: `Localization key "${key}" uses different placeholders in locale`
                         + ` "${locale}" (${placeholders.join(", ") || "none"}) than in reference`
                         + ` locale "${referenceLocale}" (${referenceSet?.join(", ") || "none"}).`
-                        + " At runtime the mismatching translation is not trusted.",
+                        + " At runtime the mismatching placeholder stays visible in the text"
+                        + " with a LOC_MISSING_PARAM diagnostic.",
                     locale,
                     messageId: key,
                     file: filesByLocale.get(locale)

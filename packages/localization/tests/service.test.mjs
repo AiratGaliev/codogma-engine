@@ -137,6 +137,25 @@ describe("LocalizationService: locale switching", () => {
         assert.equal(service.t("menu.play"), "Spielen")
     })
 
+    it("warns and keeps the first table when a locale is registered twice", () => {
+
+        const service = new LocalizationService({
+            tables: [
+                table("en-US", [["menu.play", "Play"]]),
+                table("en-US", [["menu.play", "PLAY!"]])
+            ],
+            locale: "en-US"
+        })
+
+        assert.equal(service.t("menu.play"), "Play")
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_DUPLICATE_REGISTRATION"])
+
+        service.registerTable(table("en-US", [["menu.play", "PLAY!"]]))
+
+        assert.equal(service.t("menu.play"), "Play")
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_DUPLICATE_REGISTRATION"])
+    })
+
     it("exposes hasLocale and hasMessage", () => {
 
         const service = new LocalizationService({
@@ -219,17 +238,27 @@ describe("LocalizationService: deterministic fallback", () => {
         assert.match(service.getDiagnostics()[0].message, /no fallback locale is configured/)
     })
 
-    it("disables fallback with a diagnostic when the fallback locale has no table", () => {
+    it("activates the fallback once its table is registered later", () => {
 
         const service = new LocalizationService({
-            tables: [table("en-US", [["menu.play", "Play"]])],
-            locale: "en-US",
-            fallbackLocale: "de-DE"
+            tables: [table("ru-RU", [["menu.play", "Играть"]])],
+            locale: "ru-RU",
+            fallbackLocale: "en-US"
         })
 
-        assert.equal(service.getFallbackLocale(), null)
+        // Before registration: warning, marker, no fallback use.
+        assert.equal(service.getFallbackLocale(), "en-US")
         assert.equal(service.t("menu.quit"), "[[menu.quit]]")
         assert.deepEqual(codes(service.getDiagnostics()), ["LOC_UNKNOWN_FALLBACK_LOCALE", "LOC_MISSING_TRANSLATION"])
+
+        // Lazy registration re-enables fallback without recreating the service.
+        service.registerTable(table("en-US", [["menu.play", "Play"], ["menu.quit", "Quit"]]))
+
+        assert.equal(service.t("menu.quit"), "Quit")
+        assert.deepEqual(
+            codes(service.getDiagnostics()),
+            ["LOC_UNKNOWN_FALLBACK_LOCALE", "LOC_MISSING_TRANSLATION", "LOC_FALLBACK_USED"]
+        )
     })
 
     it("is deterministic: two identical runs give identical results", () => {

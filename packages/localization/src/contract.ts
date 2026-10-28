@@ -86,6 +86,8 @@ export type LocalizationDiagnosticCode =
     | "LOC_DUPLICATE_ID"
     /** The same locale appears in more than one table of a project. */
     | "LOC_DUPLICATE_LOCALE"
+    /** A table was registered for a locale that already has a table; the existing one is kept. */
+    | "LOC_DUPLICATE_REGISTRATION"
     /** A configured fallback locale has no registered table. */
     | "LOC_UNKNOWN_FALLBACK_LOCALE"
     /** The requested locale is not registered in the service. */
