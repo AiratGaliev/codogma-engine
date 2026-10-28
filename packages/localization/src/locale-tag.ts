@@ -90,7 +90,10 @@ export function canonicalLocaleTag(tag: string): string | undefined {
         }
     }
 
-    // Variants must precede extensions and private use.
+    // Variants must precede extensions and private use. BCP 47 disallows
+    // duplicate variant subtags within the same language tag.
+    const seenVariants = new Set<string>();
+
     while (index < subtags.length) {
 
         const variant = subtags[index];
@@ -99,7 +102,14 @@ export function canonicalLocaleTag(tag: string): string | undefined {
             break;
         }
 
-        canonicalSubtags.push(variant.toLowerCase());
+        const canonicalVariant = variant.toLowerCase();
+
+        if (seenVariants.has(canonicalVariant)) {
+            return undefined;
+        }
+
+        seenVariants.add(canonicalVariant);
+        canonicalSubtags.push(canonicalVariant);
         index += 1;
     }
 
