@@ -57,45 +57,80 @@ for (let i = 1; i < args.length; i++) {
     }
 }
 
-const localeDir = path.join(projectDir, "locale")
+let localeDir
 
-if (!existsSync(localeDir) || !statSync(localeDir).isDirectory()) {
-    console.error(`No locale directory: ${localeDir}`)
-    process.exit(1)
-}
+try {
+    localeDir = path.join(projectDir, "locale")
 
-const files = readdirSync(localeDir)
-    .filter(name => name.endsWith(".json"))
-    .sort()
-    .map(name => ({
-        path: `locale/${name}`,
-        text: readFileSync(path.join(localeDir, name), "utf8")
-    }))
-
-const { diagnostics, tables } = validateLocalizationSources(
-    files,
-    fallbackLocale === undefined ? {} : { fallbackLocale }
-)
-
-if (asJson) {
-    console.log(JSON.stringify({ diagnostics, validLocales: tables.map(table => table.locale) }, null, 4))
-} else {
-
-    for (const item of diagnostics) {
-
-        const where = [item.file, item.locale, item.messageId].filter(part => part !== undefined).join(", ")
-
-        console.log(`[${item.severity}] ${item.code}${where === "" ? "" : ` (${where})`}: ${item.message}`)
+    if (!existsSync(localeDir) || !statSync(localeDir).isDirectory()) {
+        console.error(`No locale directory: ${localeDir}`)
+        process.exit(2)
     }
 
-    console.log(`\nchecked ${files.length} table file(s), ${tables.length} valid, ${diagnostics.length} diagnostic(s)`)
-}
+    const files = readdirSync(localeDir)
+        .filter(name => {
+            if (!name.endsWith(".json")) {
+                return false
+            }
+            const fullPath = path.join(localeDir, name)
+            try {
+                return statSync(fullPath).isFile()
+            } catch {
+                return false
+            }
+        })
+        .sort()
+        .map(name => {
+            const fullPath = path.join(localeDir, name)
+            const text = readFileSync(fullPath, "utf8")
+            return { path: `locale/${name}`, text }
+        })
 
-if (diagnostics.some(item => item.severity === "error")) {
-    console.error("Localization tables have errors; they must not be loaded as valid translations.")
-    process.exit(1)
-}
+    const { diagnostics, tables } = validateLocalizationSources(
+        files,
+        fallbackLocale === undefined ? {} : { fallbackLocale }
+    )
 
-if (!asJson) {
-    console.log("Localization tables are valid (warnings do not block).")
+    if (asJson) {
+        console.log(JSON.stringify({ diagnostics, validLocales: tables.map(table => table.locale) }, null, 4))
+    } else {
+
+        for (const item of diagnostics) {
+
+            const where = [item.file, item.locale, item.messageId].filter(part => part !== undefined).join(", ")
+
+            console.log(`[${item.severity}] ${item.code}${where === "" ? "" : ` (${where})`}: ${item.message}`)
+        }
+
+        console.log(`\nchecked ${files.length} table file(s), ${tables.length} valid, ${diagnostics.length} diagnostic(s)`)
+    }
+
+    if (diagnostics.some(item => item.severity === "error")) {
+        console.error("Localization tables have errors; they must not be loaded as valid translations.")
+        process.exit(1)
+    }
+
+    if (!asJson) {
+        console.log("Localization tables are valid (warnings do not block).")
+    }
+
+} catch (error) {
+
+    const message = error instanceof Error ? error.message : String(error)
+
+    if (asJson) {
+        console.log(JSON.stringify({
+            diagnostics: [{
+                code: "LOC_FILE_ERROR",
+                severity: "error",
+                message: `Failed to read or process locale directory: ${message}`,
+                file: localeDir ?? projectDir
+            }],
+            validLocales: []
+        }, null, 4))
+    } else {
+        console.error(`[error] LOC_FILE_ERROR: Failed to read or process locale directory: ${message}`)
+    }
+
+    process.exit(2)
 }

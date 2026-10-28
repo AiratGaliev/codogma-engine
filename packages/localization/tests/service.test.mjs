@@ -320,6 +320,18 @@ describe("Locale case policy (COD-64)", () => {
         assert.equal(service.t("a"), "GB")
         assert.equal(service.getLocale(), "en-GB")
     })
+
+    it("setLocale rejects a non-canonical tag and keeps the previous locale", () => {
+
+        const service = new LocalizationService({
+            tables: [table("en-US", [["a", "A"]])],
+            locale: "en-US"
+        })
+
+        service.setLocale("en-us")
+        assert.equal(service.getLocale(), "en-US")
+        assert.deepEqual(codes(service.getDiagnostics()), ["LOC_UNKNOWN_LOCALE"])
+    })
 })
 
 describe("LocalizationService: diagnostic deduplication", () => {
