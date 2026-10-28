@@ -6,13 +6,16 @@ namespace colibri {
         private _iconCache: Map<string, ui.controls.IconImage>;
         private _loadIconsFromAtlas: boolean;
         private _loadResources: boolean;
+        private _svgIcons: Set<string>;
         private _atlasImage: ui.controls.IImage;
         private _atlasData: ui.controls.IAtlasData;
         private _resources: ui.ide.Resources;
 
         constructor(id: string, config?: {
             loadIconsFromAtlas?: boolean,
-            loadResources?: boolean
+            loadResources?: boolean,
+            /** icon names served as `icons/{dark|light}/<name>.svg` files instead of atlas frames */
+            svgIcons?: string[]
         }) {
 
             this._id = id;
@@ -20,6 +23,8 @@ namespace colibri {
             this._loadIconsFromAtlas = Boolean(config?.loadIconsFromAtlas);
 
             this._loadResources = Boolean(config?.loadResources);
+
+            this._svgIcons = new Set(config?.svgIcons ?? []);
 
             this._iconCache = new Map();
         }
@@ -95,7 +100,23 @@ namespace colibri {
             let lightImage: ui.controls.IImage;
             let darkImage: ui.controls.IImage;
 
-            if (this._loadIconsFromAtlas) {
+            if (this._svgIcons.has(name)) {
+
+                // Vector icons registered by the plugin (e.g. the bundled Godot
+                // editor icons): light/dark variant files live as standalone
+                // SVGs, independent from the PNG atlas pipeline.
+                if (common) {
+
+                    darkImage = this.getThemeIcon(name, "common");
+                    lightImage = darkImage;
+
+                } else {
+
+                    darkImage = this.getThemeIcon(name, "dark");
+                    lightImage = this.getThemeIcon(name, "light");
+                }
+
+            } else if (this._loadIconsFromAtlas) {
 
                 if (common) {
 
@@ -153,7 +174,9 @@ namespace colibri {
 
         private getThemeIcon(name: string, theme: "dark" | "light" | "common") {
 
-            const iconPath = this.getIconsAtlasFrameName(name, theme);
+            const iconPath = this._svgIcons.has(name)
+                ? `${name}.svg`
+                : this.getIconsAtlasFrameName(name, theme);
 
             const url = this.getPluginURL(`icons/${iconPath}`);
 

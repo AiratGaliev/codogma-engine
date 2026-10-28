@@ -121,16 +121,15 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             },
             setValue: (fx, value: string) => {
 
-                if (typeof value === "string" && value.trim() === "") {
-
-                    value = defValue;
-                }
+                // numeric colors (Phaser convention) are normalized first,
+                // otherwise parseColor would throw and the value be dropped
+                const hex = colorValueToHexString(value, defValue);
 
                 try {
 
-                    applyColor(fx, value);
+                    applyColor(fx, hex);
 
-                    fx["color__" + name] = value;
+                    fx["color__" + name] = hex;
 
                 } catch (e) {
 
@@ -153,6 +152,77 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         const rgba = colibri.ui.controls.Colors.parseColor(hex);
 
         return Phaser.Display.Color.GetColor(rgba.r, rgba.g, rgba.b);
+    }
+
+    /**
+     * Colors reach the editor as `#hex` strings (editor convention, scene JSON,
+     * Inspector) or as numbers (Phaser convention: 0xRRGGBB, e.g. tint /
+     * fillColor values coming from external tools or prefabs).
+     * `Colors.parseColor` only understands strings, so a raw numeric value
+     * used to throw inside `setValue` and be silently dropped by its catch,
+     * leaving the default color applied and polluting the console.
+     * This helper normalizes BOTH representations to the canonical `#rrggbb`
+     * string (or returns the default when the value is unusable), so color
+     * properties, model caches and code generators never assume one type.
+     */
+    export function colorValueToHexString(value: string | number | undefined | null, defValue: string): string {
+
+        // only non-negative finite numbers are valid Phaser colors; anything
+        // else (NaN, ±Infinity, negatives) falls back to the property default
+        // instead of being masked into a destructive value (e.g. black tint)
+        if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+
+            return "#" + (Math.floor(value) & 0xffffff).toString(16).padStart(6, "0");
+        }
+
+        return typeof value === "string" && value.trim() !== "" ? value : defValue;
+    }
+
+    /**
+     * Inverse of `colorValueToHexString`: parses an editor color value — a
+     * `#hex` string or a number already stored by `NumberColorProperty` —
+     * into a plain number for Phaser APIs (graphics lineStyle, rectangle
+     * fills) and code generation. The FX wrappers hold the raw model field,
+     * which may be either representation depending on load order, so the
+     * consumers must never call string methods on it directly.
+     */
+    export function colorValueToNumber(value: string | number | undefined | null, defValue: number): number {
+
+        if (typeof value === "number" && Number.isFinite(value)) {
+
+            return value;
+        }
+
+        if (typeof value === "string" && value.trim() !== "") {
+
+            const parsed = parseInt(value.trim().replace(/^#/, ""), 16);
+
+            if (!Number.isNaN(parsed)) {
+
+                return parsed;
+            }
+        }
+
+        return defValue;
+    }
+
+    /**
+     * Marker for Phaser game objects created by FX wrappers as render helpers
+     * (the Circle background/ring graphics, the Gradient object). They live in
+     * the Phaser display list (or the parent container) so Phaser renders them,
+     * but they are NOT editor objects: they have no EditorSupport and must
+     * never reach the editor object model (outline, selection, code generation,
+     * migrations). Iteration points that read raw Phaser lists filter them out
+     * through `isFXHelperObject`.
+     */
+    export function markFXHelperObject(obj: Phaser.GameObjects.GameObject): void {
+
+        (obj as any)["__codogmaFXHelper"] = true;
+    }
+
+    export function isFXHelperObject(obj: any): boolean {
+
+        return Boolean(obj && obj["__codogmaFXHelper"]);
     }
 
     /**

@@ -39,17 +39,14 @@ namespace phasereditor2d.scene.core.code {
         }
 
         valueFloat(n: number) {
-            // tslint:disable-next-line:no-construct
             this._propertyValueExpr = new Number(n).toString();
         }
 
         valueInt(n: number) {
-            // tslint:disable-next-line:no-construct
             this._propertyValueExpr = new Number(Math.floor(n)).toString();
         }
 
         valueBool(b: boolean) {
-            // tslint:disable-next-line:no-construct
             this._propertyValueExpr = new Boolean(b).toString();
         }
 

@@ -117,6 +117,59 @@ async function main() {
     }
     console.log(`\n== tools/list == ${toolNames.length} tools`)
 
+    // --- расширенная проверка совместимости Zod 4 / tool-schema (P0 follow-up) ---
+    // Официальный пакет собран под zod ^3, проект форсирует zod 4.6.7 (overrides).
+    // Проверяем, что при Zod 4 каждая схема инструмента остаётся валидным
+    // JSON Schema, ошибки валидации не роняют сервер, а контракт результата
+    // tools/call (content: array) соблюдается на живых вызовах ниже.
+    console.log("\n== tool input schemas (Zod 4 -> JSON Schema) ==")
+    for (const tool of list.result.tools) {
+        const schema = tool.inputSchema
+        assert.ok(schema && typeof schema === "object" && !Array.isArray(schema),
+            `${tool.name}: inputSchema должен быть объектом JSON Schema`)
+        assert.equal(schema.type, "object",
+            `${tool.name}: inputSchema.type должен быть "object"`)
+        assert.ok(schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties),
+            `${tool.name}: inputSchema.properties должен быть объектом`)
+        if (schema.required !== undefined) {
+            assert.ok(Array.isArray(schema.required),
+                `${tool.name}: inputSchema.required должен быть массивом`)
+            for (const req of schema.required) {
+                assert.ok(typeof req === "string" && req in schema.properties,
+                    `${tool.name}: required "${req}" отсутствует в properties`)
+            }
+        }
+    }
+    console.log(`${list.result.tools.length} tools: схемы валидны при Zod 4`)
+
+    console.log("\n== validation rejects malformed arguments without killing the server ==")
+    // 1) неверный тип значения (Zod invalid_type)
+    const badType = await request("tools/call", {
+        name: "assets-get-texture-size",
+        arguments: { texture: { key: 12345 } }
+    })
+    assert.ok(badType.error || badType.result?.isError,
+        "невалидные аргументы (число вместо string) должны отклоняться, а не выполняться")
+    // 2) полностью отсутствующие аргументы
+    const missing = await request("tools/call", {
+        name: "assets-get-texture-size",
+        arguments: {}
+    })
+    assert.ok(missing.error || missing.result?.isError,
+        "отсутствующие обязательные аргументы должны отклоняться")
+    // 3) неизвестный инструмент
+    const unknown = await request("tools/call", {
+        name: "definitely-not-a-real-tool",
+        arguments: {}
+    })
+    assert.ok(unknown.error || unknown.result?.isError,
+        "неизвестный инструмент должен возвращать ошибку")
+    console.log("невалидные вызовы отклонены (3/3), сервер остался работоспособен")
+    // сервер обязан остаться работоспособным после неудачных вызовов
+    const stillAlive = JSON.parse(await callTool("ide-get-all-scenes-in-project", {}))
+    assert.ok(Array.isArray(stillAlive.scenes),
+        "после ошибок валидации сервер должен продолжать отвечать корректно")
+
     console.log("\n== ide-get-all-scenes-in-project ==")
     const initialScenes = JSON.parse(await callTool("ide-get-all-scenes-in-project", {}))
     assert.ok(Array.isArray(initialScenes.scenes), "Ответ со сценами должен содержать массив scenes")

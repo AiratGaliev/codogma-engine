@@ -29,7 +29,8 @@ namespace phasereditor2d.ide.ui.actions {
                     id: CMD_CHECK_UPDATES,
                     category: CAT_PROJECT,
                     name: "Check for Updates...",
-                    tooltip: "Check if a new version of Codogma Engine is available."
+                    tooltip: "Check if a new version of Codogma Engine is available.",
+                    icon: resources.getIcon(resources.ICON_SEARCH_GODOT)
                 },
                 handler: {
                     testFunc: isNotWelcomeWindowScope,

@@ -65,7 +65,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return super["evenNames"]();
         }
 
-        // tslint:disable-next-line:ban-types
         listeners(event: string | symbol): Function[] {
 
             return super["listeners"](event);
@@ -81,61 +80,51 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return super["emit"](event, ...args);
         }
 
-        // tslint:disable-next-line:ban-types
         on(event: string | symbol, fn: Function, context?: any): this {
 
             return super["on"](event, fn, context);
         }
 
-        // tslint:disable-next-line:ban-types
         addListener(event: string | symbol, fn: Function, context?: any): this {
 
             return super["addListener"](event, fn, context);
         }
 
-        // tslint:disable-next-line:ban-types
         once(event: string | symbol, fn: Function, context?: any): this {
 
             return super["once"](event, fn, context);
         }
 
-        // tslint:disable-next-line:ban-types
         removeListener(event: string | symbol, fn?: Function, context?: any, once?: boolean): this {
 
             return super["removeListener"](event, fn, context, once);
         }
 
-        // tslint:disable-next-line:ban-types
         off(event: string | symbol, fn?: Function, context?: any, once?: boolean): this {
 
             return super["off"](event, fn, context, once);
         }
 
-        // tslint:disable-next-line:ban-types
         removeAllListeners(event?: string | symbol): this {
 
             return super["removeAllListeners"](event);
         }
 
-        // tslint:disable-next-line:ban-types
         addToDisplayList(displayList?: Phaser.GameObjects.Layer | Phaser.GameObjects.DisplayList): this {
 
             return super["addToDisplayList"](displayList);
         }
 
-        // tslint:disable-next-line:ban-types
         addToUpdateList(): this {
 
             return super["addToUpdateList"]();
         }
 
-        // tslint:disable-next-line:ban-types
         removeFromDisplayList(): this {
 
             return Phaser.GameObjects.GameObject.prototype.removeFromDisplayList.call(this);
         }
 
-        // tslint:disable-next-line:ban-types
         removeFromUpdateList(): this {
 
             return Phaser.GameObjects.GameObject.prototype.removeFromUpdateList.call(this);

@@ -5,26 +5,40 @@
   "description": "Codogma Engine — open-source IDE for HTML5 game development (a Phaser Editor 2D fork) with full Phaser 4.2.1 support",
   "scripts": {
     "dev": "node server/server.mjs 2>&1 | tee dev.log",
+    "dev:proxy": "CODOGMA_ALLOWED_HOSTS='*' CODOGMA_ALLOWED_ORIGINS=\"${CODOGMA_ALLOWED_ORIGINS:-*}\" node server/server.mjs 2>&1 | tee dev.log",
     "start": "node server/server.mjs",
     "mcp": "node server/mcp-launcher.mjs",
     "mcp:builtin": "node server/mcp-stdio.mjs",
     "build": "cd source/editor && npm run build",
-    "build:localization": "cd packages/localization && npm run build",
     "watch": "cd source/editor && npm start",
     "test:e2e": "node tests/mcp-e2e-test.mjs node server/mcp-launcher.mjs",
     "test:security": "node tests/security-smoke-test.mjs",
-    "test:localization": "cd packages/localization && npm test",
-    "test:localization:project": "npm run build:localization && node packages/localization/bin/validate-localization.mjs tests/workspace/test-typescript --fallback en-US",
-    "test:localization:acceptance": "npm run build:localization && node tests/localization-acceptance.mjs"
+    "test:mini-services": "node tests/mini-services-security-test.mjs",
+    "test:unit": "node --test \"tests/*.test.mjs\"",
+    "test:all": "npm run test:unit && npm run test:security && npm run test:mini-services && npm run test:e2e",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "deps:check": "depcruise server mini-services tests --config .dependency-cruiser.cjs",
+    "knip": "knip"
   },
   "license": "MIT",
   "dependencies": {
-    "@codogma/localization": "file:packages/localization",
     "@phaserjs/editor-mcp-server": "^1.0.6"
   },
   "overrides": {
     "@phaserjs/editor-mcp-server": {
       "zod": "4.6.7"
     }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "dependency-cruiser": "^18.7.0",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "knip": "^6.43.0",
+    "prettier": "^3.9.10",
+    "typescript-eslint": "^8.72.1"
   }
 }

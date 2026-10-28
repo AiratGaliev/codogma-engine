@@ -48,7 +48,6 @@ namespace phasereditor2d.animations.ui.editors {
 
             } else {
 
-                // tslint:disable-next-line:prefer-for-of
                 for (let i = 0; i < indexes.length; i++) {
 
                     const frame = frames[indexes[i]];

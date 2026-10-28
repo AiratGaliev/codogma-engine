@@ -139,7 +139,6 @@ namespace phasereditor2d.ide.core.code {
 
         try {
 
-            // tslint:disable
             eval("() => {  function pe" + c + "pe() {} }");
 
         } catch (e) {

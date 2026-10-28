@@ -1,7 +1,6 @@
 namespace phasereditor2d.pack.ui.editor.properties {
 
     import controls = colibri.ui.controls;
-    import webContentTypes = phasereditor2d.webContentTypes;
 
     export class TextureMultiAtlasSection extends BaseSection {
 

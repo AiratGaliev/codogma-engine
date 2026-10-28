@@ -207,6 +207,13 @@ namespace phasereditor2d.scene.core.json {
 
             files.sort((a, b) => b.getModTime() - a.getModTime());
 
+            // Phase 1: parse all the scene files, without running migrations yet.
+            // Migrations resolve prefab data through this finder's maps, so they
+            // must run only after the maps are complete, otherwise a scene file
+            // referencing a prefab processed later (files are sorted by mod time)
+            // would break the migration with a "Cannot find scene prefab" error.
+            const parsedFiles: Array<{ file: io.FilePath, data: ISceneData }> = [];
+
             for (const file of files) {
 
                 const content = await FileUtils.preloadAndGetFileString(file);
@@ -215,46 +222,7 @@ namespace phasereditor2d.scene.core.json {
 
                     const data = JSON.parse(content) as ISceneData;
 
-                    ScenePlugin.getInstance().runSceneDataMigrations(data);
-
-                    sceneFilename_Data_Map.set(file.getFullName(), data);
-                    {
-                        const settings = new SceneSettings();
-                        settings.readJSON(data.settings);
-                        sceneFilename_Settings_Map.set(file.getFullName(), settings);
-                    }
-
-                    if (data.id) {
-
-                        if (sceneIdSet.has(data.id)) {
-
-                            const mappedFile = prefabId_File_Map.get(data.id);
-
-                            alert(`ERROR! File ${mappedFile.getFullName()} has a duplicated ID ${data.id}. Run the command Fix Duplicated Scenes ID.`);
-
-                        } else {
-
-                            sceneIdSet.add(data.id);
-                        }
-
-                        if (data.displayList.length > 0) {
-
-                            const objData = data.displayList[data.displayList.length - 1];
-
-                            prefabObjectId_ObjectData_Map.set(data.id, objData);
-                            prefabId_File_Map.set(data.id, file);
-
-                            this.mapNestedPrefabData(
-                                prefabObjectId_ObjectData_Map, prefabId_File_Map, nestedPrefabIds, file, objData);
-                        }
-
-                        if (data.sceneType === SceneType.PREFAB) {
-
-                            prefabFiles.push(file);
-                        }
-                    }
-
-                    sceneFiles.push(file);
+                    parsedFiles.push({ file, data });
 
                 } catch (e) {
 
@@ -264,6 +232,55 @@ namespace phasereditor2d.scene.core.json {
                 monitor.step();
             }
 
+            // Phase 2: build the scene/prefab maps from the parsed data.
+
+            for (const { file, data } of parsedFiles) {
+
+                sceneFilename_Data_Map.set(file.getFullName(), data);
+                {
+                    const settings = new SceneSettings();
+                    settings.readJSON(data.settings);
+                    sceneFilename_Settings_Map.set(file.getFullName(), settings);
+                }
+
+                if (data.id) {
+
+                    if (sceneIdSet.has(data.id)) {
+
+                        const mappedFile = prefabId_File_Map.get(data.id);
+
+                        alert(`ERROR! File ${mappedFile.getFullName()} has a duplicated ID ${data.id}. Run the command Fix Duplicated Scenes ID.`);
+
+                    } else {
+
+                        sceneIdSet.add(data.id);
+                    }
+
+                    if (data.displayList.length > 0) {
+
+                        const objData = data.displayList[data.displayList.length - 1];
+
+                        prefabObjectId_ObjectData_Map.set(data.id, objData);
+                        prefabId_File_Map.set(data.id, file);
+
+                        this.mapNestedPrefabData(
+                            prefabObjectId_ObjectData_Map, prefabId_File_Map, nestedPrefabIds, file, objData);
+                    }
+
+                    if (data.sceneType === SceneType.PREFAB) {
+
+                        prefabFiles.push(file);
+                    }
+                }
+
+                sceneFiles.push(file);
+            }
+
+            // Publish the maps before running the migrations: the migrations
+            // resolve prefab data through this finder's public maps, so they
+            // must find a complete index here. The maps hold references to the
+            // same data objects that the migrations mutate, so publishing first
+            // is safe.
             this._prefabObjectId_ObjectData_Map = prefabObjectId_ObjectData_Map;
             this._nestedPrefabIds = nestedPrefabIds;
             this._sceneFilename_Data_Map = sceneFilename_Data_Map;
@@ -271,6 +288,24 @@ namespace phasereditor2d.scene.core.json {
             this._prefabId_File_Map = prefabId_File_Map;
             this._sceneFiles = sceneFiles;
             this._prefabFiles = prefabFiles;
+
+            // Phase 3: with the maps fully built, run the scene data migrations.
+            // A failure here is contained to the affected scene file, so the rest
+            // of the project keeps indexing.
+
+            for (const { file, data } of parsedFiles) {
+
+                try {
+
+                    ScenePlugin.getInstance().runSceneDataMigrations(data);
+
+                } catch (e) {
+
+                    console.error(`SceneDataTable: migrating file ${file.getFullName()}. Error: ${(e as Error).message}`);
+                }
+
+                monitor.step();
+            }
         }
 
         private mapNestedPrefabData(

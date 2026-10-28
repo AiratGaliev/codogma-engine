@@ -1,0 +1,109 @@
+{
+    "id": "07411508-4402-4da4-b168-70a411e088f8",
+    "sceneType": "SCENE",
+    "settings": {
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "Box2dAcceptance",
+        "compilerOutputLanguage": "JAVA_SCRIPT",
+        "exportClass": false,
+        "autoImport": false,
+        "box2dEnabled": true,
+        "box2dGravityX": 0,
+        "box2dGravityY": 10,
+        "box2dAllowSleep": false,
+        "box2dDebugDraw": false,
+        "box2dWorld_scale": 30
+    },
+    "displayList": [
+        {
+            "type": "Image",
+            "id": "8f836a97-d201-49da-b69f-012575bf98f5",
+            "label": "ground",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 400,
+            "y": 560,
+            "scaleX": 8,
+            "scaleY": 0.4,
+            "Box2DBodyComponent.active": true,
+            "box2dBody.enabled": true,
+            "box2dBody.bodyType": "static",
+            "box2dBody.shapeType": "box",
+            "box2dBody.friction": 0.6
+        },
+        {
+            "type": "Image",
+            "id": "1dafdb6c-322b-4ae0-9b1a-a6a8d2a30acb",
+            "label": "ball",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 200,
+            "y": 100,
+            "Box2DBodyComponent.active": true,
+            "box2dBody.enabled": true,
+            "box2dBody.bodyType": "dynamic",
+            "box2dBody.shapeType": "circle",
+            "box2dBody.restitution": 0.6,
+            "box2dBody.friction": 0.2
+        },
+        {
+            "type": "Image",
+            "id": "a464e782-c9d8-4b07-9456-b550f7383ed9",
+            "label": "crate",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 420,
+            "y": 60,
+            "Box2DBodyComponent.active": true,
+            "box2dBody.enabled": true,
+            "box2dBody.bodyType": "dynamic",
+            "box2dBody.shapeType": "box",
+            "box2dBody.density": 2,
+            "box2dBody.friction": 0.4
+        },
+        {
+            "type": "Image",
+            "id": "0ecf0bc5-f543-4b6d-87ca-a53e5399321e",
+            "label": "kinematicPlatform",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 640,
+            "y": 300,
+            "scaleX": 3,
+            "scaleY": 0.3,
+            "Box2DBodyComponent.active": true,
+            "box2dBody.enabled": true,
+            "box2dBody.bodyType": "kinematic",
+            "box2dBody.shapeType": "box"
+        },
+        {
+            "type": "Image",
+            "id": "317de9d0-d961-417f-bb05-b182fa41c107",
+            "label": "rotatedWall",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 690,
+            "y": 440,
+            "angle": 30,
+            "scaleX": 3,
+            "scaleY": 0.3,
+            "Box2DBodyComponent.active": true,
+            "box2dBody.enabled": true,
+            "box2dBody.bodyType": "static",
+            "box2dBody.shapeType": "box"
+        }
+    ],
+    "plainObjects": [],
+    "meta": {
+        "app": "Codogma Engine - Scene Editor",
+        "url": "https://phasereditor2d.com",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    }
+}

@@ -1,9 +1,18 @@
 .DS_Store
+# Local full-project archive snapshots — never commit these
 *.zip
-!phaser-editor2d-project-*.zip
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+# Workspace-mirror visibility: the snapshot walker ignores everything above,
+# so the codogma-engine-*.zip / *.tar.gz archives in the repo root are
+# re-included here to stay visible in the synced workspace view. They are
+# still never staged or committed (a pre-commit hook blocks it as well).
+!codogma-engine-*.zip
+!codogma-engine-*.tar.gz
 dev.log
 node_modules/
 tool-results/
 .idea/
 worklog.md
-packages/localization/dist/

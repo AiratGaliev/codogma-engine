@@ -56,7 +56,40 @@ function findOfficialPackage() {
 
 const official = findOfficialPackage()
 
-if (official) {
+/**
+ * Probes the configured official-package bridge: it must answer a real tool
+ * call with the documented contract (a JSON ARRAY of MCP content items). A
+ * bridge that answers with an error object (e.g. "No Codogma Engine client is
+ * connected") or does not answer at all would make the official server fail
+ * its own CallToolResult validation ("content: expected array") for every
+ * tool call — the launcher must fall back to the built-in stdio server in
+ * that case, so external MCP hosts keep working.
+ */
+async function bridgeHasConnectedEditor() {
+
+    try {
+
+        const res = await fetch(`http://${BRIDGE_HOST}:${BRIDGE_PORT}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ tool: "ide-get-all-scenes-in-project", args: {} }),
+            signal: AbortSignal.timeout(5000)
+        })
+
+        if (!res.ok) {
+
+            return false
+        }
+
+        return Array.isArray(await res.json())
+
+    } catch (e) {
+
+        return false
+    }
+}
+
+if (official && await bridgeHasConnectedEditor()) {
 
     const child = spawn(process.execPath, [official], {
         stdio: "inherit",
@@ -78,8 +111,12 @@ if (official) {
 
     // Fallback: zero-dependency built-in stdio server (same tool set via the
     // editor HTTP bridge at /editor/mcp-bridge).
-    console.error("[phaser-editor-mcp] official package not installed; using the built-in stdio fallback.")
-    console.error("[phaser-editor-mcp] run `npm install` in the project root to use the official package.")
+    if (!official) {
+        console.error("[phaser-editor-mcp] official package not installed; using the built-in stdio fallback.")
+        console.error("[phaser-editor-mcp] run `npm install` in the project root to use the official package.")
+    } else {
+        console.error(`[phaser-editor-mcp] bridge ${BRIDGE_HOST}:${BRIDGE_PORT} has no connected editor or answers a wrong contract; using the built-in stdio fallback.`)
+    }
     const fallback = spawn(process.execPath, [path.join(__dirname, "mcp-stdio.mjs")], {
         stdio: "inherit",
         env: { ...process.env }

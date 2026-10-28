@@ -1,0 +1,137 @@
+{
+    "id": "3fa2266c-6c65-4c83-aff1-4f09ec06fdff",
+    "sceneType": "SCENE",
+    "settings": {
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "FxFxAcceptance",
+        "compilerOutputLanguage": "JAVA_SCRIPT",
+        "exportClass": false,
+        "autoImport": false
+    },
+    "displayList": [
+        {
+            "type": "Image",
+            "id": "54a69896-9542-4238-8dfe-943635a5df30",
+            "label": "circleTarget",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 250,
+            "y": 200,
+            "scaleX": 1.4,
+            "scaleY": 1.4,
+            "list": [
+                {
+                    "type": "Circle",
+                    "id": "5ea3aca1-4a1a-4063-899a-636d14a0d234",
+                    "label": "circleFX",
+                    "preFX": true,
+                    "thickness": 6,
+                    "color": "#ffd24a",
+                    "backgroundColor": "#2233aa",
+                    "scale": 0.9,
+                    "feather": 0.01
+                },
+                {
+                    "type": "Bloom",
+                    "id": "64b0a02a-3983-4f7f-91f7-679622bb6c38",
+                    "label": "bloomFX",
+                    "preFX": false,
+                    "threshold": 0.3,
+                    "blurRadius": 6,
+                    "blurSteps": 8,
+                    "blurQuality": 1,
+                    "blendAmount": 0.9
+                }
+            ]
+        },
+        {
+            "type": "Image",
+            "id": "4905176c-2047-4e2b-bd75-8fc94139bf8a",
+            "label": "afterSibling",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 120,
+            "y": 420
+        },
+        {
+            "type": "Container",
+            "id": "317de9d0-d961-417f-bb05-b182fa41c107",
+            "label": "panel",
+            "x": 560,
+            "y": 210,
+            "alpha": 0.85,
+            "list": [
+                {
+                    "type": "Image",
+                    "id": "0ecf0bc5-f543-4b6d-87ca-a53e5399321e",
+                    "label": "panelDino",
+                    "texture": {
+                        "key": "dino"
+                    },
+                    "x": 0,
+                    "y": 0,
+                    "list": [
+                        {
+                            "type": "Shine",
+                            "id": "a464e782-c9d8-4b07-9456-b550f7383ed9",
+                            "label": "shineFX",
+                            "preFX": false,
+                            "radius": 0.6,
+                            "direction": 1.05,
+                            "scale": 2,
+                            "duration": 1500,
+                            "reveal": false,
+                            "yoyo": true
+                        }
+                    ]
+                },
+                {
+                    "type": "Text",
+                    "id": "1dafdb6c-322b-4ae0-9b1a-a6a8d2a30acb",
+                    "label": "caption",
+                    "x": 0,
+                    "y": 90,
+                    "originX": 0.5,
+                    "text": "nested container + shine",
+                    "color": "#ffffff"
+                }
+            ]
+        },
+        {
+            "type": "Image",
+            "id": "8f836a97-d201-49da-b69f-012575bf98f5",
+            "label": "gradientTarget",
+            "texture": {
+                "key": "dino"
+            },
+            "x": 380,
+            "y": 470,
+            "list": [
+                {
+                    "type": "Gradient",
+                    "id": "d7548c09-2f26-450a-85f4-f7aa2c7475b0",
+                    "label": "gradientFX",
+                    "preFX": true,
+                    "color1": "#ff2020",
+                    "color2": "#2020ff",
+                    "alpha": 0.45,
+                    "fromX": 0,
+                    "fromY": 0,
+                    "toX": 0,
+                    "toY": 1,
+                    "size": 1
+                }
+            ]
+        }
+    ],
+    "plainObjects": [],
+    "meta": {
+        "app": "Codogma Engine - Scene Editor",
+        "url": "https://phasereditor2d.com",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    }
+}

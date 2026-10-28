@@ -2,7 +2,6 @@ namespace phasereditor2d.pack.ui.importers {
 
     import ide = colibri.ui.ide;
     import io = colibri.core.io;
-    import webContentTypes = phasereditor2d.webContentTypes;
 
     export class FontImporter extends ContentTypeImporter {
 

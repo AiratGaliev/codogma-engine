@@ -475,7 +475,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 if (support.isPrefabInstance()) {
 
-                    // tslint:disable-next-line:forin
                     for (const key in map) {
 
                         const prop = map[key] as IProperty<any>;
@@ -488,7 +487,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 } else {
 
-                    // tslint:disable-next-line:forin
                     for (const key in map) {
 
                         const prop = map[key] as IProperty<any>;

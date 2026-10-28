@@ -2,18 +2,16 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
     import controls = colibri.ui.controls;
 
-    export function colorStringToColorNumberConverter(value: string) {
+    export function colorStringToColorNumberConverter(value: string | number) {
 
-        if (typeof (value) === "string" && value.trim() === "") {
-
-            value = "#ffffff";
-        }
-
-        // update the real object tint property
+        // tint values may arrive as numbers (Phaser convention: 0xRRGGBB from
+        // external tools / prefabs); normalize to the #hex string first,
+        // otherwise parseColor would throw and the tint silently become 0
+        const hex = colorValueToHexString(value, "#ffffff");
 
         try {
 
-            const rgba = controls.Colors.parseColor(value);
+            const rgba = controls.Colors.parseColor(hex);
 
             const color = Phaser.Display.Color.GetColor(rgba.r, rgba.g, rgba.b);
 
@@ -50,9 +48,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 obj[name] = validColor;
 
-                // store the original, string color value in the object
-
-                obj["tint_" + name] = value;
+                // store the canonical #hex string in the object: the raw value
+                // may be a number (Phaser convention), and the cache is what
+                // writeJSON persists — a raw number here would bounce back on
+                // every load and keep hitting the parseColor string path
+                obj["tint_" + name] = colorValueToHexString(value, "#ffffff");
             },
             valueToCodeConverter: colorStringToColorNumberConverter
         };

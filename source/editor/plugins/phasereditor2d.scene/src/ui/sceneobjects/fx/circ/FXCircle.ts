@@ -58,10 +58,12 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 parent.y ?? 0,
                 width,
                 height,
-                parseInt(this.backgroundColor.replace("#", ""), 16),
+                colorValueToNumber(this.backgroundColor, 0xff0000),
                 0.4
             );
+            markFXHelperObject(background);
             const ring = this.scene.add.graphics();
+            markFXHelperObject(ring);
             let lastWidth = width;
             let lastHeight = height;
 
@@ -93,7 +95,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 background.setDepth((target.depth ?? 0) - 0.001);
                 background.setScrollFactor(target.scrollFactorX ?? 1, target.scrollFactorY ?? 1);
 
-                const color = parseInt(this.color.replace("#", ""), 16);
+                const color = colorValueToNumber(this.color, 0xff33b2);
                 const originX = target.originX ?? 0.5;
                 const originY = target.originY ?? 0.5;
                 const x = -originX * size.width + (size.width - size.width * circleScale) / 2;

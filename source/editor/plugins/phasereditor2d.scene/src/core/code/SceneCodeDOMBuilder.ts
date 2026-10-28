@@ -988,8 +988,10 @@ namespace phasereditor2d.scene.core.code {
                 const scale = Math.max(0.01, circle.scale);
                 const thickness = Math.max(0.01, circle.thickness);
                 const feather = Math.max(0, circle.feather);
-                const backgroundColor = "0x" + circle.backgroundColor.replace("#", "");
-                const ringColor = "0x" + circle.color.replace("#", "");
+                // qualified call (no import alias): the compiled alias would read
+                // ui.sceneobjects eagerly at file load, before the ui namespace exists
+                const backgroundColor = "0x" + ui.sceneobjects.colorValueToHexString(circle.backgroundColor, "#ff0000").replace("#", "");
+                const ringColor = "0x" + ui.sceneobjects.colorValueToHexString(circle.color, "#ff33b2").replace("#", "");
                 const syncCode = [
                     "const " + backgroundName + " = " + sceneExpr + ".add.rectangle(" + parent + ".x ?? 0, " + parent + ".y ?? 0, " + widthExpr + ", " + heightExpr + ", " + backgroundColor + ", 0.4);",
                     "const " + ringName + " = " + sceneExpr + ".add.graphics();",

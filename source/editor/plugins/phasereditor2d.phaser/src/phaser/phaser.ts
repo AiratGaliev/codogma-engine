@@ -135700,7 +135700,8 @@ declare namespace Phaser {
              * @param y The y coordinate of the pixel within the Texture.
              * @param key The unique string-based key of the Texture.
              * @param frame The string or index of the Frame.
-             * @returns A Color object populated with the color values of the requested pixel,or `null` if the coordinates were out of bounds.
+             * @returns A Color object populated with the color values of the requested pixel,
+or `null` if the coordinates were out of bounds.
              */
             getPixel(x: number, y: number, key: string, frame?: string | number): Phaser.Display.Color | null;
 
@@ -137436,7 +137437,8 @@ declare namespace Phaser {
                  * @param insertNull Controls how empty tiles (those with an index of -1) are stored in
                  * the LayerData. If `true`, empty tile positions are stored as `null`. If `false`, a Tile object
                  * with an index of -1 is created for each empty position instead.
-                 * @returns - An array of LayerData objects, one for each entry injson.layer.
+                 * @returns - An array of LayerData objects, one for each entry in
+json.layer.
                  */
                 function ParseTileLayers(json: object, insertNull: boolean): Phaser.Tilemaps.LayerData[];
 
@@ -137659,7 +137661,8 @@ declare namespace Phaser {
                  * @param json The Tiled JSON object.
                  * @param insertNull Controls how empty tiles, tiles with an index of -1, in the map
                  * data are handled (see {@link Phaser.Tilemaps.Parsers.Tiled.ParseJSONTiled}).
-                 * @returns - An array of LayerData objects, one for each entry injson.layers with the type 'tilelayer'.
+                 * @returns - An array of LayerData objects, one for each entry in
+json.layers with the type 'tilelayer'.
                  */
                 function ParseTileLayers(json: object, insertNull: boolean): Phaser.Tilemaps.LayerData[];
 
@@ -138462,7 +138465,8 @@ declare namespace Phaser {
              * GID this set will use here. Default 0.
              * @param tileOffset Tile texture drawing offset.
              * If not specified, it will default to {0, 0} Default {x: 0, y: 0}.
-             * @returns Returns the Tileset object that was created or updated, or null if itfailed.
+             * @returns Returns the Tileset object that was created or updated, or null if it
+failed.
              */
             addTilesetImage(tilesetName: string, key?: string, tileWidth?: number, tileHeight?: number, tileMargin?: number, tileSpacing?: number, gid?: number, tileOffset?: object): Phaser.Tilemaps.Tileset | null;
 
@@ -144392,7 +144396,8 @@ declare namespace Phaser {
              * Returns the texture coordinates (UV in pixels) in the Tileset image for the given tile index.
              * Returns null if tile index is not contained in this Tileset.
              * @param tileIndex The unique id of the tile across all tilesets in the map.
-             * @returns Object in the form { x, y } representing the top-left UV coordinatewithin the Tileset image.
+             * @returns Object in the form { x, y } representing the top-left UV coordinate
+within the Tileset image.
              */
             getTileTextureCoordinates(tileIndex: number): object | null;
 

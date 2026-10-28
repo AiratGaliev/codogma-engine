@@ -73,6 +73,10 @@ The server should respond at that address, and product metadata should be availa
 
 **Security boundary:** the editor server and MCP bridge bind to IPv4 loopback (`127.0.0.1`) and are intended for local development, not direct public-network exposure. Browser requests with a mismatched `Origin` or `Host` are rejected. File operations also reject paths that escape the chosen project through symbolic links, and request bodies have explicit size limits. These checks are defense-in-depth, not a substitute for keeping your machine and project files trusted.
 
+**Running behind a reverse proxy:** a local proxy that publishes the editor (a sandbox preview, a tunnel, a container port-mapping) connects from loopback but forwards the public `Host` header, which the guard above rejects by default. Set <code>CODOGMA_ALLOWED_HOSTS</code> to a comma-separated list of public hostnames — or `*` when the hostname is dynamic — to accept those `Host` headers from loopback peers. `npm run dev:proxy` does this in one command. The same-origin `Origin` enforcement and the loopback-only peer check keep applying, so cross-site browser attacks stay blocked; keep the server itself off public interfaces.
+
+**Gateways that rewrite the `Host` header:** some platforms serve the page from one domain while the local gateway forwards an internal `Host` name the browser never sees, so the browser `Origin` can never equal `Host` and every API call would get a 403. For those deployments set <code>CODOGMA_ALLOWED_ORIGINS</code> to a comma-separated list of trusted browser origins: exact entries (<code>https://editor.example.com</code>), scheme-locked subdomain wildcards (<code>https://*.space-z.ai</code>), or `*` for everything (trusted environments only). A listed origin bypasses only the same-host comparison — the loopback-peer and `Host` checks still apply, and non-listed origins stay rejected. Prefer the narrowest list that works, for example <code>CODOGMA_ALLOWED_ORIGINS='https://*.space-z.ai' npm run dev:proxy</code>.
+
 ### Select a game project
 
 By default, the server opens the test project in <code>tests/workspace/test-typescript</code>. This is useful for local development and CI, but it is not intended to be your own game project. Point <code>PROJECT_DIR</code> at the directory you want to edit.
@@ -132,6 +136,7 @@ Run these commands from the repository root unless noted otherwise.
 |---|---|
 | <code>npm start</code> | Start the local editor server. |
 | <code>npm run dev</code> | Start the server and pipe its output to <code>dev.log</code> (requires a shell with <code>tee</code>). |
+| <code>npm run dev:proxy</code> | Like <code>npm run dev</code>, but accept any `Host` header from loopback peers (<code>CODOGMA_ALLOWED_HOSTS=*</code>) and any browser `Origin` (<code>CODOGMA_ALLOWED_ORIGINS=*</code>, overridable) for publishing behind a trusted local reverse proxy. |
 | <code>npm run build</code> | Build/type-check the editor client through TypeScript project references. |
 | <code>npm run watch</code> | Run the editor TypeScript compiler in watch mode. Start the server separately if you need to use the editor. |
 | <code>npm run mcp</code> | Start the MCP launcher for a connected MCP client. The editor server must be running. |

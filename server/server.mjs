@@ -38,6 +38,8 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
+import { isInsideBase, safeJoin } from "./path-security.mjs"
+import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
@@ -99,93 +101,115 @@ function log(...args) {
 }
 
 /* ============================== file helpers ============================== */
+/*
+ * safeJoin / isWithinRealBase / isInsideBase live in ./path-security.mjs so
+ * they can be unit-tested directly; the TOCTOU-specific write helper below
+ * stays here because it depends on the server's PROJECT_DIR.
+ */
 
-function isWithinRealBase(base, target) {
-    const realBase = fs.realpathSync(base)
-    const isInside = candidate => candidate === realBase || candidate.startsWith(realBase + path.sep)
-    let candidate = target
+const O_NOFOLLOW = fs.constants?.O_NOFOLLOW ?? 0
 
-    while (true) {
-        try {
-            // lstat sees the link itself, unlike realpath. A dangling symlink
-            // must fail closed instead of being treated as a missing leaf
-            // under an otherwise trusted parent directory.
-            const linkOrFile = fs.lstatSync(candidate)
-
-            if (linkOrFile.isSymbolicLink()) {
-                return isInside(fs.realpathSync(candidate))
-            }
-
-            return isInside(fs.realpathSync(candidate))
-        } catch (error) {
-            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return false
-
-            // realpath(2) also reports ENOENT for a dangling symlink. Detect
-            // that case before walking up to a parent that may be in-base.
-            try {
-                if (fs.lstatSync(candidate).isSymbolicLink()) return false
-            } catch (lstatError) {
-                if (lstatError.code !== "ENOENT" && lstatError.code !== "ENOTDIR") return false
-            }
-
-            const parent = path.dirname(candidate)
-            if (parent === candidate) return false
-            candidate = parent
-        }
-    }
-}
-
-function safeJoin(base, relPath) {
-    if (typeof relPath !== "string") return null
-
-    const p = path.resolve(base, "." + path.sep + relPath.replace(/^[\\/]+/, ""))
-    if (p !== base && !p.startsWith(base + path.sep)) return null
-
-    // A lexical prefix check alone allows paths through symlinks inside the
-    // project to read or modify files elsewhere on the user's machine.
+function realBaseOrNull() {
     try {
-        if (!isWithinRealBase(base, p)) return null
+        return fs.realpathSync(PROJECT_DIR)
     } catch {
         return null
     }
-
-    return p
 }
 
-function isLoopbackAddress(address) {
-    const value = String(address || "").toLowerCase()
-    return value === "127.0.0.1" || value === "::1" || value.startsWith("::ffff:127.")
+function fdKernelPath(fd) {
+    if (process.platform !== "linux") return null
+    try {
+        return fs.readlinkSync(`/proc/self/fd/${fd}`)
+    } catch {
+        return null
+    }
 }
 
-function isLoopbackHost(hostHeader) {
-    if (typeof hostHeader !== "string" || hostHeader.length === 0) return false
+/**
+ * Open a project file for writing while closing the check-then-use (TOCTOU)
+ * gap that remains after safeJoin():
+ *
+ *  1. O_NOFOLLOW makes the open itself fail when the final path component was
+ *     swapped for a symlink between the check and the open (ELOOP → null).
+ *  2. After the open, the kernel-reported path of the open file (Linux
+ *     /proc/self/fd) is re-verified against the project's real base, so a
+ *     parent directory swapped for an outside symlink in the same window
+ *     cannot redirect the write outside the project. When the file was newly
+ *     created by this call, the stray artifact is removed again.
+ *
+ * On platforms without /proc the second check is a no-op and the O_NOFOLLOW
+ * guard plus the safeJoin() pre-check remain (documented residual).
+ *
+ * Returns a FileHandle the caller must close, or null when the target must
+ * be treated as an invalid path.
+ */
+async function openProjectFileForWrite(full) {
+    const realBase = realBaseOrNull()
+    if (!realBase) return null
+
+    let existedBefore = false
+    try {
+        existedBefore = fs.lstatSync(full).isFile()
+    } catch (e) {
+        if (e.code !== "ENOENT") return null
+    }
+
+    const flags = fs.constants.O_WRONLY | fs.constants.O_TRUNC | O_NOFOLLOW
+        | (existedBefore ? 0 : fs.constants.O_CREAT)
+
+    let handle
+    try {
+        handle = await fsp.open(full, flags, 0o666)
+    } catch (e) {
+        // ELOOP: final component is a symlink (O_NOFOLLOW). EISDIR and the
+        // rest: not a writable project file either way.
+        return null
+    }
 
     try {
-        const hostname = new URL("http://" + hostHeader).hostname.toLowerCase().replace(/\\.$/, "")
-        return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
-    } catch {
-        return false
+        const kernelPath = fdKernelPath(handle.fd)
+        if (kernelPath && !isInsideBase(realBase, kernelPath)) {
+            // The write would have landed outside the project. Remove exactly
+            // the file this call created; never a pre-existing file.
+            if (!existedBefore) {
+                try { fs.unlinkSync(kernelPath) } catch { /* best effort */ }
+            }
+            await handle.close().catch(() => { })
+            return null
+        }
+        return handle
+    } catch (e) {
+        await handle.close().catch(() => { })
+        return null
     }
 }
 
+/*
+ * Additional Host headers and browser Origins accepted from loopback peers,
+ * e.g. when the editor is published through a trusted local reverse proxy
+ * that forwards the public hostname (sandbox preview, tunnel) or rewrites
+ * the Host header to an internal gateway name. Unset stays strictly
+ * loopback; see server/request-origin.mjs for the threat model.
+ */
+const EXTRA_ALLOWED_HOSTS = parseAllowedHosts(process.env.CODOGMA_ALLOWED_HOSTS)
+const EXTRA_ALLOWED_ORIGINS = parseAllowedOrigins(process.env.CODOGMA_ALLOWED_ORIGINS)
+
 function rejectNonLocalRequest(req, res) {
-    const host = req.headers.host
-    const originHeader = req.headers.origin
-    let allowed = isLoopbackAddress(req.socket.remoteAddress) && isLoopbackHost(host)
+    const reason = evaluateRequestGuard({
+        peerAddress: req.socket.remoteAddress,
+        hostHeader: req.headers.host,
+        originHeader: req.headers.origin,
+        extraAllowedHosts: EXTRA_ALLOWED_HOSTS,
+        extraAllowedOrigins: EXTRA_ALLOWED_ORIGINS
+    })
+    if (reason === null) return false
 
-    // CLI/MCP requests generally omit Origin; browser requests must be same-origin.
-    if (allowed && originHeader !== undefined) {
-        try {
-            const origin = new URL(originHeader)
-            allowed = origin.protocol === "http:"
-                && isLoopbackHost(origin.host)
-                && origin.host.toLowerCase() === host.toLowerCase()
-        } catch {
-            allowed = false
-        }
-    }
-
-    if (allowed) return false
+    // A misconfigured proxy in front of the editor must be visible in the
+    // server output instead of surfacing to the user as an opaque 403.
+    log(`403 rejected (${reason}): peer=${req.socket.remoteAddress}`
+        + ` host=${JSON.stringify(req.headers.host)}`
+        + ` origin=${JSON.stringify(req.headers.origin)}`)
 
     res.writeHead(403, {
         "Content-Type": "text/plain; charset=utf-8",
@@ -568,7 +592,37 @@ async function handleAPI(req, res) {
             case "CreateFolder": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
+                const realBase = realBaseOrNull()
+                let existed = false
+                try {
+                    existed = fs.lstatSync(full).isDirectory()
+                } catch (e) {
+                    if (e.code !== "ENOENT") return apiError(res, "invalid path")
+                }
+                if (existed) {
+                    // mkdir(recursive) is a no-op for existing folders, but the
+                    // pre-existing path must still resolve inside the project.
+                    try {
+                        if (!realBase || !isInsideBase(realBase, fs.realpathSync(full))) {
+                            return apiError(res, "invalid path")
+                        }
+                    } catch {
+                        return apiError(res, "invalid path")
+                    }
+                    const st = await fsp.stat(full)
+                    return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
+                }
                 await fsp.mkdir(full, { recursive: true })
+                // Re-verify containment after the syscall: a parent directory
+                // swapped for an outside symlink between safeJoin() and mkdir()
+                // would place the new folder outside the project; roll back the
+                // only artifact this call created.
+                let real = null
+                try { real = fs.realpathSync(full) } catch { real = null }
+                if (!realBase || !real || !isInsideBase(realBase, real)) {
+                    await fsp.rm(full, { recursive: true, force: true }).catch(() => { })
+                    return apiError(res, "invalid path")
+                }
                 const st = await fsp.stat(full)
                 return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
             }
@@ -577,9 +631,16 @@ async function handleAPI(req, res) {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
                 await fsp.mkdir(path.dirname(full), { recursive: true })
-                await fsp.writeFile(full, body.content ?? "", "utf8")
+                const handle = await openProjectFileForWrite(full)
+                if (!handle) return apiError(res, "invalid path")
+                let st
+                try {
+                    await handle.writeFile(body.content ?? "", "utf8")
+                    st = await handle.stat()
+                } finally {
+                    await handle.close().catch(() => { })
+                }
                 hashCache.value = ""
-                const st = await fsp.stat(full)
                 return sendJSON(res, {
                     name: path.basename(body.path),
                     isFile: true,
@@ -589,9 +650,25 @@ async function handleAPI(req, res) {
             }
 
             case "DeleteFiles": {
+                const realBase = realBaseOrNull()
                 for (const p of (body.paths || [])) {
                     const full = safeJoin(PROJECT_DIR, apiPath(p))
                     if (!full || full === PROJECT_DIR) continue
+                    // Re-check the entry type immediately before the destructive
+                    // call: a symlink is unlinked (the link itself, never its
+                    // target), and anything else must still resolve inside the
+                    // project's real base at deletion time.
+                    try {
+                        const lst = fs.lstatSync(full)
+                        if (lst.isSymbolicLink()) {
+                            await fsp.unlink(full)
+                            continue
+                        }
+                        if (realBase && !isInsideBase(realBase, fs.realpathSync(full))) continue
+                    } catch (e) {
+                        if (e.code === "ENOENT") continue
+                        throw e
+                    }
                     await fsp.rm(full, { recursive: true, force: true })
                 }
                 hashCache.value = ""
@@ -603,6 +680,21 @@ async function handleAPI(req, res) {
                 const to = safeJoin(PROJECT_DIR, apiPath(body.newPath))
                 if (!from || !to) return apiError(res, "invalid path")
                 await fsp.mkdir(path.dirname(to), { recursive: true })
+                // rename(2) replaces a symlink destination atomically instead of
+                // writing through it, but a parent directory swapped for an
+                // outside symlink between safeJoin() and rename() would still
+                // move the entry out of the project. Re-verify the destination
+                // parent immediately before the syscall to shrink the window.
+                const realBase = realBaseOrNull()
+                if (realBase) {
+                    try {
+                        if (!isInsideBase(realBase, fs.realpathSync(path.dirname(to)))) {
+                            return apiError(res, "invalid path")
+                        }
+                    } catch {
+                        return apiError(res, "invalid path")
+                    }
+                }
                 await fsp.rename(from, to)
                 hashCache.value = ""
                 return sendJSON(res, {})
@@ -612,8 +704,42 @@ async function handleAPI(req, res) {
                 const from = safeJoin(PROJECT_DIR, apiPath(body.fromPath))
                 const to = safeJoin(PROJECT_DIR, apiPath(body.toPath))
                 if (!from || !to) return apiError(res, "invalid path")
+                const realBase = realBaseOrNull()
+                // Unlike rename(2), cp() writes through a symlink destination,
+                // which would overwrite the file it points to (possibly outside
+                // the project). Reject symlink targets outright.
+                let destExisted = false
+                try {
+                    const lst = fs.lstatSync(to)
+                    if (lst.isSymbolicLink()) return apiError(res, "invalid path")
+                    destExisted = true
+                } catch (e) {
+                    if (e.code !== "ENOENT") return apiError(res, "invalid path")
+                }
                 await fsp.mkdir(path.dirname(to), { recursive: true })
+                // Re-verify the destination parent right before the copy; the
+                // post-copy containment check below closes the remaining swap
+                // window by removing exactly what this call created.
+                if (realBase) {
+                    try {
+                        if (!isInsideBase(realBase, fs.realpathSync(path.dirname(to)))) {
+                            return apiError(res, "invalid path")
+                        }
+                    } catch {
+                        return apiError(res, "invalid path")
+                    }
+                }
                 await fsp.cp(from, to, { recursive: true })
+                if (realBase) {
+                    let realTo = null
+                    try { realTo = fs.realpathSync(to) } catch { realTo = null }
+                    if (!realTo || !isInsideBase(realBase, realTo)) {
+                        if (!destExisted) {
+                            await fsp.rm(to, { recursive: true, force: true }).catch(() => { })
+                        }
+                        return apiError(res, "invalid path")
+                    }
+                }
                 hashCache.value = ""
                 return sendJSON(res, { file: fileData(PROJECT_DIR, apiPath(body.toPath)) })
             }
@@ -621,6 +747,19 @@ async function handleAPI(req, res) {
             case "MoveFiles": {
                 const toDir = safeJoin(PROJECT_DIR, apiPath(body.movingToPath))
                 if (!toDir) return apiError(res, "invalid path")
+                const realBase = realBaseOrNull()
+                if (realBase) {
+                    // Re-verify the destination folder right before the moves;
+                    // renames through a parent swapped for an outside symlink
+                    // would move entries out of the project.
+                    try {
+                        if (!isInsideBase(realBase, fs.realpathSync(toDir))) {
+                            return apiError(res, "invalid path")
+                        }
+                    } catch {
+                        return apiError(res, "invalid path")
+                    }
+                }
                 for (const p of (body.movingPaths || [])) {
                     const from = safeJoin(PROJECT_DIR, apiPath(p))
                     if (!from) continue
@@ -702,8 +841,17 @@ async function handleUpload(req, res) {
                 if (!fileFull) return apiError(res, "invalid upload path")
 
                 await fsp.mkdir(dirFull, { recursive: true })
-                await fsp.writeFile(fileFull, data)
-                const st = await fsp.stat(fileFull)
+                // Same TOCTOU discipline as SetFileString: O_NOFOLLOW at open,
+                // kernel-path re-verification after the open.
+                const handle = await openProjectFileForWrite(fileFull)
+                if (!handle) return apiError(res, "invalid upload path")
+                let st
+                try {
+                    await handle.writeFile(data)
+                    st = await handle.stat()
+                } finally {
+                    await handle.close().catch(() => { })
+                }
                 fileDataOut = {
                     name: fileName,
                     isFile: true,
@@ -724,6 +872,53 @@ async function handleUpload(req, res) {
 }
 
 /* ============================== static files ============================= */
+
+/*
+ * Full-project snapshot archives (codogma-engine-<stamp>-dev+<N>commits.zip|tar.gz)
+ * are produced in the repository root for workspace hand-off. They are workspace
+ * artifacts, never committed; this route makes them downloadable through the
+ * same guarded server (loopback peer + Host/Origin checks apply to every
+ * request) without exposing anything else from the repository root.
+ */
+const ARCHIVE_NAME_PATTERN = /^codogma-engine-[A-Za-z0-9+._-]+\.(zip|tar\.gz)$/
+
+function listArchiveSnapshots() {
+    try {
+        return fs.readdirSync(ROOT, { withFileTypes: true })
+            .filter(entry => entry.isFile() && ARCHIVE_NAME_PATTERN.test(entry.name))
+            .map(entry => {
+                const full = path.join(ROOT, entry.name)
+                return { name: entry.name, full, mtimeMs: fs.statSync(full).mtimeMs }
+            })
+    } catch (e) {
+        return []
+    }
+}
+
+function serveArchive(req, res, name) {
+    if (!ARCHIVE_NAME_PATTERN.test(name) || path.dirname(path.join(ROOT, name)) !== ROOT) {
+        res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
+        res.end("Invalid archive name")
+        return
+    }
+
+    let st
+    try {
+        st = fs.statSync(path.join(ROOT, name))
+    } catch (e) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
+        res.end("Archive not found — GET /archive/ lists the newest snapshot")
+        return
+    }
+
+    res.writeHead(200, {
+        "Content-Type": name.endsWith(".zip") ? "application/zip" : "application/gzip",
+        "Content-Length": st.size,
+        "Content-Disposition": `attachment; filename="${name}"`,
+        "Cache-Control": "no-store"
+    })
+    fs.createReadStream(path.join(ROOT, name)).pipe(res)
+}
 
 function serveFile(req, res, absPath, cacheControl) {
     let st
@@ -795,6 +990,28 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(302, { Location: "/editor/" })
             res.end()
             return
+        }
+
+        // full-project archive snapshots: /archive/ redirects to the newest
+        // codogma-engine-*.zip|tar.gz, /archive/<name> streams that file
+        if (urlPath === "/archive" || urlPath === "/archive/" || urlPath.startsWith("/archive/")) {
+            if (req.method !== "GET" && req.method !== "HEAD") {
+                res.writeHead(405, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "Allow": "GET, HEAD" })
+                res.end("Method Not Allowed")
+                return
+            }
+            if (urlPath === "/archive" || urlPath === "/archive/") {
+                const latest = listArchiveSnapshots().sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
+                if (!latest) {
+                    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
+                    res.end("No archive snapshots found in the project root")
+                    return
+                }
+                res.writeHead(302, { Location: "/archive/" + encodeURIComponent(latest.name) })
+                res.end()
+                return
+            }
+            return serveArchive(req, res, urlPath.slice("/archive/".length))
         }
 
         // MCP server (Model Context Protocol, JSON-RPC over Streamable HTTP)

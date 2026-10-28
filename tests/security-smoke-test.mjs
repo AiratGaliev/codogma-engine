@@ -33,6 +33,7 @@ function request(port, requestPath, { method = "GET", headers = {}, body } = {})
             res.on("data", chunk => chunks.push(chunk))
             res.on("end", () => resolve({
                 status: res.statusCode,
+                headers: res.headers,
                 body: Buffer.concat(chunks).toString("utf8")
             }))
         })
@@ -164,6 +165,8 @@ async function main() {
         await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
         await fs.symlink(path.join(outsideDir, "secret.txt"), path.join(projectDir, "upload-link.txt"), "file")
         await fs.symlink(path.join(outsideDir, "project-config.json"), path.join(projectDir, "phasereditor2d.json"), "file")
+        await fs.mkdir(path.join(projectDir, "inside-dir"), { recursive: true })
+        await fs.symlink(path.join(projectDir, "inside-dir"), path.join(projectDir, "inside-link"), "dir")
     } catch (error) {
         const canSkipForWindows = process.platform === "win32"
             && ["EPERM", "EACCES", "ENOTSUP"].includes(error.code)
@@ -171,7 +174,7 @@ async function main() {
         if (!canSkipForWindows) throw error
 
         symlinkChecksAvailable = false
-        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt", "phasereditor2d.json"]) {
+        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt", "phasereditor2d.json", "inside-link", "inside-dir"]) {
             await fs.rm(path.join(projectDir, name), { force: true, recursive: true })
         }
         console.warn("Skipping symlink-specific checks: Windows does not permit creating symbolic links in this environment.")
@@ -182,7 +185,7 @@ async function main() {
     if (bridgePort === port) bridgePort = await freePort()
 
     let logs = ""
-    const server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
+    let server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
         cwd: ROOT,
         env: {
             ...process.env,
@@ -282,6 +285,112 @@ async function main() {
                 "multipart uploads must reject a file symlink escaping the project")
             assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
                 "multipart uploads must not overwrite a file outside the project")
+
+            // --- success-path sanity for the hardened write path ---
+            const api = (method, body) => request(port, "/editor/api", {
+                method: "POST",
+                headers: { host, "content-type": "application/json" },
+                body: JSON.stringify({ method, body })
+            })
+
+            const writeOk = await api("SetFileString", { path: "in-project.txt", content: "project file content" })
+            assert.equal(writeOk.status, 200, `SetFileString must still succeed for plain project files: ${writeOk.body}`)
+            assert.equal(JSON.parse(writeOk.body).error, undefined, "SetFileString success must not carry an error")
+            const written = await fs.readFile(path.join(projectDir, "in-project.txt"), "utf8")
+            assert.equal(written, "project file content", "written content must be readable back from disk")
+
+            const uploadedOk = await request(port, "/editor/upload", {
+                method: "POST",
+                headers: { host, "content-type": `multipart/form-data; boundary=${boundary}` },
+                body: [
+                    `--${boundary}`,
+                    `Content-Disposition: form-data; name="uploadTo"`,
+                    "",
+                    "",
+                    `--${boundary}`,
+                    `Content-Disposition: form-data; name="file"; filename="uploaded.txt"`,
+                    "Content-Type: text/plain",
+                    "",
+                    "uploaded-content",
+                    `--${boundary}--`,
+                    ""
+                ].join("\r\n")
+            })
+            assert.equal(uploadedOk.status, 200, `plain upload must still succeed: ${uploadedOk.body}`)
+            assert.equal(await fs.readFile(path.join(projectDir, "uploaded.txt"), "utf8"), "uploaded-content",
+                "uploaded content must be readable back from disk")
+
+            const copyOk = await api("CopyFile", { fromPath: "in-project.txt", toPath: "copy-in-project.txt" })
+            assert.equal(copyOk.status, 200, `CopyFile must still succeed inside the project: ${copyOk.body}`)
+            await assert.doesNotReject(fs.access(path.join(projectDir, "copy-in-project.txt")),
+                "copied file must exist")
+
+            // --- create-folder escape attempts ---
+            const mkdirEscape = await api("CreateFolder", { path: "outside-link/newdir" })
+            assert.equal(JSON.parse(mkdirEscape.body).error, "invalid path",
+                "CreateFolder must reject a symlinked parent pointing outside the project")
+            await assert.rejects(fs.access(path.join(outsideDir, "newdir")), /ENOENT/,
+                "CreateFolder must not create folders outside the project")
+
+            const mkdirDangling = await api("CreateFolder", { path: "dangling-folder/sub" })
+            assert.equal(JSON.parse(mkdirDangling.body).error, "invalid path",
+                "CreateFolder must reject dangling-symlink parents")
+            await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
+                "CreateFolder must not create the dangling symlink target")
+
+            // --- copy escape attempts ---
+            const copyFromOutside = await api("CopyFile", { fromPath: "outside-link/secret.txt", toPath: "copy-outside.txt" })
+            assert.equal(JSON.parse(copyFromOutside.body).error, "invalid path",
+                "CopyFile must reject a source symlink escaping the project")
+            await assert.rejects(fs.access(path.join(projectDir, "copy-outside.txt")), /ENOENT/,
+                "CopyFile must not copy outside content into the project through a symlink")
+
+            const copyToSymlink = await api("CopyFile", { fromPath: "in-project.txt", toPath: "upload-link.txt" })
+            assert.equal(JSON.parse(copyToSymlink.body).error, "invalid path",
+                "CopyFile must reject a symlink destination it would write through")
+            assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
+                "CopyFile must not overwrite the symlink's outside target")
+
+            // --- rename / move escape attempts ---
+            const renameFromOutside = await api("RenameFile", { oldPath: "outside-link/secret.txt", newPath: "renamed.txt" })
+            assert.equal(JSON.parse(renameFromOutside.body).error, "invalid path",
+                "RenameFile must reject a source symlink escaping the project")
+            await assert.doesNotReject(fs.access(path.join(outsideDir, "secret.txt")),
+                "RenameFile must not move the outside target")
+
+            const renameToOutside = await api("RenameFile", { oldPath: "in-project.txt", newPath: "outside-link/renamed.txt" })
+            assert.equal(JSON.parse(renameToOutside.body).error, "invalid path",
+                "RenameFile must reject a destination parent outside the project")
+            await assert.doesNotReject(fs.access(path.join(projectDir, "in-project.txt")),
+                "RenameFile must keep the source file")
+
+            const moveOutside = await api("MoveFiles", { movingPaths: ["in-project.txt"], movingToPath: "outside-link" })
+            assert.equal(JSON.parse(moveOutside.body).error, "invalid path",
+                "MoveFiles must reject a destination folder outside the project")
+            await assert.doesNotReject(fs.access(path.join(projectDir, "in-project.txt")),
+                "MoveFiles must keep the moved file")
+
+            // --- delete attempts through symlinks ---
+            const deleteThroughSymlink = await api("DeleteFiles", { paths: ["outside-link/secret.txt"] })
+            assert.equal(deleteThroughSymlink.status, 200)
+            assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
+                "DeleteFiles must not delete the target of an outside symlink")
+
+            const deleteSymlink = await api("DeleteFiles", { paths: ["outside-link"] })
+            assert.equal(deleteSymlink.status, 200, "deleting an outside-pointing symlink entry must not fail")
+            assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
+                "DeleteFiles must never touch the symlink's outside target")
+            // Fail-closed: outside-pointing symlinks are invisible to the editor
+            // listings and are never followed; their removal is left to the user.
+
+            // An inside-pointing symlink is unlinked as the link itself; the
+            // target directory must survive.
+            const deleteInsideLink = await api("DeleteFiles", { paths: ["inside-link"] })
+            assert.equal(deleteInsideLink.status, 200, "deleting an inside-pointing symlink entry must succeed")
+            await assert.rejects(fs.lstat(path.join(projectDir, "inside-link")), /ENOENT/,
+                "DeleteFiles must remove the inside-pointing link itself")
+            await assert.doesNotReject(fs.access(path.join(projectDir, "inside-dir")),
+                "DeleteFiles must not delete the link's target directory")
         }
 
         // Exercise the officially distributed MCP stdio package after the Zod override.
@@ -332,10 +441,139 @@ async function main() {
                 "MCP scene creation must not create an outside folder through a dangling symlink")
         }
 
+        // --- /archive/ snapshot download route ---
+        // Full-project archives live in the repository root and are never
+        // committed. The route must serve them through the standard guard,
+        // redirect /archive/ to the newest snapshot, and reject traversal,
+        // non-archive names, wrong methods and missing files.
+        const smokeArchiveName = "codogma-engine-smoketest-20260101-0000-dev+0commits.zip"
+        const smokeArchivePath = path.join(ROOT, smokeArchiveName)
+        const smokeArchiveBody = "codogma-security-smoke archive payload"
+        await fs.writeFile(smokeArchivePath, smokeArchiveBody)
+
+        try {
+            const archiveRedirect = await request(port, "/archive/")
+            assert.equal(archiveRedirect.status, 302, "/archive/ must redirect to the newest snapshot")
+            assert.ok(
+                String(archiveRedirect.headers.location || "").includes(encodeURIComponent(smokeArchiveName)),
+                "/archive/ must redirect to the newest codogma-engine-*.zip")
+
+            const archiveFetch = await request(port, "/archive/" + encodeURIComponent(smokeArchiveName))
+            assert.equal(archiveFetch.status, 200, "a valid archive name must be served")
+            assert.equal(archiveFetch.headers["content-type"], "application/zip")
+            assert.equal(archiveFetch.body, smokeArchiveBody, "the served bytes must match the file")
+
+            const archiveTraversal = await request(port, "/archive/..%2Fpackage.json")
+            assert.equal(archiveTraversal.status, 400, "traversal names must be rejected")
+
+            const archiveBadName = await request(port, "/archive/evil.txt")
+            assert.equal(archiveBadName.status, 400, "non-archive names must be rejected")
+
+            const archiveMissing = await request(port, "/archive/codogma-engine-missing-20260101-0000-dev+0commits.zip")
+            assert.equal(archiveMissing.status, 404, "a missing archive must 404")
+
+            const archivePost = await request(port, "/archive/", { method: "POST" })
+            assert.equal(archivePost.status, 405, "only GET/HEAD are allowed")
+        } finally {
+            await fs.rm(smokeArchivePath, { force: true })
+        }
+
         const symlinkSummary = symlinkChecksAvailable
             ? "symlink containment and dangling-link protection"
             : "symlink checks skipped (permissions unavailable)"
-        console.log(`Security smoke checks passed: loopback/origin guard, ${symlinkSummary}, and official MCP/Zod compatibility.`)
+
+        // --- trusted reverse proxy scenario (CODOGMA_ALLOWED_HOSTS) ---
+        // Sandbox previews and tunnels put a local proxy in front of the
+        // loopback server; it connects from 127.0.0.1 but forwards the public
+        // Host header. The default must stay strict and the explicit
+        // allow-list must open exactly the listed hosts while keeping the
+        // same-origin Origin enforcement.
+        await stopChild(server)
+        server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
+            cwd: ROOT,
+            env: {
+                ...process.env,
+                PORT: String(port),
+                MCP_BRIDGE_PORT: String(bridgePort),
+                PROJECT_DIR: projectDir,
+                EDITOR_DIR,
+                CODOGMA_ALLOWED_HOSTS: "preview.example,alt.example"
+            },
+            stdio: ["ignore", "pipe", "pipe"]
+        })
+        server.stdout.on("data", chunk => { logs += chunk.toString("utf8") })
+        server.stderr.on("data", chunk => { logs += chunk.toString("utf8") })
+        await waitForHttpServer(port, server, () => logs)
+
+        const proxyOk = await request(port, "/editor/product.json", { headers: { host: "preview.example" } })
+        assert.equal(proxyOk.status, 200, "an allow-listed Host from a loopback proxy must be accepted")
+
+        const proxyPorted = await request(port, "/editor/product.json", { headers: { host: "alt.example:8443" } })
+        assert.equal(proxyPorted.status, 200, "the allow-list must be port-insensitive on Host")
+
+        const proxyUnknown = await request(port, "/editor/product.json", { headers: { host: "attacker.example" } })
+        assert.equal(proxyUnknown.status, 403, "non-listed Host headers must stay rejected under an allow-list")
+
+        const proxySameOrigin = await request(port, "/editor/product.json", {
+            headers: { host: "preview.example", origin: "https://preview.example" }
+        })
+        assert.equal(proxySameOrigin.status, 200, "an https same-origin request behind the proxy must be accepted")
+
+        const proxyCrossOrigin = await request(port, "/editor/product.json", {
+            headers: { host: "preview.example", origin: "https://attacker.example" }
+        })
+        assert.equal(proxyCrossOrigin.status, 403, "cross-origin requests must stay rejected behind the proxy")
+
+        // --- Host-rewriting gateway scenario (CODOGMA_ALLOWED_ORIGINS) ---
+        // Some platforms (the sandbox preview among them) rewrite the Host
+        // header to an internal gateway name the browser never sees, so the
+        // browser Origin can never equal Host. The origin allow-list must
+        // open exactly the listed origins while the attacker-origin rejection
+        // and the Host allow-list keep applying.
+        await stopChild(server)
+        server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
+            cwd: ROOT,
+            env: {
+                ...process.env,
+                PORT: String(port),
+                MCP_BRIDGE_PORT: String(bridgePort),
+                PROJECT_DIR: projectDir,
+                EDITOR_DIR,
+                CODOGMA_ALLOWED_HOSTS: "gateway.internal.example",
+                CODOGMA_ALLOWED_ORIGINS: "https://*.preview.example"
+            },
+            stdio: ["ignore", "pipe", "pipe"]
+        })
+        server.stdout.on("data", chunk => { logs += chunk.toString("utf8") })
+        server.stderr.on("data", chunk => { logs += chunk.toString("utf8") })
+        await waitForHttpServer(port, server, () => logs)
+
+        const originAllowListed = await request(port, "/editor/product.json", {
+            headers: { host: "gateway.internal.example", origin: "https://app.preview.example" }
+        })
+        assert.equal(originAllowListed.status, 200, "an allow-listed origin must pass even when Host is rewritten by the gateway")
+
+        const originWildcardSubdomain = await request(port, "/editor/product.json", {
+            headers: { host: "gateway.internal.example", origin: "https://preview-chat-1234.preview.example" }
+        })
+        assert.equal(originWildcardSubdomain.status, 200, "the subdomain wildcard must match real subdomains")
+
+        const originWrongScheme = await request(port, "/editor/product.json", {
+            headers: { host: "gateway.internal.example", origin: "http://app.preview.example" }
+        })
+        assert.equal(originWrongScheme.status, 403, "the origin allow-list must stay scheme-locked")
+
+        const originUnlisted = await request(port, "/editor/product.json", {
+            headers: { host: "gateway.internal.example", origin: "https://attacker.example" }
+        })
+        assert.equal(originUnlisted.status, 403, "unrelated origins must stay rejected by the origin allow-list")
+
+        const originUnlistedHost = await request(port, "/editor/product.json", {
+            headers: { host: "attacker.example", origin: "https://app.preview.example" }
+        })
+        assert.equal(originUnlistedHost.status, 403, "the origin allow-list must not open unlisted Host headers")
+
+        console.log(`Security smoke checks passed: loopback/origin guard, /archive/ route, reverse-proxy allow-list, origin allow-list, ${symlinkSummary}, and official MCP/Zod compatibility.`)
     } finally {
         await stopChild(mcp?.child)
         await stopChild(server)

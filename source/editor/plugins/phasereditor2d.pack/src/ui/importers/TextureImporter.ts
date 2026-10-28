@@ -1,6 +1,5 @@
 namespace phasereditor2d.pack.ui.importers {
 
-    import webContentTypes = phasereditor2d.webContentTypes;
 
     export class TextureImporter extends ContentTypeImporter {
 

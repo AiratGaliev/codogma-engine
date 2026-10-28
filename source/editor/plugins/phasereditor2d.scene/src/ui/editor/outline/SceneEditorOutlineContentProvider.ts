@@ -116,7 +116,10 @@ namespace phasereditor2d.scene.ui.editor.outline {
 
             if (parent instanceof Phaser.GameObjects.DisplayList) {
 
-                const list = [...parent.getChildren()];
+                // FX render helpers live in the raw Phaser display list but are
+                // not editor objects; never expose them in the outline
+                const list = [...parent.getChildren()]
+                    .filter(obj => !sceneobjects.isFXHelperObject(obj));
 
                 list.reverse();
 

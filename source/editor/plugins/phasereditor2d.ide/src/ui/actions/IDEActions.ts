@@ -198,6 +198,7 @@ namespace phasereditor2d.ide.ui.actions {
                     id: CMD_RELOAD_PROJECT,
                     name: "Reload Project",
                     tooltip: "Reload the project files.",
+                    icon: resources.getIcon(resources.ICON_RELOAD_GODOT),
                     category: CAT_PROJECT
                 },
                 handler: {

@@ -52,6 +52,14 @@ namespace phasereditor2d.ide {
                 )
             );
 
+            // "Check for Updates..." command (referenced by the main menu)
+
+            reg.addExtension(
+                new colibri.ui.ide.commands.CommandExtension(
+                    ui.actions.UpdateActions.registerCommands
+                )
+            );
+
             // connect the MCP bridge when the project is opened
 
             colibri.Platform.getWorkbench().eventProjectOpened.addListener(() => {

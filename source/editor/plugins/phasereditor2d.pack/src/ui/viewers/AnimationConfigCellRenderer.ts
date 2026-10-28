@@ -49,7 +49,6 @@ namespace phasereditor2d.pack.ui.viewers {
 
                 const indexes = [0, Math.floor(len / 2), len - 1];
 
-                // tslint:disable-next-line:prefer-for-of
                 for (let i = 0; i < indexes.length; i++) {
 
                     const frame = frames[indexes[i]];
