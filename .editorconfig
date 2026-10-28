@@ -1,0 +1,17 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+# Generated upstream declarations have unusual embedded carriage returns.
+# Let Git preserve this file byte-for-byte; do not auto-normalize it in editors.
+[source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts]
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
