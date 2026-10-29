@@ -13,7 +13,7 @@ import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, readFilePrefixSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -529,6 +529,48 @@ test("copyProjectEntrySafely rejects an outside destination-parent swap before c
         fsp.open = originalOpen
         try { fs.rmSync(destination, { recursive: true, force: true }) } catch {}
         try { fs.renameSync(parkedDestination, destination) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+
+test("readFilePrefixSafely returns only the requested prefix and marks truncation", async () => {
+    const t = createTempTree()
+    const source = path.join(t.base, "large.txt")
+    fs.writeFileSync(source, "0123456789abcdef")
+    try {
+        const result = await readFilePrefixSafely(t.base, source, 8)
+        assert.equal(result.buffer.toString("utf8"), "01234567")
+        assert.equal(result.buffer.length, 8)
+        assert.equal(result.size, 16)
+        assert.equal(result.truncated, true)
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("readFilePrefixSafely does not mark an in-limit file as truncated", async () => {
+    const t = createTempTree()
+    const source = path.join(t.base, "small.txt")
+    fs.writeFileSync(source, "short")
+    try {
+        const result = await readFilePrefixSafely(t.base, source, 8)
+        assert.equal(result.buffer.toString("utf8"), "short")
+        assert.equal(result.size, 5)
+        assert.equal(result.truncated, false)
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("readFilePrefixSafely never returns content from an outside symlink", async () => {
+    const t = createTempTree()
+    const link = path.join(t.base, "external.txt")
+    try {
+        fs.symlinkSync(path.join(t.outside, "secret.txt"), link, "file")
+        await assert.rejects(readFilePrefixSafely(t.base, link, 32), /invalid or unreadable project file/)
+        assert.equal(fs.readFileSync(path.join(t.outside, "secret.txt"), "utf8"), "secret")
+    } finally {
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
