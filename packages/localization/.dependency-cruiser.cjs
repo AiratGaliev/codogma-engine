@@ -22,7 +22,7 @@ module.exports = {
     ],
     options: {
         doNotFollow: { path: "node_modules" },
-        tsConfig: "tsconfig.json",
+        tsConfig: { fileName: "tsconfig.json" },
         moduleSystems: ["es6", "cjs"],
         enhancedResolveOptions: { exportsFields: ["exports"] }
     }
