@@ -79,6 +79,28 @@ function isLoopbackHostname(hostname) {
     return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost";
 }
 
+function isAllowedHost(hostHeader) {
+
+    if (typeof hostHeader !== "string" || hostHeader.length === 0) return false;
+
+    try {
+
+        const parsed = new URL("http://" + hostHeader);
+
+        if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+            return false;
+        }
+
+        const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+
+        return isLoopbackHostname(hostname);
+
+    } catch (e) {
+
+        return false;
+    }
+}
+
 /**
  * Non-browser callers (the official MCP stdio server, curl) omit Origin and are
  * accepted. Browser callers must be loopback (the editor page) or explicitly
@@ -220,6 +242,15 @@ function sendToEditors(message) {
 
 const server = createServer(async (req, res) => {
 
+    // Require a loopback Host as well as a loopback/allow-listed Origin. This
+    // blocks DNS-rebinding requests before status/data or editor tools are reached.
+    if (!isAllowedHost(req.headers.host)) {
+
+        reject(res, 403, "Forbidden host.", req);
+
+        return;
+    }
+
     // Browser callers with a foreign Origin cannot drive editor tools.
     if (!isAllowedOrigin(req.headers.origin)) {
 
@@ -345,6 +376,14 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 
 server.on("upgrade", (req, socket, head) => {
 
+    if (!isAllowedHost(req.headers.host)) {
+
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+
+        return;
+    }
+
     if (!isAllowedOrigin(req.headers.origin)) {
 
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
@@ -413,6 +452,18 @@ wss.on("connection", (ws) => {
     });
 });
 
+// This helper has no remote-authentication protocol. Never bind it to LAN/public
+// interfaces: remote access should use an authenticated tunnel instead.
+if (!isLoopbackHostname(HOST.toLowerCase())) {
+
+    console.error("phaser-editor-mcp-bridge: refusing non-loopback bind host " + HOST + ".");
+    process.exit(1);
+}
+
+server.headersTimeout = 10_000;
+server.requestTimeout = 30_000;
+server.keepAliveTimeout = 5_000;
+
 server.listen(PORT, HOST, () => {
 
     console.log(`phaser-editor-mcp-bridge listening on http://${HOST}:${PORT} (loopback-only by default)`);
@@ -420,8 +471,4 @@ server.listen(PORT, HOST, () => {
     console.log(`- POST /  : official MCP server requests ({tool, args})`);
     console.log(`- WS   /  : editor clients connect here`);
 
-    if (HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
-
-        console.warn(`phaser-editor-mcp-bridge: MCP_BRIDGE_HOST="${HOST}" exposes this service beyond loopback.`);
-    }
 });
