@@ -462,6 +462,91 @@ function entryPathAtDirectoryHandle(handle, parentPath, leaf) {
 }
 
 /**
+ * Create a directory path component-by-component through verified parent
+ * directory handles on Linux. This prevents a parent pathname swapped to an
+ * outside symlink from redirecting recursive mkdir. Non-Linux platforms retain
+ * the necessary legacy path-based behavior with before/after containment checks;
+ * that fallback is explicitly not a portable race-free guarantee.
+ */
+export async function ensureProjectDirectorySafely(base, target) {
+    if (typeof target !== "string") return false
+
+    const lexicalBase = path.resolve(base)
+    const full = path.resolve(target)
+    if (!isInsideBase(lexicalBase, full)) return false
+
+    if (full === lexicalBase) {
+        try {
+            return fs.statSync(base).isDirectory() && fs.realpathSync(base) === fs.realpathSync(lexicalBase)
+        } catch {
+            return false
+        }
+    }
+
+    try {
+        if (!isWithinRealBase(base, full)) return false
+    } catch {
+        return false
+    }
+
+    if (process.platform !== "linux") {
+        try {
+            await fsp.mkdir(full, { recursive: true })
+            const realBase = fs.realpathSync(base)
+            const realFull = fs.realpathSync(full)
+            return isInsideBase(realBase, realFull) && fs.statSync(full).isDirectory()
+        } catch {
+            return false
+        }
+    }
+
+    const relative = path.relative(lexicalBase, full)
+    if (!relative || relative.startsWith(".." + path.sep) || relative === ".." || path.isAbsolute(relative)) {
+        return false
+    }
+
+    const segments = relative.split(path.sep).filter(Boolean)
+    let currentPath = lexicalBase
+    let currentHandle = await openSafeProjectParentDirectory(base, currentPath)
+    if (!currentHandle) return false
+
+    try {
+        for (const segment of segments) {
+            if (segment === "." || segment === ".." || segment.includes(path.sep)) return false
+            if (!isSafeOpenProjectDirectory(base, currentPath, currentHandle.fd)) return false
+
+            const childPath = path.join(currentPath, segment)
+            const operationPath = entryPathAtDirectoryHandle(currentHandle, currentPath, segment)
+
+            try {
+                await fsp.mkdir(operationPath)
+            } catch (error) {
+                if (error.code !== "EEXIST") return false
+            }
+
+            let childHandle
+            try {
+                childHandle = await fsp.open(operationPath, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0))
+            } catch {
+                return false
+            }
+
+            if (!isSafeOpenProjectDirectory(base, childPath, childHandle.fd)) {
+                await childHandle.close().catch(() => {})
+                return false
+            }
+
+            await currentHandle.close().catch(() => {})
+            currentHandle = childHandle
+            currentPath = childPath
+        }
+        return true
+    } finally {
+        await currentHandle.close().catch(() => {})
+    }
+}
+
+/**
  * Remove one project entry through an already-open parent directory descriptor
  * on Linux. The operation path is anchored to that descriptor, so swapping the
  * original parent pathname for an outside symlink after validation does not
