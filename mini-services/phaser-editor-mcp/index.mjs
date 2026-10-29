@@ -452,23 +452,25 @@ wss.on("connection", (ws) => {
     });
 });
 
+server.headersTimeout = 10_000;
+server.requestTimeout = 30_000;
+server.keepAliveTimeout = 5_000;
+
 // This helper has no remote-authentication protocol. Never bind it to LAN/public
 // interfaces: remote access should use an authenticated tunnel instead.
 if (!isLoopbackHostname(HOST.toLowerCase())) {
 
     console.error("phaser-editor-mcp-bridge: refusing non-loopback bind host " + HOST + ".");
-    process.exit(1);
+    process.exitCode = 1;
+
+} else {
+
+    server.listen(PORT, HOST, () => {
+
+        console.log(`phaser-editor-mcp-bridge listening on http://${HOST}:${PORT} (loopback-only by default)`);
+        console.log(`- GET  /  : status endpoint ({status, clients})`);
+        console.log(`- POST /  : official MCP server requests ({tool, args})`);
+        console.log(`- WS   /  : editor clients connect here`);
+
+    });
 }
-
-server.headersTimeout = 10_000;
-server.requestTimeout = 30_000;
-server.keepAliveTimeout = 5_000;
-
-server.listen(PORT, HOST, () => {
-
-    console.log(`phaser-editor-mcp-bridge listening on http://${HOST}:${PORT} (loopback-only by default)`);
-    console.log(`- GET  /  : status endpoint ({status, clients})`);
-    console.log(`- POST /  : official MCP server requests ({tool, args})`);
-    console.log(`- WS   /  : editor clients connect here`);
-
-});
