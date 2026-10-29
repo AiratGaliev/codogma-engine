@@ -187,7 +187,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 call.arg(parentBodyVar);
                 call.arg(`{ ${shapeDef.join(", ")} }`);
-                call.arg(`b2MakePolygon(b2ComputeHull([${pairStrs.join(", ")}], ${pairStrs.length / 2 || 0}), pxm(0))`);
+                call.arg(`b2MakePolygon(b2ComputeHull([${pairStrs.join(", ")}], ${pairStrs.length}), pxm(0))`);
 
             } else if (typeName === "b2CircleShape") {
                 const radius = data.radius ?? 0;

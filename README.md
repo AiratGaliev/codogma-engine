@@ -23,6 +23,8 @@ Development priorities:
 
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
+Web behaviour is a product constraint, not a final packaging detail: browser lifecycle, audio activation, WebGL context loss, mobile memory/input, iframe hosts, cross-origin isolation and initial-download cost must be covered by explicit target tests. See the [architecture risk register](docs/architecture-risk-register.md).
+
 **Target scene workflow:** a versioned, serializable scene document is the source of truth. The future Core/runtime loader will instantiate that data and attach independently authored, explicitly registered TypeScript components. A separate generated TypeScript class/file for every scene must not be required to author, preview or build a game. The target contract is defined in the [technical specification §5.3](docs/technical-specification.md#53-сцена-как-сериализуемые-данные-а-не-обязательный-генерируемый-класс), [ADR-0001](docs/decisions/ADR-0001-core-architecture.md) and [roadmap Stage 2](docs/roadmap.md#этап-2--project-model-и-собственный-typescript-componentecs-core). It is **not implemented as a complete workflow in the current editor baseline**. Existing scene serialization/code generation remains supported while the new loader and a safe migration/compatibility path are developed and accepted.
 
 ## Current capabilities

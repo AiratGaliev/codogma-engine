@@ -3,7 +3,7 @@
 | Поле | Значение |
 |---|---|
 | Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
-| Версия документа | 1.8 |
+| Версия документа | 1.9 |
 | Дата | 29.10.2026 |
 | Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
 | Связанный документ | [Дорожная карта](roadmap.md) |
@@ -600,6 +600,24 @@ P0/P1/P2 — приоритеты требований, не обещание д
 - Для target/browser matrix фиксируются необходимые API и fallback-поведение. Нельзя заявлять поддержку WebGL/WebGPU, звукового формата или compressed texture format без реальной проверки.
 - Изменение build profile должно быть воспроизводимым: настройки сериализуются, попадают в отчёт и не зависят от последнего вручную открытого состояния редактора.
 
+#### Обязательный контракт Web Runtime
+
+Web — основная среда исполнения, а не сборочная цель «после Desktop». Ограничения браузера и хоста отражаются в runtime contracts и критериях приёмки:
+
+- До первого production release определить matrix поддерживаемых браузеров/WebView, минимальные версии, устройства и ограничения целевых площадок. «Современный браузер» не является критерием.
+- Runtime имеет единый lifecycle видимости/фокуса и паузы. `visibilitychange`, потеря фокуса, реклама и ручная пауза — отдельные причины состояния; события идемпотентны. После скрытия вкладки нельзя симулировать огромный delta или выполнять неограниченный catch-up; fixed-step backlog/max substeps должны быть определены.
+- WebGL context loss — ожидаемый отказ GPU-ресурсов. Проверить `WEBGL_lose_context` восстановление или управляемый fallback/reload. Восстанавливать GPU-ресурсы из авторских/CPU-side данных; не хранить состояние игры только в GPU handles.
+- Web Audio учитывает autoplay policy: отклонённый `AudioContext.resume()` / `HTMLMediaElement.play()` не ломает gameplay. Нужен понятный user gesture для включения звука.
+- Default target не требует cross-origin isolation, `SharedArrayBuffer` или многопоточности. Threaded profile допустим только после измерения и проверки COOP/COEP/CORP/CORS, SDK, рекламных iframe и хостинга.
+- Взаимодействие с parent page/iframe использует versioned message contract, точный `origin`, schema payload, timeout и защиту от повторных команд. `postMessage` с `*` не является безопасным default.
+- Resource budget включает network bytes, decoded images, audio buffers, GPU allocations, temporary copies, atlas pages и cache. Асинхронная загрузка должна поддерживать отмену, deduplication, ограниченный retry, diagnostics и unload.
+- IndexedDB/cache/local save — best-effort storage, если браузер не подтвердил иное. Обрабатывать quota errors, private mode, очистку данных, interrupted writes и несколько вкладок.
+- Production output имеет hosting contract: WASM MIME, content encoding, cache/version strategy, asset base path, CORS/CSP, source maps и diagnostics. Service worker включается после проверки cache invalidation.
+- Initial download, time-to-first-frame, first input, memory high-water mark и long tasks измеряются отдельно на desktop и representative low-end mobile. Budget назначается после baseline; CI сохраняет raw/compressed size и build manifest.
+- Release matrix покрывает заявленные desktop/mobile browsers и официальный embedded host каждой площадки. Непроверенный target нельзя объявлять поддерживаемым.
+
+Платформенные основания: [Page Visibility API](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API), [WebGL context loss](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextlost_event), [audio autoplay](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay), [storage quotas](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) и [Godot Web export constraints](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html). См. [architecture risk register](architecture-risk-register.md).
+
 ### 10.2. CLI и разделение editor/runtime/build
 
 Headless CLI — самостоятельный интерфейс к тем же Project Model, schema, importer и build APIs, которыми пользуется редактор, а не альтернативная реализация этих правил.
@@ -872,7 +890,7 @@ Profiler должен сначала собирать воспроизводим
 - Input/scene/time services: тесты преобразования координат, UI-vs-world event routing, focus loss, scene transition/cancellation, таймеров/tweens и отсутствия callbacks после disposal.
 - Sprite/Tilemap/UI authoring: fixtures на slicing/pivot/custom collision shapes, deterministc render sorting, 9-slicing, brush/Undo/Redo, tilemap chunk metrics и разные viewport/aspect ratios.
 - Audio/storage/localization: browser autoplay/focus behavior, ресурсное освобождение, миграции save data, missing locale keys и fallback behavior.
-- Web production: target browser smoke, startup-size/report validation, source map diagnostics for development builds and assertion that editor-only code is absent from release output.
+- Web production: target browser smoke, startup-size/report validation, source map diagnostics for development builds and assertion that editor-only code is absent from release output. Acceptance также покрывает visibility/focus, blocked audio before user activation, WebGL context loss/restore, interrupted asset load, mobile memory pressure, resize/orientation/DPR, storage quota failure, hosting headers/MIME и embedded host. Desktop Chromium happy-path недостаточен.
 - Desktop: сборка, установка и smoke/acceptance на каждой заявленной ОС.
 
 CI Fast сейчас не выполняет весь перечисленный набор: E2E MCP запускается на PR в `test` и `main`, а browser UI acceptance пока требует отдельного сценария. Новые проверки добавляются по мере появления соответствующих подсистем, а не описываются в документации как уже существующие.
@@ -891,6 +909,9 @@ CI Fast сейчас не выполняет весь перечисленный
 
 ## 14. Безопасность, лицензии и происхождение кода
 
+- Project file, asset, package manifest и scene data — данные, не доверенный код. Валидация JSON не делает пользовательский TypeScript безопасным: подключённый компонент выполняется с правами контекста загрузки.
+- Editor extensions/npm packages не изолированы только из-за manifest, scope или capability metadata. До реальной sandbox boundary разрешать установку/активацию только из явно выбранного источника; показывать lifecycle scripts, version, provenance, licences и security warnings; не исполнять package ради discovery.
+- Обновление plugin/SDK/runtime не должно молча менять проект. Фиксировать compatibility range, pins/lockfile, миграции данных и rollback path. Несовместимые extension API/schema дают диагностику, а не частичную загрузку.
 - Файловые операции ограничиваются выбранным проектом и явно разрешёнными действиями. Недоверенный проект/плагин не должен автоматически получать доступ ко всему диску.
 - Запуск subprocess, обновление приложения, загрузка ресурсов и работа с секретами должны иметь явную границу доверия и обработку ошибок.
 - Сохранять применимые лицензии и upstream-notices для кода и зависимостей.
@@ -929,7 +950,7 @@ CI Fast сейчас не выполняет весь перечисленный
 
 ### 15.1. Каталог технических ссылок по подсистемам
 
-Подробный, сгруппированный по подсистемам каталог официальных руководств, исходников, кандидатов библиотек, toolchain и платформенных SDK вынесен в отдельный документ: **[docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md)**. Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.6), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
+Подробный каталог официальных руководств и кандидатов вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md). Web-first risks и уроки из Unity, Cocos Creator, Godot и Defold собраны в [architecture risk register](architecture-risk-register.md). Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.6), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
 
 Использовать каталог вместе с этим ТЗ и [дорожной картой](roadmap.md). Перед выбором зависимости перепроверять текущую версию и лицензию; ссылки являются техническими reference, не утверждённым dependency manifest.
 

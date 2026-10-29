@@ -1,6 +1,6 @@
 # Baseline производительности
 
-**Снимок репозитория:** `dev` на `754edaa1f7313409e99c3462a802d5fd430a9a01`, 27.10.2026.  
+**Базовый снимок репозитория:** `dev` на `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. Измерения остаются не снятыми; обновление commit SHA не является измерением производительности.  
 **Статус:** документ и протокол измерений созданы; достоверные численные baseline results ещё не сняты. В репозитории нет оснований утверждать конкретные FPS, CPU %, latency или размер собранной игры.
 
 ## Цель и границы
@@ -17,6 +17,8 @@
 | PERF-04 | Asset Pack import/preview | Отдельный набор фиксированных изображений, spritesheet, шрифта и видео; размер/количество файлов записать | Import duration, preview first-frame time, peak memory, ошибки и cleanup | Не измерено |
 | PERF-05 | Generated runtime scene | Fixture на Phaser 4.2.1, фиксированные объекты/FX; фиксировать browser/GPU и build | Startup time, frame-time p50/p95, long tasks, output raw/gzip size | Не измерено |
 | PERF-06 | Core vertical slice | Project → Scene → Node/Transform → component → save/reopen → preview/build fixture | Время сериализации, round-trip, start/stop/restart, build duration | Будет доступно после реализации |
+| PERF-07 | Web host lifecycle and recovery | Release fixture в foreground/background и target iframe/WebView; отдельный прогон с WEBGL_lose_context | Восстановление ресурсов/состояния, дубликаты listeners, CPU после hidden tab | Не измерено |
+| PERF-08 | Low-end mobile and first load | Зафиксированные Android/iOS device/browser/host, стабильные assets и cold cache | compressed/raw initial download, time-to-first-frame, first input, memory high-water mark, long tasks, asset failures | Не измерено |
 
 ## Протокол
 
@@ -26,6 +28,7 @@
 4. Не сравнивать разные машины/браузеры или разные fixtures без пометки. Для CPU использовать одну согласованную методику (browser performance trace либо OS process metrics) и описать способ получения результата.
 5. Сохранять trace/log или небольшую сводку в PR/CI artifact. Сначала определить baseline, затем обсуждать budgets на основании наблюдаемого workload.
 6. Не использовать один headless SwiftShader result как замену измерению целевого браузера с фактическим GPU; отдельно помечать headless/CI environment.
+7. Для Web сравнивать одинаковый artifact/build profile, viewport/DPR, browser, host/iframe policy и cache state. Фиксировать cold-cache и warm-cache; не выводить mobile performance из desktop/headless результата.
 
 ## Наблюдения из статического аудита
 

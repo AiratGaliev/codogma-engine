@@ -1,9 +1,13 @@
 # Change Log
 
-## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
+## Unreleased (dev; обновлять при каждом принятом изменении)
 
 P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
 MCP robustness, and regression suites for every defect found along the way.
+
+### Box2D / code generation
+
+* Fix: polygon shape generation passes the actual parsed vertex count to `b2ComputeHull`; a regression test checks generated code. Real Box2D browser/runtime acceptance (world lifecycle, fixed-step, scaling and cleanup) remains a separate gate.
 
 ### Editor
 
