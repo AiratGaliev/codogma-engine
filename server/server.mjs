@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, ensureProjectDirectorySafely, removeProjectEntrySafely, renameProjectEntrySafely } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -151,86 +151,54 @@ function rejectNonLocalRequest(req, res) {
 }
 
 function walkTree(dirPath, relPrefix, files, folders) {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dirPath)
+    if (!entries) return
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix ? relPrefix + "/" + entry.name : entry.name
         const full = path.join(dirPath, entry.name)
-        if (entry.isDirectory()) {
+        if (entry.isDirectory) {
             folders.push(rel)
             walkTree(full, rel, files, folders)
-        } else if (entry.isFile()) {
+        } else if (entry.isFile) {
             files.push(rel)
         }
-    }
-}
-
-/*
- * The IDE client sends file paths as `getFullName()`, which includes the
- * project root folder name as the first segment (e.g.
- * "test-typescript/scenes/Level.scene"), while GET URLs (`/editor/project/*`)
- * use paths relative to the project root ("scenes/Level.scene").
- * The official server accepts both; we normalize by stripping the leading
- * segment when it matches the project folder name.
- */
-function apiPath(p) {
-    if (typeof p !== "string" || p.length === 0) return p
-    const parts = p.split(/[\\/]/).filter(Boolean)
-    if (parts.length > 1 && parts[0] === path.basename(PROJECT_DIR)) {
-        return parts.slice(1).join("/")
-    }
-    return p
-}
-
-function fileData(projectDir, relPath) {
-    const full = safeJoin(projectDir, relPath)
-    if (!full) return null
-    try {
-        const st = fs.statSync(full)
-        return {
-            name: path.basename(relPath),
-            isFile: st.isFile(),
-            size: st.isFile() ? st.size : 0,
-            modTime: Math.floor(st.mtimeMs),
-            children: st.isFile() ? undefined : []
-        }
-    } catch (e) {
-        return null
     }
 }
 
 function buildRootFileData(projectDir) {
     const name = path.basename(projectDir)
     const children = []
-    const entries = fs.readdirSync(projectDir, { withFileTypes: true })
+    const entries = readProjectDirectoryEntriesSafelySync(projectDir, projectDir) || []
     for (const entry of entries) {
-        if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const full = path.join(projectDir, entry.name)
-        const st = fs.statSync(full)
-        if (st.isDirectory()) {
-            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(st.mtimeMs), children: [] }
-            buildFolderData(full, entry.name, sub)
+        if (entry.isDirectory) {
+            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(entry.mtimeMs), children: [] }
+            buildFolderData(projectDir, full, entry.name, sub)
             children.push(sub)
-        } else if (st.isFile()) {
-            children.push({ name: entry.name, isFile: true, size: st.size, modTime: Math.floor(st.mtimeMs) })
+        } else if (entry.isFile) {
+            children.push({ name: entry.name, isFile: true, size: entry.size, modTime: Math.floor(entry.mtimeMs) })
         }
     }
     return { name, isFile: false, size: 0, modTime: Date.now(), children }
 }
 
-function buildFolderData(dirPath, relPrefix, node) {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+function buildFolderData(projectRoot, dirPath, relPrefix, node) {
+    const entries = readProjectDirectoryEntriesSafelySync(projectRoot, dirPath)
+    if (!entries) return
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix + "/" + entry.name
         const full = path.join(dirPath, entry.name)
-        const st = fs.statSync(full)
-        if (st.isDirectory()) {
-            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(st.mtimeMs), children: [] }
-            buildFolderData(full, rel, sub)
+        if (entry.isDirectory) {
+            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(entry.mtimeMs), children: [] }
+            buildFolderData(projectRoot, full, rel, sub)
             node.children.push(sub)
-        } else {
-            node.children.push({ name: entry.name, isFile: true, size: st.size, modTime: Math.floor(st.mtimeMs) })
+        } else if (entry.isFile) {
+            node.children.push({ name: entry.name, isFile: true, size: entry.size, modTime: Math.floor(entry.mtimeMs) })
         }
     }
 }
