@@ -21,7 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { writeFileSafely } from "./path-security.mjs"
+import { openSafeProjectFileForWrite, readFileSafely, writeFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -131,7 +131,7 @@ function readSceneFile(rel) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full || !fs.existsSync(full)) return null
     try {
-        return JSON.parse(fs.readFileSync(full, "utf8"))
+        return JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 4 * 1024 * 1024))
     } catch (e) {
         return null
     }
@@ -367,7 +367,9 @@ function parseAssetPacks() {
     const packs = []
     for (const rel of findAssetPacks()) {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(PROJECT_DIR, rel), "utf8"))
+            const full = safeJoin(PROJECT_DIR, rel)
+            if (!full) continue
+            const data = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 8 * 1024 * 1024))
             const entries = []
             for (const section of Object.values(data)) {
                 if (section && Array.isArray(section.files)) {
@@ -936,7 +938,7 @@ defTool(
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
         if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
-        const buf = fs.readFileSync(full)
+        const buf = readFileSafely(PROJECT_DIR, full)
         const mime = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".svg": "image/svg+xml" }[path.extname(full).toLowerCase()] || "application/octet-stream"
         return image(buf.toString("base64"), mime)
     }
@@ -1086,9 +1088,8 @@ defTool(
     async ({ path: p }) => {
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
-        if (!full || !fs.existsSync(full) || !fs.statSync(full).isFile()) throw new Error(`File not found: ${rel}`)
-        if (fs.statSync(full).size > 1024 * 512) throw new Error("File too large")
-        return text(fs.readFileSync(full, "utf8"))
+        if (!full) throw new Error("invalid path")
+        return text(readFileSafely(PROJECT_DIR, full, "utf8", 1024 * 512))
     }
 )
 
@@ -1106,7 +1107,14 @@ defTool(
         if (!full) throw new Error("invalid path")
         if (rel.toLowerCase().endsWith(".scene")) throw new Error("Use the scene-* tools to modify scene files")
         await fsp.mkdir(path.dirname(full), { recursive: true })
-        await fsp.writeFile(full, content ?? "", "utf8")
+        const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
+        if (!handle) throw new Error("invalid path")
+        try {
+            await handle.truncate(0)
+            await handle.writeFile(content ?? "", "utf8")
+        } finally {
+            await handle.close().catch(() => {})
+        }
         notifyFilesChanged()
         return text(`Written: ${rel} (${Buffer.byteLength(content || "")} bytes)`)
     }
@@ -1137,7 +1145,9 @@ defTool(
         const phaserFile = walkFiles(PROJECT_DIR, "").find(f => /(^|\/)(phaser\.js|phaser\.min\.js)$/.test(f))
         if (phaserFile) {
             try {
-                const head = fs.readFileSync(path.join(PROJECT_DIR, phaserFile), "utf8").slice(0, 300)
+                const full = safeJoin(PROJECT_DIR, phaserFile)
+                if (!full) throw new Error("invalid path")
+                const head = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024).slice(0, 300)
                 const m = head.match(/Phaser v([\d.]+)/) || head.match(/version:\s*["']([\d.]+)/)
                 if (m) phaserVersion = m[1]
             } catch (e) { /* ignore */ }
@@ -1291,7 +1301,7 @@ function resolveTilesetImage(imageKey) {
 
     if (!full || !fs.existsSync(full)) throw new Error(`Tileset image file not found: ${url}`)
 
-    const size = parseImageSize(fs.readFileSync(full))
+    const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
 
     if (!size || !size.width || !size.height) throw new Error(`Cannot read the image size of "${imageKey}" (${url}).`)
 
@@ -2586,7 +2596,7 @@ defTool(
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
         if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
-        const size = parseImageSize(fs.readFileSync(full))
+        const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
         if (!size) throw new Error(`Cannot parse image size of ${url}`)
         return text(JSON.stringify({ key, url, ...size }, null, 2))
     }
@@ -2606,7 +2616,7 @@ defTool(
                 const full = safeJoin(PROJECT_DIR, imgUrl)
                 if (!full || !fs.existsSync(full)) throw new Error(`Bitmap font image not found: ${imgUrl}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
-                return image(fs.readFileSync(full).toString("base64"), mime)
+                return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
         }
         throw new Error(`Bitmap font "${key}" not found`)
@@ -2624,7 +2634,7 @@ defTool(
                 const full = safeJoin(PROJECT_DIR, e.url)
                 if (!full || !fs.existsSync(full)) throw new Error(`Spritesheet image not found: ${e.url}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
-                return image(fs.readFileSync(full).toString("base64"), mime)
+                return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
         }
         throw new Error(`Spritesheet "${key}" not found`)
@@ -2686,7 +2696,7 @@ defTool(
         if (!url.toLowerCase().endsWith(".json")) {
             return text(`Skeleton "${dataKey}" is binary (.skel): parse it in the editor for full info.`)
         }
-        const data = JSON.parse(fs.readFileSync(full, "utf8"))
+        const data = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024))
         const skins = (Array.isArray(data.skins) ? data.skins : [])
             .map(s => typeof s === "string" ? s : s.name).filter(Boolean)
         return text(JSON.stringify({
@@ -2709,7 +2719,7 @@ defTool(
         if (!url) throw new Error(`Tilemap "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
         if (!full || !fs.existsSync(full)) throw new Error(`Tilemap file not found: ${url}`)
-        const raw = fs.readFileSync(full, "utf8")
+        const raw = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024)
         if (url.toLowerCase().endsWith(".json")) {
             const data = JSON.parse(raw)
             return text(JSON.stringify({
@@ -2793,7 +2803,7 @@ defTool(
             if (!m) throw new Error(`Could not resolve the TTF URL for family "${family}"`)
             url = m[1]
         }
-        const pack = JSON.parse(fs.readFileSync(full, "utf8"))
+        const pack = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 8 * 1024 * 1024))
         const sectionName = Object.keys(pack).find(k => pack[k] && Array.isArray(pack[k].files)) || "section1"
         pack[sectionName] = pack[sectionName] || { files: [] }
         if (pack[sectionName].files.some(f => f.key === key)) throw new Error(`Key "${key}" already exists in ${rel}`)
