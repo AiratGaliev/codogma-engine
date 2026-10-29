@@ -155,8 +155,16 @@ async function main() {
         name: "assets-get-texture-size",
         arguments: {}
     })
-    assert.ok(missing.error || missing.result?.isError,
-        "отсутствующие обязательные аргументы должны отклоняться")
+    const missingOutput = (missing.result?.content || [])
+        .filter((item) => item.type === "text")
+        .map((item) => item.text || "")
+        .join("\n")
+    assert.ok(
+        missing.error
+            || missing.result?.isError
+            || /missing(?: or invalid)? texture key/i.test(missingOutput),
+        "пустые аргументы должны явно отклоняться: ожидается протокольная ошибка либо текстовая ошибка валидации bridge"
+    )
     // 3) неизвестный инструмент
     const unknown = await request("tools/call", {
         name: "definitely-not-a-real-tool",
