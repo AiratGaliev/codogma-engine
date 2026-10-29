@@ -5,7 +5,7 @@
 ### Tests
 
 * Added focused tests in `tests/editor-codegen.test.mjs` for Particle Emitter code generation: unset texture uses Phaser's `__DEFAULT` key, configured frames survive code generation, explicit texture keys remain intact, and clearing frames removes stale `frame` config.
-* Added lifecycle regression tests against the real `colibri.ui.controls.Controls.createImageFromBlob()` owner: blob URLs are revoked on both successful image load and decode error. Added recoverability tests for actual `ThumbnailCache` behavior when IndexedDB reads or writes reject: a fresh preview remains available, and optional persistence failures do not fail the preview.
+* Added lifecycle regression tests against the real `colibri.ui.controls.Controls.createImageFromBlob()` owner: blob URLs are revoked on both successful image load and decode error. Added recoverability tests for actual `ThumbnailCache` behavior when IndexedDB reads or writes reject: a fresh preview remains available, and optional persistence failures do not fail the preview. Added direct `AudioPreviewSection` tests for string, string-array and `{ type, url }` descriptor paths, including malformed entries.
 
 ---
 
