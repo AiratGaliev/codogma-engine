@@ -185,6 +185,110 @@ function removeCreatedFileIfStillOwned(full, fd) {
 }
 
 /**
+ * Check that an already-open read descriptor resolves to a regular file inside
+ * the selected project. The bytes are consumed from this descriptor after the
+ * check, never by reopening the pathname.
+ */
+function isSafeOpenReadFileHandle(base, target, fd) {
+    try {
+        const lexicalBase = path.resolve(base)
+        const full = path.resolve(target)
+        if (!isInsideBase(lexicalBase, full) || full === lexicalBase) return false
+
+        const realBase = fs.realpathSync(base)
+        const opened = fs.fstatSync(fd)
+        if (!opened.isFile()) return false
+
+        if (process.platform === "linux") {
+            // /proc/self/fd resolves the object actually opened, even when a
+            // parent symlink was swapped between validation and open().
+            const fdPath = fs.readlinkSync(`/proc/self/fd/${fd}`)
+            if (fdPath.endsWith(" (deleted)") || !isInsideBase(realBase, path.resolve(fdPath))) {
+                return false
+            }
+            return true
+        }
+
+        // Portable fallback: compare descriptor identity with the file reached
+        // through the current path. This detects a swap during open(), though
+        // platforms without descriptor-path introspection have weaker evidence.
+        const resolved = fs.realpathSync(full)
+        if (!isInsideBase(realBase, resolved)) return false
+        const current = fs.statSync(full)
+        return current.dev === opened.dev && current.ino === opened.ino
+    } catch {
+        return false
+    }
+}
+
+function safeReadContext(base, target) {
+    if (typeof target !== "string") return null
+
+    const lexicalBase = path.resolve(base)
+    const full = path.resolve(target)
+    if (!isInsideBase(lexicalBase, full) || full === lexicalBase) return null
+
+    try {
+        if (!isWithinRealBase(base, full)) return null
+    } catch {
+        return null
+    }
+
+    return { full }
+}
+
+/**
+ * Open a project file for reading and verify the actual object selected by the
+ * kernel. Callers must consume the returned FileHandle instead of reopening
+ * its pathname; symlinks resolving within the project remain supported.
+ */
+export async function openSafeProjectFileForRead(base, target) {
+    const context = safeReadContext(base, target)
+    if (!context) return null
+
+    let handle
+    try {
+        handle = await fsp.open(context.full, fs.constants.O_RDONLY)
+    } catch {
+        return null
+    }
+
+    if (!isSafeOpenReadFileHandle(base, context.full, handle.fd)) {
+        await handle.close().catch(() => {})
+        return null
+    }
+
+    return handle
+}
+
+/**
+ * Synchronous descriptor-based read for MCP helpers and small project files.
+ * Unsafe paths fail closed with an error; callers never receive bytes obtained
+ * by reopening a pathname after the containment check.
+ */
+export function readFileSafely(base, target, options) {
+    const context = safeReadContext(base, target)
+    if (!context) throw new Error("Refusing to read outside the project root")
+
+    let fd
+    try {
+        fd = fs.openSync(context.full, fs.constants.O_RDONLY)
+    } catch {
+        throw new Error("Unable to open a safe project file")
+    }
+
+    try {
+        if (!isSafeOpenReadFileHandle(base, context.full, fd)) {
+            throw new Error("Refusing to read an unsafe project file")
+        }
+
+        return fs.readFileSync(fd, options)
+    } finally {
+        fs.closeSync(fd)
+    }
+}
+
+/**
  * Open a project file for writing without truncating it. The caller MUST
  * truncate only after this function returns a verified handle.
  * Parent directories should be created by the caller first.
