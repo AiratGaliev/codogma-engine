@@ -396,6 +396,22 @@ ${scripts.map(s => `    <script src="${s}"></script>`).join("\n")}
 
 function readRequestBuffer(req, maxBytes) {
     return new Promise((resolve, reject) => {
+        // Reject a declared oversize body immediately instead of buffering it.
+        // Keep the streaming byte counter below as the authoritative check for
+        // chunked requests or clients that send a larger body than declared.
+        const contentLength = req.headers["content-length"]
+        const declaredLength = contentLength === undefined ? null : Number(contentLength)
+        if (Number.isSafeInteger(declaredLength) && declaredLength > maxBytes) {
+            const error = new Error("Request body too large")
+            error.statusCode = 413
+            // Continue draining so Node can finish the request cleanly while
+            // the API responds with 413 without waiting for the declared body.
+            req.on("error", () => {})
+            req.resume()
+            reject(error)
+            return
+        }
+
         const chunks = []
         let size = 0
         let settled = false
@@ -413,6 +429,7 @@ function readRequestBuffer(req, maxBytes) {
             if (size > maxBytes) {
                 settled = true
                 cleanup()
+                req.on("error", () => {})
                 req.resume()
                 const error = new Error("Request body too large")
                 error.statusCode = 413
@@ -471,7 +488,11 @@ async function handleAPI(req, res) {
     try {
         reqData = await readBodyJSON(req)
     } catch (e) {
-        return apiError(res, "invalid request body")
+        return apiError(
+            res,
+            e.statusCode === 413 ? e.message : "invalid request body",
+            e.statusCode || 400
+        )
     }
     const method = reqData.method
     const body = reqData.body || {}
