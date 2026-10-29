@@ -12,7 +12,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -189,6 +189,58 @@ test("writeFileSafely rejects a symlinked parent and preserves outside content",
             assert.equal(fs.readFileSync(path.join(t.outside, "secret.txt"), "utf8"), "secret")
         })
     } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+
+test("readFileSafely reads bytes from a verified descriptor and rejects outside symlinks", () => {
+    const t = createTempTree()
+    try {
+        assert.equal(readFileSafely(t.base, path.join(t.base, "file.txt"), "utf8"), "content")
+        fs.symlinkSync(path.join(t.outside, "secret.txt"), path.join(t.base, "secret-link.txt"), "file")
+        assert.throws(
+            () => readFileSafely(t.base, path.join(t.base, "secret-link.txt"), "utf8"),
+            /unsafe project file|outside the project root/
+        )
+        assert.equal(fs.readFileSync(path.join(t.outside, "secret.txt"), "utf8"), "secret")
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("readFileSafely rejects a parent-symlink swap between path validation and open", () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const parkedAssets = path.join(t.base, "assets-internal")
+    const target = path.join(assets, "race.txt")
+    const outsideTarget = path.join(t.outside, "race.txt")
+    fs.writeFileSync(target, "inside secret")
+    fs.writeFileSync(outsideTarget, "OUTSIDE SECRET")
+    const originalOpenSync = fs.openSync
+    let swapped = false
+
+    try {
+        fs.openSync = function (filePath, ...args) {
+            if (!swapped && filePath === target) {
+                swapped = true
+                fs.renameSync(assets, parkedAssets)
+                fs.symlinkSync(t.outside, assets, "dir")
+            }
+            return originalOpenSync.call(fs, filePath, ...args)
+        }
+
+        assert.throws(
+            () => readFileSafely(t.base, target, "utf8"),
+            /unsafe project file|outside the project root/
+        )
+        assert.equal(swapped, true, "test must inject the symlink swap immediately before open()")
+        assert.equal(fs.readFileSync(outsideTarget, "utf8"), "OUTSIDE SECRET",
+            "the outside file must not be returned to the caller")
+    } finally {
+        fs.openSync = originalOpenSync
+        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedAssets, assets) } catch {}
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
