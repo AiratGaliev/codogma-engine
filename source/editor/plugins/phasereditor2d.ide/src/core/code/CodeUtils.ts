@@ -2,6 +2,10 @@ namespace phasereditor2d.ide.core.code {
 
     import io = colibri.core.io;
 
+    /**
+     * Legacy template heuristic: a root package.json selects package-style imports.
+     * This does not validate that imported packages are declared or installed.
+     */
     export function projectHasRootPackageJson(): boolean {
         const root = colibri.ui.ide.FileUtils.getRoot();
         if (root && root.getFile("package.json")) {
@@ -90,7 +94,9 @@ namespace phasereditor2d.ide.core.code {
         const parent = file.getParent();
         const parentPath = parent.getFullName();
         const parentElements = parentPath.split("/");
-        const importFileName = includeFileExtension ? importFile.getName() : importFile.getNameWithoutExtension();
+        const importFileName = includeFileExtension
+            ? importFile.getNameWithoutExtension() + ".js"
+            : importFile.getNameWithoutExtension();
         const importFilePath = io.FilePath.join(importFile.getParent().getFullName(), importFileName);
         const importFileElements = importFilePath.split("/");
 

@@ -236,6 +236,44 @@ test("Box2D world ID expression preserves legacy variables and template-owned sc
     assert.equal(component.getWorldIdExpression(true, true), "this.scene.worldId");
 })
 
+test("ES module import paths use emitted .js extensions for scene and TypeScript sources", () => {
+    const FilePath = globalThis.colibri.core.io.FilePath;
+    const codeUtils = globalThis.phasereditor2d.ide.core.code;
+    const root = new FilePath(null, {
+        name: "project",
+        isFile: false,
+        size: 0,
+        modTime: 0,
+        children: [{
+            name: "scenes",
+            isFile: false,
+            size: 0,
+            modTime: 0,
+            children: [
+                { name: "main.scene", isFile: true, size: 0, modTime: 0 },
+                { name: "prefabs", isFile: false, size: 0, modTime: 0, children: [
+                    { name: "enemy.scene", isFile: true, size: 0, modTime: 0 }
+                ] },
+                { name: "components", isFile: false, size: 0, modTime: 0, children: [
+                    { name: "Player.ts", isFile: true, size: 0, modTime: 0 },
+                    { name: "Helper.js", isFile: true, size: 0, modTime: 0 }
+                ] }
+            ]
+        }]
+    });
+
+    const scenes = root.getFile("scenes");
+    const scene = scenes.getFile("main.scene");
+    const prefab = scenes.getFile("prefabs").getFile("enemy.scene");
+    const component = scenes.getFile("components").getFile("Player.ts");
+    const helper = scenes.getFile("components").getFile("Helper.js");
+
+    assert.equal(codeUtils.getImportPath(scene, prefab, true).importPath, "./prefabs/enemy.js");
+    assert.equal(codeUtils.getImportPath(scene, component, true).importPath, "./components/Player.js");
+    assert.equal(codeUtils.getImportPath(scene, helper, true).importPath, "./components/Helper.js");
+    assert.equal(codeUtils.getImportPath(scene, prefab, false).importPath, "./prefabs/enemy");
+})
+
 /* =========================== code helpers =========================== */
 
 test("formatToValidVarName produces identifier-safe names", () => {

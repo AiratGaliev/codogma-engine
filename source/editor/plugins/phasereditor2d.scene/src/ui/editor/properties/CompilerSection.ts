@@ -75,6 +75,12 @@ namespace phasereditor2d.scene.ui.editor.properties {
                 this.createLabel(comp, "Auto Import (ES Module)", "Automatic import used classes like prefabs and user components.")
             );
 
+            this.createBooleanField(comp, "importFileExtension",
+
+                this.createLabel(comp, "Add .js to module imports",
+                    "Use explicit .js import specifiers for native browser/Node ESM. Generated imports target emitted JavaScript modules, including scenes from .scene files and components from .ts files.")
+            );
+
             this.createStringField(
                 comp, "superClassName", "Super Class",
                 "The super class used for the scene. If it is blank (no-value) then use default value.");

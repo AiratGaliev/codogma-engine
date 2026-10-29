@@ -8,6 +8,7 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
         outputLang?: ide.core.code.SourceLang,
         exportClass?: boolean,
         autoImport?: boolean,
+        importFileExtension?: boolean,
         insertSpaces?: boolean,
         tabSize?: number,
         meta: {

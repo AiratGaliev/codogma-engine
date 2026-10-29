@@ -619,6 +619,8 @@ Web — основная среда исполнения, а не сборочн
 - Resource budget включает network bytes, decoded images, audio buffers, GPU allocations, temporary copies, atlas pages и cache. Асинхронная загрузка должна поддерживать отмену, deduplication, ограниченный retry, diagnostics и unload.
 - IndexedDB/cache/local save — best-effort storage, если браузер не подтвердил иное. Обрабатывать quota errors, private mode, очистку данных, interrupted writes и несколько вкладок.
 - Production output имеет hosting contract: WASM MIME, content encoding, cache/version strategy, asset base path, CORS/CSP, source maps и diagnostics. Service worker включается после проверки cache invalidation.
+- ESM-кодогенерация различает исходный файл и выходной модуль: `.scene` и `.ts` могут порождать `.js`; явный import suffix должен указывать на исполняемый JS, а не на исходный файл. Это проверяется отдельно для scene, prefab, superclass и user component, включая TypeScript output.
+- Наличие корневого `package.json` — только legacy template heuristic, не доказательство доступности `phaser` или `@phaserjs/editor-scripts-base`. Package-based build должен диагностировать отсутствующие dependency declarations/resolution; автоматически устанавливать зависимости не предполагается.
 - Initial download, time-to-first-frame, first input, memory high-water mark и long tasks измеряются отдельно на desktop и representative low-end mobile. Budget назначается после baseline; CI сохраняет raw/compressed size и build manifest.
 - Release matrix покрывает заявленные desktop/mobile browsers и официальный embedded host каждой площадки. Непроверенный target нельзя объявлять поддерживаемым.
 
