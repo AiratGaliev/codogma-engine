@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, ensureProjectDirectorySafely, removeProjectEntrySafely, renameProjectEntrySafely } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -542,15 +542,7 @@ async function handleAPI(req, res) {
                     const st = await fsp.stat(full)
                     return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
                 }
-                await fsp.mkdir(full, { recursive: true })
-                // Re-verify containment after the syscall: a parent directory
-                // swapped for an outside symlink between safeJoin() and mkdir()
-                // would place the new folder outside the project; roll back the
-                // only artifact this call created.
-                let real = null
-                try { real = fs.realpathSync(full) } catch { real = null }
-                if (!realBase || !real || !isInsideBase(realBase, real)) {
-                    await fsp.rm(full, { recursive: true, force: true }).catch(() => { })
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, full)) {
                     return apiError(res, "invalid path")
                 }
                 const st = await fsp.stat(full)
@@ -560,7 +552,7 @@ async function handleAPI(req, res) {
             case "SetFileString": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
-                await fsp.mkdir(path.dirname(full), { recursive: true })
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) return apiError(res, "invalid path")
                 const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
                 if (!handle) return apiError(res, "invalid path")
                 let st
@@ -581,26 +573,12 @@ async function handleAPI(req, res) {
             }
 
             case "DeleteFiles": {
-                const realBase = realBaseOrNull()
                 for (const p of (body.paths || [])) {
                     const full = safeJoin(PROJECT_DIR, apiPath(p))
                     if (!full || full === PROJECT_DIR) continue
-                    // Re-check the entry type immediately before the destructive
-                    // call: a symlink is unlinked (the link itself, never its
-                    // target), and anything else must still resolve inside the
-                    // project's real base at deletion time.
-                    try {
-                        const lst = fs.lstatSync(full)
-                        if (lst.isSymbolicLink()) {
-                            await fsp.unlink(full)
-                            continue
-                        }
-                        if (realBase && !isInsideBase(realBase, fs.realpathSync(full))) continue
-                    } catch (e) {
-                        if (e.code === "ENOENT") continue
-                        throw e
+                    if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) {
+                        return apiError(res, "invalid path")
                     }
-                    await fsp.rm(full, { recursive: true, force: true })
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
@@ -609,24 +587,13 @@ async function handleAPI(req, res) {
             case "RenameFile": {
                 const from = safeJoin(PROJECT_DIR, apiPath(body.oldPath))
                 const to = safeJoin(PROJECT_DIR, apiPath(body.newPath))
-                if (!from || !to) return apiError(res, "invalid path")
-                await fsp.mkdir(path.dirname(to), { recursive: true })
-                // rename(2) replaces a symlink destination atomically instead of
-                // writing through it, but a parent directory swapped for an
-                // outside symlink between safeJoin() and rename() would still
-                // move the entry out of the project. Re-verify the destination
-                // parent immediately before the syscall to shrink the window.
-                const realBase = realBaseOrNull()
-                if (realBase) {
-                    try {
-                        if (!isInsideBase(realBase, fs.realpathSync(path.dirname(to)))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
-                        return apiError(res, "invalid path")
-                    }
+                if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(to))) {
+                    return apiError(res, "invalid path")
                 }
-                await fsp.rename(from, to)
+                if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
+                    return apiError(res, "invalid path")
+                }
                 hashCache.value = ""
                 return sendJSON(res, {})
             }
@@ -647,7 +614,7 @@ async function handleAPI(req, res) {
                 } catch (e) {
                     if (e.code !== "ENOENT") return apiError(res, "invalid path")
                 }
-                await fsp.mkdir(path.dirname(to), { recursive: true })
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(to))) return apiError(res, "invalid path")
                 // Re-verify the destination parent right before the copy; the
                 // post-copy containment check below closes the remaining swap
                 // window by removing exactly what this call created.
@@ -678,25 +645,15 @@ async function handleAPI(req, res) {
             case "MoveFiles": {
                 const toDir = safeJoin(PROJECT_DIR, apiPath(body.movingToPath))
                 if (!toDir) return apiError(res, "invalid path")
-                const realBase = realBaseOrNull()
-                if (realBase) {
-                    // Re-verify the destination folder right before the moves;
-                    // renames through a parent swapped for an outside symlink
-                    // would move entries out of the project.
-                    try {
-                        if (!isInsideBase(realBase, fs.realpathSync(toDir))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
-                        return apiError(res, "invalid path")
-                    }
-                }
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, toDir)) return apiError(res, "invalid path")
+
                 for (const p of (body.movingPaths || [])) {
                     const from = safeJoin(PROJECT_DIR, apiPath(p))
-                    if (!from) continue
+                    if (!from || from === PROJECT_DIR) continue
                     const to = path.join(toDir, path.basename(p))
-                    await fsp.mkdir(path.dirname(to), { recursive: true })
-                    await fsp.rename(from, to)
+                    if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
+                        return apiError(res, "invalid path")
+                    }
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
@@ -771,8 +728,8 @@ async function handleUpload(req, res) {
                 const fileFull = safeJoin(PROJECT_DIR, path.join(uploadTo, fileName))
                 if (!fileFull) return apiError(res, "invalid upload path")
 
-                await fsp.mkdir(dirFull, { recursive: true })
-                // Same TOCTOU discipline as SetFileString: O_NOFOLLOW at open,
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, dirFull)) return apiError(res, "invalid upload path")
+                // Same TOCTOU discipline as SetFileString: verified handle at open,
                 // kernel-path re-verification after the open.
                 const handle = await openSafeProjectFileForWrite(PROJECT_DIR, fileFull)
                 if (!handle) return apiError(res, "invalid upload path")
