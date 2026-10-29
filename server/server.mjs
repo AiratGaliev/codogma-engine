@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForWrite } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -493,7 +493,7 @@ async function handleAPI(req, res) {
                 const configPath = safeJoin(PROJECT_DIR, "phasereditor2d.json")
                 if (configPath && fs.existsSync(configPath)) {
                     try {
-                        return sendJSON(res, JSON.parse(fs.readFileSync(configPath, "utf8")))
+                        return sendJSON(res, JSON.parse(readFileSafely(PROJECT_DIR, configPath, "utf8", 1024 * 1024)))
                     } catch (e) { /* fallthrough */ }
                 }
                 return sendJSON(res, {})
@@ -863,54 +863,84 @@ function serveArchive(req, res, name) {
     fs.createReadStream(path.join(ROOT, name)).pipe(res)
 }
 
-function serveFile(req, res, absPath, cacheControl) {
-    let st
+async function serveFile(req, res, absPath, cacheControl, projectBase) {
+    let initial
     try {
-        st = fs.statSync(absPath)
+        initial = fs.statSync(absPath)
     } catch (e) {
         res.writeHead(404, { "Content-Type": "text/plain" })
         res.end("Not Found")
         return
     }
-    if (st.isDirectory()) {
+
+    if (initial.isDirectory()) {
         const index = path.join(absPath, "index.html")
         if (fs.existsSync(index)) {
-            return serveFile(req, res, index, cacheControl)
+            return serveFile(req, res, index, cacheControl, projectBase)
         }
         res.writeHead(404, { "Content-Type": "text/plain" })
         res.end("Not Found")
         return
     }
 
-    const ext = path.extname(absPath).toLowerCase()
-    const mime = MIME[ext] || "application/octet-stream"
-    const headers = {
-        "Content-Type": mime,
-        "Content-Length": st.size,
-        "Cache-Control": cacheControl || "no-cache",
-        "Last-Modified": st.mtime.toUTCString()
+    // Re-open and validate the object actually selected by the OS. The
+    // response body is streamed from this verified descriptor, not from the
+    // pathname (which could be retargeted after safeJoin/stat).
+    let handle = await openSafeProjectFileForRead(projectBase, absPath)
+    if (!handle) {
+        res.writeHead(404, { "Content-Type": "text/plain" })
+        res.end("Not Found")
+        return
     }
 
-    if (req.method === "HEAD") {
+    let streamOwnsHandle = false
+    try {
+        const st = await handle.stat()
+        if (!st.isFile()) {
+            res.writeHead(404, { "Content-Type": "text/plain" })
+            res.end("Not Found")
+            return
+        }
+
+        const ext = path.extname(absPath).toLowerCase()
+        const mime = MIME[ext] || "application/octet-stream"
+        const headers = {
+            "Content-Type": mime,
+            "Content-Length": st.size,
+            "Cache-Control": cacheControl || "no-cache",
+            "Last-Modified": st.mtime.toUTCString()
+        }
+
+        if (req.method === "HEAD") {
+            res.writeHead(200, headers)
+            res.end()
+            return
+        }
+
+        const inm = req.headers["if-none-match"]
+        const etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`
+        headers["ETag"] = etag
+        if (inm === etag) {
+            res.writeHead(304, headers)
+            res.end()
+            return
+        }
+
         res.writeHead(200, headers)
-        res.end()
-        return
-    }
-
-    const inm = req.headers["if-none-match"]
-    const etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`
-    headers["ETag"] = etag
-    if (inm === etag) {
-        res.writeHead(304, headers)
-        res.end()
-        return
-    }
-
-    res.writeHead(200, headers)
-    if (req.method === "GET") {
-        fs.createReadStream(absPath).pipe(res)
-    } else {
-        res.end()
+        if (req.method === "GET") {
+            const stream = handle.createReadStream({ autoClose: true })
+            streamOwnsHandle = true
+            stream.on("error", error => {
+                if (!res.destroyed) res.destroy(error)
+            })
+            stream.pipe(res)
+        } else {
+            res.end()
+        }
+    } finally {
+        if (!streamOwnsHandle) {
+            await handle.close().catch(() => {})
+        }
     }
 }
 
@@ -988,7 +1018,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (urlPath === "/favicon.png") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600")
+            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600", EDITOR_DIR)
         }
 
         if (!urlPath.startsWith("/editor/")) {
@@ -1008,11 +1038,11 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (rest === "product.json") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "product.json"), "no-store")
+            return serveFile(req, res, path.join(EDITOR_DIR, "product.json"), "no-store", EDITOR_DIR)
         }
 
         if (rest === "static/favicon.png") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600")
+            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600", EDITOR_DIR)
         }
 
         // api
@@ -1043,7 +1073,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Forbidden")
                 return
             }
-            return serveFile(req, res, full, "no-cache")
+            return serveFile(req, res, full, "no-cache", PLUGINS_DIR)
         }
 
         // project files (editor views)
@@ -1055,7 +1085,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Forbidden")
                 return
             }
-            return serveFile(req, res, full, "no-cache")
+            return serveFile(req, res, full, "no-cache", PROJECT_DIR)
         }
 
         // play mode
@@ -1067,7 +1097,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Forbidden")
                 return
             }
-            return serveFile(req, res, full, "no-cache")
+            return serveFile(req, res, full, "no-cache", PROJECT_DIR)
         }
 
         res.writeHead(404, { "Content-Type": "text/plain" })
