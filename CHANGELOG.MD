@@ -1,5 +1,14 @@
 # Change Log
 
+## Unreleased (2026-10-29 — descriptor-verified project file access)
+
+### Security
+
+* Added descriptor-verified project file reads. MCP file/text/asset metadata reads now consume bytes from an opened descriptor validated against the project root; HTTP project/editor static responses stream from a validated file handle instead of reopening a pathname.
+* Routed MCP `project-write-file` through the existing validated write-handle primitive rather than `fsp.writeFile(path)`.
+* Added deterministic regression tests that swap a parent directory for an outside symlink immediately before open and assert that neither read nor write exposes/modifies the outside file.
+* This is a partial hardening, not a claim that TOCTOU is fully resolved. Delete/rename/mkdir and tree enumeration still need descriptor-relative handling and explicit platform-specific threat-model acceptance.
+
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
 P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
