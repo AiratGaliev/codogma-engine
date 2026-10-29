@@ -9,7 +9,8 @@
 * Added Linux descriptor-anchored helpers for project directory creation, deletion and rename; wired the HTTP project API and MCP project-file tools to use them. Added deterministic parent-symlink-swap regressions for delete, rename and directory creation.
 * Added descriptor-verified one-level directory enumeration for the HTTP project file tree and MCP project file listing; Linux reads metadata through the verified `/proc/self/fd` directory handle and skips symlink entries.
 * Added deterministic regression tests that swap a parent directory for an outside symlink immediately before open and assert that neither read nor write exposes/modifies the outside file.
-* This is partial hardening, not a claim that TOCTOU is fully resolved. `CopyFile`, some other pathname-based traversal/operations, residual races where a directory is moved after it is opened, and the non-Linux path fallback still need a documented mechanism and platform-specific acceptance.
+* Replaced HTTP `CopyFile`'s recursive path-based `fsp.cp()` with a verified recursive copy helper. It opens source files without following final symlinks, creates a temporary sibling through the destination directory handle, and commits using a directory-handle-anchored rename on Linux. Copy rejects symlink entries rather than following them; tests cover ordinary file/tree copies and a destination-parent swap.
+* This is partial hardening, not a claim that TOCTOU is fully resolved. Non-Linux path-based fallback, residual races where an opened directory is moved outside after verification, and some metadata/static paths still need a proven cross-platform guarantee and acceptance.
 
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
