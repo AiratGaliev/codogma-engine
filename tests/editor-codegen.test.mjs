@@ -11,6 +11,7 @@
  *     fixed in this branch: one broken prefab reference aborting the whole
  *     origin migration)
  *   - the code-DOM code generators (JavaScript + TypeScript output)
+ *   - Particle Emitter texture fallback and frame configuration lifecycle
  *   - variable-name / JSON formatting helpers used by codegen
  */
 
@@ -262,4 +263,56 @@ test("SceneFinder rejects syntactically valid but structurally invalid scene dat
 
     assert.equal(isValidSceneData({ displayList: [] }), true)
     assert.equal(isValidSceneData({ displayList: [], settings: {} }), true)
+})
+
+
+/* ====================== Particle Emitter codegen ====================== */
+
+const sceneObjects = globalThis.phasereditor2d.scene.ui.sceneobjects
+
+function buildParticleEmitterFactoryArgs(texture, frame) {
+    const emitter = {
+        x: 12,
+        y: 34,
+        configTexture: texture,
+        configFrame: frame
+    }
+
+    // Exercise the real compiler-config builder without constructing Phaser's
+    // runtime emitter (which requires a live Scene and WebGL/DOM services).
+    const support = Object.create(sceneObjects.ParticleEmitterEditorSupport.prototype)
+    support.getObject = () => emitter
+    support.isUnlockedProperty = () => false
+    support.isPrefabInstance = () => false
+    emitter.getEditorSupport = () => support
+
+    const builder = Object.create(sceneObjects.ParticleEmitterCodeDOMBuilder.prototype)
+    const call = builder.buildCreateObjectWithFactoryCodeDOM({
+        obj: emitter,
+        gameObjectFactoryExpr: "this.add"
+    })
+
+    return call.getArgs()
+}
+
+test("Particle Emitter codegen uses Phaser's __DEFAULT texture and preserves configured frames", () => {
+    const args = buildParticleEmitterFactoryArgs(undefined, [0, 1])
+
+    assert.deepEqual(args.slice(0, 2), ["12", "34"])
+    assert.equal(args[2], '"__DEFAULT"', "unset texture must use Phaser's default particle texture")
+    assert.match(args[3], /\bframe\b/, "configured frames must be included in generated config")
+    assert.match(args[3], /\[0, 1\]/, "generated config must keep the complete frame list")
+})
+
+test("Particle Emitter codegen omits removed frames and uses an explicit texture key", () => {
+    const configuredArgs = buildParticleEmitterFactoryArgs("spark", [2])
+    const clearedArgs = buildParticleEmitterFactoryArgs("spark", [])
+
+    assert.equal(configuredArgs[2], '"spark"')
+    assert.match(configuredArgs[3], /\bframe\b/)
+    assert.match(configuredArgs[3], /\[2\]/)
+
+    assert.equal(clearedArgs[2], '"spark"')
+    assert.doesNotMatch(clearedArgs[3], /\bframe\b/,
+        "clearing the frame selection must remove the stale frame config from generated code")
 })
