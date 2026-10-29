@@ -172,7 +172,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [x] Создать первоначальную `docs/dependency-capability-matrix.md` для текущих direct package roots, Phaser bundle и Box2D runtime path.
 - [ ] Завершить транзитивную dependency/SBOM, license и provenance инвентаризацию; проверить ограничения и стоимость обновления значимых зависимостей до публикации пакетов.
 - [ ] Для нового Core toolchain зафиксировать pinned devDependencies, scripts и lockfile; legacy TSLint dependency уже отсутствует, но `lint.sh`/`tslint.json` остаются неактивными артефактами. Удалить или заменить их отдельным cleanup после пилота.
-- [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
+- [ ] Определить вертикальный срез для будущих изменений: сериализованная сцена → зарегистрированный независимый TypeScript-компонент → Inspector metadata → save/reopen → запуск без генерируемого per-scene TS-класса → live selection/diagnostics → HTML5 build.
 - [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
 - [x] Зафиксировать решения первого vertical slice в `docs/decisions/ADR-0001-core-architecture.md`: Project Model, Component-object Core, runtime adapter и browser-first Preview Host. Детальные API signatures остаются test-driven реализационными задачами.
 - [x] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile и scope нового Core, ESLint/Prettier/Vitest, Knip/dependency-cruiser report mode и staged CI ratchet. Сам toolchain pilot ещё не реализован.
@@ -203,16 +203,22 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### Внутренняя очередь выполнения
 
-1. **Сначала — формат данных:** схема Project/Scene/Node/Transform/Component/Prefab/Asset Reference, стабильные IDs, сериализация, versioning/migrations и compatibility fixtures.
-2. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, serialization и runtime adapter используют одну схему.
-3. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
-4. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
-5. **Отдельное решение, а не предположение:** data-oriented ECS и дополнительные physics backends не входят в минимальный Core автоматически. Сравнить component-object API и нужные physics capabilities на fixture; усложнять модель только если это оправдано тестами/измерениями.
+1. **Сначала — формат данных:** схема Project/Scene/Node/Transform/Component/Prefab/Asset Reference, стабильные IDs, сериализация, versioning/migrations и compatibility fixtures. Сериализованная сцена — каноническое исходное представление; runtime-объекты, Preview и generated source являются производными представлениями.
+2. **Затем — registry и loader:** явная регистрация TypeScript component modules со стабильными type IDs и metadata; data-driven scene loader выполняет миграцию/валидацию, разрешает ссылки и детерминированно создаёт runtime-иерархию. Сцене не требуется отдельный сгенерированный TS-класс.
+3. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, сериализация, валидация и runtime adapter используют единый контракт.
+4. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
+5. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
+6. **Отдельное решение, а не предположение:** data-oriented ECS и дополнительные physics backends не входят в минимальный Core автоматически. Сравнить component-object API и нужные physics capabilities на fixture; усложнять модель только если это оправдано тестами/измерениями.
 
 ### Задачи
 
 - [ ] Подготовить минимальный npm Workspace/package skeleton с исходниками Core в `packages/cge` и только теми самостоятельными пакетами, которые нужны первому vertical slice. После отдельной миграции добавить `src/editor` в root Workspaces при подтверждённой совместимости; package/lockfile consolidation провести отдельным проверяемым изменением. Не создавать `src/cge` как параллельный корень исходников.
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
+- [ ] Зафиксировать инвариант: в целевом Core сцена хранится как versioned data, а не как обязательный генерируемый TypeScript-класс; стабильные IDs и явные ссылки не зависят от имён файлов/классов.
+- [ ] Реализовать explicit component registry и module manifest с предсказуемым build-time graph; не использовать runtime scanning, угадывание путей или `eval` для подключения игровых скриптов.
+- [ ] Реализовать data-driven scene loader: preflight schema/ref validation, зарегистрированные миграции, детерминированное создание hierarchy/Transform/components, lifecycle activation и rollback/cleanup при ошибке загрузки.
+- [ ] Подтвердить, что один независимо написанный TypeScript component module можно повторно использовать несколькими узлами и сценами без копирования логики в scene-specific code.
+- [ ] Сохранить текущий scene codegen как legacy/compatibility path до приёмки data-driven loader; отдельно описать совместимость и миграцию существующих проектов, не удалять генератор данным архитектурным шагом.
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 - [ ] Определить версионирование формата и механизм миграции; подготовить compatibility fixtures для текущих проектов.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
@@ -228,6 +234,10 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Работает минимальная сцена с Node, Transform и пользовательским TypeScript-компонентом на текущем Phaser runtime.
+- [ ] Fixture загружает сцену из сериализованной модели и явно зарегистрированного TypeScript-компонента без отдельного генерируемого TS-класса/файла сцены.
+- [ ] Один компонентный модуль успешно используется несколькими узлами (в том числе в разных сценах); его значения остаются независимыми на уровне экземпляров.
+- [ ] Отсутствующий/несовместимый тип компонента, broken asset ref или unsupported schema приводит к адресной диагностике и не оставляет частично активную сцену или ресурсы.
+- [ ] Существующий legacy codegen имеет регрессионные проверки и не удаляется до согласованной runtime-паритетности и проверенного migration/compatibility path.
 - [ ] Lifecycle тестируется при создании, активации, отключении, повторной активации и уничтожении объекта.
 - [ ] Добавление/удаление компонентов во время system update безопасно и детерминировано.
 - [ ] Повторное открытие проектного файла сохраняет данные; неизвестные/новые поля не теряются молча.
@@ -242,13 +252,13 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ## Этап 3 — Game Preview Host, live Inspector и runtime debugging
 
-**Цель:** сделать рабочую игру доступной из редактора как реальную runtime-сессию, а не только как результат генерации кода.
+**Цель:** сделать рабочую игру доступной из редактора как реальную runtime-сессию. В целевом Core Preview запускает сцену из сериализованных данных и зарегистрированных компонентов, а не требует предварительной генерации отдельного TS-класса для каждого уровня. Текущий codegen остаётся совместимым legacy-путём до отдельной приёмки перехода.
 
 **Зависимости:** базовые Project Model и Runtime Adapter contracts из этапа 2; первые прототипы можно делать параллельно без ожидания полной ECS.
 
 ### Внутренняя очередь выполнения
 
-1. **Первая цель — Browser Preview:** запустить fixture в обычном браузере, обрабатывать повторные Play/Stop/Restart, ошибки запуска и завершать принадлежащие preview процессы без утечек. Это первый путь; Tauri не требуется.
+1. **Первая цель — Browser Preview:** запустить fixture в обычном браузере через data-driven loader (serialized scene + registered component module), обрабатывать повторные Play/Stop/Restart, ошибки запуска и завершать принадлежащие preview процессы без утечек. Fixture не должен зависеть от per-scene generated TS class; Tauri не требуется.
 2. **Сразу после него — runtime identity и диагностика:** связать runtime entity/component ID с Project Model, получать реальные runtime values, различать runtime mutations и serialized source data, привязывать errors/logs к запуску.
 3. **Следующий UI-слой — Embedded Game View:** подключать после доказанного browser lifecycle. Сравнить отзывчивость редактора под нагрузкой; не обещать изоляцию, если не измерены отдельные context/window/process.
 4. **Только затем — расширенная диагностика:** overlays, time scale и single-step после подтверждения scheduler semantics. Отдельное окно — дополнительный способ проверки fullscreen/input/scaling, а не блокер первой browser-сессии.
@@ -256,6 +266,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Задачи
 
 - [ ] Выделить Game Preview Host с отдельным контрактом от Tauri/Electron и текущего HTTP сервера.
+- [ ] Запускать новый Core Preview из Project Model через тот же loader/adapter contract, который используют runtime/build; legacy generated-code preview поддерживается отдельно, пока не выполнен переход.
 - [ ] Реализовать управление preview: Play, Pause, Resume, Restart/Stop, resize viewport и передачу log/error events.
 - [ ] Поддержать Embedded Game View для быстрой итерации.
 - [ ] Поддержать запуск игры в отдельном окне, чтобы проверять fullscreen, input, scaling и поведение без панелей редактора.
@@ -271,6 +282,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Сквозной сценарий: открыть fixture → изменить сцену/компонент → запустить → увидеть игру → выбрать live entity → проверить его компоненты → остановить и повторить запуск.
+- [ ] Target fixture запускается из сериализованной сцены и зарегистрированного TypeScript-компонента без generated TS class для уровня; Start/Stop/Restart очищают runtime-объекты и ресурсы.
 - [ ] Команды жизненного цикла preview обрабатывают повторные вызовы и ошибки; зависшие server/preview процессы не остаются после Stop/закрытия.
 - [ ] Error/log messages связаны с текущим запуском и доступны для диагностики.
 - [ ] Live Inspector показывает runtime state, а не только сериализованные значения из editor model.
@@ -304,6 +316,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Включить состав selected features и причины inclusion/exclusion в build report; проверить на fixture, что выключенные/неподдерживаемые и editor-only contributions не попадают в production bundle там, где это доказуемо import graph/bundler.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
 - [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production; проверить возможность использования [Vite](https://vite.dev/guide/) только после сравнения с текущей сборкой.
+- [ ] Реализовать сборку целевого runtime непосредственно из валидированной Project Model, сериализованных сцен, зарегистрированного графа TypeScript-компонентов, asset graph и настроек adapter; отдельный generated TS-класс на каждую сцену не является обязательным входом.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
 - [ ] Добавить подходящие обработчики ассетов: атласы, оптимизацию изображений, проверку аудио/шрифтов и другие операции только при подтверждённой потребности.
 - [ ] Подготовить platform-neutral API Platform Services и Mock/Local implementation.
@@ -317,6 +330,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Получается независимая HTML5-сборка, работающая без editor server и без Tauri.
+- [ ] HTML5 fixture собирается из сериализованной сцены, зарегистрированного TypeScript-модуля компонента, asset graph и выбранного adapter; отсутствие per-scene generated TS source не блокирует build.
+- [ ] Preview и экспортированная игра создают согласованную hierarchy/component state; build report показывает включённые scene data, scripts и runtime dependencies.
 - [ ] Сборка проходит asset/project validation и сообщает ошибки до публикации.
 - [ ] Platform API работает через mocks локально и через отдельный adapter в целевом окружении.
 - [ ] Rewarded reward выдаётся только после подтверждённого успешного завершения рекламного сценария.
@@ -397,7 +412,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Для каждого перенесённого/изменённого инструмента есть checklist основных действий и regression tests.
-- [ ] Undo/Redo, save/reopen, Prefab update и code generation сохраняют ожидаемую семантику.
+- [ ] Undo/Redo, save/reopen, Prefab update и существующий legacy code generation сохраняют ожидаемую семантику; изменения не ломают текущие проекты в ожидании нового Core loader.
 - [ ] Browser workflow остаётся проверяемым в ходе UI миграции.
 - [ ] Набор иконок ограничен общими UI-командами и поддерживаемыми 2D-инструментами; 3D-only иконки не включены и не используются.
 - [ ] Светлая и тёмная темы корректно выбирают свои варианты иконок; проверены читаемость, контраст и применимые состояния интерфейса.

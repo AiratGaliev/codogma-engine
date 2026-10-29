@@ -23,12 +23,14 @@ Development priorities:
 
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
+**Target scene workflow:** a versioned, serializable scene document is the source of truth. The future Core/runtime loader will instantiate that data and attach independently authored, explicitly registered TypeScript components. A separate generated TypeScript class/file for every scene must not be required to author, preview or build a game. This target is specified in the technical specification, ADR-0001 and roadmap Stage 2, but it is **not implemented as a complete workflow in the current editor baseline**. Existing scene serialization/code generation remains supported while the new loader and a safe migration/compatibility path are developed and accepted.
+
 ## Current capabilities
 
 | Area | Available today |
 |---|---|
 | Browser-based IDE | A local Node.js server serves the editor at <code>/editor/</code> and connects it to a project directory. |
-| Scene authoring | Visual scene editing, inspectors, serialization and generated game code. |
+| Scene authoring | Visual scene editing, inspectors, serialization and generated game code in the current/legacy editor workflow; the new data-driven Core scene loader is not implemented yet. |
 | Project assets | Asset Pack Editor and asset tools for textures, spritesheets, tilemaps and other supported asset types. |
 | Animation and components | Animation tools, User Components Editor and code editors. |
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
