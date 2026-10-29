@@ -150,9 +150,9 @@ function rejectNonLocalRequest(req, res) {
     return true
 }
 
-function walkTree(dirPath, relPrefix, files, folders) {
+function walkTree(dirPath, relPrefix, files, folders, metadata = new Map()) {
     const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dirPath)
-    if (!entries) return
+    if (!entries) return metadata
 
     for (const entry of entries) {
         if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
@@ -160,11 +160,14 @@ function walkTree(dirPath, relPrefix, files, folders) {
         const full = path.join(dirPath, entry.name)
         if (entry.isDirectory) {
             folders.push(rel)
-            walkTree(full, rel, files, folders)
+            metadata.set(rel, entry)
+            walkTree(full, rel, files, folders, metadata)
         } else if (entry.isFile) {
             files.push(rel)
+            metadata.set(rel, entry)
         }
     }
+    return metadata
 }
 
 function buildRootFileData(projectDir) {
@@ -210,14 +213,12 @@ function computeProjectHash() {
     if (hashCache.value && now - hashCache.stamp < 1000) {
         return hashCache.value
     }
-    const files = [], folders = []
-    walkTree(PROJECT_DIR, "", files, folders)
+    const files = [], folders = [], metadata = new Map()
+    walkTree(PROJECT_DIR, "", files, folders, metadata)
     const parts = []
     for (const rel of files.concat(folders).sort()) {
-        try {
-            const st = fs.statSync(path.join(PROJECT_DIR, rel))
-            parts.push(`${rel}|${Math.floor(st.mtimeMs)}|${st.size}`)
-        } catch (e) { /* ignore */ }
+        const entry = metadata.get(rel)
+        if (entry) parts.push(`${rel}|${Math.floor(entry.mtimeMs)}|${entry.size}`)
     }
     const value = crypto.createHash("sha1").update(parts.join("\n")).digest("hex")
     hashCache.value = value
@@ -227,12 +228,9 @@ function computeProjectHash() {
 
 /* ============================== image size =============================== */
 
-function getImageSize(absPath) {
-    const buf = Buffer.alloc(65536)
-    const fd = fs.openSync(absPath, "r")
-    const bytes = fs.readSync(fd, buf, 0, buf.length, 0)
-    fs.closeSync(fd)
-    const data = buf.subarray(0, bytes)
+function getImageSize(input, extension) {
+    if (!Buffer.isBuffer(input)) return null
+    const data = input.subarray(0, 65536)
 
     // PNG
     if (data.length > 24 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) {
@@ -283,7 +281,7 @@ function getImageSize(absPath) {
     }
 
     // SVG
-    const ext = path.extname(absPath).toLowerCase()
+    const ext = String(extension || "").toLowerCase()
     if (ext === ".svg") {
         const text = data.toString("utf8")
         const w = text.match(/width\s*=\s*["']([\d.]+)/)
@@ -629,8 +627,18 @@ async function handleAPI(req, res) {
 
             case "GetImageSize": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
-                if (!full || !fs.existsSync(full)) return apiError(res, "file not found")
-                const size = getImageSize(full)
+                if (!full) return apiError(res, "file not found")
+                const handle = await openSafeProjectFileForRead(PROJECT_DIR, full)
+                if (!handle) return apiError(res, "file not found")
+                let data
+                try {
+                    const buffer = Buffer.alloc(65536)
+                    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+                    data = buffer.subarray(0, bytesRead)
+                } finally {
+                    await handle.close().catch(() => {})
+                }
+                const size = getImageSize(data, path.extname(full))
                 if (!size) return apiError(res, "cannot read image size")
                 return sendJSON(res, size)
             }
