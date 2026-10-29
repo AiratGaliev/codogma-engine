@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -600,43 +600,9 @@ async function handleAPI(req, res) {
             case "CopyFile": {
                 const from = safeJoin(PROJECT_DIR, apiPath(body.fromPath))
                 const to = safeJoin(PROJECT_DIR, apiPath(body.toPath))
-                if (!from || !to) return apiError(res, "invalid path")
-                const realBase = realBaseOrNull()
-                // Unlike rename(2), cp() writes through a symlink destination,
-                // which would overwrite the file it points to (possibly outside
-                // the project). Reject symlink targets outright.
-                let destExisted = false
-                try {
-                    const lst = fs.lstatSync(to)
-                    if (lst.isSymbolicLink()) return apiError(res, "invalid path")
-                    destExisted = true
-                } catch (e) {
-                    if (e.code !== "ENOENT") return apiError(res, "invalid path")
-                }
-                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(to))) return apiError(res, "invalid path")
-                // Re-verify the destination parent right before the copy; the
-                // post-copy containment check below closes the remaining swap
-                // window by removing exactly what this call created.
-                if (realBase) {
-                    try {
-                        if (!isInsideBase(realBase, fs.realpathSync(path.dirname(to)))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
-                        return apiError(res, "invalid path")
-                    }
-                }
-                await fsp.cp(from, to, { recursive: true })
-                if (realBase) {
-                    let realTo = null
-                    try { realTo = fs.realpathSync(to) } catch { realTo = null }
-                    if (!realTo || !isInsideBase(realBase, realTo)) {
-                        if (!destExisted) {
-                            await fsp.rm(to, { recursive: true, force: true }).catch(() => { })
-                        }
-                        return apiError(res, "invalid path")
-                    }
-                }
+                if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
+                if (!await copyProjectEntrySafely(PROJECT_DIR, from, to)) return apiError(res, "invalid path")
+
                 hashCache.value = ""
                 return sendJSON(res, { file: fileData(PROJECT_DIR, apiPath(body.toPath)) })
             }
