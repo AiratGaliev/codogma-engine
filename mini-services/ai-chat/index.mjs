@@ -50,7 +50,16 @@ function getZai() {
 
 function isLoopbackHostname(hostname) {
 
-    const normalized = hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "")
+    let normalized = hostname.toLowerCase()
+
+    if (normalized.startsWith("[") && normalized.endsWith("]")) {
+        normalized = normalized.slice(1, -1)
+    }
+
+    if (normalized.endsWith(".")) {
+        normalized = normalized.slice(0, -1)
+    }
+
     return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost"
 }
 
@@ -67,8 +76,7 @@ function isAllowedHost(hostHeader) {
 
         if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return false
 
-        const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "")
-        return isLoopbackHostname(hostname)
+        return isLoopbackHostname(parsed.hostname)
     } catch {
         return false
     }
