@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -775,8 +775,13 @@ async function serveArchive(req, res, name) {
     try {
         // Stream only the actual object selected by a validated descriptor.
         // The initial lstat/name validation alone would leave a swap window.
-        handle = await openSafeProjectFileForRead(ROOT, archivePath)
-        if (!handle) throw new Error("Archive is not a safe regular file")
+        handle = await fsp.open(
+            archivePath,
+            fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+        )
+        if (!isSafeOpenFileHandle(ROOT, archivePath, handle.fd)) {
+            throw new Error("Archive is not a safe regular file")
+        }
         st = await handle.stat()
         if (!st.isFile()) throw new Error("Archive is not a regular file")
     } catch {
