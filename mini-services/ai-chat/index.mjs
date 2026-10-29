@@ -62,7 +62,11 @@ function isAllowedHost(hostHeader) {
     if (typeof hostHeader !== "string" || hostHeader.length === 0) return false
 
     try {
-        const hostname = new URL("http://" + hostHeader).hostname.toLowerCase().replace(/\.$/, "")
+        const parsed = new URL("http://" + hostHeader)
+
+        if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return false
+
+        const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "")
         return isLoopbackHostname(hostname)
     } catch {
         return false
@@ -341,12 +345,19 @@ const server = createServer(async (req, res) => {
 
 })
 
+// AI Chat has no remote authentication protocol and must remain loopback-only.
+if (!isLoopbackHostname(HOST.toLowerCase())) {
+
+    console.error("phaser-editor-ai-chat: refusing non-loopback bind host " + HOST + ".")
+    process.exit(1)
+}
+
+server.headersTimeout = 10_000
+server.requestTimeout = 30_000
+server.keepAliveTimeout = 5_000
+
 server.listen(PORT, HOST, () => {
 
     console.log(`phaser-editor-ai-chat listening on http://${HOST}:${PORT} (loopback-only by default)`)
 
-    if (HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
-
-        console.warn(`phaser-editor-ai-chat: AI_CHAT_HOST="${HOST}" exposes this service beyond loopback.`)
-    }
 })
