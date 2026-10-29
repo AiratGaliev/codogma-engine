@@ -15,6 +15,7 @@
 import fs from "fs"
 import path from "path"
 import fsp from "fs/promises"
+import crypto from "crypto"
 
 /**
  * True when `target`'s real location is the base itself or inside it.
@@ -805,3 +806,186 @@ export async function renameProjectEntrySafely(base, fromTarget, toTarget) {
     }
 }
 
+
+
+/**
+ * Copy a regular file or directory tree without delegating to path-based
+ * recursive fs.cp(). Entries are opened from verified project-parent handles;
+ * Linux destination writes are staged in a temporary sibling and renamed
+ * through the already-open directory descriptor.
+ *
+ * Symbolic links are rejected rather than followed or copied. The non-Linux
+ * fallback uses the same checks but cannot promise an atomic directory-relative
+ * operation against a hostile local process that moves an opened directory.
+ */
+export async function copyProjectEntrySafely(base, fromTarget, toTarget) {
+    const source = safeProjectEntryContext(base, fromTarget)
+    const destination = safeProjectEntryContext(base, toTarget)
+    if (!source || !destination || source.full === destination.full) return false
+
+    const relativeDestination = path.relative(source.full, destination.full)
+    if (relativeDestination && !relativeDestination.startsWith(".." + path.sep)
+        && relativeDestination !== ".." && !path.isAbsolute(relativeDestination)) {
+        // Copying a directory into itself would recurse indefinitely.
+        try {
+            const st = fs.lstatSync(source.full)
+            if (st.isDirectory() && !st.isSymbolicLink()) return false
+        } catch {
+            // The recursive copy below will fail closed for missing source paths.
+        }
+    }
+
+    async function copyEntry(from, to, depth = 0) {
+        if (depth > 256) return false
+        const sourceContext = safeProjectEntryContext(base, from)
+        const destinationContext = safeProjectEntryContext(base, to)
+        if (!sourceContext || !destinationContext) return false
+
+        const sourceParent = await openSafeProjectParentDirectory(base, sourceContext.parent)
+        if (!sourceParent) return false
+
+        let sourceHandle
+        let destinationParent
+        let temporaryPath
+        let temporaryHandle
+        try {
+            const sourceEntryPath = entryPathAtDirectoryHandle(sourceParent, sourceContext.parent, sourceContext.leaf)
+            let sourceEntry
+            try {
+                sourceEntry = await fsp.lstat(sourceEntryPath)
+            } catch {
+                return false
+            }
+
+            if (sourceEntry.isSymbolicLink()) return false
+            if (!sourceEntry.isFile() && !sourceEntry.isDirectory()) return false
+
+            if (sourceEntry.isDirectory()) {
+                const relativeChild = path.relative(sourceContext.full, destinationContext.full)
+                if (relativeChild === "" || (relativeChild !== ".."
+                    && !relativeChild.startsWith(".." + path.sep)
+                    && !path.isAbsolute(relativeChild))) {
+                    return false
+                }
+
+                if (!await ensureProjectDirectorySafely(base, destinationContext.parent)) return false
+
+                destinationParent = await openSafeProjectParentDirectory(base, destinationContext.parent)
+                if (!destinationParent) return false
+
+                const destinationEntryPath = entryPathAtDirectoryHandle(
+                    destinationParent, destinationContext.parent, destinationContext.leaf
+                )
+                try {
+                    const destinationEntry = await fsp.lstat(destinationEntryPath)
+                    if (destinationEntry.isSymbolicLink() || !destinationEntry.isDirectory()) return false
+                } catch (error) {
+                    if (error.code !== "ENOENT") return false
+                    if (!await ensureProjectDirectorySafely(base, destinationContext.full)) return false
+                }
+
+                const entries = readProjectDirectoryEntriesSafelySync(base, sourceContext.full)
+                if (!entries) return false
+                for (const entry of entries) {
+                    if (entry.isSymbolicLink) return false
+                    const childFrom = path.join(sourceContext.full, entry.name)
+                    const childTo = path.join(destinationContext.full, entry.name)
+                    if (!await copyEntry(childFrom, childTo, depth + 1)) return false
+                }
+                return true
+            }
+
+            // Open source relative to the verified parent, without following a
+            // final symlink, then validate the object actually opened.
+            try {
+                sourceHandle = await fsp.open(
+                    sourceEntryPath,
+                    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+                )
+            } catch {
+                return false
+            }
+            if (!isSafeOpenReadFileHandle(base, sourceContext.full, sourceHandle.fd)) return false
+            const sourceStat = await sourceHandle.stat()
+            if (!sourceStat.isFile()) return false
+
+            if (!await ensureProjectDirectorySafely(base, destinationContext.parent)) return false
+            if (!isSafeOpenProjectDirectory(base, sourceContext.parent, sourceParent.fd)) return false
+
+            destinationParent = await openSafeProjectParentDirectory(base, destinationContext.parent)
+            if (!destinationParent) return false
+
+            const destinationEntryPath = entryPathAtDirectoryHandle(
+                destinationParent, destinationContext.parent, destinationContext.leaf
+            )
+            try {
+                const destinationEntry = await fsp.lstat(destinationEntryPath)
+                if (destinationEntry.isSymbolicLink() || !destinationEntry.isFile()) return false
+            } catch (error) {
+                if (error.code !== "ENOENT") return false
+            }
+
+            const temporaryName = `.codogma-copy-${crypto.randomUUID()}.tmp`
+            temporaryPath = entryPathAtDirectoryHandle(destinationParent, destinationContext.parent, temporaryName)
+            try {
+                temporaryHandle = await fsp.open(
+                    temporaryPath,
+                    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
+                    sourceStat.mode & 0o777
+                )
+            } catch {
+                return false
+            }
+
+            const buffer = Buffer.alloc(64 * 1024)
+            let position = 0
+            while (true) {
+                if (!isSafeOpenReadFileHandle(base, sourceContext.full, sourceHandle.fd)
+                    || !isSafeOpenProjectDirectory(base, destinationContext.parent, destinationParent.fd)) {
+                    return false
+                }
+
+                const { bytesRead } = await sourceHandle.read(buffer, 0, buffer.length, position)
+                if (bytesRead === 0) break
+
+                let written = 0
+                while (written < bytesRead) {
+                    const result = await temporaryHandle.write(buffer, written, bytesRead - written, position + written)
+                    if (!result.bytesWritten) return false
+                    written += result.bytesWritten
+                }
+                position += bytesRead
+            }
+
+            await temporaryHandle.chmod(sourceStat.mode & 0o777)
+            await temporaryHandle.close()
+            temporaryHandle = null
+
+            if (!isSafeOpenProjectDirectory(base, destinationContext.parent, destinationParent.fd)) return false
+            await fsp.rename(temporaryPath, destinationEntryPath)
+            temporaryPath = null
+            return true
+        } catch {
+            return false
+        } finally {
+            if (temporaryHandle) await temporaryHandle.close().catch(() => {})
+            if (temporaryPath && destinationParent) {
+                try {
+                    await fsp.unlink(temporaryPath)
+                } catch {
+                    // Best-effort cleanup of the temporary file created here.
+                }
+            }
+            if (sourceHandle) await sourceHandle.close().catch(() => {})
+            if (destinationParent) await destinationParent.close().catch(() => {})
+            await sourceParent.close().catch(() => {})
+        }
+    }
+
+    try {
+        if (!await ensureProjectDirectorySafely(base, destination.parent)) return false
+        return await copyEntry(source.full, destination.full)
+    } catch {
+        return false
+    }
+}
