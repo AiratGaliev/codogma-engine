@@ -38,6 +38,7 @@ MCP robustness, and regression suites for every defect found along the way.
 * Extended MCP e2e: JSON Schema validity of all 66 tools under the forced Zod
   4.6.7 override, malformed-argument rejection without killing the server,
   and post-failure liveness (1e7f9d4).
+* Strengthened MCP schema acceptance with recursive validation of nested JSON Schema keywords and optional fields in both the built-in tools and the official Zod 4.6.7 bridge; the live E2E also checks nested optional object-list fields and validates the standard `tools/call` content array shape.
 * Fix: reverse-proxy Host allow-list and Origin guard for gateways that
   rewrite headers (0545a29, fb03067); guarded `/archive/` snapshot route
   (1094f1c).
