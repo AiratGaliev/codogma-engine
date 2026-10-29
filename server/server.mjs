@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -1148,21 +1148,16 @@ async function buildAttachmentsContext(attachments) {
 
         try {
 
-            let buf = await fsp.readFile(att.abs)
+            const attachment = await readFilePrefixSafely(PROJECT_DIR, att.abs, AI_CHAT_ATTACHMENT_MAX_BYTES)
+            const buf = attachment.buffer
 
             if (buf.subarray(0, Math.min(buf.length, 8000)).includes(0)) {
                 warnings.push(`${att.rel}: binary file — not included`)
-                lines.push(`#### ${att.rel}`, `[binary file, ${buf.length} bytes — text content not included]`, "")
+                lines.push(`#### ${att.rel}`, `[binary file, ${attachment.size} bytes — text content not included]`, "")
                 continue
             }
 
-            let truncated = false
-
-            if (buf.length > AI_CHAT_ATTACHMENT_MAX_BYTES) {
-                buf = buf.subarray(0, AI_CHAT_ATTACHMENT_MAX_BYTES)
-                truncated = true
-            }
-
+            const truncated = attachment.truncated
             let text = buf.toString("utf8")
 
             if (truncated) {
