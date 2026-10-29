@@ -158,6 +158,11 @@ async function testAiChat() {
         const ipv6LoopbackHost = await request(port, "/health", { headers: { host: `[::1]:${port}` } })
         assert.equal(ipv6LoopbackHost.status, 200, "IPv6 loopback Host headers must be normalized and accepted")
 
+        const ipv6LoopbackOrigin = await request(port, "/health", {
+            headers: { host, origin: `http://[::1]:${port}` }
+        })
+        assert.equal(ipv6LoopbackOrigin.status, 200, "IPv6 loopback Origin headers must be normalized and accepted")
+
         const csrf = await request(port, "/chat", {
             method: "POST",
             headers: { host, "content-type": "application/json", origin: "https://attacker.example" },
@@ -258,6 +263,12 @@ async function testMcpBridge() {
         assert.equal(editorOrigin.status, 200, "the editor page origin (loopback) must be accepted")
         assert.equal(editorOrigin.headers["access-control-allow-origin"], "http://127.0.0.1:3000",
             "CORS must echo the specific allowed origin, not a wildcard")
+
+        const ipv6Origin = await request(port, "/", {
+            headers: { host, origin: "http://[::1]:3000" }
+        })
+        assert.equal(ipv6Origin.status, 200, "IPv6 loopback origins must be accepted")
+        assert.equal(ipv6Origin.headers["access-control-allow-origin"], "http://[::1]:3000")
 
         const preflight = await request(port, "/", {
             method: "OPTIONS",
