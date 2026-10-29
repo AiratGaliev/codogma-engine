@@ -50,7 +50,8 @@ function getZai() {
 
 function isLoopbackHostname(hostname) {
 
-    return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost"
+    const normalized = hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "")
+    return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost"
 }
 
 /**
