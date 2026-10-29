@@ -81,7 +81,7 @@ remain package-local; no lint/type gate is enabled across the legacy editor tree
 `quality:report` is report-only: Knip uses `--no-exit-code`; dependency-cruiser
 rules use warning severity. Review findings before promoting either report to a
 blocking gate. Explicit Knip entries cover the public ESM entry, CLI and tests;
-generated `dist/` and fixtures are excluded from unused-file findings.
+generated `dist/` and fixtures are excluded from unused-file findings. The four shared tool binaries are explicitly ignored because their versions are owned by the root manifest/lockfile rather than duplicated in this package.
 
 Repository-level commands (from the root):
 
