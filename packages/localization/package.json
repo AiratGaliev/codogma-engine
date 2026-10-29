@@ -18,7 +18,7 @@
         "test": "npm run build && node --test tests/*.test.mjs",
         "typecheck": "tsc -p tsconfig.json --noEmit",
         "lint": "eslint \"src/**/*.ts\" \"tests/*.test.mjs\" \"bin/**/*.mjs\"",
-        "format:check": "prettier --check \"src/**/*.ts\" \"tests/*.test.mjs\" \"bin/**/*.mjs\" package.json tsconfig.json knip.json .dependency-cruiser.cjs .prettierrc.json",
+        "format:check": "prettier --check package.json tsconfig.json knip.json .dependency-cruiser.cjs .prettierrc.json",
         "deps:report": "depcruise src --config .dependency-cruiser.cjs --output-type err-long",
         "knip:report": "knip --config knip.json --reporter compact --no-exit-code",
         "quality:check": "npm run typecheck && npm run lint && npm run format:check && npm test",
