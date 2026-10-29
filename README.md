@@ -271,6 +271,8 @@ A successful server-side MCP test, TypeScript build or security smoke test does 
 
 The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
 
+For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`) and the task-start/review/acceptance checklist, follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). In particular, `In Review` means implementation is finished but evidence or acceptance is still pending; `Done` requires all applicable criteria to be verified.
+
 ### Permanent branches
 
 | Branch | Purpose | What may be merged into it |
