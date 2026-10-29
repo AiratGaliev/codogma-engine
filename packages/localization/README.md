@@ -63,13 +63,18 @@ cd packages/localization
 npm ci          # package-lock: TypeScript 5.3.3
 npm run build   # strict typecheck + emit dist/
 npm test        # build + node --test contract/service/validation/fixture/CLI tests
-npm run quality:check  # strict typecheck, scoped ESLint, Prettier and unit tests
+npm run quality:check  # strict typecheck, scoped ESLint, config-format check and unit tests
 npm run quality:report # non-blocking Knip + dependency-cruiser reports
 ~~~
 
 The quality pilot deliberately uses root-locked ESLint, Prettier, Knip and
 dependency-cruiser versions rather than duplicating tool dependencies in this
-package's lockfile. Run the root `npm ci` first, then `npm ci` here for the
+package's lockfile. Prettier currently gates the package manifest and new
+tooling configuration files; existing source/test/CLI formatting is not
+mass-rewritten in this pilot, while those files remain covered by strict
+typecheck, scoped ESLint and unit tests. A full package-source formatting
+ratchet is a separate follow-up so it can be reviewed without mixing formatting
+churn into toolchain bootstrap. Run the root `npm ci` first, then `npm ci` here for the
 package's pinned TypeScript compiler. The strict TypeScript compiler options
 remain package-local; no lint/type gate is enabled across the legacy editor tree.
 
