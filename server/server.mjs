@@ -752,29 +752,35 @@ function listArchiveSnapshots() {
             .filter(entry => entry.isFile() && ARCHIVE_NAME_PATTERN.test(entry.name))
             .map(entry => {
                 const full = path.join(ROOT, entry.name)
-                return { name: entry.name, full, mtimeMs: fs.statSync(full).mtimeMs }
+                const stat = fs.lstatSync(full)
+                if (stat.isSymbolicLink() || !stat.isFile()) return null
+                return { name: entry.name, full, mtimeMs: stat.mtimeMs }
             })
-    } catch (e) {
+            .filter(Boolean)
+    } catch {
         return []
     }
 }
 
-function serveArchive(req, res, name) {
+async function serveArchive(req, res, name) {
     if (!ARCHIVE_NAME_PATTERN.test(name) || path.dirname(path.join(ROOT, name)) !== ROOT) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
         res.end(req.method === "HEAD" ? undefined : "Invalid archive name")
         return
     }
 
+    const archivePath = path.join(ROOT, name)
+    let handle
     let st
     try {
-        // lstat deliberately rejects a matching archive name that is a symlink;
-        // this endpoint serves only archives created as regular root-level files.
-        st = fs.lstatSync(path.join(ROOT, name))
-        if (st.isSymbolicLink() || !st.isFile()) {
-            throw Object.assign(new Error("Archive is not a regular file"), { code: "ENOENT" })
-        }
-    } catch (e) {
+        // Stream only the actual object selected by a validated descriptor.
+        // The initial lstat/name validation alone would leave a swap window.
+        handle = await openSafeProjectFileForRead(ROOT, archivePath)
+        if (!handle) throw new Error("Archive is not a safe regular file")
+        st = await handle.stat()
+        if (!st.isFile()) throw new Error("Archive is not a regular file")
+    } catch {
+        if (handle) await handle.close().catch(() => {})
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
         res.end(req.method === "HEAD" ? undefined : "Archive not found — GET /archive/ lists the newest snapshot")
         return
@@ -788,27 +794,28 @@ function serveArchive(req, res, name) {
     })
 
     if (req.method === "HEAD") {
+        await handle.close().catch(() => {})
         res.end()
         return
     }
 
-    fs.createReadStream(path.join(ROOT, name)).pipe(res)
+    const stream = handle.createReadStream({ autoClose: true })
+    stream.on("error", error => {
+        if (!res.destroyed) res.destroy(error)
+    })
+    stream.pipe(res)
 }
 
 async function serveFile(req, res, absPath, cacheControl, projectBase) {
-    let initial
-    try {
-        initial = fs.statSync(absPath)
-    } catch (e) {
-        res.writeHead(404, { "Content-Type": "text/plain" })
-        res.end("Not Found")
-        return
-    }
-
-    if (initial.isDirectory()) {
-        const index = path.join(absPath, "index.html")
-        if (fs.existsSync(index)) {
-            return serveFile(req, res, index, cacheControl, projectBase)
+    // Determine directories through a verified directory handle rather than a
+    // path-based stat()/existsSync() pair that can follow a swapped symlink.
+    const directoryEntries = readProjectDirectoryEntriesSafelySync(projectBase, absPath)
+    if (directoryEntries !== null) {
+        const indexEntry = directoryEntries.find(entry =>
+            entry.name === "index.html" && entry.isFile && !entry.isSymbolicLink
+        )
+        if (indexEntry) {
+            return serveFile(req, res, path.join(absPath, "index.html"), cacheControl, projectBase)
         }
         res.writeHead(404, { "Content-Type": "text/plain" })
         res.end("Not Found")
