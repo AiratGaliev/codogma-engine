@@ -35,6 +35,7 @@ const coreCode = globalThis.phasereditor2d.scene.core.code
 const sceneUi = globalThis.phasereditor2d.scene.ui
 const json = globalThis.colibri.core.json
 const FileUtils = globalThis.colibri.ui.ide.FileUtils
+const controls = globalThis.colibri.ui.controls
 
 /**
  * Runs `fn` with FileUtils resolving no files and no images (data-only mode:
@@ -420,4 +421,71 @@ test("ThumbnailCache clearing is safe before the database exists", async () => {
     const cache = new sceneUi.ThumbnailCache("test-thumb-db")
 
     await assert.doesNotReject(() => cache.clearCache())
+})
+
+
+/* ======================= blob URL lifecycle ======================= */
+
+async function withBlobUrlStubs(fn) {
+    const originalCreateElement = document.createElement
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    const revoked = []
+    const listeners = new Map()
+    const image = {
+        src: "",
+        addEventListener(type, listener, options) {
+            const entries = listeners.get(type) || []
+            entries.push({ listener, options })
+            listeners.set(type, entries)
+        }
+    }
+    let nextUrlId = 0
+
+    try {
+        URL.createObjectURL = () => `blob:codogma-thumbnail-${++nextUrlId}`
+        URL.revokeObjectURL = url => revoked.push(url)
+        document.createElement = tag => tag === "img" ? image : originalCreateElement.call(document, tag)
+
+        await fn({ image, listeners, revoked })
+    } finally {
+        document.createElement = originalCreateElement
+        URL.createObjectURL = originalCreateObjectURL
+        URL.revokeObjectURL = originalRevokeObjectURL
+    }
+}
+
+test("Controls.createImageFromBlob revokes its object URL after load", async () => {
+    await withBlobUrlStubs(async ({ image, listeners, revoked }) => {
+        const result = controls.Controls.createImageFromBlob(new Blob(["thumbnail"]))
+        assert.equal(result, image)
+        assert.equal(image.src, "blob:codogma-thumbnail-1")
+
+        for (const type of ["load", "error"]) {
+            const entries = listeners.get(type) || []
+            assert.equal(entries.length, 1, `one ${type} cleanup listener must be installed`)
+            assert.equal(entries[0].options?.once, true, `${type} cleanup listener must be one-shot`)
+        }
+
+        const [loadListener] = listeners.get("load")
+        loadListener.listener(new Event("load"))
+        assert.deepEqual(revoked, ["blob:codogma-thumbnail-1"],
+            "a successfully decoded thumbnail must release its object URL")
+    })
+})
+
+test("Controls.createImageFromBlob revokes its object URL after error", async () => {
+    await withBlobUrlStubs(async ({ image, listeners, revoked }) => {
+        const result = controls.Controls.createImageFromBlob(new Blob(["broken thumbnail"]))
+        assert.equal(result, image)
+        assert.equal(image.src, "blob:codogma-thumbnail-1")
+
+        const [errorListener] = listeners.get("error")
+        assert.ok(errorListener, "failed image decoding must still have a cleanup listener")
+        assert.equal(errorListener.options?.once, true)
+        errorListener.listener(new Event("error"))
+
+        assert.deepEqual(revoked, ["blob:codogma-thumbnail-1"],
+            "a failed thumbnail must release its object URL too")
+    })
 })
