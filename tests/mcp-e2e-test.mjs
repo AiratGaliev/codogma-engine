@@ -9,6 +9,7 @@ import assert from "node:assert/strict"
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import { spawn } from "node:child_process"
+import { assertToolInputSchema } from "./mcp-schema-contract.mjs"
 
 const cmd = process.argv[2] || "node"
 const args = process.argv.slice(3)
@@ -82,11 +83,19 @@ async function callTool(name, args) {
     if (response.error) throw new Error(`${name}: ${response.error.message}`)
 
     const result = response.result
-    const output = (result?.content || [])
+    if (!result) throw new Error(`${name}: пустой ответ MCP-сервера`)
+    assert.ok(Array.isArray(result.content), `${name}: tools/call result.content должен быть массивом`)
+    for (const [index, item] of result.content.entries()) {
+        assert.ok(item && typeof item === "object" && typeof item.type === "string",
+            `${name}: content[${index}] должен иметь строковый type`)
+        if (item.type === "text") {
+            assert.ok(typeof item.text === "string", `${name}: content[${index}].text должен быть строкой`)
+        }
+    }
+    const output = result.content
         .map((item) => item.type === "text" ? item.text : `[${item.type}]`)
         .join("\n")
 
-    if (!result) throw new Error(`${name}: пустой ответ MCP-сервера`)
     if (result.isError) throw new Error(`${name}: ${output}`)
     return output
 }
@@ -123,24 +132,16 @@ async function main() {
     // JSON Schema, ошибки валидации не роняют сервер, а контракт результата
     // tools/call (content: array) соблюдается на живых вызовах ниже.
     console.log("\n== tool input schemas (Zod 4 -> JSON Schema) ==")
+    let nestedSchemaCount = 0
+    let optionalFieldCount = 0
     for (const tool of list.result.tools) {
-        const schema = tool.inputSchema
-        assert.ok(schema && typeof schema === "object" && !Array.isArray(schema),
-            `${tool.name}: inputSchema должен быть объектом JSON Schema`)
-        assert.equal(schema.type, "object",
-            `${tool.name}: inputSchema.type должен быть "object"`)
-        assert.ok(schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties),
-            `${tool.name}: inputSchema.properties должен быть объектом`)
-        if (schema.required !== undefined) {
-            assert.ok(Array.isArray(schema.required),
-                `${tool.name}: inputSchema.required должен быть массивом`)
-            for (const req of schema.required) {
-                assert.ok(typeof req === "string" && req in schema.properties,
-                    `${tool.name}: required "${req}" отсутствует в properties`)
-            }
-        }
+        const stats = assertToolInputSchema(tool.name, tool.inputSchema)
+        nestedSchemaCount += stats.nestedSchemaCount
+        optionalFieldCount += stats.optionalFieldCount
     }
-    console.log(`${list.result.tools.length} tools: схемы валидны при Zod 4`)
+    assert.ok(nestedSchemaCount > 0, "official MCP schemas must include nested properties")
+    assert.ok(optionalFieldCount > 0, "official MCP schemas must include optional fields")
+    console.log(`${list.result.tools.length} tools: recursive input schemas valid with Zod 4, ${nestedSchemaCount} nested fields and ${optionalFieldCount} optional fields checked`)
 
     console.log("\n== validation rejects malformed arguments without killing the server ==")
     // 1) неверный тип значения (Zod invalid_type)
@@ -199,6 +200,14 @@ async function main() {
             { type: "Text", properties: { label: "score", text: "Codogma CI passed", x: 250, y: 60, color: "#ff9d45" } }
         ]
     })
+
+    console.log("\n== optional nested object fields (Zod 4 compatibility) ==")
+    const objectList = JSON.parse(await callTool("scene-add-object-list", {
+        sceneId: scene.id,
+        lists: [{ label: `E2E-optional-list-${process.pid}` }]
+    }))
+    assert.ok(Array.isArray(objectList.added) && objectList.added.length === 1,
+        "scene-add-object-list must accept nested items while omitting optional scope/objectIds")
 
     console.log("\n== ide-get-all-prefabs-in-project ==")
     await callTool("ide-get-all-prefabs-in-project", {})
