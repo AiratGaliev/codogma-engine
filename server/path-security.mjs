@@ -282,8 +282,41 @@ export function readFileSafely(base, target, options, maxBytes) {
             throw new Error("Refusing to read an unsafe project file")
         }
 
-        if (Number.isFinite(maxBytes) && fs.fstatSync(fd).size > maxBytes) {
-            throw new Error("Project file exceeds the configured read limit")
+        if (Number.isFinite(maxBytes)) {
+            if (fs.fstatSync(fd).size > maxBytes) {
+                throw new Error("Project file exceeds the configured read limit")
+            }
+
+            // Do not rely on the initial fstat alone: another process may grow
+            // the same inode after the size check. Consume at most maxBytes + 1
+            // bytes from this descriptor so the cap remains effective under
+            // concurrent writes as well.
+            const chunks = []
+            let total = 0
+            let position = 0
+
+            while (true) {
+                const capacity = Math.min(64 * 1024, maxBytes + 1 - total)
+                const chunk = Buffer.alloc(capacity)
+                const bytesRead = fs.readSync(fd, chunk, 0, capacity, position)
+
+                if (bytesRead === 0) break
+
+                total += bytesRead
+                if (total > maxBytes) {
+                    throw new Error("Project file exceeds the configured read limit")
+                }
+
+                chunks.push(chunk.subarray(0, bytesRead))
+                position += bytesRead
+            }
+
+            const data = Buffer.concat(chunks, total)
+            if (typeof options === "string") return data.toString(options)
+            if (options && typeof options === "object" && options.encoding) {
+                return data.toString(options.encoding)
+            }
+            return data
         }
 
         return fs.readFileSync(fd, options)
