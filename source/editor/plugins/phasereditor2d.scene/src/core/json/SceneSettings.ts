@@ -35,7 +35,11 @@ namespace phasereditor2d.scene.core.json {
             public box2dGravityY = 10,
             public box2dAllowSleep = true,
             public box2dDebugDraw = false,
-            public box2dWorld_scale = 30
+            public box2dWorld_scale = 30,
+            public importFileExtension = false,
+            public box2dGenerateWorldCode = false,
+            public box2dSceneGenerateDebugCode = false,
+            public box2dDebugEditor = false
         ) {
 
         }
@@ -74,6 +78,10 @@ namespace phasereditor2d.scene.core.json {
             write(data, "box2dAllowSleep", this.box2dAllowSleep, true);
             write(data, "box2dDebugDraw", this.box2dDebugDraw, false);
             write(data, "box2dWorld_scale", this.box2dWorld_scale, 30);
+            write(data, "importFileExtension", this.importFileExtension, false);
+            write(data, "box2dGenerateWorldCode", this.box2dGenerateWorldCode, false);
+            write(data, "box2dSceneGenerateDebugCode", this.box2dSceneGenerateDebugCode, false);
+            write(data, "box2dDebugEditor", this.box2dDebugEditor, false);
 
             return data;
         }
@@ -110,6 +118,10 @@ namespace phasereditor2d.scene.core.json {
             this.box2dAllowSleep = read(data, "box2dAllowSleep", true);
             this.box2dDebugDraw = read(data, "box2dDebugDraw", false);
             this.box2dWorld_scale = read(data, "box2dWorld_scale", 30);
+            this.importFileExtension = read(data, "importFileExtension", false);
+            this.box2dGenerateWorldCode = read(data, "box2dGenerateWorldCode", false);
+            this.box2dSceneGenerateDebugCode = read(data, "box2dSceneGenerateDebugCode", false);
+            this.box2dDebugEditor = read(data, "box2dDebugEditor", false);
         }
     }
 }

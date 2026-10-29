@@ -2,6 +2,14 @@ namespace phasereditor2d.ide.core.code {
 
     import io = colibri.core.io;
 
+    export function projectHasRootPackageJson(): boolean {
+        const root = colibri.ui.ide.FileUtils.getRoot();
+        if (root && root.getFile("package.json")) {
+            return true;
+        }
+        return false;
+    }
+
     export function isCopiedLibraryFile(file: io.FilePath) {
 
         if (file.isRoot()) {
@@ -70,7 +78,7 @@ namespace phasereditor2d.ide.core.code {
         return findNodeModuleName(file.getParent());
     }
 
-    export function getImportPath(file: io.FilePath, importFile: io.FilePath): { importPath: string, asDefault: boolean } {
+    export function getImportPath(file: io.FilePath, importFile: io.FilePath, includeFileExtension = false): { importPath: string, asDefault: boolean } {
 
         const nodeModule = findNodeModuleName(importFile);
 
@@ -82,12 +90,13 @@ namespace phasereditor2d.ide.core.code {
         const parent = file.getParent();
         const parentPath = parent.getFullName();
         const parentElements = parentPath.split("/");
-        const importFilePath = io.FilePath.join(importFile.getParent().getFullName(), importFile.getNameWithoutExtension());
+        const importFileName = includeFileExtension ? importFile.getName() : importFile.getNameWithoutExtension();
+        const importFilePath = io.FilePath.join(importFile.getParent().getFullName(), importFileName);
         const importFileElements = importFilePath.split("/");
 
         if (parent === importFile.getParent()) {
 
-            return { importPath: "./" + importFile.getNameWithoutExtension(), asDefault: true };
+            return { importPath: "./" + importFileName, asDefault: true };
         }
 
         if (importFilePath.startsWith(parentPath + "/")) {
