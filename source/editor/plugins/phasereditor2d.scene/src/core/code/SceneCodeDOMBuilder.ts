@@ -171,6 +171,35 @@ namespace phasereditor2d.scene.core.code {
                     this.buildPrefabPropertiesFields(fields);
                 }
 
+                if (!this._isPrefabScene && settings.box2dGenerateWorldCode
+                    && !fields.some(field => field.getName() === "worldId")) {
+
+                    if (settings.compilerOutputLanguage === "TYPE_SCRIPT") {
+                        ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, "b2WorldId", this._sceneFile);
+                    }
+
+                    const worldIdField = new FieldDeclCodeDOM("worldId", "b2WorldId");
+                    worldIdField.setAllowUndefined(true);
+                    fields.push(worldIdField);
+                }
+
+                if (!this._isPrefabScene && settings.box2dSceneGenerateDebugCode) {
+
+                    if (!fields.some(field => field.getName() === "debugGraphics")) {
+
+                        const debugGraphics = new FieldDeclCodeDOM("debugGraphics", "Phaser.GameObjects.Graphics");
+                        debugGraphics.setAllowUndefined(true);
+                        fields.push(debugGraphics);
+                    }
+
+                    if (!fields.some(field => field.getName() === "debugDraw")) {
+
+                        const debugDraw = new FieldDeclCodeDOM("debugDraw", "PhaserDebugDraw");
+                        debugDraw.setAllowUndefined(true);
+                        fields.push(debugDraw);
+                    }
+                }
+
                 clsDecl.getBody().push(...methods);
                 clsDecl.getBody().push(...fields);
 
@@ -555,6 +584,10 @@ namespace phasereditor2d.scene.core.code {
 
             const generateWorld = settings.box2dGenerateWorldCode || settings.box2dEnabled;
 
+            if (settings.box2dSceneGenerateDebugCode && !settings.box2dGenerateWorldCode) {
+                throw new Error("Box2D debug drawing requires the 'Generate Box2D world code' setting.");
+            }
+
             if (this._scene.isPrefabSceneType() || !generateWorld) {
 
                 return;
@@ -584,12 +617,12 @@ namespace phasereditor2d.scene.core.code {
                         + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
                     new RawCodeDOM(`this.worldId = world.worldId;`));
 
-                if (settings.box2dSceneGenerateDebugCode) {
+                if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
 
-                    for (const name of ["PhaserDebugDraw", "b2World_Draw"]) {
-
-                        ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
-                    }
+                    ui.sceneobjects.Box2DBodyComponent.addBox2DImport(
+                        this._unit, "PhaserDebugDraw", this._sceneFile, "PhaserDebugDraw.js");
+                    ui.sceneobjects.Box2DBodyComponent.addBox2DImport(
+                        this._unit, "b2World_Draw", this._sceneFile);
 
                     body.push(
                         new RawCodeDOM(`this.debugGraphics = this.add.graphics();`),
@@ -637,7 +670,7 @@ namespace phasereditor2d.scene.core.code {
 
             const names = ["b2World_Step", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"];
 
-            if (settings.box2dSceneGenerateDebugCode) {
+            if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
 
                 names.push("b2World_Draw");
             }
@@ -651,7 +684,8 @@ namespace phasereditor2d.scene.core.code {
                 ? "(_time: number, delta: number)"
                 : "(_time, delta)";
 
-            const worldVar = settings.box2dGenerateWorldCode ? "this.worldId" : "box2dWorldId";
+            const worldVar = ui.sceneobjects.Box2DBodyComponent.getWorldIdExpression(
+                settings.box2dGenerateWorldCode, false);
 
             const updateBody = [
                 new RawCodeDOM(""),
@@ -671,7 +705,7 @@ namespace phasereditor2d.scene.core.code {
                 new RawCodeDOM(`    UpdateWorldSprites(${worldVar});`)
             ];
 
-            if (settings.box2dSceneGenerateDebugCode) {
+            if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
 
                 updateBody.push(
                     new RawCodeDOM("    this.debugGraphics.clear();"),

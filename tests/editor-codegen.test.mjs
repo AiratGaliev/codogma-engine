@@ -226,26 +226,14 @@ test("TypeScript unit generator emits typed fields", () => {
     assert.match(output, /sprite: Phaser\.GameObjects\.Sprite/, "TypeScript output must carry field type annotations")
 })
 
-test("Box2D polygon code generation passes the number of parsed vertices to b2ComputeHull", () => {
-    const builder = new globalThis.phasereditor2d.scene.ui.sceneobjects.B2ShapeCodeDOMBuilder()
-    const obj = {
-        __b2Data: { points: "0 0 10 0 10 10 0 10" },
-        getEditorSupport: () => ({ getObjectType: () => "b2PolygonShape" })
-    }
-    const call = builder.buildCreateObjectWithFactoryCodeDOM({
-        obj,
-        parentVarName: "box2dWorldId",
-        sceneExpr: "this.scene"
-    })
-    const method = new coreCode.MethodDeclCodeDOM("createShape")
-    method.setBody([call])
-    const klass = new coreCode.ClassDeclCodeDOM("GeneratedBox2D")
-    klass.getBody().push(method)
-    const unit = new coreCode.UnitCodeDOM([klass])
-    const output = new coreCode.JavaScriptUnitCodeGenerator(unit).generate("")
+test("Box2D world ID expression preserves legacy variables and template-owned scene/prefab IDs", () => {
+    const component = globalThis.phasereditor2d.scene.ui.sceneobjects.Box2DBodyComponent;
 
-    assert.match(output, /b2ComputeHull\(\[.*\], 4\)/,
-        "four coordinate pairs must produce four polygon vertices, not two")
+    assert.equal(component.getWorldIdExpression(false, false), "box2dWorldId");
+    assert.equal(component.getWorldIdExpression(false, true), "box2dWorldId",
+        "legacy prefab code must use the world variable created in the consuming scene");
+    assert.equal(component.getWorldIdExpression(true, false), "this.worldId");
+    assert.equal(component.getWorldIdExpression(true, true), "this.scene.worldId");
 })
 
 /* =========================== code helpers =========================== */

@@ -1,6 +1,6 @@
 # Baseline качества кода и проверок
 
-**Базовый снимок `dev`:** `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. SHA `754edaa…` относится к историческому baseline PR #10. CI Fast PR #21 был успешен на head `bb9de8d2211947e196cf955f012bc4ee18537cbe`; это не runtime acceptance и не статус будущего head.  
+**Базовый снимок `dev`:** `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. SHA `754edaa…` — исторический baseline. CI Fast run #40948450618 успешно завершился на точном head `d053cdb23f3312f775b162a642aa3fdb6f0c83b7`; это не runtime acceptance и не статус будущего head.  
 **Охват:** manifests, TypeScript configs, workflows, test scripts и ключевые server/MCP paths. Полный построчный lint/security review всех legacy-файлов не выполнялся.
 
 ## Фактические CI/local checks

@@ -31,11 +31,20 @@
 | Reference | Что изучать | Ограничения/критика, которую проверять | Как избежать повторения |
 |---|---|---|---|
 | **Unity 6** | Цельный Editor → assets → build profiles → Package Manager → profiling workflow | Web имеет отдельные browser/system requirements; Unity packages/URP не копируются как universal architecture | Разделить editor/runtime/build; отключение capability подтверждать output report, не checkbox |
-| **Cocos Creator 4.0 / Cocos 4** | TypeScript-first 2D workflow, sorting/batching, target build selection | Manual Cocos Creator 4.0 и исходная ветка Cocos 4 — разные references; manifest не доказывает bundle tree-shaking | Закреплять версии manual/source и проверять чистую fixture-сборку |
+| **Cocos Creator 4.0 manual / separate COCOS 4 source** | Creator scene/asset workflows, sorting/batching; COCOS 4 source — отдельный исследовательский reference | Creator 4.0 manual обозначает себя как LTS, но также говорит о 3.x как latest; `cocos/cocos4` не является тем же SDK line, а manifest не доказывает tree-shaking | Pin exact manual/source version, verify release availability/API and fixture build; retain Creator 3.8 LTS as separate reference |
 | **Godot 4.x Web** | Scene/Node model, integrated authoring, export templates | Godot 4.5 docs указывают WebAssembly/WebGL 2, отсутствие Web export для C# в Godot 4; threaded build требует cross-origin isolation. Есть Web Audio trade-offs | JS/TS-native API и default build без обязательной COOP/COEP; ограничения показывать в target capability table |
 | **Defold** | Web runtime, explicit heap size и HTML5 size/memory workflow | Engine/game size и heap — разные показатели; маленький heap даёт allocation failures, большой вреден low-end devices | Раздельно считать transfer size, decoded/GPU memory и heap/high-water mark |
 
 Community reports Godot Web упоминают startup size, Safari/mobile, cross-origin headers и export plugins, но эти reports — test hypotheses, не доказательство дефекта актуальной версии. Использовать [официальный Godot 4.5 Web manual](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html), [community thread](https://www.reddit.com/r/godot/comments/1qx4qr8/limitations_of_web_build/), [Defold HTML5 manual](https://defold.com/manuals/html5/) и [Defold size guide](https://defold.com/manuals/optimization-size/) с фиксацией version/device/host.
+
+## 3.2. WebGPU и WebAssembly: стандарты под наблюдением
+
+На 29.10.2026 W3C указывает статус Candidate Recommendation Draft для WebGPU и WGSL; MDN помечает WebGPU как limited availability/non-Baseline и secure-context-only. WebAssembly Core 3.0 также опубликован как Candidate Recommendation Draft 28.10.2026. Это аргумент в пользу заменяемой renderer/runtime boundary, а не обязательной миграции.
+
+- Default target остаётся на проверенном WebGL 2 path; WebGPU — opt-in backend после feature detection, adapter/device creation, device-loss recovery, formats/limits checks и browser/device acceptance.
+- Core, Project Model и scene serialization не хранят GPU handles и не зависят от backend-specific resource identity.
+- WASI/component-model и browser WebAssembly/JS APIs — разные execution environments. Не требовать WASI в browser runtime без доказанного use case.
+- Обновлять standards watch по официальным публикациям; статус proposal/CR Draft не означает одинаковую реализацию или поддержку во всех браузерах.
 
 ## Инварианты Codogma
 

@@ -1,6 +1,6 @@
 # Матрица зависимостей и capabilities
 
-**Базовый снимок `dev`:** `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. PR #21 добавляет editor/codegen paths, но не доказывает, что версия внешнего Box2D runtime, его packaging и browser behaviour закреплены в end-to-end fixture. Старые dependency audit результаты не являются текущим SBOM или scan каждого нового head.  
+**Scope note:** эта матрица перечисляет direct package roots и пути поставки bundle; это не текущий SBOM или scan каждого нового head. Наличие `PhaserBox2D.js` в test fixture не доказывает совместимость любой внешней версии runtime/helper.
 **Статус:** первоначальная инвентаризация непосредственных зависимостей и путей доставки. Это не полный SBOM и не юридическое заключение по лицензиям всех транзитивных пакетов.
 
 ## Активные package roots

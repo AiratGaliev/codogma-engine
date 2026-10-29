@@ -23,16 +23,14 @@ Development priorities:
 
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
-Web behaviour is a product constraint, not a final packaging detail: browser lifecycle, audio activation, WebGL context loss, mobile memory/input, iframe hosts, cross-origin isolation and initial-download cost must be covered by explicit target tests. See the [architecture risk register](docs/architecture-risk-register.md).
-
-**Target scene workflow:** a versioned, serializable scene document is the source of truth. The future Core/runtime loader will instantiate that data and attach independently authored, explicitly registered TypeScript components. A separate generated TypeScript class/file for every scene must not be required to author, preview or build a game. The target contract is defined in the [technical specification §5.3](docs/technical-specification.md#53-сцена-как-сериализуемые-данные-а-не-обязательный-генерируемый-класс), [ADR-0001](docs/decisions/ADR-0001-core-architecture.md) and [roadmap Stage 2](docs/roadmap.md#этап-2--project-model-и-собственный-typescript-componentecs-core). It is **not implemented as a complete workflow in the current editor baseline**. Existing scene serialization/code generation remains supported while the new loader and a safe migration/compatibility path are developed and accepted.
+Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL loss/recovery, iframe host contracts, resource/memory budgets, storage failures and mobile/embedded-host acceptance are explicit requirements. See [the architecture risk register](docs/architecture-risk-register.md).
 
 ## Current capabilities
 
 | Area | Available today |
 |---|---|
 | Browser-based IDE | A local Node.js server serves the editor at <code>/editor/</code> and connects it to a project directory. |
-| Scene authoring | Visual scene editing, inspectors, serialization and generated game code in the current/legacy editor workflow; the new data-driven Core scene loader is not implemented yet. |
+| Scene authoring | Visual scene editing, inspectors, serialization and generated game code. |
 | Project assets | Asset Pack Editor and asset tools for textures, spritesheets, tilemaps and other supported asset types. |
 | Animation and components | Animation tools, User Components Editor and code editors. |
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
@@ -274,6 +272,8 @@ A successful server-side MCP test, TypeScript build or security smoke test does 
 ## Branches, Pull Requests and Mandatory Development Rules
 
 The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
+
+For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`) and the task-start/review/acceptance checklist, follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). In particular, `In Review` means implementation is finished but evidence or acceptance is still pending; `Done` requires all applicable criteria to be verified.
 
 ### Permanent branches
 

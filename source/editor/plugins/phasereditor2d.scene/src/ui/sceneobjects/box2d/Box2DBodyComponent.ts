@@ -169,6 +169,16 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             unit.addImport(elementName, importPath, false);
         }
 
+        static getWorldIdExpression(generateWorldCode: boolean, isPrefabInstance: boolean): string {
+
+            if (!generateWorldCode) {
+
+                return "box2dWorldId";
+            }
+
+            return isPrefabInstance ? "this.scene.worldId" : "this.worldId";
+        }
+
         static isBodyEnabled(obj: ISceneGameObject) {
 
             return Box2DBodyComponent.enabled.getValue(obj) === true;
@@ -284,10 +294,10 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const unit = args.unit;
 
-            // v5 templates expose the world via this.worldId (scenes) or this.scene.worldId (prefabs)
-            const isPrefabInstance = args.prefabSerializer ? true : false;
-            const worldVar = isPrefabInstance ? "this.scene.worldId"
-                : settings.box2dGenerateWorldCode ? "this.worldId" : "box2dWorldId";
+            // Prefab instances must use the world mode of their consuming scene.
+            const isPrefabInstance = args.prefabSerializer !== undefined && args.prefabSerializer !== null;
+            const worldVar = Box2DBodyComponent.getWorldIdExpression(
+                settings.box2dGenerateWorldCode, isPrefabInstance);
 
             const bodyParts = ["...b2DefaultBodyDef()"];
             const shapeParts = ["...b2DefaultShapeDef()"];

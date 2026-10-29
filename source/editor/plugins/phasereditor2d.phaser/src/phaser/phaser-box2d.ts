@@ -1,6 +1,12 @@
 /**
  * Ambient type declarations for the Phaser Box2D physics runtime module.
  *
+ * The declarations in this file describe the legacy object-oriented `Phaser.Box2D.World/Body` compatibility surface.
+ * They are NOT the low-level named-export C API consumed by the current scene code generator
+ * (for example `CreateWorld`, `b2CreateBody`, `b2CreatePolygonShape` from `PhaserBox2D.js`).
+ * Do not infer runtime compatibility from these ambient declarations alone. Keep this legacy
+ * API separate until a dedicated migration updates declarations, generated imports and fixtures together.
+
  * IMPORTANT: Box2D is NOT part of the Phaser 4.2.1 core dist bundled with this editor
  * (see `phaser.ts`): it ships as a separate Phaser runtime module. These declarations
  * cover the API surface the scene editor and the generated scene code rely on, so the

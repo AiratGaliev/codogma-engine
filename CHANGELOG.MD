@@ -7,7 +7,7 @@ MCP robustness, and regression suites for every defect found along the way.
 
 ### Box2D / code generation
 
-* Fix: polygon shape generation passes the actual parsed vertex count to `b2ComputeHull`; a regression test checks generated code. Real Box2D browser/runtime acceptance (world lifecycle, fixed-step, scaling and cleanup) remains a separate gate.
+* Fix: prefab body generation selects the world ID according to the consuming scene's configured mode. Exposed world-generation/debug settings in Inspector, declares the generated `worldId` property and imports `PhaserDebugDraw` from the separate helper file. Incomplete standalone B2Body/B2Shape nodes are deferred until their Inspector/schema/body-ID/prefab/runtime contracts are complete. Browser/runtime acceptance remains a separate gate.
 
 ### Editor
 
