@@ -379,3 +379,180 @@ export function writeFileSafely(base, target, content) {
         fs.closeSync(fd)
     }
 }
+
+/**
+ * Build a validated single-entry context. Destructive operations must never
+ * receive a caller-controlled multi-component path after the parent directory
+ * has been opened; only the final basename is appended to that handle.
+ */
+function safeProjectEntryContext(base, target) {
+    if (typeof target !== "string") return null
+
+    const lexicalBase = path.resolve(base)
+    const full = path.resolve(target)
+    if (!isInsideBase(lexicalBase, full) || full === lexicalBase) return null
+
+    const leaf = path.basename(full)
+    if (!leaf || leaf === "." || leaf === ".." || leaf.includes(path.sep)) return null
+
+    try {
+        if (!isWithinRealBase(base, full)) return null
+    } catch {
+        return null
+    }
+
+    return { full, parent: path.dirname(full), leaf }
+}
+
+/**
+ * Verify that an opened directory descriptor and its current pathname still
+ * identify the same directory inside the project. On Linux, /proc/self/fd
+ * provides evidence for the object actually opened, not just its pathname.
+ */
+function isSafeOpenProjectDirectory(base, parentPath, fd) {
+    try {
+        const realBase = fs.realpathSync(base)
+        const opened = fs.fstatSync(fd)
+        if (!opened.isDirectory()) return false
+
+        if (process.platform === "linux") {
+            const descriptorPath = fs.readlinkSync(`/proc/self/fd/${fd}`)
+            if (descriptorPath.endsWith(" (deleted)") || !isInsideBase(realBase, path.resolve(descriptorPath))) {
+                return false
+            }
+        }
+
+        const currentRealPath = fs.realpathSync(parentPath)
+        if (!isInsideBase(realBase, currentRealPath)) return false
+        const current = fs.statSync(parentPath)
+        return current.isDirectory() && current.dev === opened.dev && current.ino === opened.ino
+    } catch {
+        return false
+    }
+}
+
+async function openSafeProjectParentDirectory(base, parentPath) {
+    try {
+        if (!isWithinRealBase(base, parentPath)) return null
+    } catch {
+        return null
+    }
+
+    let handle
+    try {
+        const directoryFlag = fs.constants.O_DIRECTORY ?? 0
+        handle = await fsp.open(parentPath, fs.constants.O_RDONLY | directoryFlag)
+    } catch {
+        return null
+    }
+
+    if (!isSafeOpenProjectDirectory(base, parentPath, handle.fd)) {
+        await handle.close().catch(() => {})
+        return null
+    }
+
+    return handle
+}
+
+function entryPathAtDirectoryHandle(handle, parentPath, leaf) {
+    if (process.platform === "linux") {
+        return `/proc/self/fd/${handle.fd}/${leaf}`
+    }
+    return path.join(parentPath, leaf)
+}
+
+/**
+ * Remove one project entry through an already-open parent directory descriptor
+ * on Linux. The operation path is anchored to that descriptor, so swapping the
+ * original parent pathname for an outside symlink after validation does not
+ * redirect the delete to the symlink target. Other platforms use the existing
+ * path-based operation after immediate containment/identity revalidation;
+ * that fallback is best-effort and is not a portable race-free guarantee.
+ */
+export async function removeProjectEntrySafely(base, target, options = {}) {
+    const context = safeProjectEntryContext(base, target)
+    if (!context) return false
+
+    if (process.platform !== "linux") {
+        try {
+            if (!isWithinRealBase(base, context.full)) return false
+            const realBase = fs.realpathSync(base)
+            const parentReal = fs.realpathSync(context.parent)
+            if (!isInsideBase(realBase, parentReal)) return false
+            await fsp.rm(context.full, options)
+            return true
+        } catch (error) {
+            return Boolean(options.force && error.code === "ENOENT")
+        }
+    }
+
+    const handle = await openSafeProjectParentDirectory(base, context.parent)
+    if (!handle) return false
+
+    try {
+        // Recheck immediately before dispatch. The syscall remains anchored to
+        // the opened directory even if another process swaps the pathname next.
+        if (!isSafeOpenProjectDirectory(base, context.parent, handle.fd)) return false
+        const operationPath = entryPathAtDirectoryHandle(handle, context.parent, context.leaf)
+        await fsp.rm(operationPath, options)
+        return true
+    } catch (error) {
+        return Boolean(options.force && error.code === "ENOENT")
+    } finally {
+        await handle.close().catch(() => {})
+    }
+}
+
+/**
+ * Rename an entry using open parent-directory descriptors on Linux. Both ends
+ * use one-component names relative to their verified directories. Platforms
+ * without procfs use containment/identity rechecks around the pathname syscall;
+ * that fallback still has a documented race window.
+ */
+export async function renameProjectEntrySafely(base, fromTarget, toTarget) {
+    const source = safeProjectEntryContext(base, fromTarget)
+    const destination = safeProjectEntryContext(base, toTarget)
+    if (!source || !destination || source.full === destination.full) return false
+
+    if (process.platform !== "linux") {
+        try {
+            if (!isWithinRealBase(base, source.full) || !isWithinRealBase(base, destination.parent)) return false
+            const realBase = fs.realpathSync(base)
+            const sourceParent = fs.realpathSync(source.parent)
+            const destinationParent = fs.realpathSync(destination.parent)
+            if (!isInsideBase(realBase, sourceParent) || !isInsideBase(realBase, destinationParent)) return false
+            await fsp.rename(source.full, destination.full)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    const sourceHandle = await openSafeProjectParentDirectory(base, source.parent)
+    if (!sourceHandle) return false
+    const destinationHandle = await openSafeProjectParentDirectory(base, destination.parent)
+    if (!destinationHandle) {
+        await sourceHandle.close().catch(() => {})
+        return false
+    }
+
+    try {
+        if (!isSafeOpenProjectDirectory(base, source.parent, sourceHandle.fd)
+            || !isSafeOpenProjectDirectory(base, destination.parent, destinationHandle.fd)) {
+            return false
+        }
+
+        const sourcePath = entryPathAtDirectoryHandle(sourceHandle, source.parent, source.leaf)
+        const destinationPath = entryPathAtDirectoryHandle(destinationHandle, destination.parent, destination.leaf)
+        await fsp.rename(sourcePath, destinationPath)
+        return true
+    } catch {
+        return false
+    } finally {
+        await Promise.all([
+            sourceHandle.close().catch(() => {}),
+            destinationHandle.close().catch(() => {})
+        ])
+    }
+}
+
