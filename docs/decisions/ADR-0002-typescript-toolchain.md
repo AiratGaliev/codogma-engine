@@ -31,7 +31,7 @@
 | dependency-cruiser | Проверка границ слоёв и циклов | Сначала report mode; границы Core → adapters/Editor и правила для новых editor modules вводить постепенно |
 | Node.js built-in test/assert | Остаётся достаточным для простых JS server/security smoke scripts | Не мигрировать существующие smoke tests без необходимости |
 
-Точные версии npm packages выбираются в реализации пилота на основе актуальной совместимости, закрепляются lockfile и подтверждаются clean install. Эта ADR не утверждает, что инструменты уже добавлены в зависимости или CI.
+Legacy editor не переводится на строгие правила массово. Ограниченный pilot реализуется в уже строгом `packages/localization/`: пакет использует root-locked ESLint/Prettier/Knip/dependency-cruiser, отдельный ESLint scope и package-local Prettier config. Пакетный lockfile остаётся минимальным и закрепляет TypeScript 5.3.3; версии quality tools не дублируются в нём. Node built-in `node:test` сохраняется вместо добавления ещё одного test runner. Knip работает с `--no-exit-code`, dependency-cruiser — с warning severity, пока false positives и dynamic entry points проверяются человеком. Этот pilot должен пройти clean CI checks прежде чем считать rollout завершённым.
 
 ### 3. Структура и изоляция
 
@@ -56,4 +56,4 @@
 
 **Компромиссы:** временно существуют разные quality scopes и возможно отдельный lockfile. Это предпочтительнее, чем вводить непроверенные правила на весь legacy code.
 
-Следующие задачи: создать пилотный toolchain для нового/изменяемого Codogma-owned scope; проверить его в CI и применить к выбранным editor modernization modules; решить, нужно ли удалить остаточные `source/editor/lint.sh` и `source/editor/tslint.json`; затем расширять analysis scope постепенно. TSLint не считать доступным или активным, пока его dependency не вернулась в manifest.
+Следующие задачи после pilot: проверить CI и report findings; применить accepted checks к новым Codogma-owned modules без включения всего legacy tree; решить, нужно ли удалить остаточные `source/editor/lint.sh` и `source/editor/tslint.json`; затем расширять analysis scope постепенно. TSLint не считать доступным или активным, пока его dependency не вернулась в manifest.
