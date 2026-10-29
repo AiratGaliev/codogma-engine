@@ -13,7 +13,7 @@ import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -441,6 +441,94 @@ test("readProjectDirectoryEntriesSafelySync does not enumerate an outside symlin
         fs.readdirSync = originalReaddir
         try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
         try { fs.renameSync(parkedAssets, assets) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+
+test("copyProjectEntrySafely copies regular files and safely replaces an existing destination", async () => {
+    const t = createTempTree()
+    const source = path.join(t.base, "file.txt")
+    const destination = path.join(t.base, "copy.txt")
+    fs.writeFileSync(source, "source payload")
+    fs.writeFileSync(destination, "old payload")
+
+    try {
+        assert.equal(await copyProjectEntrySafely(t.base, source, destination), true)
+        assert.equal(fs.readFileSync(destination, "utf8"), "source payload")
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("copyProjectEntrySafely copies a directory tree without following symbolic links", async () => {
+    const t = createTempTree()
+    const source = path.join(t.base, "assets")
+    const destination = path.join(t.base, "copied-assets")
+    fs.writeFileSync(path.join(source, "nested", "nested.txt"), "nested payload")
+    fs.writeFileSync(path.join(source, ".hidden-asset"), "hidden payload")
+
+    try {
+        assert.equal(await copyProjectEntrySafely(t.base, source, destination), true)
+        assert.equal(fs.readFileSync(path.join(destination, "hero.png"), "utf8"), "png")
+        assert.equal(fs.readFileSync(path.join(destination, "nested", "nested.txt"), "utf8"), "nested payload")
+        assert.equal(fs.readFileSync(path.join(destination, ".hidden-asset"), "utf8"), "hidden payload")
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("copyProjectEntrySafely rejects symbolic-link sources and preserves outside data", async () => {
+    const t = createTempTree()
+    const link = path.join(t.base, "copy-link.txt")
+    const destination = path.join(t.base, "copy-destination.txt")
+
+    try {
+        fs.symlinkSync(path.join(t.outside, "secret.txt"), link, "file")
+        assert.equal(await copyProjectEntrySafely(t.base, link, destination), false)
+        assert.equal(fs.existsSync(destination), false)
+        assert.equal(fs.readFileSync(path.join(t.outside, "secret.txt"), "utf8"), "secret")
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("copyProjectEntrySafely rejects an outside destination-parent swap before commit", { skip: process.platform !== "linux" }, async () => {
+    const t = createTempTree()
+    const destination = path.join(t.base, "destination")
+    const parkedDestination = path.join(t.base, "destination-internal")
+    const source = path.join(t.base, "file.txt")
+    const target = path.join(destination, "copied.txt")
+    const outsideTarget = path.join(t.outside, "copied.txt")
+    fs.mkdirSync(destination)
+    fs.writeFileSync(source, "new payload")
+    fs.writeFileSync(outsideTarget, "OUTSIDE MUST SURVIVE")
+    const originalOpen = fsp.open
+    let swapped = false
+
+    try {
+        fsp.open = async function (filePath, ...args) {
+            if (!swapped && typeof filePath === "string" && filePath.includes("/.codogma-copy-")) {
+                fs.renameSync(destination, parkedDestination)
+                fs.symlinkSync(t.outside, destination, "dir")
+                swapped = true
+            }
+            return originalOpen.call(fsp, filePath, ...args)
+        }
+
+        assert.equal(await copyProjectEntrySafely(t.base, source, target), false)
+        assert.equal(swapped, true, "test must inject the symlink swap before the temporary copy file is opened")
+        assert.equal(fs.readFileSync(outsideTarget, "utf8"), "OUTSIDE MUST SURVIVE")
+        assert.equal(fs.existsSync(path.join(parkedDestination, "copied.txt")), false)
+        assert.deepEqual(
+            fs.readdirSync(parkedDestination),
+            [],
+            "the temporary file created by the rejected copy must be cleaned up"
+        )
+    } finally {
+        fsp.open = originalOpen
+        try { fs.rmSync(destination, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedDestination, destination) } catch {}
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
