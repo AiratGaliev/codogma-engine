@@ -21,7 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { openSafeProjectFileForWrite, readFileSafely, writeFileSafely } from "./path-security.mjs"
+import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, removeProjectEntrySafely, writeFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -140,7 +140,7 @@ function readSceneFile(rel) {
 function writeSceneFile(rel, data) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full) throw new Error("invalid scene path: " + rel)
-    fs.mkdirSync(path.dirname(full), { recursive: true })
+    if (!ensureProjectDirectorySafelySync(PROJECT_DIR, path.dirname(full))) throw new Error("invalid scene path: " + rel)
     const serialized = JSON.stringify(data, null, 4)
     if (!writeFileSafely(PROJECT_DIR, full, serialized)) {
         throw new Error("invalid scene path: " + rel)
@@ -1106,7 +1106,7 @@ defTool(
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
         if (rel.toLowerCase().endsWith(".scene")) throw new Error("Use the scene-* tools to modify scene files")
-        await fsp.mkdir(path.dirname(full), { recursive: true })
+        if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) throw new Error("invalid path")
         const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
         if (!handle) throw new Error("invalid path")
         try {
@@ -1128,7 +1128,7 @@ defTool(
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full || full === PROJECT_DIR) throw new Error("invalid path")
-        await fsp.rm(full, { recursive: true, force: true })
+        if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) throw new Error("invalid path")
         notifyFilesChanged()
         return text(`Deleted: ${rel}`)
     }
