@@ -31,6 +31,7 @@ const PLUGINS_DIR = path.join(ROOT, "source", "editor", "plugins")
 loadEditorBundles(PLUGINS_DIR)
 
 const packCore = globalThis.phasereditor2d.pack.core
+const packUi = globalThis.phasereditor2d.pack.ui
 const coreCode = globalThis.phasereditor2d.scene.core.code
 const sceneUi = globalThis.phasereditor2d.scene.ui
 const json = globalThis.colibri.core.json
@@ -572,5 +573,37 @@ test("ThumbnailCache recovers when persisting a successfully loaded thumbnail fa
         localForage.createInstance = originalCreateInstance
         controls.Controls.createBlobFromImage = originalCreateBlobFromImage
         console.warn = originalWarn
+    }
+})
+
+
+test("AudioPreviewSection resolves string, array, and { type, url } descriptor URLs", () => {
+    const sectionPrototype = packUi.properties.AudioPreviewSection.prototype
+    const originalLookup = packCore.AssetPackUtils.getFileFromPackUrl
+    const resolved = new Map([
+        ["audio/single.ogg", "/project/audio/single.ogg"],
+        ["audio/array.mp3", "/project/audio/array.mp3"],
+        ["audio/descriptor.webm", "/project/audio/descriptor.webm"]
+    ])
+    packCore.AssetPackUtils.getFileFromPackUrl = (_pack, url) => {
+        const resolvedUrl = resolved.get(url)
+        return resolvedUrl ? { getUrl: () => resolvedUrl } : null
+    }
+
+    try {
+        const run = data => {
+            const section = Object.create(sectionPrototype)
+            section.getSelectionFirstElement = () => new packCore.AudioAssetPackItem(null, data)
+            return section.getSelectedAudioUrl()
+        }
+
+        assert.equal(run({ url: "audio/single.ogg" }), "/project/audio/single.ogg")
+        assert.equal(run({ url: ["audio/missing.ogg", "audio/array.mp3"] }), "/project/audio/array.mp3")
+        assert.equal(run({ url: [
+            { type: "audio/ogg", url: "audio/descriptor.webm" }
+        ] }), "/project/audio/descriptor.webm")
+        assert.equal(run({ url: [{ type: "audio/ogg" }, 42, null, { url: " " }] }), null)
+    } finally {
+        packCore.AssetPackUtils.getFileFromPackUrl = originalLookup
     }
 })
