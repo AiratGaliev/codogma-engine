@@ -9,10 +9,11 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
+import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -303,6 +304,109 @@ test("readFileSafely enforces maxBytes even when the file grows after fstat", ()
         assert.equal(grew, true, "test must grow the file between fstat and descriptor read")
     } finally {
         fs.readSync = originalReadSync
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+
+test("removeProjectEntrySafely anchors deletion to the opened parent if its path is swapped", { skip: process.platform !== "linux" }, async () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const parkedAssets = path.join(t.base, "assets-internal")
+    const target = path.join(assets, "delete.txt")
+    const outsideTarget = path.join(t.outside, "delete.txt")
+    fs.writeFileSync(target, "inside file")
+    fs.writeFileSync(outsideTarget, "OUTSIDE MUST SURVIVE")
+    const originalRm = fsp.rm
+    let swapped = false
+
+    try {
+        fsp.rm = async function (entryPath, options) {
+            if (!swapped && typeof entryPath === "string" && entryPath.endsWith("/delete.txt")) {
+                assert.match(entryPath, /^\/proc\/self\/fd\/\d+\/delete\.txt$/)
+                fs.renameSync(assets, parkedAssets)
+                fs.symlinkSync(t.outside, assets, "dir")
+                swapped = true
+            }
+            return originalRm.call(fsp, entryPath, options)
+        }
+
+        assert.equal(await removeProjectEntrySafely(t.base, target, { recursive: true, force: true }), true)
+        assert.equal(swapped, true, "test must swap the parent immediately before rm()")
+        assert.equal(fs.readFileSync(outsideTarget, "utf8"), "OUTSIDE MUST SURVIVE")
+        assert.equal(fs.existsSync(path.join(parkedAssets, "delete.txt")), false)
+    } finally {
+        fsp.rm = originalRm
+        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedAssets, assets) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("renameProjectEntrySafely anchors destination to the opened parent if its path is swapped", { skip: process.platform !== "linux" }, async () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const destination = path.join(t.base, "destination")
+    const parkedDestination = path.join(t.base, "destination-internal")
+    fs.mkdirSync(destination)
+    const source = path.join(assets, "move.txt")
+    const target = path.join(destination, "moved.txt")
+    const outsideTarget = path.join(t.outside, "moved.txt")
+    fs.writeFileSync(source, "original payload")
+    const originalRename = fsp.rename
+    let swapped = false
+
+    try {
+        fsp.rename = async function (fromPath, toPath) {
+            if (!swapped && typeof toPath === "string" && toPath.endsWith("/moved.txt")) {
+                assert.match(toPath, /^\/proc\/self\/fd\/\d+\/moved\.txt$/)
+                fs.renameSync(destination, parkedDestination)
+                fs.symlinkSync(t.outside, destination, "dir")
+                swapped = true
+            }
+            return originalRename.call(fsp, fromPath, toPath)
+        }
+
+        assert.equal(await renameProjectEntrySafely(t.base, source, target), true)
+        assert.equal(swapped, true, "test must swap the destination parent immediately before rename()")
+        assert.equal(fs.existsSync(outsideTarget), false, "rename must not write through the swapped outside symlink")
+        assert.equal(fs.readFileSync(path.join(parkedDestination, "moved.txt"), "utf8"), "original payload")
+        assert.equal(fs.existsSync(source), false)
+    } finally {
+        fsp.rename = originalRename
+        try { fs.rmSync(destination, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedDestination, destination) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("ensureProjectDirectorySafely does not create a directory through a swapped outside parent", { skip: process.platform !== "linux" }, async () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const parkedAssets = path.join(t.base, "assets-internal")
+    const target = path.join(assets, "new-folder")
+    const outsideTarget = path.join(t.outside, "new-folder")
+    const originalMkdir = fsp.mkdir
+    let swapped = false
+
+    try {
+        fsp.mkdir = async function (dirPath, options) {
+            if (!swapped && typeof dirPath === "string" && dirPath.endsWith("/new-folder")) {
+                assert.match(dirPath, /^\/proc\/self\/fd\/\d+\/new-folder$/)
+                fs.renameSync(assets, parkedAssets)
+                fs.symlinkSync(t.outside, assets, "dir")
+                swapped = true
+            }
+            return originalMkdir.call(fsp, dirPath, options)
+        }
+
+        assert.equal(await ensureProjectDirectorySafely(t.base, target), false)
+        assert.equal(swapped, true, "test must swap the parent immediately before mkdir()")
+        assert.equal(fs.existsSync(outsideTarget), false, "mkdir must not create a directory through the swapped outside symlink")
+    } finally {
+        fsp.mkdir = originalMkdir
+        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedAssets, assets) } catch {}
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
