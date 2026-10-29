@@ -2,5 +2,6 @@
     "$schema": "../../node_modules/knip/schema.json",
     "entry": ["src/index.ts", "bin/validate-localization.mjs", "tests/*.test.mjs"],
     "project": ["src/**/*.ts", "bin/**/*.mjs", "tests/**/*.mjs"],
+    "ignoreBinaries": ["depcruise", "eslint", "knip", "prettier"],
     "ignoreExportsUsedInFile": true
 }
