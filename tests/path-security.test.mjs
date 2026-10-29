@@ -244,3 +244,37 @@ test("readFileSafely rejects a parent-symlink swap between path validation and o
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
+
+
+test("writeFileSafely rejects a parent-symlink swap immediately before open without truncating outside data", () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const parkedAssets = path.join(t.base, "assets-internal")
+    const target = path.join(assets, "race-write.txt")
+    const outsideTarget = path.join(t.outside, "race-write.txt")
+    fs.writeFileSync(target, "inside original")
+    fs.writeFileSync(outsideTarget, "OUTSIDE MUST STAY")
+    const originalOpenSync = fs.openSync
+    let swapped = false
+
+    try {
+        fs.openSync = function (filePath, ...args) {
+            if (!swapped && filePath === target) {
+                swapped = true
+                fs.renameSync(assets, parkedAssets)
+                fs.symlinkSync(t.outside, assets, "dir")
+            }
+            return originalOpenSync.call(fs, filePath, ...args)
+        }
+
+        assert.equal(writeFileSafely(t.base, target, "attacker write"), false)
+        assert.equal(swapped, true, "test must inject the symlink swap immediately before open()")
+        assert.equal(fs.readFileSync(outsideTarget, "utf8"), "OUTSIDE MUST STAY",
+            "failed validation must not truncate or overwrite the outside file")
+    } finally {
+        fs.openSync = originalOpenSync
+        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedAssets, assets) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
