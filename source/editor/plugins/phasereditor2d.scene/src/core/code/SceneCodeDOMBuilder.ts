@@ -174,16 +174,14 @@ namespace phasereditor2d.scene.core.code {
                 if (!this._isPrefabScene && settings.box2dGenerateWorldCode
                     && !fields.some(field => field.getName() === "worldId")) {
 
-                    if (settings.compilerOutputLanguage === "TYPE_SCRIPT") {
-                        ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, "b2WorldId", this._sceneFile);
-                    }
-
-                    const worldIdField = new FieldDeclCodeDOM("worldId", "b2WorldId");
+                    const worldIdField = new FieldDeclCodeDOM(
+                        "worldId", 'ReturnType<typeof CreateWorld>["worldId"]');
                     worldIdField.setAllowUndefined(true);
                     fields.push(worldIdField);
                 }
 
-                if (!this._isPrefabScene && settings.box2dSceneGenerateDebugCode) {
+                if (!this._isPrefabScene && settings.box2dGenerateWorldCode
+                    && settings.box2dSceneGenerateDebugCode) {
 
                     if (!fields.some(field => field.getName() === "debugGraphics")) {
 
@@ -598,8 +596,8 @@ namespace phasereditor2d.scene.core.code {
                 ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
             }
 
-            // shortcut: the debugDraw setting is not emitted yet, it needs the
-            // PhaserDebugDraw.js project-file plumbing of the official editor
+            // Debug drawing uses the separately imported PhaserDebugDraw.js helper,
+            // and is only valid when the scene owns its generated world ID.
 
             // the editor Y points down, the Box2D world Y points up
             const gravityY = -settings.box2dGravityY;
