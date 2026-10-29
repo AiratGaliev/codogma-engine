@@ -547,6 +547,83 @@ export async function ensureProjectDirectorySafely(base, target) {
 }
 
 /**
+ * Open a project directory and return a descriptor whose actual target and
+ * current pathname match. Returns null on any failed containment/identity check.
+ */
+function openSafeProjectDirectorySync(base, target) {
+    if (typeof target !== "string") return null
+    const lexicalBase = path.resolve(base)
+    const full = path.resolve(target)
+    if (!isInsideBase(lexicalBase, full)) return null
+
+    try {
+        if (!isWithinRealBase(base, full)) return null
+    } catch {
+        return null
+    }
+
+    let fd
+    try {
+        fd = fs.openSync(full, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0))
+    } catch {
+        return null
+    }
+
+    if (!isSafeOpenProjectDirectory(base, full, fd)) {
+        try { fs.closeSync(fd) } catch {}
+        return null
+    }
+    return { fd, full }
+}
+
+/**
+ * Read one directory level and its entry metadata through an opened descriptor.
+ * Symlink entries are reported as links, never followed; callers should skip
+ * them. Linux reads through /proc/self/fd so swapping the requested directory
+ * pathname after open cannot redirect enumeration to an outside symlink.
+ */
+export function readProjectDirectoryEntriesSafelySync(base, target) {
+    const opened = openSafeProjectDirectorySync(base, target)
+    if (!opened) return null
+
+    try {
+        const directoryPath = process.platform === "linux"
+            ? `/proc/self/fd/${opened.fd}`
+            : opened.full
+        const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
+        const result = []
+
+        for (const entry of entries) {
+            if (entry.name === "." || entry.name === "..") continue
+            const entryPath = process.platform === "linux"
+                ? `${directoryPath}/${entry.name}`
+                : path.join(opened.full, entry.name)
+            let stat
+            try {
+                stat = fs.lstatSync(entryPath)
+            } catch {
+                // Entries concurrently removed or inaccessible are not exposed.
+                continue
+            }
+
+            result.push({
+                name: entry.name,
+                isFile: stat.isFile(),
+                isDirectory: stat.isDirectory(),
+                isSymbolicLink: stat.isSymbolicLink(),
+                size: stat.size,
+                mtimeMs: stat.mtimeMs
+            })
+        }
+        return result
+    } catch {
+        return null
+    } finally {
+        try { fs.closeSync(opened.fd) } catch {}
+    }
+}
+
+/**
  * Synchronous counterpart for existing synchronous MCP scene helpers.
  * Linux operations are descriptor-anchored; the non-Linux fallback is path-based
  * and therefore retains the documented portable race limitation.
