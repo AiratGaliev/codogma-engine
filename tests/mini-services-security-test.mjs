@@ -81,9 +81,9 @@ async function assertRemoteBindRejected(serviceDir, script, env, label) {
     const service = spawnService(serviceDir, script, env)
 
     try {
-        const exitPromise = service.child.exitCode !== null
-            ? Promise.resolve([service.child.exitCode, service.child.signalCode])
-            : once(service.child, "exit")
+        // "close" fires after stdout/stderr streams are drained, so the
+        // startup-rejection message is available for the assertion below.
+        const exitPromise = once(service.child, "close")
         let timer
         const outcome = await Promise.race([
             exitPromise.then(([code, signal]) => ({ type: "exit", code, signal })),
