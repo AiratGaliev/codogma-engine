@@ -25,7 +25,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ## Текущее состояние и границы блокеров (29.10.2026)
 
-Базовая точка `dev` на момент ревью — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). Последний до текущего изменения PR head `d053cdb23f3312f775b162a642aa3fdb6f0c83b7` имел успешный CI Fast run #40948450618; статусы CI привязаны к exact head и должны перепроверяться после каждого нового коммита. Этот CI не является browser/runtime acceptance Box2D. Runtime/geometry/lifecycle acceptance остаётся отдельным gate.
+Базовая точка `dev` на момент ревью — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). CI status всегда относится к точному head SHA; для текущего состояния использовать live checks PR и не переносить исторический success на новый commit. Например, run #40948450618 прошёл на d053cdb, а run #40953191407 — на 1674d79. Ни один CI Fast не является browser/runtime acceptance Box2D. Runtime/geometry/lifecycle acceptance остаётся отдельным gate.
 
 ### Можно начинать сейчас
 

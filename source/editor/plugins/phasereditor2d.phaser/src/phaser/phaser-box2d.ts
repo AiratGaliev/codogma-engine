@@ -1,21 +1,14 @@
 /**
- * Ambient type declarations for the Phaser Box2D physics runtime module.
+ * Legacy ambient declarations for the historical object-oriented
+ * Phaser.Box2D.World/Body API. They are not the low-level named-export C API
+ * used by current generated scenes (PhaserBox2D.js).
  *
- * The declarations in this file describe the legacy object-oriented `Phaser.Box2D.World/Body` compatibility surface.
- * They are NOT the low-level named-export C API consumed by the current scene code generator
- * (for example `CreateWorld`, `b2CreateBody`, `b2CreatePolygonShape` from `PhaserBox2D.js`).
- * Do not infer runtime compatibility from these ambient declarations alone. Keep this legacy
- * API separate until a dedicated migration updates declarations, generated imports and fixtures together.
-
- * IMPORTANT: Box2D is NOT part of the Phaser 4.2.1 core dist bundled with this editor
- * (see `phaser.ts`): it ships as a separate Phaser runtime module. These declarations
- * describe the legacy object-oriented compatibility surface for older consumers; they do not
- * establish that the low-level named exports used by current generated code are available.
- * Legacy consumers still need a matching runtime that exposes `Phaser.Box2D`; current
- * generated scenes import named exports from `PhaserBox2D.js`, and optional debug drawing from `PhaserDebugDraw.js`.
+ * These declarations do not ship a runtime or prove that named exports exist.
+ * Legacy namespace callers need a matching runtime; current generated scenes
+ * import from PhaserBox2D.js and optional debug drawing from PhaserDebugDraw.js.
  *
- * Declared here (in a separate file, `phaser.ts` is generated and must not be edited)
- * following the same ambient-declaration style of the Phaser types.
+ * Keep phaser.ts generated. Change this declaration surface only together with
+ * the matching runtime/package and generated-game acceptance fixture.
  */
 
 declare namespace Phaser {

@@ -2,8 +2,7 @@
 
 ## Unreleased (dev; обновлять при каждом принятом изменении)
 
-P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
-MCP robustness, and regression suites for every defect found along the way.
+Unreleased work tracked here: editor reliability, FX and Box2D codegen/runtime follow-ups, Svelte PoC, MCP robustness and regression suites. The heading is not evidence that browser/runtime acceptance is complete; see the explicit open gates below.
 
 ### Box2D / code generation
 

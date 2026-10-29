@@ -36,7 +36,7 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
 | Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
 | Editable tilemaps | Tilemap authoring tools, layers, tilesets, painting operations and MCP tools for modifying tilemap data. |
-| Physics authoring | Arcade Physics-related scene tooling and Box2D body/world authoring and code generation. Box2D runtime setup may be needed in the game project separately. |
+| Physics authoring | Arcade Physics tooling; component-based Box2D body/world settings and code generation on existing Phaser GameObjects. External Box2D runtime setup may be required. Standalone B2Body/B2Shape object nodes are not currently supported. |
 | MCP integration | Official <code>@phaserjs/editor-mcp-server</code> package connected through the local MCP bridge, plus built-in fallback entry points. |
 | AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
