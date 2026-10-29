@@ -70,8 +70,16 @@ namespace phasereditor2d.scene.ui.editor.properties {
                 const worldEnabled = settings.box2dEnabled || settings.box2dGenerateWorldCode;
 
                 libraryWarning.style.display = worldEnabled && !hasLibrary ? "block" : "none";
+
+                const debugRequiresWorldMode = !settings.box2dGenerateWorldCode;
+                const debugHelperMissing = !hasDebugLibrary;
+
+                debugLibraryWarning.textContent = debugRequiresWorldMode
+                    ? "Box2D debug drawing requires Generate Box2D world code."
+                    : "Box2D debug drawing is enabled, but PhaserDebugDraw.js was not found in the project.";
+
                 debugLibraryWarning.style.display = settings.box2dSceneGenerateDebugCode
-                    && (!settings.box2dGenerateWorldCode || !hasDebugLibrary) ? "block" : "none";
+                    && (debugRequiresWorldMode || debugHelperMissing) ? "block" : "none";
             });
         }
 
