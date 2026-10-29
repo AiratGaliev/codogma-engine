@@ -31,6 +31,7 @@ MCP robustness, and regression suites for every defect found along the way.
 
 ### Server / MCP
 
+* Security: reject declared JSON API bodies above 32 MiB and multipart uploads above 128 MiB before buffering their contents; keep the streaming cap for chunked/misdeclared bodies and return HTTP 413 consistently. Malformed JSON is reported as HTTP 400.
 * Fix: MCP launcher probes the official-package bridge and falls back to the
   built-in stdio server when the bridge is served by another process or has
   no connected editor — external MCP hosts keep working in any deployment
