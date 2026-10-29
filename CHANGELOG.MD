@@ -31,6 +31,7 @@ MCP robustness, and regression suites for every defect found along the way.
 
 ### Server / MCP
 
+* Extracted `readRequestBuffer()` into `server/request-body.mjs` and added fast unit tests for exact-limit chunked bodies, streaming 413 after the cap, misdeclared Content-Length, early declared oversize rejection, stream errors, and invalid limits. This exercises stream-enforcement logic using small buffers instead of large CI payloads.
 * Security: reject declared JSON API bodies above 32 MiB and multipart uploads above 128 MiB before buffering their contents; keep the streaming cap for chunked/misdeclared bodies and return HTTP 413 consistently. Malformed JSON is reported as HTTP 400.
 * Fix: MCP launcher probes the official-package bridge and falls back to the
   built-in stdio server when the bridge is served by another process or has
