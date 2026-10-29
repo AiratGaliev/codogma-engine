@@ -21,7 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, removeProjectEntrySafely, writeFileSafely } from "./path-security.mjs"
+import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -105,18 +105,15 @@ function normPath(p) {
 }
 
 function walkFiles(dir, relPrefix, out = []) {
-    let entries
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true })
-    } catch (e) {
-        return out
-    }
+    const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dir)
+    if (!entries) return out
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix ? relPrefix + "/" + entry.name : entry.name
         const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) walkFiles(full, rel, out)
-        else if (entry.isFile()) out.push(rel)
+        if (entry.isDirectory) walkFiles(full, rel, out)
+        else if (entry.isFile) out.push(rel)
     }
     return out
 }
