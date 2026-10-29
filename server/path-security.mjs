@@ -71,6 +71,12 @@ export function isInsideBase(realBase, candidate) {
 export function safeJoin(base, relPath) {
     if (typeof relPath !== "string") return null
 
+    // Do not reinterpret drive-qualified or UNC paths as project-relative names.
+    // A single leading slash/backslash remains supported for legacy editor paths.
+    if (/^[a-zA-Z]:/.test(relPath) || /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+/.test(relPath)) {
+        return null
+    }
+
     const p = path.resolve(base, "." + path.sep + relPath.replace(/^[\\/]+/, ""))
     if (p !== base && !p.startsWith(base + path.sep)) return null
 
