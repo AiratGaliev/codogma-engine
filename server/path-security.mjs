@@ -327,6 +327,44 @@ export function readFileSafely(base, target, options, maxBytes) {
 }
 
 /**
+ * Read only a bounded prefix from a verified project file handle.
+ * The returned buffer never exceeds maxBytes, even if the file is very large
+ * or grows while being read. size is the opening fstat size; truncated also
+ * accounts for growth observed before the read finishes.
+ */
+export async function readFilePrefixSafely(base, target, maxBytes) {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+        throw new TypeError("maxBytes must be a non-negative safe integer")
+    }
+
+    const handle = await openSafeProjectFileForRead(base, target)
+    if (!handle) throw new Error("invalid or unreadable project file")
+
+    try {
+        const initial = await handle.stat()
+        if (!initial.isFile()) throw new Error("project path is not a regular file")
+
+        const limit = Math.min(initial.size, maxBytes)
+        const buffer = Buffer.alloc(limit)
+        let offset = 0
+        while (offset < limit) {
+            const { bytesRead } = await handle.read(buffer, offset, limit - offset, offset)
+            if (bytesRead === 0) break
+            offset += bytesRead
+        }
+
+        const finalStat = await handle.stat()
+        return {
+            buffer: buffer.subarray(0, offset),
+            size: initial.size,
+            truncated: initial.size > maxBytes || finalStat.size > offset
+        }
+    } finally {
+        await handle.close().catch(() => {})
+    }
+}
+
+/**
  * Open a project file for writing without truncating it. The caller MUST
  * truncate only after this function returns a verified handle.
  * Parent directories should be created by the caller first.
