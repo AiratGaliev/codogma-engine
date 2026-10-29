@@ -574,3 +574,41 @@ test("readFilePrefixSafely never returns content from an outside symlink", async
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
+
+
+test("copyProjectEntrySafely rejects a source-parent swap to an outside symlink", { skip: process.platform !== "linux" }, async () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const parkedAssets = path.join(t.base, "assets-internal")
+    const source = path.join(assets, "source.txt")
+    const destination = path.join(t.base, "copied-source.txt")
+    const outsideSource = path.join(t.outside, "source.txt")
+    fs.writeFileSync(source, "INSIDE SOURCE")
+    fs.writeFileSync(outsideSource, "OUTSIDE SECRET MUST NOT BE COPIED")
+    const originalOpen = fsp.open
+    let swapped = false
+
+    try {
+        fsp.open = async function (filePath, ...args) {
+            if (!swapped && typeof filePath === "string" && /\/source\.txt$/.test(filePath)
+                && /^\/proc\/self\/fd\/\d+\//.test(filePath)) {
+                fs.renameSync(assets, parkedAssets)
+                fs.symlinkSync(t.outside, assets, "dir")
+                swapped = true
+            }
+            return originalOpen.call(fsp, filePath, ...args)
+        }
+
+        assert.equal(await copyProjectEntrySafely(t.base, source, destination), false,
+            "copy must fail closed when the source's pathname is swapped to an outside symlink")
+        assert.equal(swapped, true, "test must swap the parent immediately before source open")
+        assert.equal(fs.existsSync(destination), false, "no destination may be committed after source validation fails")
+        assert.equal(fs.readFileSync(outsideSource, "utf8"), "OUTSIDE SECRET MUST NOT BE COPIED")
+        assert.equal(fs.readFileSync(path.join(parkedAssets, "source.txt"), "utf8"), "INSIDE SOURCE")
+    } finally {
+        fsp.open = originalOpen
+        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedAssets, assets) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
