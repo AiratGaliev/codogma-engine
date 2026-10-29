@@ -40,6 +40,7 @@ import {
 } from "./mcp.mjs"
 import { isInsideBase, safeJoin, openSafeProjectFileForWrite } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
+import { readRequestBuffer } from "./request-body.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
@@ -393,72 +394,6 @@ ${scripts.map(s => `    <script src="${s}"></script>`).join("\n")}
 }
 
 /* =============================== API layer =============================== */
-
-function readRequestBuffer(req, maxBytes) {
-    return new Promise((resolve, reject) => {
-        // Reject a declared oversize body immediately instead of buffering it.
-        // Keep the streaming byte counter below as the authoritative check for
-        // chunked requests or clients that send a larger body than declared.
-        const contentLength = req.headers["content-length"]
-        const declaredLength = contentLength === undefined ? null : Number(contentLength)
-        if (Number.isSafeInteger(declaredLength) && declaredLength > maxBytes) {
-            const error = new Error("Request body too large")
-            error.statusCode = 413
-            // Continue draining so Node can finish the request cleanly while
-            // the API responds with 413 without waiting for the declared body.
-            req.on("error", () => {})
-            req.resume()
-            reject(error)
-            return
-        }
-
-        const chunks = []
-        let size = 0
-        let settled = false
-
-        const cleanup = () => {
-            req.off("data", onData)
-            req.off("end", onEnd)
-            req.off("error", onError)
-        }
-
-        const onData = chunk => {
-            if (settled) return
-            size += chunk.length
-
-            if (size > maxBytes) {
-                settled = true
-                cleanup()
-                req.on("error", () => {})
-                req.resume()
-                const error = new Error("Request body too large")
-                error.statusCode = 413
-                reject(error)
-                return
-            }
-
-            chunks.push(chunk)
-        }
-
-        const onEnd = () => {
-            if (settled) return
-            settled = true
-            cleanup()
-            resolve(Buffer.concat(chunks))
-        }
-
-        const onError = error => {
-            if (settled) return
-            settled = true
-            cleanup()
-            reject(error)
-        }
-
-        req.on("data", onData)
-        req.on("end", onEnd)
-        req.on("error", onError)
-    })
-}
 
 async function readBodyJSON(req) {
     const body = await readRequestBuffer(req, MAX_API_BODY_BYTES)
