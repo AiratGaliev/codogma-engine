@@ -73,6 +73,10 @@ The server should respond at that address, and product metadata should be availa
 
 **Security boundary:** the editor server and MCP bridge bind to IPv4 loopback (`127.0.0.1`) and are intended for local development, not direct public-network exposure. Browser requests with a mismatched `Origin` or `Host` are rejected. File operations also reject paths that escape the chosen project through symbolic links, and request bodies have explicit size limits. These checks are defense-in-depth, not a substitute for keeping your machine and project files trusted.
 
+**Running behind a reverse proxy:** a local proxy that publishes the editor (a sandbox preview, a tunnel, a container port-mapping) connects from loopback but forwards the public `Host` header, which the guard above rejects by default. Set <code>CODOGMA_ALLOWED_HOSTS</code> to a comma-separated list of public hostnames — or `*` when the hostname is dynamic — to accept those `Host` headers from loopback peers. `npm run dev:proxy` does this in one command. The same-origin `Origin` enforcement and the loopback-only peer check keep applying, so cross-site browser attacks stay blocked; keep the server itself off public interfaces.
+
+**Gateways that rewrite the `Host` header:** some platforms serve the page from one domain while the local gateway forwards an internal `Host` name the browser never sees, so the browser `Origin` can never equal `Host` and every API call would get a 403. For those deployments set <code>CODOGMA_ALLOWED_ORIGINS</code> to a comma-separated list of trusted browser origins: exact entries (<code>https://editor.example.com</code>), scheme-locked subdomain wildcards (<code>https://*.space-z.ai</code>), or `*` for everything (trusted environments only). A listed origin bypasses only the same-host comparison — the loopback-peer and `Host` checks still apply, and non-listed origins stay rejected. Prefer the narrowest list that works, for example <code>CODOGMA_ALLOWED_ORIGINS='https://*.space-z.ai' npm run dev:proxy</code>.
+
 ### Select a game project
 
 By default, the server opens the test project in <code>tests/workspace/test-typescript</code>. This is useful for local development and CI, but it is not intended to be your own game project. Point <code>PROJECT_DIR</code> at the directory you want to edit.
@@ -132,11 +136,13 @@ Run these commands from the repository root unless noted otherwise.
 |---|---|
 | <code>npm start</code> | Start the local editor server. |
 | <code>npm run dev</code> | Start the server and pipe its output to <code>dev.log</code> (requires a shell with <code>tee</code>). |
+| <code>npm run dev:proxy</code> | Like <code>npm run dev</code>, but accept any `Host` header from loopback peers (<code>CODOGMA_ALLOWED_HOSTS=*</code>) and any browser `Origin` (<code>CODOGMA_ALLOWED_ORIGINS=*</code>, overridable) for publishing behind a trusted local reverse proxy. |
 | <code>npm run build</code> | Build/type-check the editor client through TypeScript project references. |
 | <code>npm run watch</code> | Run the editor TypeScript compiler in watch mode. Start the server separately if you need to use the editor. |
 | <code>npm run mcp</code> | Start the MCP launcher for a connected MCP client. The editor server must be running. |
 | <code>npm run mcp:builtin</code> | Start the built-in stdio MCP implementation. |
 | <code>npm run test:e2e</code> | Run the MCP integration test driver. Start the editor server first. |
+| <code>npm run test:all</code> | Run unit, security, mini-service, localization, project-diagnostics, localization-runtime acceptance and MCP E2E checks. Install dependencies in each package first and start the editor server for MCP E2E. |
 
 For a typical local code change:
 
@@ -184,9 +190,21 @@ The local server exposes editor routes including:
 - <code>/editor/project/...</code> — project file access used by editor components;
 - <code>/editor/external/...</code> — project files for play mode;
 - <code>/editor/upload</code> — uploads;
-- <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint.
+- <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint;
+- <code>/archive/</code> and <code>/archive/&lt;filename&gt;</code> — development-only download of a prepared full-project snapshot (see below).
 
 The server also listens on the MCP bridge port (default <code>1902</code>) for the contract used by the official MCP package. Keep the HTTP port and MCP bridge port distinct.
+
+### Full-project development snapshots
+
+The <code>/archive/</code> endpoint is a development hand-off mechanism for retrieving an archive of the current project snapshot. It is separate from the Release workflow's <code>codogma-engine-release</code> artifact: this endpoint serves a prepared full-project archive from the repository root, including the files captured by the development snapshot process.
+
+- <code>GET /archive/</code> selects the most recently modified matching archive in the repository root and responds with a redirect to its download URL.
+- <code>GET /archive/&lt;filename&gt;</code> downloads a specific snapshot by name. <code>HEAD</code> is supported for metadata checks without downloading the body.
+- Accepted filenames match <code>codogma-engine-&lt;snapshot-id&gt;.zip</code> or <code>codogma-engine-&lt;snapshot-id&gt;.tar.gz</code>, where the snapshot ID contains only letters, digits, <code>+</code>, <code>.</code>, <code>_</code> and <code>-</code>. The endpoint does not build an archive itself; the snapshot must already exist as a regular file in the repository root.
+- If no matching snapshot exists, <code>/archive/</code> responds with <code>404</code>. An invalid filename is rejected; unsupported HTTP methods return <code>405</code>.
+
+**Access boundary:** snapshots may contain the complete source tree, development fixtures and documentation, so treat this as a trusted development endpoint, not a public artifact distribution service. The server binds to loopback and the route goes through the same Host/Origin guard as other HTTP routes. If access is provided through a reverse proxy, allow only the required trusted hosts and browser origins; do not expose this endpoint to an untrusted network or use wildcard proxy allow-lists in shared/public environments. Do not commit generated snapshots to the repository.
 
 ## MCP and AI tooling
 
@@ -231,7 +249,7 @@ CI is designed to check changes quickly and to run MCP integration tests on prom
 
 | Workflow / job | Trigger | Main checks |
 |---|---|---|
-| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs locked root/editor dependencies, validates PR routing, builds the editor client and smoke-tests the server and editor response. |
+| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization dependencies, validates PR routing, builds the editor client, runs unit regression and security checks, smoke-tests the server/editor, and tests localization package, project diagnostics and runtime acceptance. |
 | **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Starts the server and MCP bridge, then runs the MCP integration test driver. |
 | **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
 
@@ -329,12 +347,16 @@ If a promotion gate fails, stop the promotion. Fix the issue in the appropriate 
 
 ### Local checks before a PR
 
-Run commands from the repository root. Root and editor dependencies are installed separately:
+Run commands from the repository root. Root, editor and localization dependencies are installed separately:
 
 ~~~bash
 npm ci
 npm audit --audit-level=low
 cd source/editor
+npm ci
+npm audit --audit-level=low
+cd ../..
+cd packages/localization
 npm ci
 npm audit --audit-level=low
 cd ../..
@@ -350,9 +372,18 @@ Then run checks relevant to the change:
 | Dependencies | Run `npm audit --audit-level=low` from the root and `source/editor`; CI blocks any reported vulnerability |
 | Server, bridge or MCP tools | Run `npm run test:security`; start the server with `npm start`; in a second terminal run `npm run test:e2e` |
 | Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
+| Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |
 | Release candidate (`dev → test` or `test → main`) | Check the complete candidate in addition to the required CI integration test; document manual acceptance for any affected UI path |
 
 The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` (PowerShell: `$env:MCP_E2E_WITH_EDITOR = "1"` before running `npm run test:e2e`). They require the editor UI to be running and connected. The default CI E2E job does **not** enable that mode.
+
+### Line endings and generated files
+
+The repository uses `.gitattributes` to keep ordinary source, configuration, documentation and SVG files on LF line endings across operating systems. Do not use a repository-wide `git add --renormalize .` as a routine cleanup: a line-ending migration must be reviewed and committed separately.
+
+`source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts` is generated Phaser TypeScript declaration output. Its current upstream-generated blob contains non-standard mixed carriage-return bytes, so Git deliberately does not apply end-of-line conversion to that one file and EditorConfig leaves its line-ending policy unset. It is also excluded from formatting. **Do not open and save it with automatic line-ending conversion, run a formatter on it, or hand-edit it.** Change the generator/input instead, regenerate the declarations, and review that generated output separately.
+
+When reviewing a diff that may contain line-ending noise, compare with `git diff --ignore-space-at-eol` to identify whether meaningful code changes remain. This is a diagnostic aid, not a substitute for checking the actual generated output.
 
 ### Pull Request description checklist
 
@@ -377,7 +408,7 @@ The required GitHub Actions status names are:
 | `test` | `fast-checks`, `mcp-integration` |
 | `main` | `fast-checks`, `mcp-integration` |
 
-`fast-checks` validates the branch route, installs locked dependencies, builds the editor client and smoke-tests the server/editor response. `mcp-integration` runs on PRs targeting `test` and `main`; it starts the server and MCP bridge and runs `npm run test:e2e`. Normal PRs into `dev` do not run this slower integration suite as a routine CI gate, so run it locally whenever the change touches MCP/server behaviour and run targeted browser acceptance for UI changes.
+`fast-checks` validates the branch route, installs and audits the locked root/editor/localization dependencies, builds the editor client, runs unit regression and security checks, smoke-tests the server/editor response, and runs localization package tests, project diagnostics and runtime acceptance. `mcp-integration` runs on PRs targeting `test` and `main`; it starts the server and MCP bridge and runs `npm run test:e2e`. Normal PRs into `dev` do not run this slower MCP integration suite as a routine CI gate, so run it locally whenever the change touches MCP/server behaviour and run targeted browser acceptance for UI changes.
 
 The active Rulesets require PRs and successful checks, but **currently do not require reviewer approval**. That is a repository setting, not permission to bypass the PR, test, documentation or promotion rules in this section.
 

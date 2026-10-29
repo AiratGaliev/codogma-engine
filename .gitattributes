@@ -1,0 +1,50 @@
+# Normalize ordinary text files while keeping their working-tree representation stable.
+* text=auto
+
+# Keep source, config, docs and text assets on LF on every platform.
+*.c text eol=lf
+*.cc text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+*.svg text eol=lf
+*.txt text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.properties text eol=lf
+
+# Preserve the exact bytes of this generated declaration file. It currently
+# contains mixed CRLF / bare-CR bytes from upstream generation; do not normalize.
+source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts -text
+
+# Binary assets must never undergo text or EOL conversion.
+*.7z binary
+*.bmp binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.mp3 binary
+*.mp4 binary
+*.pdf binary
+*.png binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.webp binary
+*.wasm binary
+*.zip binary

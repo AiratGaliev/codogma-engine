@@ -17,9 +17,9 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             this.refreshFX();
         }
 
-        private colorToRGBA(value: string): [number, number, number, number] {
+        private colorToRGBA(value: string | number): [number, number, number, number] {
 
-            const color = parseInt(value.replace("#", ""), 16);
+            const color = colorValueToNumber(value, 0xffffff);
 
             return [
                 ((color >> 16) & 0xff) / 255,
@@ -55,6 +55,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 Math.max(1, parent.width ?? parent.displayWidth ?? 128),
                 Math.max(1, parent.height ?? parent.displayHeight ?? 128)
             );
+            markFXHelperObject(gradient);
             const sync = () => {
                 const target = this.getParent() as any;
                 if (!target || !gradient.active) {

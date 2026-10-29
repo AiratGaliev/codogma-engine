@@ -24,14 +24,36 @@
  *   WS upgrade /    → editor clients connect here; protocol:
  *                        bridge → client: { id, tool, args }
  *                        client → bridge: { id, result }
+ *
+ * Security posture (local helper service, never a public API):
+ *   - Binds to 127.0.0.1 explicitly (both AI hosts and the editor connect locally).
+ *   - CORS is origin-validated (loopback origins and MCP_BRIDGE_ALLOWED_ORIGINS),
+ *     not a wildcard; requests with a foreign Origin header are rejected.
+ *   - HTTP bodies and WebSocket payloads are size-capped.
+ *   - Tool names/args are shape-validated before forwarding to the editor.
+ *   - The number of WS clients and pending forwarded requests is capped.
  */
 
 import { createServer } from "node:http"
 
 import { WebSocketServer } from "ws"
 
+const HOST = process.env["MCP_BRIDGE_HOST"] || "127.0.0.1"
 const PORT = Number(process.env["PORT"] || 1902);
 const TOOL_TIMEOUT_MS = 30_000;
+
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_WS_PAYLOAD = 64 * 1024 * 1024;
+const MAX_TOOL_NAME_LENGTH = 300;
+const MAX_CLIENTS = 32;
+const MAX_PENDING = 128;
+
+/** extra browser origins (comma-separated URLs) allowed to call the bridge */
+const ALLOWED_ORIGINS = new Set(
+    (process.env["MCP_BRIDGE_ALLOWED_ORIGINS"] || "")
+        .split(",")
+        .map(s => s.trim())
+        .filter(Boolean));
 
 /** connected editor clients (browser WebSockets) */
 const clients = new Set();
@@ -52,39 +74,131 @@ function log(text) {
     }
 }
 
-function corsHeaders() {
+function isLoopbackHostname(hostname) {
 
-    return {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-    };
+    return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost";
 }
 
-function json(res, body, status = 200) {
+/**
+ * Non-browser callers (the official MCP stdio server, curl) omit Origin and are
+ * accepted. Browser callers must be loopback (the editor page) or explicitly
+ * allow-listed, so a random web page cannot drive the editor's tools.
+ */
+function isAllowedOrigin(originHeader) {
 
-    const data = JSON.stringify(body);
+    if (originHeader === undefined) return true;
+
+    if (typeof originHeader !== "string") return false;
+
+    try {
+
+        const origin = new URL(originHeader);
+
+        if (origin.protocol === "http:" && isLoopbackHostname(origin.hostname)) return true;
+
+        return ALLOWED_ORIGINS.has(originHeader);
+
+    } catch (e) {
+
+        return false;
+    }
+}
+
+function corsHeaders(req) {
+
+    const origin = req?.headers?.origin;
+
+    const headers = {
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Vary": "Origin",
+    };
+
+    // Echo the specific origin instead of a wildcard: credentials-free GET/POST
+    // still work for the editor page, foreign pages get no CORS grant.
+    if (typeof origin === "string" && isAllowedOrigin(origin)) {
+
+        headers["Access-Control-Allow-Origin"] = origin;
+    }
+
+    return headers;
+}
+
+function reject(res, status, message, req) {
+
+    const data = JSON.stringify({ error: message });
 
     res.writeHead(status, {
         "Content-Type": "application/json",
-        ...corsHeaders(),
+        "Cache-Control": "no-store",
+        ...corsHeaders(req),
     });
 
     res.end(data);
 }
 
-function readBody(req) {
+function json(res, body, status = 200, req) {
+
+    const data = JSON.stringify(body);
+
+    res.writeHead(status, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        ...corsHeaders(req),
+    });
+
+    res.end(data);
+}
+
+function readBody(req, maxBytes) {
 
     return new Promise((resolve, reject) => {
 
-        let data = "";
+        const chunks = [];
+        let size = 0;
+        let settled = false;
 
-        req.on("data", chunk => data += chunk);
+        const fail = error => {
 
-        req.on("end", () => resolve(data));
+            if (settled) return;
 
-        req.on("error", reject);
+            settled = true;
+            req.resume();
+            reject(error);
+        };
+
+        req.on("data", chunk => {
+
+            if (settled) return;
+
+            size += chunk.length;
+
+            if (size > maxBytes) {
+
+                const error = new Error("Request body too large");
+                error.statusCode = 413;
+                fail(error);
+                return;
+            }
+
+            chunks.push(chunk);
+        });
+
+        req.on("end", () => {
+
+            if (settled) return;
+
+            settled = true;
+            resolve(Buffer.concat(chunks).toString("utf8"));
+        });
+
+        req.on("error", fail);
     });
+}
+
+function isPlainObject(value) {
+
+    return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function sendToEditors(message) {
@@ -106,10 +220,18 @@ function sendToEditors(message) {
 
 const server = createServer(async (req, res) => {
 
+    // Browser callers with a foreign Origin cannot drive editor tools.
+    if (!isAllowedOrigin(req.headers.origin)) {
+
+        reject(res, 403, "Forbidden origin.", req);
+
+        return;
+    }
+
     // CORS preflight
     if (req.method === "OPTIONS") {
 
-        res.writeHead(204, corsHeaders());
+        res.writeHead(204, corsHeaders(req));
 
         res.end();
 
@@ -125,7 +247,7 @@ const server = createServer(async (req, res) => {
             pending: pending.size,
             port: PORT,
             activity,
-        });
+        }, 200, req);
 
         return;
     }
@@ -136,11 +258,12 @@ const server = createServer(async (req, res) => {
 
         try {
 
-            body = JSON.parse(await readBody(req));
+            body = JSON.parse(await readBody(req, MAX_BODY_BYTES));
 
         } catch (e) {
 
-            json(res, { error: "Invalid JSON body." }, 400);
+            reject(res, e.statusCode === 413 ? 413 : 400,
+                e.statusCode === 413 ? e.message : "Invalid JSON body.", req);
 
             return;
         }
@@ -148,9 +271,16 @@ const server = createServer(async (req, res) => {
         const tool = body?.tool;
         const args = body?.args ?? {};
 
-        if (typeof tool !== "string" || tool.length === 0) {
+        if (typeof tool !== "string" || tool.length === 0 || tool.length > MAX_TOOL_NAME_LENGTH) {
 
-            json(res, { error: "Missing 'tool' field in request body." }, 400);
+            reject(res, 400, "Missing 'tool' field in request body.", req);
+
+            return;
+        }
+
+        if (!isPlainObject(args)) {
+
+            reject(res, 400, "'args' must be a JSON object.", req);
 
             return;
         }
@@ -159,10 +289,17 @@ const server = createServer(async (req, res) => {
 
             log(`POST ${tool} → rejected (no editor client connected)`);
 
-            json(res, {
-                error: "No Codogma Engine client is connected to the MCP bridge. " +
-                    "Open Codogma Engine and enable the MCP Bridge (main menu → AI → Enable MCP Bridge).",
-            }, 503);
+            reject(res, 503, "No Codogma Engine client is connected to the MCP bridge. " +
+                    "Open Codogma Engine and enable the MCP Bridge (main menu → AI → Enable MCP Bridge).", req);
+
+            return;
+        }
+
+        if (pending.size >= MAX_PENDING) {
+
+            log(`POST ${tool} → rejected (bridge busy: ${pending.size} pending)`);
+
+            reject(res, 503, "The MCP bridge is busy; too many pending tool requests.", req);
 
             return;
         }
@@ -196,15 +333,36 @@ const server = createServer(async (req, res) => {
 
         // The official MCP server returns this JSON as-is as the MCP tool "content",
         // so the editor is expected to answer with an array of MCP content items.
-        json(res, result);
+        json(res, result, 200, req);
 
         return;
     }
 
-    json(res, { error: `Unsupported method ${req.method}.` }, 405);
+    reject(res, 405, `Unsupported method ${req.method}.`, req);
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
+
+server.on("upgrade", (req, socket, head) => {
+
+    if (!isAllowedOrigin(req.headers.origin)) {
+
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+
+        return;
+    }
+
+    if (clients.size >= MAX_CLIENTS) {
+
+        socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+
+        return;
+    }
+
+    wss.handleUpgrade(req, socket, head, ws => wss.emit("connection", ws, req));
+});
 
 wss.on("connection", (ws) => {
 
@@ -255,10 +413,15 @@ wss.on("connection", (ws) => {
     });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
 
-    console.log(`phaser-editor-mcp-bridge listening on http://127.0.0.1:${PORT}`);
+    console.log(`phaser-editor-mcp-bridge listening on http://${HOST}:${PORT} (loopback-only by default)`);
     console.log(`- GET  /  : status endpoint ({status, clients})`);
     console.log(`- POST /  : official MCP server requests ({tool, args})`);
     console.log(`- WS   /  : editor clients connect here`);
+
+    if (HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
+
+        console.warn(`phaser-editor-mcp-bridge: MCP_BRIDGE_HOST="${HOST}" exposes this service beyond loopback.`);
+    }
 });

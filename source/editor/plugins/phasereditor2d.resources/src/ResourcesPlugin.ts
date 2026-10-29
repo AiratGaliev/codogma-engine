@@ -72,6 +72,43 @@ namespace phasereditor2d.resources {
     export const ICON_FILE_SOUND = "file-sound";
     export const ICON_FILE_TEXT = "file-text";
 
+    /**
+     * Bundled Godot editor icons (vector, light/dark variants).
+     *
+     * Source: godotengine/godot @ c8256a8ecec068340753869e423dd478c84ef167,
+     * folder editor/icons, MIT license (see icons/GODOT-ICONS-LICENSE.txt).
+     * Files: icons/{dark,light}/godot/<name>.svg; light variants are generated
+     * by scripts/generate-godot-light-icons.mjs.
+     */
+    // generic UI
+    export const ICON_RELOAD_GODOT = "godot/reload";
+    export const ICON_SEARCH_GODOT = "godot/search";
+    export const ICON_EXTERNAL_LINK_GODOT = "godot/external-link";
+    export const ICON_MARKER_GODOT = "godot/marker";
+    // 2D scene object types
+    export const ICON_NODE_2D_GODOT = "godot/node-2d";
+    export const ICON_SPRITE_2D_GODOT = "godot/sprite-2d";
+    export const ICON_COLLISION_SHAPE_2D_GODOT = "godot/collision-shape-2d";
+    export const ICON_CAMERA_2D_GODOT = "godot/camera-2d";
+    export const ICON_TIMER_GODOT = "godot/timer";
+    export const ICON_AUDIO_STREAM_2D_GODOT = "godot/audio-stream-2d";
+    export const ICON_PATH_2D_GODOT = "godot/path-2d";
+    export const ICON_ANIMATION_PLAYER_GODOT = "godot/animation-player";
+    export const ICON_PARTICLES_2D_GODOT = "godot/particles-2d";
+    export const ICON_PARTICLE_MATERIAL_GODOT = "godot/particle-material";
+    export const ICON_BONE_2D_GODOT = "godot/bone-2d";
+    export const ICON_CURVE_2D_GODOT = "godot/curve-2d";
+    export const ICON_VISIBILITY_NOTIFIER_2D_GODOT = "godot/visibility-notifier-2d";
+
+    /** every registered Godot icon name; kept in sync with the svg files */
+    export const GODOT_ICON_NAMES = [
+        ICON_RELOAD_GODOT, ICON_SEARCH_GODOT, ICON_EXTERNAL_LINK_GODOT, ICON_MARKER_GODOT,
+        ICON_NODE_2D_GODOT, ICON_SPRITE_2D_GODOT, ICON_COLLISION_SHAPE_2D_GODOT, ICON_CAMERA_2D_GODOT,
+        ICON_TIMER_GODOT, ICON_AUDIO_STREAM_2D_GODOT, ICON_PATH_2D_GODOT, ICON_ANIMATION_PLAYER_GODOT,
+        ICON_PARTICLES_2D_GODOT, ICON_PARTICLE_MATERIAL_GODOT, ICON_BONE_2D_GODOT, ICON_CURVE_2D_GODOT,
+        ICON_VISIBILITY_NOTIFIER_2D_GODOT
+    ];
+
     export class ResourcesPlugin extends colibri.Plugin {
 
         // icons
@@ -87,7 +124,8 @@ namespace phasereditor2d.resources {
         private constructor() {
             super("phasereditor2d.resources", {
                 loadIconsFromAtlas: true,
-                loadResources: true
+                loadResources: true,
+                svgIcons: GODOT_ICON_NAMES
             });
         }
     }

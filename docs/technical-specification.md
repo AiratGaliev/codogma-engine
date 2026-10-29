@@ -512,7 +512,7 @@ Codogma предоставляет единый публичный Physics API �
 - Tilemap Editor с Tiled import/export, brush presets, auto-tiling, collision editing и профилированием больших карт; hex/isometric support после основного grid workflow;
 - Particle Editor и стабильный lifecycle preview;
 - Audio workflow с группами/бусами, preview и корректным browser lifecycle;
-- Опциональная Localization service и versioned local save/storage API; проверен интеграционный entry point (`packages/localization/bin/validate-localization.mjs`), locale case policy (`canonicalLocaleTag`) и регрессионная защита placeholder (`Object.prototype.hasOwnProperty`).
+- опциональная Localization service и versioned local save/storage API;
 - расширенные importers для Aseprite/PSD как подключаемые инструменты, а также bundles/atlas variants;
 - skeletal animation (например, Spine/DragonBones) как отдельные extensions;
 - build profiles для development/release и target-aware asset/build optimization.

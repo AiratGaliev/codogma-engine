@@ -403,6 +403,47 @@ namespace colibri.ui.ide.actions {
             );
         }
 
+        /**
+         * Runs undo/redo on the undo manager of the active editor when possible.
+         *
+         * When the focus is in a view (like the Inspector or the Outline), the
+         * active part has its own empty undo manager, so the change the user
+         * wants to revert lives in the active editor's undo manager. This
+         * matches the behavior of professional editors, where Ctrl+Z reverts
+         * the last document change no matter which panel has the focus.
+         */
+        private static undoRedo(args: commands.HandlerArgs, redo: boolean) {
+
+            const part = args.activePart;
+            const editor = args.activeEditor;
+
+            if (editor && editor !== part) {
+
+                if (redo) {
+
+                    editor.getUndoManager().redo();
+
+                } else {
+
+                    editor.getUndoManager().undo();
+                }
+
+                return;
+            }
+
+            if (part) {
+
+                if (redo) {
+
+                    part.getUndoManager().redo();
+
+                } else {
+
+                    part.getUndoManager().undo();
+                }
+            }
+        }
+
         private static initUndo(manager: commands.CommandManager) {
             // undo
 
@@ -414,13 +455,14 @@ namespace colibri.ui.ide.actions {
             });
 
             manager.addHandlerHelper(CMD_UNDO,
-                args => args.activePart !== null,
-                args => args.activePart.getUndoManager().undo()
+                args => args.activePart !== null || args.activeEditor !== null,
+                args => ColibriCommands.undoRedo(args, false)
             );
 
             manager.addKeyBinding(CMD_UNDO, new KeyMatcher({
                 control: true,
-                key: "KeyZ"
+                key: "KeyZ",
+                filterInputElements: false
             }));
 
             // redo
@@ -433,15 +475,15 @@ namespace colibri.ui.ide.actions {
             });
 
             manager.addHandlerHelper(CMD_REDO,
-                args => args.activePart !== null,
-                args => args.activePart.getUndoManager().redo()
-
+                args => args.activePart !== null || args.activeEditor !== null,
+                args => ColibriCommands.undoRedo(args, true)
             );
 
             manager.addKeyBinding(CMD_REDO, new KeyMatcher({
                 control: true,
                 shift: true,
-                key: "KeyZ"
+                key: "KeyZ",
+                filterInputElements: false
             }));
 
             // update current editor

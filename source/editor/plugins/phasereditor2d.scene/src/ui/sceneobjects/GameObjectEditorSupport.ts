@@ -24,7 +24,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         private _extension: SceneGameObjectExtension;
         private _prefabId: string;
         private _serializables: json.ISerializable[];
-        // tslint:disable-next-line:ban-types
         private _componentMap: Map<Function, Component<any>>;
         private _unlockedProperties: Set<string>;
         private _isNestedPrefabInstance: boolean;
@@ -271,12 +270,14 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             if (obj instanceof Layer) {
 
-                return obj.getChildren() as T[];
+                // filter FX render helpers: raw Phaser objects may sit in the
+                // same Phaser lists but are not editor objects
+                return obj.getChildren().filter(o => !isFXHelperObject(o)) as T[];
             }
 
             if (obj instanceof Container) {
 
-                return obj.list as ISceneGameObject[];
+                return obj.list.filter(o => !isFXHelperObject(o)) as ISceneGameObject[];
             }
 
             return this._objectChildren;
@@ -607,7 +608,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             comp.setActive(active);
         }
 
-        // tslint:disable-next-line:ban-types
         getComponent(ctr: Function): Component<any> {
 
             const comp = this._componentMap.get(ctr);
@@ -620,7 +620,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return undefined;
         }
 
-        // tslint:disable-next-line:ban-types
         hasComponent(ctr: Function) {
 
             const comp = this._componentMap.get(ctr);
@@ -648,7 +647,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return this.getComponent(UserComponentsEditorComponent) as UserComponentsEditorComponent;
         }
 
-        // tslint:disable-next-line:ban-types
         static getObjectComponent(obj: any, ctr: Function) {
 
             if (this.hasEditorSupport(obj)) {
@@ -665,7 +663,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             try {
 
-                // tslint:disable-next-line:ban-types
                 const support = obj["getEditorSupport"] as Function;
 
                 return support.apply(obj) instanceof GameObjectEditorSupport;
@@ -687,7 +684,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return null;
         }
 
-        // tslint:disable-next-line:ban-types
         static hasObjectComponent(obj: any, ctr: Function) {
 
             return this.getObjectComponent(obj, ctr) !== null;

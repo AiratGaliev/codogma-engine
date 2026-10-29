@@ -1,5 +1,60 @@
 # Change Log
 
+## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
+
+P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
+MCP robustness, and regression suites for every defect found along the way.
+
+### Editor
+
+* Fix: pack SpriteSheet frame layout now matches the Phaser runtime exactly —
+  row/column fit formula, margin/spacing handling, window frame naming
+  (sequential, not absolute), `endFrame: 0` no longer misread as "unbounded";
+  frame rects never exceed the image bounds (952361e).
+* Fix: color values in both conventions (editor `#hex` strings and Phaser
+  numeric colors from external tools/prefabs) are normalized everywhere.
+  Previously a numeric tint silently became 0 (black) AND was persisted into
+  the scene JSON, re-throwing on every reload
+  ("this.color.replace is not a function"); shape/FX colors were dropped to
+  their defaults (258cbe0).
+* Fix: FX render helpers (Circle background/ring, Gradient object) no longer
+  leak into the editor object model — scenes with Circle/Gradient FX opened
+  empty with an error alert and `[object Object]` outline rows before
+  (258cbe0).
+* Fix: Undo/redo reliability, Enter commit in Inspector fields, scene data
+  migrations, update command (86b9baa); TOCTOU write gap closed in the file
+  API (62c5ac6).
+* Feat: Godot editor icons integrated with light/dark variants (249227e).
+* Feat: limited Svelte 5 PoC plugin (`phasereditor2d.sveltepoc`) with live and
+  mock bridges, isolated build toolchain and ADR-0004 decision record; the
+  workbench stays colibri-based (21bda49).
+
+### Server / MCP
+
+* Fix: MCP launcher probes the official-package bridge and falls back to the
+  built-in stdio server when the bridge is served by another process or has
+  no connected editor — external MCP hosts keep working in any deployment
+  (1e7f9d4).
+* Extended MCP e2e: JSON Schema validity of all 66 tools under the forced Zod
+  4.6.7 override, malformed-argument rejection without killing the server,
+  and post-failure liveness (1e7f9d4).
+* Fix: reverse-proxy Host allow-list and Origin guard for gateways that
+  rewrite headers (0545a29, fb03067); guarded `/archive/` snapshot route
+  (1094f1c).
+
+### Tests
+
+* `tests/editor-color-values.test.mjs` — 11 regression tests for color
+  normalization, tint round-trips, FX wrapper color parsing and helper-object
+  marking (258cbe0).
+* `tests/editor-data-preview.test.mjs` — 21 tests locking audio/video URL
+  forms, spritesheet margin/spacing parity, JS/TS printer undefined handling,
+  JSON semantics and thumbnail cache safety (952361e).
+* `tests/editor-codegen.test.mjs` — migrations, Serializer and code printer
+  regressions (9f95063).
+* Security smoke: loopback/Host/Origin guard, `/archive/`, symlink
+  containment, official MCP/Zod compatibility.
+
 ## Codogma Engine 1.0
 
 ### Unreleased (COD-62 / COD-64)

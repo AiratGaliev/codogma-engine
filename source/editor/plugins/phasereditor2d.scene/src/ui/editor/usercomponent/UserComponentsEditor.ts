@@ -510,7 +510,6 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
             viewer.setStyledLabelProvider(new UserComponentSignatureStyledLabelProvider());
             viewer.setContentProvider(new UserComponentEditorContentProvider());
             viewer.setCellRendererProvider(new controls.viewers.EmptyCellRendererProvider(
-                // tslint:disable-next-line:new-parens
                 obj => {
 
                     if (obj instanceof UserComponent) {
@@ -521,7 +520,6 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
                     return new controls.viewers.IconImageCellRenderer(resources.getIcon(resources.ICON_USER_PROPERTY));
                 }
             ));
-            // tslint:disable-next-line:new-parens
             viewer.setTreeRenderer(new class extends controls.viewers.TreeViewerRenderer {
                 constructor() {
                     super(viewer);

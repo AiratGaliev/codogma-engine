@@ -94,6 +94,9 @@ jobs:
       - name: Build editor client (typecheck)
         run: npm run build
 
+      - name: Unit regression tests (editor, serialization, security and icons)
+        run: npm run test:unit
+
       - name: Smoke test (server boots, editor responds)
         shell: bash
         run: |

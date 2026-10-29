@@ -31,10 +31,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             },
             setValue: (obj, value: string) => {
 
-                if (typeof (value) === "string" && value.trim() === "") {
-
-                    value = defValue;
-                }
+                // colors may arrive as numbers (Phaser convention: tint,
+                // fillColor from external tools/prefabs); normalize them to
+                // the #hex string first, otherwise parseColor would throw and
+                // the value silently fall back to the default
+                value = colorValueToHexString(value, defValue);
 
                 // update the real object color property
 
@@ -107,11 +108,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                     return defValue;
                 }
 
-                const color = parseColor(val);
-
-                console.log("parseColor", val, color);
-
-                return color;
+                return parseColor(val);
             },
 
             setValue: (obj, value) => {

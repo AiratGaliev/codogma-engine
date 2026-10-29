@@ -134,7 +134,6 @@ namespace colibri.ui.controls {
                 return;
             }
 
-            // tslint:disable-next-line:no-unused-expression
             new TooltipManager(element, tooltip);
         }
 

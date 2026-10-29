@@ -10,8 +10,8 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         buildCreateObjectWithFactoryCodeDOM(args: IBuildObjectFactoryCodeDOMArgs): core.code.MethodCallCodeDOM {
             const obj = args.obj as FXGradient;
             const parent = args.parentVarName;
-            const colorToRGBA = (value: string): string => {
-                const color = parseInt(value.replace("#", ""), 16);
+            const colorToRGBA = (value: string | number): string => {
+                const color = colorValueToNumber(value, 0xffffff);
                 return `[${((color >> 16) & 0xff) / 255}, ${((color >> 8) & 0xff) / 255}, ${(color & 0xff) / 255}, ${obj.alpha}]`;
             };
             const call = new core.code.MethodCallCodeDOM("gradient", `${args.sceneExpr}.add`);

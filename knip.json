@@ -1,0 +1,24 @@
+{
+    "$schema": "./node_modules/knip/schema.json",
+    "entry": [
+        "server/server.mjs",
+        "server/mcp-launcher.mjs",
+        "server/mcp-stdio.mjs",
+        "mini-services/ai-chat/index.mjs",
+        "mini-services/phaser-editor-mcp/index.mjs",
+        "tests/security-smoke-test.mjs",
+        "tests/mini-services-security-test.mjs",
+        "tests/path-security.test.mjs",
+        "tests/mcp-e2e-test.mjs",
+        "eslint.config.mjs",
+        ".dependency-cruiser.cjs"
+    ],
+    "project": [
+        "server/**/*.mjs",
+        "mini-services/**/*.mjs",
+        "tests/*.mjs"
+    ],
+    "ignoreBinaries": ["PhaserEditor2D"],
+    "ignoreDependencies": ["z-ai-web-dev-sdk"],
+    "ignoreExportsUsedInFile": true
+}

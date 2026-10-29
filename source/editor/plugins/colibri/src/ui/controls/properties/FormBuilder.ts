@@ -214,6 +214,37 @@ namespace colibri.ui.controls.properties {
 
             const text = this.createText(parent, readOnly);
 
+            // commit the value with Enter, like professional editors do,
+            // instead of requiring a focus-out to apply it.
+
+            text.addEventListener("keydown", e => {
+
+                if (e.key === "Enter") {
+
+                    const initText = text.getAttribute("__editorInitText");
+
+                    if (initText === null) {
+
+                        if (text.value !== "") {
+
+                            text.dispatchEvent(new CustomEvent("change"));
+                        }
+
+                    } else if (text.value !== initText) {
+
+                        text.dispatchEvent(new CustomEvent("change", {
+                            detail: {
+                                initText
+                            }
+                        }));
+
+                        text.setAttribute("__editorInitText", text.value);
+                    }
+
+                    e.preventDefault();
+                }
+            });
+
             if (increment !== undefined) {
 
                 text.addEventListener("focusout", e => {

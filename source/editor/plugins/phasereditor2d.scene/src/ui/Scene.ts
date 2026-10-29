@@ -329,7 +329,11 @@ namespace phasereditor2d.scene.ui {
 
         getGameObjects(): sceneobjects.ISceneGameObject[] {
 
-            return this.sys.displayList.getChildren() as any;
+            // FX wrappers add raw render helpers (rectangle/ring/gradient) to
+            // the Phaser display list; they have no EditorSupport and must
+            // never be exposed as editor objects
+            return this.sys.displayList.getChildren()
+                .filter(obj => !sceneobjects.isFXHelperObject(obj)) as any;
         }
 
         getInputSortedObjects(): Phaser.GameObjects.GameObject[] {

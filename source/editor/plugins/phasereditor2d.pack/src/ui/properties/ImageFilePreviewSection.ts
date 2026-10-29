@@ -3,7 +3,6 @@ namespace phasereditor2d.pack.ui.properties {
     import controls = colibri.ui.controls;
     import ide = colibri.ui.ide;
     import io = colibri.core.io;
-    import webContentTypes = phasereditor2d.webContentTypes;
 
     export class ImageFilePreviewSection extends controls.properties.PropertySection<any> {
 

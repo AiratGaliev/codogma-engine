@@ -1,0 +1,10 @@
+# Prettier is applied only to files owned by the editor-priority branch.
+# Legacy sources must not be mass-reformatted, so everything is ignored and
+# the branch-owned files are re-included explicitly.
+**
+!eslint.config.mjs
+!server/path-security.mjs
+!mini-services/ai-chat/index.mjs
+!mini-services/phaser-editor-mcp/index.mjs
+!tests/path-security.test.mjs
+!tests/mini-services-security-test.mjs

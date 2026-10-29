@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Svelte PoC — standalone (mock mode)</title>
+    <style>
+        body {
+            font-family: Roboto, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #18191c;
+            color: #e6e7ea;
+        }
+        html.light body { background: #eceef2; color: #17181a; }
+        #sveltepoc-root {
+            width: 360px;
+            height: 420px;
+            border: 1px solid #ffffff24;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .row { margin: 10px 0; display: flex; gap: 8px; }
+        button {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid #ffffff1c;
+            background: #2b2d34;
+            color: inherit;
+            cursor: pointer;
+        }
+        p { max-width: 560px; font-size: 12px; opacity: .8; }
+    </style>
+</head>
+<body>
+    <h2>Svelte PoC — standalone mock mode</h2>
+    <p>
+        This page loads the compiled Svelte bundle <em>without</em> the colibri workbench.
+        The event source is a mock that implements only the selection-event and
+        theme-event interface (see ADR-0004). It measures bundle size, mount cost and
+        update latency in isolation; it does not prove workbench integration.
+    </p>
+    <div class="row">
+        <button id="sveltepoc-emit">Emit selection (4 objects)</button>
+        <button id="sveltepoc-theme">Toggle theme</button>
+        <button id="sveltepoc-bench">Benchmark ×1000</button>
+    </div>
+    <div id="sveltepoc-root"></div>
+    <script src="_out/svelte-poc.js"></script>
+</body>
+</html>

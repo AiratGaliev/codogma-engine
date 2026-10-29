@@ -609,7 +609,13 @@ namespace phasereditor2d.scene {
 
         getPlainObjectCategories() {
 
-            return this.getPlainObjectExtensions().map(e => e.getCategory());
+            // Different plain-object extensions may share one category (the
+            // fork registers both the legacy Tilemap and the EditableTilemap
+            // under "Tile Map"). The Outline builds its roots from this list,
+            // so duplicated categories would render the section - and all its
+            // children - twice. De-duplicate, keeping registration order.
+
+            return [...new Set(this.getPlainObjectExtensions().map(e => e.getCategory()))];
         }
 
         getPlainObjectExtensionByObjectType(type: string) {

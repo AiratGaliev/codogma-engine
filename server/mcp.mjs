@@ -21,6 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
+import { writeFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -140,7 +141,10 @@ function writeSceneFile(rel, data) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full) throw new Error("invalid scene path: " + rel)
     fs.mkdirSync(path.dirname(full), { recursive: true })
-    fs.writeFileSync(full, JSON.stringify(data, null, 4), "utf8")
+    const serialized = JSON.stringify(data, null, 4)
+    if (!writeFileSafely(PROJECT_DIR, full, serialized)) {
+        throw new Error("invalid scene path: " + rel)
+    }
     notifyFilesChanged()
 }
 
@@ -2329,7 +2333,6 @@ defTool(
         const prune = (list) => {
             for (const obj of list || []) {
                 if (Array.isArray(obj.list)) {
-                    const before = obj.list.length
                     obj.list = obj.list.filter(fx => {
                         if (ids.has(fx.id) || ids.has(fx.label)) { deleted++; return false }
                         return true
@@ -2795,7 +2798,9 @@ defTool(
         pack[sectionName] = pack[sectionName] || { files: [] }
         if (pack[sectionName].files.some(f => f.key === key)) throw new Error(`Key "${key}" already exists in ${rel}`)
         pack[sectionName].files.push({ key, type: "font", url, family })
-        fs.writeFileSync(full, JSON.stringify(pack, null, 4), "utf8")
+        if (!writeFileSafely(PROJECT_DIR, full, JSON.stringify(pack, null, 4))) {
+            throw new Error("invalid asset pack path: " + rel)
+        }
         notifyFilesChanged()
         return text(`Font "${key}" (${family}) added to ${rel}.`)
     }
@@ -2939,11 +2944,30 @@ export async function handleMcpHttpRequest(req, res) {
         return res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "GET not supported (stateless server)" }, id: null }))
     }
     if (req.method === "OPTIONS") {
-        res.writeHead(204, {
-            "Access-Control-Allow-Origin": "*",
+        // This endpoint sits behind the server's loopback/origin guard, so
+        // cross-origin browser use is not a supported scenario. Only echo a
+        // loopback http origin back; never grant a wildcard.
+        let allowOrigin = null
+        const origin = req.headers.origin
+        if (typeof origin === "string") {
+            try {
+                const parsed = new URL(origin)
+                const host = parsed.hostname
+                if (parsed.protocol === "http:"
+                    && (host === "127.0.0.1" || host === "localhost" || host === "::1")) {
+                    allowOrigin = origin
+                }
+            } catch (e) {
+                // keep allowOrigin = null
+            }
+        }
+        const headers = {
             "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id, Authorization"
-        })
+            "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id, Authorization",
+            "Vary": "Origin"
+        }
+        if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin
+        res.writeHead(204, headers)
         return res.end()
     }
     if (req.method !== "POST") {
