@@ -1,5 +1,14 @@
 # Change Log
 
+## Unreleased (2026-10-29 — Particle Emitter codegen regressions)
+
+### Tests
+
+* Added focused tests in `tests/editor-codegen.test.mjs` for Particle Emitter code generation: unset texture uses Phaser's `__DEFAULT` key, configured frames survive code generation, explicit texture keys remain intact, and clearing frames removes stale `frame` config.
+* The broader preview-lifecycle acceptance item remains open until blob URL creation/release is located and tested against the real owner/lifecycle.
+
+---
+
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
 P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
