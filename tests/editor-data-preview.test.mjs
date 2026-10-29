@@ -489,3 +489,88 @@ test("Controls.createImageFromBlob revokes its object URL after error", async ()
             "a failed thumbnail must release its object URL too")
     })
 })
+
+
+test("ThumbnailCache recovers from IndexedDB read failures using a fresh image", async () => {
+    const localForage = window["localforage"]
+    assert.ok(localForage && typeof localForage.createInstance === "function",
+        "the real localForage module must be loaded by the editor bundle loader")
+
+    const originalCreateInstance = localForage.createInstance
+    const originalLog = console.log
+    const image = {
+        preload: async () => controls.PreloadResult.NOTHING_LOADED,
+        getImageElement: () => null
+    }
+    let createImageCalls = 0
+    localForage.createInstance = () => ({
+        getItem: async () => { throw new Error("simulated IndexedDB read failure") },
+        setItem: async () => { throw new Error("read-failure fallback must not try to persist") },
+        clear: async () => {}
+    })
+    console.log = () => {}
+
+    try {
+        class TestThumbnailCache extends sceneUi.ThumbnailCache {
+            constructor() { super("test-thumbnail-read-failure") }
+            computeObjectHash() { return "test-hash" }
+            computeObjectKey() { return "test-object" }
+            createObjectImage() { createImageCalls += 1; return image }
+        }
+
+        const cache = new TestThumbnailCache()
+        const file = { id: "test-file" }
+        await assert.doesNotReject(() => cache.preload(file))
+        assert.equal(createImageCalls, 1, "cache read errors must fall back to a fresh image")
+        assert.equal(cache.getContent(file), image, "fallback image must be retained by ContentCache")
+    } finally {
+        localForage.createInstance = originalCreateInstance
+        console.log = originalLog
+    }
+})
+
+test("ThumbnailCache recovers when persisting a successfully loaded thumbnail fails", async () => {
+    const localForage = window["localforage"]
+    assert.ok(localForage && typeof localForage.createInstance === "function",
+        "the real localForage module must be loaded by the editor bundle loader")
+
+    const originalCreateInstance = localForage.createInstance
+    const originalCreateBlobFromImage = controls.Controls.createBlobFromImage
+    const originalWarn = console.warn
+    const imageElement = {}
+    const image = {
+        preload: async () => controls.PreloadResult.RESOURCES_LOADED,
+        getImageElement: () => imageElement
+    }
+    let persistedKeys = 0
+    localForage.createInstance = () => ({
+        getItem: async () => null,
+        setItem: async () => {
+            persistedKeys += 1
+            throw new Error("simulated IndexedDB write failure")
+        },
+        clear: async () => {}
+    })
+    controls.Controls.createBlobFromImage = async () => new Blob(["thumbnail"])
+    console.warn = () => {}
+
+    try {
+        class TestThumbnailCache extends sceneUi.ThumbnailCache {
+            constructor() { super("test-thumbnail-write-failure") }
+            computeObjectHash() { return "test-hash" }
+            computeObjectKey() { return "test-object" }
+            createObjectImage() { return image }
+        }
+
+        const cache = new TestThumbnailCache()
+        const file = { id: "test-file" }
+        await assert.doesNotReject(() => cache.preload(file))
+        assert.equal(persistedKeys, 1, "the cache must attempt to persist the generated blob")
+        assert.equal(cache.getContent(file), image,
+            "a successful preview must remain available when IndexedDB persistence fails")
+    } finally {
+        localForage.createInstance = originalCreateInstance
+        controls.Controls.createBlobFromImage = originalCreateBlobFromImage
+        console.warn = originalWarn
+    }
+})
