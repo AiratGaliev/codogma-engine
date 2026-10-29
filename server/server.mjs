@@ -170,6 +170,39 @@ function walkTree(dirPath, relPrefix, files, folders, metadata = new Map()) {
     return metadata
 }
 
+/*
+ * The IDE client sends file paths with the project root folder as the first
+ * segment, while /editor/project URLs are relative to the project root.
+ */
+function apiPath(p) {
+    if (typeof p !== "string" || p.length === 0) return p
+    const parts = p.split(/[\\/]/).filter(Boolean)
+    if (parts.length > 1 && parts[0] === path.basename(PROJECT_DIR)) {
+        return parts.slice(1).join("/")
+    }
+    return p
+}
+
+/**
+ * Return metadata from a verified parent-directory enumeration rather than
+ * following a client-controlled pathname with stat().
+ */
+function fileData(projectDir, relPath) {
+    const full = safeJoin(projectDir, relPath)
+    if (!full || full === projectDir) return null
+    const entries = readProjectDirectoryEntriesSafelySync(projectDir, path.dirname(full))
+    if (!entries) return null
+    const entry = entries.find(candidate => candidate.name === path.basename(full))
+    if (!entry || entry.isSymbolicLink || (!entry.isFile && !entry.isDirectory)) return null
+    return {
+        name: path.basename(relPath),
+        isFile: entry.isFile,
+        size: entry.isFile ? entry.size : 0,
+        modTime: Math.floor(entry.mtimeMs),
+        children: entry.isFile ? undefined : []
+    }
+}
+
 function buildRootFileData(projectDir) {
     const name = path.basename(projectDir)
     const children = []
