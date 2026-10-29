@@ -7,9 +7,9 @@
 * Added descriptor-verified project file reads. MCP file/text/asset metadata reads now consume bytes from an opened descriptor validated against the project root; HTTP project/editor static responses stream from a validated file handle instead of reopening a pathname.
 * Routed MCP `project-write-file` through the existing validated write-handle primitive rather than `fsp.writeFile(path)`.
 * Added Linux descriptor-anchored helpers for project directory creation, deletion and rename; wired the HTTP project API and MCP project-file tools to use them. Added deterministic parent-symlink-swap regressions for delete, rename and directory creation.
-* Non-Linux destructive operations retain a revalidation-based path fallback; `CopyFile` and recursive tree enumeration remain pathname-based. TOCTOU is still an open risk and this PR does not claim full closure.
+* Added descriptor-verified one-level directory enumeration for the HTTP project file tree and MCP project file listing; Linux reads metadata through the verified `/proc/self/fd` directory handle and skips symlink entries.
 * Added deterministic regression tests that swap a parent directory for an outside symlink immediately before open and assert that neither read nor write exposes/modifies the outside file.
-* This is a partial hardening, not a claim that TOCTOU is fully resolved. Delete/rename/mkdir and tree enumeration still need descriptor-relative handling and explicit platform-specific threat-model acceptance.
+* This is partial hardening, not a claim that TOCTOU is fully resolved. `CopyFile`, some other pathname-based traversal/operations, residual races where a directory is moved after it is opened, and the non-Linux path fallback still need a documented mechanism and platform-specific acceptance.
 
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
