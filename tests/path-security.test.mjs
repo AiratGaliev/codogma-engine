@@ -278,3 +278,31 @@ test("writeFileSafely rejects a parent-symlink swap immediately before open with
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
+
+
+test("readFileSafely enforces maxBytes even when the file grows after fstat", () => {
+    const t = createTempTree()
+    const target = path.join(t.base, "file.txt")
+    fs.writeFileSync(target, "small")
+    const originalReadSync = fs.readSync
+    let grew = false
+
+    try {
+        fs.readSync = function (fd, ...args) {
+            if (!grew) {
+                grew = true
+                fs.appendFileSync(target, "-concurrent-growth")
+            }
+            return originalReadSync.call(fs, fd, ...args)
+        }
+
+        assert.throws(
+            () => readFileSafely(t.base, target, "utf8", 5),
+            /configured read limit/
+        )
+        assert.equal(grew, true, "test must grow the file between fstat and descriptor read")
+    } finally {
+        fs.readSync = originalReadSync
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
