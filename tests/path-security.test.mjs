@@ -13,7 +13,7 @@ import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -405,6 +405,40 @@ test("ensureProjectDirectorySafely does not create a directory through a swapped
         assert.equal(fs.existsSync(outsideTarget), false, "mkdir must not create a directory through the swapped outside symlink")
     } finally {
         fsp.mkdir = originalMkdir
+        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
+        try { fs.renameSync(parkedAssets, assets) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+
+test("readProjectDirectoryEntriesSafelySync does not enumerate an outside symlink after the path is swapped", { skip: process.platform !== "linux" }, () => {
+    const t = createTempTree()
+    const assets = path.join(t.base, "assets")
+    const parkedAssets = path.join(t.base, "assets-internal")
+    fs.writeFileSync(path.join(assets, "inside-only.txt"), "inside")
+    fs.writeFileSync(path.join(t.outside, "outside-only.txt"), "outside")
+    const originalReaddir = fs.readdirSync
+    let swapped = false
+
+    try {
+        fs.readdirSync = function (directoryPath, ...args) {
+            if (!swapped && typeof directoryPath === "string" && /^\/proc\/self\/fd\/\d+$/.test(directoryPath)) {
+                fs.renameSync(assets, parkedAssets)
+                fs.symlinkSync(t.outside, assets, "dir")
+                swapped = true
+            }
+            return originalReaddir.call(fs, directoryPath, ...args)
+        }
+
+        const entries = readProjectDirectoryEntriesSafelySync(t.base, assets)
+        assert.ok(entries, "the already-open internal directory should remain readable")
+        assert.equal(swapped, true, "test must swap the path immediately before readdir()")
+        const names = entries.map(entry => entry.name)
+        assert.ok(names.includes("inside-only.txt"))
+        assert.ok(!names.includes("outside-only.txt"), "enumeration must not be redirected to the outside symlink")
+    } finally {
+        fs.readdirSync = originalReaddir
         try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
         try { fs.renameSync(parkedAssets, assets) } catch {}
         fs.rmSync(t.root, { recursive: true, force: true })
