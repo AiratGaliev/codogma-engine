@@ -34,4 +34,4 @@
 3. Проверить root override Zod 4.6.7 на все используемые схемы MCP прежде, чем обновлять официальный пакет или Zod.
 4. Перед решением о Phaser modularization сделать один воспроизводимый build fixture: сравнить API coverage, runtime dependencies и raw/gzip размер, проверить generated game без editor UI.
 5. Перед npm Workspaces отдельно проверить TypeScript references, root/editor scripts, server path, release ZIP, CI/cache paths и чистую установку; не удалять editor lockfile до зелёного PoC.
-6. Не передавать пакетному менеджеру файловые операции, пока TOCTOU риск в server file API не закрыт race-resistant механизмом либо не утверждена проверяемая модель угроз.
+6. Не передавать Package Manager файловые операции до закрытия остаточного filesystem TOCTOU: content-file write paths уже проверяют открытый descriptor, но folder creation/rename/copy/move/delete остаются pathname-based. Нужны OS-aware mutation design и adversarial concurrent-race tests либо документированная модель угроз с ограничением экспозиции.

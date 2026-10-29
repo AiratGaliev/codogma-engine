@@ -3,8 +3,8 @@
 | Поле | Значение |
 |---|---|
 | Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
-| Версия документа | 1.9 |
-| Дата | 29.10.2026 |
+| Версия документа | 1.10 |
+| Дата | 30.10.2026 |
 | Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
 | Связанный документ | [Дорожная карта](roadmap.md) |
 
@@ -16,7 +16,7 @@ Codogma Engine должен развиться в самостоятельный
 
 Главная ближайшая задача — **существенно модернизировать существующий редактор и его исходный код на текущей базе**, чтобы он стал цельной, удобной и надёжной средой разработки 2D-игр. Сюда входят визуальная система и layout рабочего пространства, Scene/Hierarchy/Inspector, работа с ресурсами, Undo/Redo, Prefabs/Components и подтверждение поведения уже реализованных runtime-функций. Это должно выражаться в работающем коде и приёмке, а не только в проектных документах.
 
-[Unity 6](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d) и [Cocos Creator 4.0](https://docs.cocos.com/creator/4.0/manual/en/) — ориентиры по качеству редакторского UX и типовым 2D-workflows. Из них следует изучать организацию Scene/Game view, Hierarchy, Inspector, Assets, panels/layouts, компоненты, Prefabs, Undo/Redo, анимацию, физику, live preview и диагностику. **Цель — сопоставимость основных 2D-сценариев и профессионального ощущения редактора, а не полный feature parity**, копирование чужой архитектуры или API. Codogma должен оставаться TypeScript-native и Web-first.
+[Unity 6](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d) и [Cocos Creator 4.0](https://docs.cocos.com/creator/4.0/manual/en/) — ориентиры по качеству редакторского UX и типовым 2D-workflows. Из них следует изучать организацию Scene/Game view, Hierarchy, Inspector, Assets, panels/layouts, компоненты, Prefabs, Undo/Redo, анимацию, физику, live preview и диагностику. **Цель — сопоставимость основных 2D-сценариев и профессионального ощущения редактора, а не полный feature parity**, копирование чужой архитектуры или API. Codogma должен оставаться TypeScript-native и Web-first.
 
 ### 1.1. Приоритет продуктовой ценности
 
@@ -97,7 +97,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 #### Исторический baseline PR #10 (снимок на 27.10.2026)
 
-[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. PR был слит в `dev` 27.10.2026. `754edaa1f7313409e99c3462a802d5fd430a9a01` — исторический snapshot; актуальная базовая точка `dev` на дату аудита — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). Runtime/security follow-ups остаются открытыми независимо от обновления снимка.
+[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. PR был слит в `dev` 27.10.2026. `754edaa1f7313409e99c3462a802d5fd430a9a01` — исторический snapshot; актуальная базовая точка `dev` на дату аудита — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). PR #21 current head на 30.10.2026 — `57b5fa0bdd165521fbe9846d539ba004cba92f3c`; CI Fast прошёл на этом точном head ([run #40955266022](https://github.com/AiratGaliev/codogma-engine/actions/runs/40955266022)). Это не заменяет browser/runtime acceptance Box2D.
 
 На PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` CI Fast завершился успешно ([run #40472189614](https://github.com/AiratGaliev/codogma-engine/actions/runs/40472189614)): обе установки зависимостей и `npm audit --audit-level=low`, сборка/typecheck редактора, server smoke и security smoke прошли; audit на этом lockfile сообщил 0 уязвимостей. После слияния в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01` отдельный повторный запуск CI именно на merge commit в этом аудите не подтверждён. Успешный PR CI подтверждает только перечисленные проверки на PR head, но не visual/runtime correctness или отсутствие неизвестных уязвимостей.
 
@@ -108,7 +108,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 - импорт и предпросмотр шрифтов, сжатых текстур и медиа, drag-and-drop больших/вложенных каталогов, обработка частичных ошибок и освобождение временных ресурсов;
 - адресные regression tests для сериализатора/codegen, Particle Emitter, spritesheet frame lookup, URL-дескрипторов аудио/видео и thumbnail cache.
 
-Security smoke проверяет конкретные локальные сценарии: loopback/Host/Origin, уже существующие и dangling symlink, выходящий за проект upload, чтение корневого config через symlink и совместимость MCP stdio. **Открытый security residual:** `safeJoin` проверяет real path до файловой операции, но сама проверка и последующее чтение/запись не атомарны. Локальный процесс, который успеет заменить symlink между проверкой и операцией, может создать TOCTOU-гонку. Успешный smoke не закрывает этот риск; follow-up и критерии его закрытия вынесены в [roadmap](roadmap.md).
+Security smoke проверяет перечисленные loopback/Host/Origin, symlink/dangling-symlink, upload и MCP-сценарии, но не моделирует adversarial races для каждой файловой операции. После PR #10 targeted content-file writes, использующие `openSafeProjectFileForWrite`, открывают и валидируют file descriptor до truncate/write; на Linux дополнительно сверяются `/proc/self/fd`, dev/inode и pathname. Это сужает race в этих write paths, но **не закрывает общий filesystem TOCTOU residual**: `CreateFolder`, `RenameFile`, `CopyFile`, `MoveFiles` и `DeleteFiles` остаются pathname-based с проверками до/после syscall. Нужны OS-aware design и concurrent symlink-replacement tests; не обещать race-proof защиту до их выполнения. См. [roadmap](roadmap.md).
 ## 3. Продуктовая область и границы
 
 ### 3.1. Входит в целевое направление
@@ -704,13 +704,13 @@ Yandex Games и VK Games являются самостоятельными targe
 
 #### Дополнительный release gate для Yandex Games
 
-- Использовать актуальный официальный [Yandex Games SDK](https://yandex.com/dev/games/doc/en/sdk) и официальный loader. До завершения задачи перепроверять текущие требования выбранного target и поддерживаемые методы SDK.
-- Вызывать `LoadingAPI.ready()` только когда игра действительно готова к взаимодействию: ресурсы загружены, интерактивные элементы готовы, splash/loading overlay убран.
-- Согласовывать `GameplayAPI.start()`/`stop()` с фактическим началом и остановкой gameplay: старт уровня, выход из меню, pause/unpause, реклама, переключение вкладки и возврат. Обработчики событий паузы/возобновления должны быть идемпотентными и не инициировать двойной resume.
+- Использовать актуальный официальный [Yandex Games SDK](https://yandex.ru/dev/games/doc/ru/sdk/sdk-about) и loader; сверяться с [game loading/gameplay events](https://yandex.ru/dev/games/doc/ru/sdk/sdk-game-events) и [requirement 1.19](https://yandex.ru/dev/games/doc/ru/requirements/1/19). Подключить SDK до `YaGames.init()`: в архиве, загружаемом на сервер Яндекса, использовать относительный `<script src="/sdk.js"></script>`; при hosting на собственном домене — `https://sdk.games.s3.yandex.net/sdk.js`. Не скачивать/vendoring SDK; абсолютный SDK URL внутри загруженного игрового архива может приводить к `SERVICE_STORAGE_URL_DETECTED`.
+- Вызывать `ysdk.features.LoadingAPI?.ready()` только когда все игровые ресурсы загружены, UI интерактивен и loading/splash screen убран.
+- Согласовывать `ysdk.features.GameplayAPI?.start()` / `.stop()` с фактическим началом/остановкой gameplay: start level, выход из меню, unpause/возврат из рекламы/в активную вкладку; stop level end, pause/menu, fullscreen/rewarded ads и уход во вкладку background. Состояние pause/resume должно быть идемпотентным; `start()` допустим только если gameplay реально немедленно возобновляется.
 - Во время рекламы приостанавливать симуляцию и звук по контракту host adapter; восстанавливать gameplay только после корректного возврата в активный host. Rewarded-награду выдавать только после подтверждённого успешного результата показа; close, interruption, timeout или error не дают награду.
 - Раздельно тестировать mock/local adapter и официальный test/sandbox environment. Успешный mock и локальный browser smoke не доказывают соответствие SDK или прохождение модерации.
 
-Нормативные первоисточники: [Yandex Games SDK](https://yandex.com/dev/games/doc/en/sdk), [SDK methods requirement 1.19](https://yandex.com/dev/games/doc/en/requirements/1/19), [game loading and gameplay markup](https://yandex.com/dev/games/doc/en/sdk/sdk-game-events).
+Нормативные первоисточники: [Yandex Games SDK setup](https://yandex.ru/dev/games/doc/ru/sdk/sdk-about), [SDK loading/gameplay events](https://yandex.ru/dev/games/doc/ru/sdk/sdk-game-events), [requirements 1.19](https://yandex.ru/dev/games/doc/ru/requirements/1/19).
 
 ### 11.4. Критерии приёмки будущей реализации
 
@@ -941,7 +941,7 @@ CI Fast сейчас не выполняет весь перечисленный
 
 Эти проекты предназначены для исследования идей, а не для безусловного копирования кода.
 
-- [Unity 6.6 / 6000.7 2D manual](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d) — последовательность действий в Scene Editor, Inspector, Prefabs, Package Manager, отладка и интегрированный рабочий процесс.
+- [Unity 6.6 / 6000.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d) — последовательность действий в Scene Editor, Inspector, Prefabs, Package Manager, отладка и интегрированный рабочий процесс.
 - Cocos Creator 4.0 User Manual ([official manual](https://docs.cocos.com/creator/4.0/manual/en/)) — version-pinned workflow reference for scenes/assets, scripting, Web publishing, 2D sorting/batching, UI, animation, physics, particles, AssetManager, localization and editor extensions. Its landing page labels 4.0 LTS but also calls Creator 3.x the latest version; validate release availability/API before adopting it. Keep it distinct from the separate `cocos/cocos4` source repository. Use [Creator 3.8 LTS](https://docs.cocos.com/creator/3.8/manual/en/) as a separate established 3.x workflow reference. Focused pages: [asset workflow](https://docs.cocos.com/creator/4.0/manual/en/asset/asset-workflow.html), [TiledMap](https://docs.cocos.com/creator/4.0/manual/en/asset/tiledmap.html), [input events](https://docs.cocos.com/creator/4.0/manual/en/engine/event/event-input.html), [2D sorting](https://docs.cocos.com/creator/4.0/manual/en/engine/rendering/sorting-2d.html), [batching guidelines](https://docs.cocos.com/creator/4.0/manual/en/ui-system/components/engine/ui-batch.html), [UI system](https://docs.cocos.com/creator/4.0/manual/en/2d-object/ui-system/index.html), [scripting](https://docs.cocos.com/creator/4.0/manual/en/scripting/index.html), [web publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-web.html), and [command-line publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-in-command-line.html).
 - Cocos 4 (upstream: [repository](https://github.com/cocos/cocos4), [branch v4.0.0](https://github.com/cocos/cocos4/tree/v4.0.0)) — reference по разделению core/editor/CLI и подсистемам physics backend selector, 2D batching, Animation Graph, Tiled integration, UI layout, particle lifecycle, AssetManager и display/DPR configuration. Во время исследования 26.10.2026 ветка имела prerelease-версию; рассматривать её как источник архитектурных концепций и проверяемого кода, а не как обязательную runtime-зависимость или доказательство стабильности.
 - Cocos 4 reference files: [physics selector](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/physics-2d/framework/physics-selector.ts), [2D batcher](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/renderer/batcher-2d.ts), [UI static batch component](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/components/ui-static-batch.ts), [2D animation graph](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/animation/marionette), [Tiled map](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/tiledmap), [UI](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/ui), [2D particles](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/particle-2d) and [AssetManager](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/asset/asset-manager/asset-manager.ts).
@@ -954,7 +954,7 @@ CI Fast сейчас не выполняет весь перечисленный
 - [PixiJS 8 documentation](https://pixijs.com/8.x/guides/) — possible rendering adapter reference; PixiJS alone is not a full replacement for Phaser's scene/game framework.
 - [Tauri 2 documentation](https://v2.tauri.app/) — desktop shell, permissions and IPC/security model; use only for editor desktop-shell responsibilities.
 - [Tiled user manual](https://docs.mapeditor.org/en/latest/manual/introduction/) — tilemap formats, isometric/hexagonal layouts, object layers, brushes, tile collisions and custom extensions.
-- Unity 6 / Unity 6.6 User Manual, 6000.7 — [2D overview](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d), [Sprites](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/sprite), [Tilemaps](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/tilemaps), [2D Physics](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/2d-physics), [2D Physics Core API](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/2d-physics-api), [2D in URP](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/2d-urp), [2D Profiler](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/sprite/profiler-2d), [Sprite Atlas workflow](https://docs.unity.com/en-us/engine/6000.7/manual/unity2d/sprite/atlas/create-sprite-atlas). Использовать как функциональную карту спрайтов, collision shapes, sorting, 9-slicing, tilemap palettes/brushes, profiler и 2D light/post-process workflows, не как требование копировать Unity packages или URP.
+- Unity 6 / Unity 6.6 User Manual, 6000.6 — [2D overview](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d), [Sprites](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite), [Tilemaps](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/tilemaps), [2D Physics](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics), [2D Physics Core API](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics-api), [2D in URP](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-urp), [2D Profiler](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/profiler-2d), [Sprite Atlas workflow](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/atlas/create-sprite-atlas). Использовать как функциональную карту спрайтов, collision shapes, sorting, 9-slicing, tilemap palettes/brushes, profiler и 2D light/post-process workflows, не как требование копировать Unity packages или URP.
 
 Полезные принципы, которые следует применить в Codogma после gap analysis:
 1. Physics API с зарегистрированными backend adapters и явной картой capabilities вместо жёсткого связывания пользовательского кода с конкретным solver.
@@ -968,7 +968,7 @@ CI Fast сейчас не выполняет весь перечисленный
 
 ### 15.1. Каталог технических ссылок по подсистемам
 
-Подробный каталог официальных руководств и кандидатов вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md). Web-first risks и уроки из Unity, Cocos Creator, Godot и Defold собраны в [architecture risk register](architecture-risk-register.md). Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.7), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
+Подробный каталог официальных руководств и кандидатов вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md). Web-first risks и уроки из Unity, Cocos Creator, Godot и Defold собраны в [architecture risk register](architecture-risk-register.md). Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.6), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
 
 Использовать каталог вместе с этим ТЗ и [дорожной картой](roadmap.md). Перед выбором зависимости перепроверять текущую версию и лицензию; ссылки являются техническими reference, не утверждённым dependency manifest.
 

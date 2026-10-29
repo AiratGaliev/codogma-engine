@@ -26,8 +26,17 @@ re-implement the MCP protocol.
   `[{ type: "text", text: "…" }]` or `[{ type: "image", data: "<base64>", mimeType: "image/png" }]`.
 - `GET /` returns `{ status: "ok", clients: <n>, … }` — used by the editor's
   *AI → MCP Server Configuration* dialog to verify connectivity.
-- CORS headers (`Access-Control-Allow-Origin: *`) are sent on every response so the editor
-  page (served from a different origin/port) can call the status endpoint.
+- CORS grants are origin-validated: the bridge echoes a specific Origin only when it is
+  loopback or listed in `MCP_BRIDGE_ALLOWED_ORIGINS`; it does not grant wildcard origins.
+  HTTP bodies and WebSocket payloads are size-capped, as are clients and pending requests.
+
+## Security boundary and limits
+
+- Default bind: `127.0.0.1`; `MCP_BRIDGE_HOST` is a privileged local configuration override, not a public deployment setting.
+- Browser Origins must be loopback or explicitly listed in `MCP_BRIDGE_ALLOWED_ORIGINS`; the response echoes that exact Origin, not `*`.
+- The bridge caps HTTP request bodies, WebSocket payloads, clients, pending tool requests and request timeouts. These controls limit accidental/malicious load but do not replace authorization.
+- Calls without an `Origin` are accepted for local official MCP stdio clients. A remote non-browser client can also omit or forge headers; Host/Origin checks are not authentication.
+- No general authentication/authorization exists. Do not use a non-loopback bind or public/multi-user proxy without an authenticated front door and independent security review. The normal main-server security smoke does not prove this separate process is secure.
 
 ## Run
 
@@ -37,7 +46,7 @@ npm install
 npm run dev        # node --watch index.mjs (dev)  |  npm start for plain node index.mjs
 ```
 
-The bridge listens on `http://127.0.0.1:1902` (override with the `PORT` env var).
+The bridge binds to `127.0.0.1:1902` by default (`PORT` changes the port; `MCP_BRIDGE_HOST` changes the bind host). Requests are checked with loopback Host/Origin policy; no general user authentication is implemented. Keep this as a local helper and **do not** bind it to `0.0.0.0` or expose it through an untrusted/public proxy. Host/Origin headers are not authentication for arbitrary non-browser callers.
 
 > **Workspace note:** in this sandbox the **production** server (`node server/server.mjs`)
 > is already running on port `1902` and serves the editor plus its own built-in MCP bridge

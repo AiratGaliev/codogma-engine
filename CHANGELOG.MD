@@ -25,8 +25,11 @@ Unreleased work tracked here: editor reliability, FX and Box2D codegen/runtime f
   empty with an error alert and `[object Object]` outline rows before
   (258cbe0).
 * Fix: Undo/redo reliability, Enter commit in Inspector fields, scene data
-  migrations, update command (86b9baa); TOCTOU write gap closed in the file
-  API (62c5ac6).
+  migrations and update command (86b9baa). The file API now validates the opened
+  descriptor before truncating/writing existing content (62c5ac6). This narrows
+  the write-path race, but does **not** close every filesystem TOCTOU: folder
+  creation and path-based rename/copy/move/delete still need race-resistant
+  treatment and explicit concurrency tests.
 * Feat: Godot editor icons integrated with light/dark variants (249227e).
 * Feat: limited Svelte 5 PoC plugin (`phasereditor2d.sveltepoc`) with live and
   mock bridges, isolated build toolchain and ADR-0004 decision record; the
