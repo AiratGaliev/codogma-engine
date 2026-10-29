@@ -103,7 +103,7 @@ test("safeJoin rejects lexical escapes and absolute paths", () => {
             "\\\\server\\share\\secret.txt",
             "//server/share/secret.txt"
         ]) {
-            assert.equal(safeJoin(t.base, input), null, \`expected path rejection for \${input}\`)
+            assert.equal(safeJoin(t.base, input), null, "expected path rejection for " + input)
         }
     } finally {
         fs.rmSync(t.root, { recursive: true, force: true })
