@@ -38,7 +38,7 @@
 
 Community reports Godot Web упоминают startup size, Safari/mobile, cross-origin headers и export plugins, но эти reports — test hypotheses, не доказательство дефекта актуальной версии. Использовать [официальный Godot 4.5 Web manual](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html), [community thread](https://www.reddit.com/r/godot/comments/1qx4qr8/limitations_of_web_build/), [Defold HTML5 manual](https://defold.com/manuals/html5/) и [Defold size guide](https://defold.com/manuals/optimization-size/) с фиксацией version/device/host.
 
-## 3.2. WebGPU и WebAssembly: стандарты под наблюдением
+## WebGPU и WebAssembly: стандарты под наблюдением
 
 На 29.10.2026 W3C указывает статус Candidate Recommendation Draft для WebGPU и WGSL; MDN помечает WebGPU как limited availability/non-Baseline и secure-context-only. WebAssembly Core 3.0 также опубликован как Candidate Recommendation Draft 28.10.2026. Это аргумент в пользу заменяемой renderer/runtime boundary, а не обязательной миграции.
 
