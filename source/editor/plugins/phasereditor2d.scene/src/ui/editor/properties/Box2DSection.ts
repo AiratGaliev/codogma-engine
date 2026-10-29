@@ -46,10 +46,6 @@ namespace phasereditor2d.scene.ui.editor.properties {
                 this.createLabel(comp, "Allow Sleep",
                     "If enabled, the bodies are allowed to sleep when they come to rest."));
 
-            this.createBooleanField(comp, "box2dDebugDraw",
-
-                this.createLabel(comp, "Debug Draw (not generated yet)",
-                    "The setting is stored, but runtime debug-draw code is not emitted by the scene compiler yet."));
 
             const libraryWarning = this.createLabel(comp,
                 "Box2D is enabled, but PhaserBox2D.js was not found in the project.",

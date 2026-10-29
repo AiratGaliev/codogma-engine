@@ -34,6 +34,7 @@ namespace phasereditor2d.scene.core.json {
             public box2dGravityX = 0,
             public box2dGravityY = 10,
             public box2dAllowSleep = true,
+            /** Legacy serialized preference. Kept for round-trip compatibility; code generation uses box2dSceneGenerateDebugCode. */
             public box2dDebugDraw = false,
             public box2dWorld_scale = 30,
             public importFileExtension = false,

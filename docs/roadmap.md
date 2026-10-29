@@ -25,7 +25,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ## Текущее состояние и границы блокеров (30.10.2026)
 
-Базовая точка `dev` на момент ревью — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). PR #21 current head — `57b5fa0bdd165521fbe9846d539ba004cba92f3c`; CI Fast завершился успешно на этом точном commit ([run #40955266022](https://github.com/AiratGaliev/codogma-engine/actions/runs/40955266022)). Это подтверждает только выполненные workflow jobs; browser/runtime Box2D acceptance, performance measurements и release-host acceptance остаются отдельными gates.
+Базовая точка `dev` на момент ревью — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). PR #21 добавляет изменения Box2D codegen и документирует целевую архитектуру Scene Loader; статус CI необходимо проверять по live checks на точном head PR, а не хранить SHA очередного запуска в постоянной документации. Любой CI Fast подтверждает только выполненные workflow jobs; browser/runtime Box2D acceptance, performance measurements и release-host acceptance остаются отдельными gates.
 
 ### Можно начинать сейчас
 

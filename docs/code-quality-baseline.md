@@ -1,6 +1,6 @@
 # Baseline качества кода и проверок
 
-**Базовый снимок `dev`:** `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. Последний подтверждённый PR #21 CI Fast на 30.10.2026 прошёл на точном head `57b5fa0bdd165521fbe9846d539ba004cba92f3c` ([run #40955266022](https://github.com/AiratGaliev/codogma-engine/actions/runs/40955266022)). Это подтверждает workflow checks, но не browser/runtime acceptance и не performance.  
+**Базовый снимок `dev`:** `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. CI — commit-scoped evidence; актуальный статус PR проверяется по live checks. Эта baseline не подтверждает browser/runtime acceptance и не содержит performance measurements.  
 **Охват:** manifests, TypeScript configs, workflows, test scripts и ключевые server/MCP paths. Полный построчный lint/security review всех legacy-файлов не выполнялся.
 
 ## Фактические CI/local checks

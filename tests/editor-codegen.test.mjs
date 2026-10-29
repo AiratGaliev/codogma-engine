@@ -31,6 +31,7 @@ const coreJson = globalThis.phasereditor2d.scene.core.json
 const coreCode = globalThis.phasereditor2d.scene.core.code
 const migrations = globalThis.phasereditor2d.scene.core.migrations
 const isValidSceneData = coreJson.isValidSceneData
+const SceneSettings = globalThis.phasereditor2d.scene.core.json.SceneSettings
 
 /* ===================== property serialization ===================== */
 
@@ -81,6 +82,20 @@ test("scene Serializer.write keeps non-default values and drops default ones", (
     serializer.write("visible", false, true) // differs from default → kept
 
     assert.equal(data.visible, false)
+})
+
+test("legacy Box2D debug flag round-trips without enabling the current generated debug-draw option", () => {
+    const settings = new SceneSettings()
+    settings.readJSON({ box2dDebugDraw: true })
+
+    assert.equal(settings.box2dDebugDraw, true,
+        "old scene metadata must remain readable for compatibility")
+    assert.equal(settings.box2dSceneGenerateDebugCode, false,
+        "the legacy flag must not silently change the new generator option")
+
+    const data = settings.toJSON()
+    assert.equal(data.box2dDebugDraw, true,
+        "the legacy setting must survive serialization")
 })
 
 /* ===================== scene-data migrations ===================== */
