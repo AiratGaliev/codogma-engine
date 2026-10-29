@@ -266,7 +266,7 @@ export async function openSafeProjectFileForRead(base, target) {
  * Unsafe paths fail closed with an error; callers never receive bytes obtained
  * by reopening a pathname after the containment check.
  */
-export function readFileSafely(base, target, options) {
+export function readFileSafely(base, target, options, maxBytes) {
     const context = safeReadContext(base, target)
     if (!context) throw new Error("Refusing to read outside the project root")
 
@@ -280,6 +280,10 @@ export function readFileSafely(base, target, options) {
     try {
         if (!isSafeOpenReadFileHandle(base, context.full, fd)) {
             throw new Error("Refusing to read an unsafe project file")
+        }
+
+        if (Number.isFinite(maxBytes) && fs.fstatSync(fd).size > maxBytes) {
+            throw new Error("Project file exceeds the configured read limit")
         }
 
         return fs.readFileSync(fd, options)
