@@ -323,6 +323,10 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Включить состав selected features и причины inclusion/exclusion в build report; проверить на fixture, что выключенные/неподдерживаемые и editor-only contributions не попадают в production bundle там, где это доказуемо import graph/bundler.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
 - [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production; проверить возможность использования [Vite](https://vite.dev/guide/) только после сравнения с текущей сборкой.
+- [ ] Зафиксировать поддерживаемые браузеры, WebView и целевые embedded hosts с минимальными версиями; для каждого target указать статус supported/experimental/unsupported, причины и fallback.
+- [ ] Добавить воспроизводимый Web lifecycle fixture: hidden/visible, focus loss, pause/resume с несколькими независимыми причинами, frame stalls и bounded fixed-step catch-up; отдельно тестировать blocked audio до user gesture.
+- [ ] Добавить recovery acceptance для WebGL context loss/restore и interrupted asset loading; проверить stop/restart, повторную подписку listeners и освобождение GPU/decoded resource lifecycle.
+- [ ] Добавить mobile/host acceptance для resize/orientation/DPR, memory pressure, storage quota/denied state и взаимодействия parent iframe с origin-validated message contract. Не требовать COOP/COEP в default target.
 - [ ] Реализовать сборку целевого runtime непосредственно из валидированной Project Model, сериализованных сцен, зарегистрированного графа TypeScript-компонентов, asset graph и настроек adapter; отдельный generated TS-класс на каждую сцену не является обязательным входом.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
 - [ ] Добавить подходящие обработчики ассетов: атласы, оптимизацию изображений, проверку аудио/шрифтов и другие операции только при подтверждённой потребности.
@@ -347,6 +351,9 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] В тестах и документации разделены Yandex Games, VK Mini Apps и VK Play.
 - [ ] Runtime/build-only зависимости не попадают в лишние production bundles.
 - [ ] Feature Registry различает package installed, feature provided/available, feature enabled in project, target-included и runtime/editor-activated states; один статус не переключает другой автоматически. На этапе 4A package-installed/provider state разрешено проверять через тестовый fixture descriptor, не считая финальный package metadata contract уже утверждённым.
+- [ ] Web acceptance подтверждена на зафиксированном browser/device/host matrix и включает hidden-tab lifecycle, audio autoplay denial/recovery, WebGL context loss, asset cancellation, resize/DPR, browser storage failure и origin validation для parent messaging.
+- [ ] Build artifact report сохраняет raw/compressed initial payload, runtime/asset inclusion manifest и измеренные time-to-first-frame; mobile memory/CPU показатели не выводятся из desktop/headless/SwiftShader результатов.
+- [ ] Cross-origin isolation/threaded WASM — отдельный opt-in profile с проверкой headers и совместимости сторонних SDK/ads; unsupported hosting configurations диагностируются до выпуска.
 - [ ] Fixture проверяет feature dependency closure, отсутствующий provider, несовместимую комбинацию/target и структурированную диагностику.
 - [ ] Повторная сборка с той же конфигурацией даёт стабильный список выбранных функций и эквивалентный состав bundle; tree-shaking claims подтверждаются измеримым bundle report, а не одним лишь описанием metadata.
 - [ ] В feature-build acceptance явно разделены логическое отключение функции и физическое исключение её runtime-кода; для Phaser-пути исключение считается доказанным только после проверки конечного bundle на fixture.
