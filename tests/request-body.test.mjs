@@ -62,3 +62,27 @@ test("readRequestBuffer rejects invalid byte limits", async () => {
     assert.throws(() => readRequestBuffer(request, -1), /maxBytes/)
     assert.throws(() => readRequestBuffer(request, 1.5), /maxBytes/)
 })
+
+test("readRequestBuffer rejects an aborted request before returning partial bytes", async () => {
+    const request = requestStream(["partial"], {})
+    request.complete = false
+
+    const pending = assert.rejects(
+        readRequestBuffer(request, 10),
+        /Request body aborted before completion/
+    )
+    request.emit("aborted")
+    await pending
+})
+
+test("readRequestBuffer rejects a close before the HTTP message is complete", async () => {
+    const request = requestStream(["partial"], {})
+    request.complete = false
+
+    const pending = assert.rejects(
+        readRequestBuffer(request, 10),
+        /Request body closed before completion/
+    )
+    request.emit("close")
+    await pending
+})
