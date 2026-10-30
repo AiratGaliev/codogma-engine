@@ -86,16 +86,25 @@ test("safeJoin rejects lexical escapes and absolute paths", () => {
         assert.equal(safeJoin(t.base, "/etc/passwd"), path.join(t.base, "etc", "passwd"))
         assert.equal(safeJoin(t.base, "/absolute/path.txt"), path.join(t.base, "absolute", "path.txt"))
 
-        // Windows-style separators: an escape on win32, a literal (in-base)
-        // file name on POSIX — both outcomes are safe.
-        for (const input of ["..\\..\\etc\\passwd", "C:\\windows\\system32"]) {
-            const result = safeJoin(t.base, input)
-            if (process.platform === "win32") {
-                assert.equal(result, null, `expected null on win32 for ${input}`)
-            } else {
-                assert.ok(result && result.startsWith(t.base + path.sep),
-                    `expected an in-base literal filename on POSIX for ${input}`)
-            }
+        // Windows-style traversal is platform-dependent because backslashes
+        // are ordinary filename characters on POSIX.
+        const windowsTraversal = safeJoin(t.base, "..\\..\\etc\\passwd")
+        if (process.platform === "win32") {
+            assert.equal(windowsTraversal, null)
+        } else {
+            assert.ok(windowsTraversal && windowsTraversal.startsWith(t.base + path.sep))
+        }
+
+        // Drive-qualified and UNC paths are rejected on every platform instead
+        // of silently being reinterpreted as relative project filenames.
+        for (const input of [
+            "C:\\windows\\system32",
+            "C:/windows/system32",
+            "C:relative.txt",
+            "\\\\server\\share\\secret.txt",
+            "//server/share/secret.txt"
+        ]) {
+            assert.equal(safeJoin(t.base, input), null, "expected path rejection for " + input)
         }
     } finally {
         fs.rmSync(t.root, { recursive: true, force: true })

@@ -34,7 +34,9 @@ export function initMcp(options) {
 /** Official asset tools pass `{ texture: { key, frame } }`; accept flat `{ key }` too. */
 function textureKeyOf(args) {
     const key = args.key ?? args.texture?.key
-    if (!key) throw new Error('Missing texture key: pass { "key" } or { "texture": { "key" } }.')
+    if (typeof key !== "string" || key.trim().length === 0) {
+        throw new Error('Missing or invalid texture key: pass a non-empty string as { "key" } or { "texture": { "key" } }.')
+    }
     return key
 }
 
@@ -2587,8 +2589,14 @@ defTool(
         type: "object",
         properties: {
             key: { type: "string", description: "The key of the texture." },
-            texture: { type: "object", properties: { key: { type: "string" } }, description: "Alternative official shape." }
-        }
+            texture: {
+                type: "object",
+                properties: { key: { type: "string" } },
+                required: ["key"],
+                description: "Alternative official shape."
+            }
+        },
+        anyOf: [{ required: ["key"] }, { required: ["texture"] }]
     },
     async (args) => {
         const key = textureKeyOf(args)
