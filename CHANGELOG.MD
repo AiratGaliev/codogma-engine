@@ -979,3 +979,9 @@ First release under the Codogma Engine name. Rebranded from Phaser Editor 2D (op
 ## Version 3.0.0 - May 5, 2020
 
 [First public release](https://phasereditor2d.com/blog/2020/05/phaser-editor-v3-released-for-the-public-new-online-service-play-phaser-editor-2d)
+
+- Extended MCP scene object serialization to preserve editor-specific Sprite, TileSprite, slice, Text/BitmapText, shape and Video fields, and convert upstream ParticleEmitter operation configs into the editor's stored property-set format.
+
+- Normalized upstream Arcade.active/body.* MCP arguments into the current Codogma ArcadeComponent serializer, added explicit support checks for enable/disable, and expanded round-trip coverage for HitArea and Shape stroke properties.
+
+- Corrected Arcade MCP serialization: upstream Arcade.active/body.* fields are mapped to current ArcadeComponent JSON keys. Enable/disable validates editor type support, and regression coverage exercises both direct aliases and arcade shorthand.

@@ -529,3 +529,10 @@ When changing architecture, project formats, compiler output, runtime integratio
 The current editor client includes code derived from the open-source Phaser Editor 2D v3 client. Its origin is relevant to attribution and license compliance, but it does not define Codogma's product direction. Preserve the copyright and license notices in [LICENSE](LICENSE).
 
 Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integration. Phaser and other third-party components remain subject to their own licenses and terms; review those terms when distributing the engine or a game built with it.
+
+
+MCP scene-object round-trip tests also cover editor-specific properties for Sprite, TileSprite, NineSlice/ThreeSlice, Text/BitmapText, shapes, Video and ParticleEmitter config, in addition to SpineGameObject serialization.
+
+MCP scene-object round-trip coverage also checks Shape stroke fields, HitArea serialization, current-editor ArcadeComponent key normalization, and Arcade enable/disable behaviour on supported display objects; unsupported object types return explicit errors.
+
+Arcade MCP tools preserve the upstream body.* argument contract while translating fields to the current editor's ArcadeComponent serialization. The enable tool rejects object types that do not install ArcadeComponent; the package suite exercises direct aliases, the arcade shortcut, enable and disable paths.

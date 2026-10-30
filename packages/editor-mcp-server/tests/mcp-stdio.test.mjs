@@ -545,6 +545,11 @@ test("real Codogma registry preserves all upstream tools and every JSON Schema c
     const guidance = await dispatchTool("get-system-instructions", {});
     assert.match(guidance.content[0].text, /SpineGameObject/, "system instructions must describe the Spine object type");
     assert.match(guidance.content[0].text, /assets-get-spine-skin-image/, "system instructions must document the Spine preview workflow");
+    assert.match(guidance.content[0].text, /ParticleEmitter configuration/, "system instructions must describe editor-compatible particle config");
+    assert.match(guidance.content[0].text, /Video/, "system instructions must describe the Video scene object");
+    assert.match(guidance.content[0].text, /Hit areas can be configured/, "system instructions must document editor hit areas");
+    assert.match(guidance.content[0].text, /Arcade physics is available only/, "system instructions must describe supported Arcade component types");
+    assert.match(guidance.content[0].text, /Hit areas can be configured/, "system instructions must describe hit-area data");
 });
 
 
@@ -591,6 +596,295 @@ test("Spine game-object configuration survives scene JSON creation", async () =>
         for (const [key, value] of Object.entries(spineProperties)) {
             assert.deepEqual(spineObject[key], value, `Spine property '${key}' must be serialized without loss`);
         }
+    } finally {
+        await rm(projectDir, { recursive: true, force: true });
+    }
+});
+
+
+test("Codogma scene-object creation preserves upstream type-specific properties", async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), "codogma-mcp-object-fields-"));
+
+    try {
+        initMcp({ projectDir, log: () => {} });
+        await dispatchTool("ide-create-new-scene", { name: "ObjectFields", folder: "scenes" });
+
+        const sceneFile = path.join(projectDir, "scenes", "ObjectFields.scene");
+        const initialScene = JSON.parse(await readFile(sceneFile, "utf8"));
+        const objects = [
+            {
+                type: "Sprite",
+                properties: {
+                    label: "animatedSprite",
+                    texture: { key: "hero", frame: "idle" },
+                    animationPlayMethod: 1,
+                    animationKey: "walk",
+                    animationCustomConfig: true,
+                    animationFrameRate: 18,
+                    animationRepeat: -1,
+                    animationYoyo: true,
+                    animationTimeScale: 0.75
+                }
+            },
+            {
+                type: "TileSprite",
+                properties: {
+                    label: "scrollingTile",
+                    texture: { key: "tiles" },
+                    width: 320,
+                    height: 128,
+                    tilePositionX: 12,
+                    tilePositionY: 18,
+                    tileScaleX: 0.5,
+                    tileScaleY: 0.75
+                }
+            },
+            {
+                type: "NineSlice",
+                properties: {
+                    label: "nineSlice",
+                    texture: { key: "panel" },
+                    width: 240,
+                    height: 120,
+                    leftWidth: 12,
+                    rightWidth: 14,
+                    topHeight: 16,
+                    bottomHeight: 18
+                }
+            },
+            {
+                type: "ThreeSlice",
+                properties: {
+                    label: "threeSlice",
+                    texture: { key: "button" },
+                    width: 180,
+                    height: 48,
+                    leftWidth: 10,
+                    rightWidth: 10
+                }
+            },
+            {
+                type: "Text",
+                properties: {
+                    label: "styledText",
+                    text: "Hello MCP",
+                    fixedWidth: 240,
+                    paddingLeft: 4,
+                    paddingTop: 5,
+                    paddingRight: 6,
+                    paddingBottom: 7,
+                    wordWrapUseAdvanced: true,
+                    style: {
+                        shadow: {
+                            offsetX: 3,
+                            offsetY: 4,
+                            color: "#112233",
+                            stroke: true,
+                            fill: false,
+                            blur: 5
+                        },
+                        padding: { left: 8, top: 9, right: 10, bottom: 11 }
+                    }
+                }
+            },
+            {
+                type: "BitmapText",
+                properties: {
+                    label: "bitmapLabel",
+                    font: "ui-font",
+                    text: "Bitmap",
+                    fontSize: 32,
+                    letterSpacing: 2,
+                    maxWidth: 256,
+                    dropShadowX: 2,
+                    dropShadowY: 3,
+                    dropShadowAlpha: 0.7,
+                    dropShadowColor: "#445566"
+                }
+            },
+            {
+                type: "Ellipse",
+                properties: { label: "softEllipse", smoothness: 96 }
+            },
+            {
+                type: "Triangle",
+                properties: { label: "customTriangle", x1: 1, y1: 2, x2: 3, y2: 4, x3: 5, y3: 6 }
+            },
+            {
+                type: "Polygon",
+                properties: { label: "customPolygon", points: "0 0 80 0 40 60" }
+            },
+            {
+                type: "Rectangle",
+                properties: {
+                    label: "outlinedRect",
+                    width: 100,
+                    height: 50,
+                    isFilled: true,
+                    isStroked: true,
+                    fillColor: "#112233",
+                    fillAlpha: 0.8,
+                    strokeColor: "#445566",
+                    strokeAlpha: 0.9,
+                    lineWidth: 3
+                }
+            },
+            {
+                type: "Image",
+                properties: {
+                    label: "hitTarget",
+                    texture: { key: "icon" },
+                    hitArea: { shape: "RECTANGLE", x: 1, y: 2, width: 30, height: 40 },
+                    arcade: {
+                        physicsType: 1,
+                        geometry: 0,
+                        radius: 14,
+                        velocityX: 5,
+                        gravityY: 9,
+                        allowGravity: false,
+                        overlapX: 2,
+                        checkCollisionDown: false
+                    }
+                }
+            },
+            {
+                type: "Image",
+                properties: {
+                    label: "enablePhysicsLater",
+                    texture: { key: "icon" }
+                }
+            },
+            {
+                type: "Image",
+                properties: {
+                    label: "legacyArcadeDirect",
+                    texture: { key: "icon" },
+                    "Arcade.active": true,
+                    "body.physicsType": 1,
+                    "body.geometry": 0,
+                    "body.radius": 18,
+                    "body.gravity.y": 400,
+                    "body.allowGravity": false
+                }
+            },
+            {
+                type: "Video",
+                properties: { label: "introVideo", url: "video/intro", loop: true, mute: true, autoplay: false }
+            },
+            {
+                type: "ParticleEmitter",
+                properties: {
+                    label: "sparks",
+                    config: {
+                        configTexture: "effects",
+                        configFrame: ["spark"],
+                        speed: { type: "Static", value: 180 },
+                        lifespan: { type: "MinMax", min: 450, max: 900, int: false },
+                        quantity: { type: "Static", value: 3 },
+                        _duration: 5000,
+                        gravityY: 320,
+                        radial: false
+                    }
+                }
+            },
+            {
+                type: "ParticleEmitter",
+                properties: {
+                    label: "sparkShortcut",
+                    texture: { key: "spark-atlas", frame: "yellow" },
+                    config: { speed: 120 }
+                }
+            }
+        ];
+
+        await dispatchTool("scene-add-game-objects", {
+            sceneId: initialScene.id,
+            objects
+        });
+
+        const scene = JSON.parse(await readFile(sceneFile, "utf8"));
+        const byLabel = Object.fromEntries(scene.displayList.map(object => [object.label, object]));
+
+        assert.equal(byLabel.animatedSprite.animationKey, "walk");
+        assert.equal(byLabel.animatedSprite.animationPlayMethod, 1);
+        assert.equal(byLabel.animatedSprite.animationTimeScale, 0.75);
+        assert.equal(byLabel.scrollingTile.tilePositionX, 12);
+        assert.equal(byLabel.scrollingTile.tileScaleY, 0.75);
+        assert.equal(byLabel.nineSlice.leftWidth, 12);
+        assert.equal(byLabel.nineSlice.bottomHeight, 18);
+        assert.equal(byLabel.threeSlice.rightWidth, 10);
+        assert.equal(byLabel.styledText.fixedWidth, 240);
+        assert.equal(byLabel.styledText.paddingBottom, 11);
+        assert.equal(byLabel.styledText.paddingLeft, 8);
+        assert.equal(byLabel.styledText["shadow.offsetX"], 3);
+        assert.equal(byLabel.styledText["shadow.color"], "#112233");
+        assert.equal(byLabel.bitmapLabel.font, "ui-font");
+        assert.equal(byLabel.bitmapLabel.dropShadowColor, "#445566");
+        assert.equal(byLabel.softEllipse.smoothness, 96);
+        assert.equal(byLabel.customTriangle.x3, 5);
+        assert.equal(byLabel.customPolygon.points, "0 0 80 0 40 60");
+        assert.equal(byLabel.outlinedRect.isStroked, true);
+        assert.equal(byLabel.outlinedRect.lineWidth, 3);
+        assert.equal(byLabel.outlinedRect.strokeColor, "#445566");
+        assert.equal(byLabel.hitTarget["hitArea.shape"], "RECTANGLE");
+        assert.equal(byLabel.hitTarget["hitArea.x"], 1);
+        assert.equal(byLabel.hitTarget["hitArea.width"], 30);
+        assert.equal(byLabel.hitTarget["ArcadeComponent.active"], true);
+        assert.equal(byLabel.hitTarget.physicsType, 1);
+        assert.equal(byLabel.hitTarget.bodyGeometry, 0);
+        assert.equal(byLabel.hitTarget.radius, 14);
+        assert.equal(byLabel.hitTarget["body.velocity.x"], 5);
+        assert.equal(byLabel.hitTarget["body.gravity.y"], 9);
+        assert.equal(byLabel.hitTarget.allowGravity, false);
+        assert.equal(byLabel.hitTarget.overlapX, 2);
+        assert.equal(byLabel.hitTarget["body.checkCollision.down"], false);
+        assert.equal(byLabel.legacyArcadeDirect["ArcadeComponent.active"], true);
+        assert.equal(byLabel.legacyArcadeDirect.physicsType, 1);
+        assert.equal(byLabel.legacyArcadeDirect.bodyGeometry, 0);
+        assert.equal(byLabel.legacyArcadeDirect.radius, 18);
+        assert.equal(byLabel.legacyArcadeDirect["body.gravity.y"], 400);
+        assert.equal(byLabel.legacyArcadeDirect.allowGravity, false);
+
+        await dispatchTool("scene-enable-arcade-physics-body", {
+            sceneId: initialScene.id,
+            updates: [{ id: byLabel.enablePhysicsLater.id }]
+        });
+        let afterEnable = JSON.parse(await readFile(sceneFile, "utf8"));
+        let enabledObject = afterEnable.displayList.find(object => object.label === "enablePhysicsLater");
+        assert.equal(enabledObject["ArcadeComponent.active"], true);
+        assert.equal(enabledObject.physicsType, 0);
+        assert.equal(enabledObject.bodyGeometry, 1);
+
+        await dispatchTool("scene-disable-arcade-physics-body", {
+            sceneId: initialScene.id,
+            ids: [enabledObject.id]
+        });
+        const afterDisable = JSON.parse(await readFile(sceneFile, "utf8"));
+        const disabledObject = afterDisable.displayList.find(object => object.label === "enablePhysicsLater");
+        assert.equal(Object.hasOwn(disabledObject, "ArcadeComponent.active"), false);
+        assert.equal(Object.hasOwn(disabledObject, "bodyGeometry"), false);
+        assert.equal(Object.hasOwn(disabledObject, "body.velocity.x"), false);
+
+        await assert.rejects(
+            dispatchTool("scene-enable-arcade-physics-body", {
+                sceneId: initialScene.id,
+                updates: [{ id: byLabel.introVideo.id }]
+            }),
+            /does not expose an Arcade physics component/
+        );
+        assert.equal(byLabel.introVideo.url, "video/intro");
+        assert.equal(byLabel.introVideo.loop, true);
+        assert.equal(byLabel.sparks.configTexture, "effects");
+        assert.deepEqual(byLabel.sparks.configFrame, ["spark"]);
+        assert.equal(byLabel.sparks.speed_type, "Static");
+        assert.equal(byLabel.sparks.speed_value, 180);
+        assert.equal(byLabel.sparks.lifespan_type, "MinMax");
+        assert.equal(byLabel.sparks.lifespan_min, 450);
+        assert.equal(byLabel.sparks.duration, 5000);
+        assert.equal(byLabel.sparks.gravityY, 320);
+        assert.equal(byLabel.sparkShortcut.configTexture, "spark-atlas");
+        assert.deepEqual(byLabel.sparkShortcut.configFrame, ["yellow"]);
+        assert.equal(byLabel.sparkShortcut.speed_value, 120);
     } finally {
         await rm(projectDir, { recursive: true, force: true });
     }

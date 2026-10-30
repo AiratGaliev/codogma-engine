@@ -562,3 +562,12 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 Этап можно объявить завершённым только после выполнения всех его критериев приёмки, обновления соответствующих tests/docs и интеграции в основную ветку разработки. Если критерии не выполняются, этап остаётся открытым; нельзя заменять фактическую приёмку переименованием статуса или набором выполненных подзадач.
 
 Для крупной архитектурной фазы допускается разработка отдельных готовых частей параллельно, но в `dev → test` переводится только согласованный и внутренне целостный acceptance candidate.
+
+
+MCP object serialization acceptance covers editor-specific fields for Sprite/TileSprite/slices/Text/BitmapText/shapes/Video/ParticleEmitter/Spine; ParticleEmitter operation config must be translated to the current editor component model.
+
+
+MCP object contract checks additionally cover Shape stroke fields, HitArea properties and normalization of legacy Arcade.active/body.* aliases to the current editor component serialization. Arcade enable/disable is constrained to editor types that actually install ArcadeComponent.
+
+
+MCP physics contract coverage includes upstream Arcade aliases, arcade object shorthand, editor-specific ArcadeComponent active/property keys, enable/disable and unsupported-type errors. HitArea and shape stroke fields are included in the object JSON round-trip test.

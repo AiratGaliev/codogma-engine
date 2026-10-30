@@ -212,10 +212,203 @@ function requireScene(args) {
 const OBJECT_TYPES = [
     "Image", "Sprite", "Text", "BitmapText", "Container", "Layer", "TileSprite",
     "NineSlice", "ThreeSlice", "Rectangle", "Ellipse", "Triangle", "Polygon",
-    "ParticleEmitter", "Tilemap", "TilemapLayer", "ScriptNode", "SpineGameObject"
+    "ParticleEmitter", "Tilemap", "TilemapLayer", "ScriptNode", "SpineGameObject", "Video"
 ]
 
 const TEXTURE_TYPES = new Set(["Image", "Sprite", "TileSprite", "NineSlice", "ThreeSlice"])
+
+// Keep the upstream MCP argument names, but serialize them using the names
+// actually consumed by the current Codogma ArcadeComponent implementation.
+const ARCADE_PROPERTY_ALIASES = {
+    "Arcade.active": "ArcadeComponent.active",
+    "body.physicsType": "physicsType",
+    "body.geometry": "bodyGeometry",
+    "body.radius": "radius",
+    "body.allowGravity": "allowGravity",
+    "body.immovable": "immovable",
+    "body.mass": "mass",
+    "body.collideWorldBounds": "collideWorldBounds",
+    "body.angularVelocity": "angularVelocity",
+    "body.angularAcceleration": "angularAcceleration",
+    "body.angularDrag": "angularDrag",
+    "body.maxAngular": "maxAngular",
+    "body.enable": "enable",
+    "body.moves": "moves",
+    "body.maxSpeed": "maxSpeed",
+    "body.useDamping": "useDamping",
+    "body.allowDrag": "allowDrag",
+    "body.onWorldBounds": "onWorldBounds",
+    "body.allowRotation": "allowRotation",
+    "body.pushable": "pushable",
+    "body.overlapX": "overlapX",
+    "body.overlapY": "overlapY",
+    "body.overlapR": "overlapR"
+}
+
+function setSceneObjectProperty(obj, name, value) {
+    obj[ARCADE_PROPERTY_ALIASES[name] ?? name] = value
+}
+
+const ARCADE_CAPABLE_TYPES = new Set([
+    "Image", "Sprite", "BitmapText", "Container", "TileSprite", "NineSlice", "ThreeSlice",
+    "Text", "Rectangle", "Ellipse", "Triangle", "Polygon", "SpineGameObject",
+    "ArcadeImage", "ArcadeSprite"
+])
+
+const TYPE_PROPERTY_KEYS = {
+    Sprite: [
+        "animationPlayMethod", "animationKey", "animationCustomConfig",
+        "animationFrameRate", "animationDelay", "animationRepeat", "animationRepeatDelay",
+        "animationYoyo", "animationShowBeforeDelay", "animationShowOnStart",
+        "animationHideOnComplete", "animationStartFrame", "animationTimeScale"
+    ],
+    TileSprite: ["tilePositionX", "tilePositionY", "tileScaleX", "tileScaleY"],
+    NineSlice: ["leftWidth", "rightWidth", "topHeight", "bottomHeight"],
+    ThreeSlice: ["leftWidth", "rightWidth"],
+    Text: [
+        "fixedWidth", "fixedHeight", "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
+        "baselineX", "baselineY", "wordWrapUseAdvanced"
+    ],
+    BitmapText: ["font", "dropShadowX", "dropShadowY", "dropShadowAlpha", "dropShadowColor"],
+    Ellipse: ["smoothness"],
+    Triangle: ["x1", "y1", "x2", "y2", "x3", "y3"],
+    Polygon: ["points"],
+    Video: ["url", "loop", "mute", "autoplay"],
+    ParticleEmitter: [
+        "configTexture", "configFrame", "blendMode", "colorEase", "tintFill", "duration",
+        "stopAfter", "frequency", "timeScale", "gravityX", "gravityY", "radial",
+        "maxAliveParticles", "maxParticles", "advance", "particleBringToTop", "sortOrderAsc",
+        "sortProperty", "follow", "trackVisible", "previewAdvance", "previewActive", "animationKey",
+        ...["x", "y", "moveToX", "moveToY", "scale", "scaleX", "scaleY", "angle", "rotate",
+            "accelerationX", "accelerationY", "maxVelocityX", "maxVelocityY", "speed", "speedX",
+            "speedY", "delay", "hold", "lifespan", "quantity", "tint", "alpha", "color"]
+            .flatMap(name => ["_type", "_value", "_values", "_start", "_end", "_randomFlag",
+                "_random", "_interpolation", "_ease", "_steps", "_yoyo", "_min", "_max",
+                "_int", "_onEmit", "_onUpdate"].map(suffix => name + suffix))
+    ]
+}
+
+const PARTICLE_EMITTER_PROPERTY_SETS = [
+    "x", "y", "moveToX", "moveToY", "scale", "scaleX", "scaleY", "angle", "rotate",
+    "accelerationX", "accelerationY", "maxVelocityX", "maxVelocityY", "speed", "speedX",
+    "speedY", "delay", "hold", "lifespan", "quantity", "tint", "alpha", "color"
+]
+
+const PARTICLE_EMITTER_SIMPLE_KEYS = [
+    "blendMode", "colorEase", "tintFill", "duration", "stopAfter", "frequency", "timeScale",
+    "gravityX", "gravityY", "radial", "maxAliveParticles", "maxParticles", "advance",
+    "particleBringToTop", "sortOrderAsc", "sortProperty", "follow", "trackVisible", "animationKey"
+]
+
+function setParticleEmitterOperation(target, name, value) {
+    if (value === undefined || value === null) return
+    const prefix = name + "_"
+
+    if (Array.isArray(value)) {
+        target[prefix + "type"] = "Random"
+        target[prefix + "random"] = value
+        return
+    }
+
+    if (typeof value !== "object") {
+        target[prefix + "type"] = "Static"
+        target[prefix + "value"] = value
+        return
+    }
+
+    const type = value.type
+    if (type === "None") return
+
+    if (type === "Static" || Object.hasOwn(value, "value")) {
+        target[prefix + "type"] = "Static"
+        if (value.value !== undefined) target[prefix + "value"] = value.value
+    } else if (type === "Random" || Array.isArray(value.random)) {
+        target[prefix + "type"] = "Random"
+        if (value.random !== undefined) target[prefix + "random"] = value.random
+    } else if (type === "Interpolation" || Object.hasOwn(value, "values")) {
+        target[prefix + "type"] = "Interpolation"
+        if (value.values !== undefined) target[prefix + "values"] = value.values
+        if (value.interpolation !== undefined) target[prefix + "interpolation"] = value.interpolation
+        if (value.ease !== undefined) target[prefix + "ease"] = value.ease
+    } else if (type === "Stepped" || Object.hasOwn(value, "steps")) {
+        target[prefix + "type"] = "Stepped"
+        for (const key of ["steps", "start", "end", "yoyo"]) {
+            if (value[key] !== undefined) target[prefix + key] = value[key]
+        }
+    } else if (type === "MinMax" || Object.hasOwn(value, "min") || Object.hasOwn(value, "max")) {
+        target[prefix + "type"] = "MinMax"
+        for (const key of ["min", "max", "int"]) {
+            if (value[key] !== undefined) target[prefix + key] = value[key]
+        }
+    } else if (type === "StartEndRandom" || Object.hasOwn(value, "start") || Object.hasOwn(value, "end")) {
+        target[prefix + "type"] = "StartEndRandom"
+        for (const key of ["start", "end", "ease", "randomFlag"]) {
+            if (value[key] !== undefined) target[prefix + key] = value[key]
+        }
+        if (value.random !== undefined && value.randomFlag === undefined) {
+            target[prefix + "randomFlag"] = value.random
+        }
+    } else if (type === "CustomUpdate" || Object.hasOwn(value, "onUpdate")) {
+        target[prefix + "type"] = "CustomUpdate"
+        if (value.onEmit !== undefined) target[prefix + "onEmit"] = value.onEmit
+        if (value.onUpdate !== undefined) target[prefix + "onUpdate"] = value.onUpdate
+    } else if (type === "CustomEmit" || Object.hasOwn(value, "onEmit")) {
+        target[prefix + "type"] = "CustomEmit"
+        target[prefix + "onEmit"] = value.onEmit
+    } else {
+        throw new Error(`Unsupported ParticleEmitter operation type for "${name}".`)
+    }
+}
+
+function applyParticleEmitterConfig(target, props) {
+    const config = props.config && typeof props.config === "object" && !Array.isArray(props.config)
+        ? props.config
+        : {}
+
+    const texture = props.texture ?? config.texture
+    if (typeof texture === "string") {
+        target.configTexture = texture
+    } else if (texture && typeof texture === "object" && typeof texture.key === "string") {
+        target.configTexture = texture.key
+        if (texture.frame !== undefined && texture.frame !== null) {
+            target.configFrame = Array.isArray(texture.frame) ? texture.frame : [texture.frame]
+        }
+    }
+    if (typeof config.configTexture === "string") target.configTexture = config.configTexture
+
+    const frame = props.frame ?? config.frame ?? config.configFrame
+    if (frame !== undefined) {
+        target.configFrame = Array.isArray(frame) ? frame : (frame === null ? [] : [frame])
+    }
+
+    const aliases = {
+        _duration: "duration",
+        _stopAfter: "stopAfter",
+        _frequency: "frequency",
+        _timeScale: "timeScale",
+        _maxAliveParticles: "maxAliveParticles",
+        _maxParticles: "maxParticles",
+        _advance: "advance"
+    }
+
+    for (const [key, value] of Object.entries(config)) {
+        if (key === "texture" || key === "frame" || key === "configTexture" || key === "configFrame") continue
+        if (key === "_anim") {
+            if (typeof value === "string") target.animationKey = value
+            else if (Array.isArray(value) && value.length === 1 && typeof value[0] === "string") target.animationKey = value[0]
+            else if (Array.isArray(value) && value.length > 1) {
+                throw new Error("This Codogma Editor build supports one ParticleEmitter animationKey; multiple _anim entries are not supported.")
+            }
+            continue
+        }
+        const name = aliases[key] ?? key
+        if (PARTICLE_EMITTER_PROPERTY_SETS.includes(name)) {
+            setParticleEmitterOperation(target, name, value)
+        } else if (PARTICLE_EMITTER_SIMPLE_KEYS.includes(name) && value !== undefined) {
+            target[name] = value
+        }
+    }
+}
 
 function genLabel(doc, type) {
     const base = type.charAt(0).toLowerCase() + type.slice(1)
@@ -254,14 +447,29 @@ function buildObjectJson(type, props, doc) {
         "strokeThickness", "backgroundColor", "paddingX", "paddingY", "align",
         "wordWrap", "wordWrapWidth", "lineSpacing", "maxLines", "resolution",
         "letterSpacing", "displayWidth", "displayHeight", "width", "height",
-        "radius", "isFilled", "fillColor", "fillAlpha", "strokeColor", "strokeAlpha", "strokeWidth",
+        "radius", "isFilled", "isStroked", "fillColor", "fillAlpha", "strokeColor", "strokeAlpha",
+        "strokeWidth", "lineWidth",
         "list", "scrollFactorX", "scrollFactorY",
         "dataKey", "atlasKey", "skinName", "bpType", "bpSkin", "bpAnimation", "bpTimeStep",
         "animationMixes", "defaultMix", "timeScale",
-        "skeleton", "skin", "animation", "boundsProviderType"
+        "skeleton", "skin", "animation", "boundsProviderType",
+        "fixedWidth", "fixedHeight", "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
+        "baselineX", "baselineY", "wordWrapUseAdvanced",
+        "dropShadowX", "dropShadowY", "dropShadowAlpha", "dropShadowColor",
+        "tilePositionX", "tilePositionY", "tileScaleX", "tileScaleY",
+        "leftWidth", "rightWidth", "topHeight", "bottomHeight",
+        "smoothness", "x1", "y1", "x2", "y2", "x3", "y3", "points",
+        "font", "url", "loop", "mute", "autoplay"
     ]
     for (const k of copyKeys) {
         if (props[k] !== undefined) obj[k] = props[k]
+    }
+    for (const k of TYPE_PROPERTY_KEYS[type] || []) {
+        if (props[k] !== undefined) obj[k] = props[k]
+    }
+
+    if (type === "ParticleEmitter") {
+        applyParticleEmitterConfig(obj, props)
     }
 
     // Spine game object: auto-generate a label from the data key if omitted
@@ -275,15 +483,45 @@ function buildObjectJson(type, props, doc) {
             obj.texture.frame = props.texture.frame
         }
     }
+
+    if (props.hitArea && typeof props.hitArea === "object" && !Array.isArray(props.hitArea)) {
+        const allowedHitAreaKeys = new Set([
+            "shape", "x", "y", "width", "height", "radius", "points", "alphaTolerance"
+        ])
+        for (const [key, value] of Object.entries(props.hitArea)) {
+            if (allowedHitAreaKeys.has(key) && value !== undefined) {
+                obj[`hitArea.${key}`] = value
+            }
+        }
+    }
+
     if (type === "Text" && props.style) {
-        // allow `style: {...}` shorthand as well as flat props
-        for (const [k, v] of Object.entries(props.style)) obj[k] = v
+        // Allow `style: {...}` shorthand as well as flat props, but map
+        // nested style members to the editor's persisted dotted properties.
+        const style = { ...props.style }
+        if (style.shadow && typeof style.shadow === "object" && !Array.isArray(style.shadow)) {
+            for (const [key, value] of Object.entries(style.shadow)) {
+                obj[`shadow.${key}`] = value
+            }
+            delete style.shadow
+        }
+        if (style.padding && typeof style.padding === "object" && !Array.isArray(style.padding)) {
+            for (const key of ["left", "top", "right", "bottom"]) {
+                if (style.padding[key] !== undefined) obj[`padding${key[0].toUpperCase()}${key.slice(1)}`] = style.padding[key]
+            }
+            delete style.padding
+        }
+        for (const [k, v] of Object.entries(style)) obj[k] = v
+    }
+    if (type === "Text" && props.shadow && typeof props.shadow === "object" && !Array.isArray(props.shadow)) {
+        for (const [key, value] of Object.entries(props.shadow)) obj[`shadow.${key}`] = value
     }
 
     // component activation + dotted component properties pass-through
     const componentKeys = [
-        "Arcade.active", "body.physicsType", "body.geometry", "body.radius",
-        "body.width", "body.height", "body.offset.x", "body.offset.y",
+        "Arcade.active", "ArcadeComponent.active",
+        "body.physicsType", "body.geometry", "body.radius", "body.width", "body.height",
+        "body.offset.x", "body.offset.y",
         "body.velocity.x", "body.velocity.y", "body.maxVelocity.x", "body.maxVelocity.y",
         "body.acceleration.x", "body.acceleration.y", "body.drag.x", "body.drag.y",
         "body.bounce.x", "body.bounce.y", "body.gravity.x", "body.gravity.y",
@@ -294,27 +532,48 @@ function buildObjectJson(type, props, doc) {
         "body.onWorldBounds", "body.allowRotation", "body.pushable",
         "body.checkCollision.none", "body.checkCollision.up", "body.checkCollision.down",
         "body.checkCollision.left", "body.checkCollision.right",
-        "ScrollFactorX", "ScrollFactorY"
+        "body.overlapX", "body.overlapY", "body.overlapR",
+        "ScrollFactorX", "ScrollFactorY",
+        "hitArea.shape", "hitArea.x", "hitArea.y", "hitArea.width", "hitArea.height",
+        "hitArea.radius", "hitArea.points", "hitArea.alphaTolerance"
     ]
     for (const k of componentKeys) {
-        if (props[k] !== undefined) obj[k] = props[k]
+        if (props[k] !== undefined) setSceneObjectProperty(obj, k, props[k])
     }
 
-    // arcade shortcut: props.arcade = {...} enables the physics body
+    // arcade shortcut: props.arcade = {...} enables the editor's ArcadeComponent.
     if (props.arcade && typeof props.arcade === "object") {
-        obj["Arcade.active"] = true
+        setSceneObjectProperty(obj, "Arcade.active", true)
         const map = {
             physicsType: "body.physicsType", geometry: "body.geometry", radius: "body.radius",
             width: "body.width", height: "body.height",
             velocityX: "body.velocity.x", velocityY: "body.velocity.y",
+            maxVelocityX: "body.maxVelocity.x", maxVelocityY: "body.maxVelocity.y",
+            accelerationX: "body.acceleration.x", accelerationY: "body.acceleration.y",
+            dragX: "body.drag.x", dragY: "body.drag.y",
             bounceX: "body.bounce.x", bounceY: "body.bounce.y",
             gravityX: "body.gravity.x", gravityY: "body.gravity.y",
+            frictionX: "body.friction.x", frictionY: "body.friction.y",
+            offsetX: "body.offset.x", offsetY: "body.offset.y",
             collideWorldBounds: "body.collideWorldBounds", immovable: "body.immovable",
-            allowGravity: "body.allowGravity", moves: "body.moves", mass: "body.mass"
+            allowGravity: "body.allowGravity", moves: "body.moves", maxSpeed: "body.maxSpeed",
+            mass: "body.mass", enable: "body.enable", useDamping: "body.useDamping",
+            allowDrag: "body.allowDrag", onWorldBounds: "body.onWorldBounds",
+            allowRotation: "body.allowRotation", pushable: "body.pushable",
+            angularVelocity: "body.angularVelocity", angularAcceleration: "body.angularAcceleration",
+            angularDrag: "body.angularDrag", maxAngular: "body.maxAngular",
+            overlapX: "body.overlapX", overlapY: "body.overlapY", overlapR: "body.overlapR",
+            checkCollisionNone: "body.checkCollision.none",
+            checkCollisionUp: "body.checkCollision.up",
+            checkCollisionDown: "body.checkCollision.down",
+            checkCollisionLeft: "body.checkCollision.left",
+            checkCollisionRight: "body.checkCollision.right"
         }
         for (const [k, v] of Object.entries(props.arcade)) {
-            if (map[k]) obj[map[k]] = v
-            else obj["body." + k] = v
+            if (!Object.hasOwn(map, k)) {
+                throw new Error(`Unsupported arcade shortcut property: "${k}".`)
+            }
+            setSceneObjectProperty(obj, map[k], v)
         }
     }
 
@@ -1165,7 +1424,7 @@ const SYSTEM_INSTRUCTIONS = `You are a game development assistant specialized in
 
 Scenes are JSON files (\`.scene\`) with an \`id\`, \`settings\` (\`sceneKey\`), a \`displayList\` of game objects, and \`plainObjects\`. Each object has a unique \`id\`, a \`type\`, a \`label\` (valid JS identifier, unique in the scene) and flat properties (dotted names allowed for component properties, e.g. \`body.velocity.x\`).
 
-Game object types: Image, Sprite, Text, BitmapText, Container, Layer, TileSprite, NineSlice, ThreeSlice, Rectangle, Ellipse, Triangle, Polygon, ParticleEmitter, Tilemap, TilemapLayer, ScriptNode, SpineGameObject.
+Game object types: Image, Sprite, Text, BitmapText, Container, Layer, TileSprite, NineSlice, ThreeSlice, Rectangle, Ellipse, Triangle, Polygon, ParticleEmitter, Tilemap, TilemapLayer, ScriptNode, SpineGameObject, Video.
 
 Common properties (all optional unless noted):
 
@@ -1185,19 +1444,61 @@ class BlendModeComponent { blendMode: number } // 0 SKIP_CHECK, 1 NORMAL, 2 ADD,
 class TintComponent { tintFill = false; tintTopLeft = "#ffffff"; ... } // hex colors
 class SizeComponent { width: number; height: number }
 class TextObject { text: string; fontFamily = "Courier"; fontSize = "16px"; color = "#fff"; fontStyle?; align?; backgroundColor?; stroke?; strokeThickness?; wordWrapWidth? }
-class Shapes { isFilled = true; fillColor = "#ffffff"; fillAlpha = 1; strokeColor?; strokeWidth? }
+class Shapes { isFilled = true; fillColor = "#ffffff"; fillAlpha = 1; isStroked = false; strokeColor = "#ffffff"; strokeAlpha = 1; lineWidth = 1 }
 class ArcadeBody {
-    // enable arcade physics on the object (shortcut: pass an "arcade" object)
+    // Upstream MCP aliases; the server normalizes them to current editor serialization keys.
     "Arcade.active": true
-    "body.physicsType": 0 | 1     // 0 DYNAMIC_BODY, 1 STATIC_BODY
-    "body.geometry": 0 | 1        // 0 CIRCLE, 1 RECTANGLE
+    "body.physicsType": 0 | 1      // 0 DYNAMIC_BODY, 1 STATIC_BODY -> editor key physicsType
+    "body.geometry": 0 | 1         // 0 CIRCLE, 1 RECTANGLE -> editor key bodyGeometry
+    "body.radius": number; "body.width": number; "body.height": number
+    "body.offset.x": number; "body.offset.y": number
     "body.velocity.x": number; "body.velocity.y": number
+    "body.maxVelocity.x": number; "body.maxVelocity.y": number
+    "body.acceleration.x": number; "body.acceleration.y": number
+    "body.drag.x": number; "body.drag.y": number
     "body.bounce.x": number; "body.bounce.y": number
-    "body.collideWorldBounds": boolean
-    "body.immovable": boolean; "body.allowGravity": boolean
     "body.gravity.x": number; "body.gravity.y": number
+    "body.friction.x": number; "body.friction.y": number
+    "body.allowGravity": boolean; "body.immovable": boolean
+    "body.mass": number; "body.collideWorldBounds": boolean
+    "body.angularVelocity": number; "body.angularAcceleration": number
+    "body.angularDrag": number; "body.maxAngular": number
+    "body.enable": boolean; "body.moves": boolean; "body.maxSpeed": number
+    "body.useDamping": boolean; "body.allowDrag": boolean
+    "body.onWorldBounds": boolean; "body.allowRotation": boolean; "body.pushable": boolean
+    "body.checkCollision.none": boolean; "body.checkCollision.up": boolean
+    "body.checkCollision.down": boolean; "body.checkCollision.left": boolean
+    "body.checkCollision.right": boolean
+    "body.overlapX": number; "body.overlapY": number; "body.overlapR": number
 }
 \`\`\`
+
+## Type-specific object properties
+
+- Sprite: animationPlayMethod (0 none, 1 play, 2 play reverse), animationKey, animationCustomConfig and animationFrameRate, animationDelay, animationRepeat, animationRepeatDelay, animationYoyo, animationShowBeforeDelay, animationShowOnStart, animationHideOnComplete, animationStartFrame and animationTimeScale.
+- TileSprite: tilePositionX, tilePositionY, tileScaleX and tileScaleY.
+- NineSlice: leftWidth, rightWidth, topHeight and bottomHeight. ThreeSlice: leftWidth and rightWidth.
+- BitmapText: font (asset-pack bitmap-font key), fontSize, align (0 left, 1 center, 2 right), letterSpacing, maxWidth, dropShadowX, dropShadowY, dropShadowAlpha and dropShadowColor.
+- Text: fixedWidth, fixedHeight, paddingLeft, paddingTop, paddingRight, paddingBottom, lineSpacing, wordWrapWidth, wordWrapUseAdvanced, maxLines, baselineX and baselineY. Shadow may be passed as an object with offsetX, offsetY, color, stroke, fill and blur; it is serialized to the editor's dotted shadow properties.
+- Hit areas can be configured as a \`hitArea\` object or dotted \`hitArea.shape\` fields. shape is NONE, RECTANGLE, CIRCLE, ELLIPSE, POLYGON or PIXEL_PERFECT. RECTANGLE uses x/y/width/height; CIRCLE uses x/y/radius; ELLIPSE uses x/y/width/height; POLYGON uses points; PIXEL_PERFECT uses alphaTolerance.
+- Shape objects also support isFilled, fillColor, fillAlpha, isStroked, strokeColor, strokeAlpha and lineWidth.
+- Arcade physics is available only on object types whose current editor support installs ArcadeComponent. Use scene-enable-arcade-physics-body / scene-disable-arcade-physics-body rather than setting a component active flag manually. The server accepts upstream Arcade.active/body.* fields and normalizes them to current editor serialization keys. The arcade shortcut is an object containing known body fields such as physicsType, geometry, velocityX, gravityY, allowGravity and collideWorldBounds.
+- Video: url is a video asset key or absolute URL; loop, mute and autoplay are booleans.
+
+### ParticleEmitter configuration
+
+Pass the editor configuration in properties.config. configTexture is the asset-pack texture key and configFrame is an array of frame names/numbers. The properties.texture shorthand accepts a texture key and optional frame.
+
+Operation-valued fields (x, y, moveToX, moveToY, scale, scaleX, scaleY, angle, rotate, accelerationX, accelerationY, maxVelocityX, maxVelocityY, speed, speedX, speedY, delay, hold, lifespan, quantity, tint, alpha and color) accept the upstream discriminated forms:
+- { type: "Static", value: number }
+- { type: "Random", random: number[] }
+- { type: "StartEndRandom", start: number, end: number, randomFlag?: boolean, ease?: string }
+- { type: "Interpolation", values: number[], interpolation?: "linear" | "catmull" | "bezier", ease?: string }
+- { type: "Stepped", steps: number, start: number, end: number, yoyo?: boolean }
+- { type: "MinMax", min: number, max: number, int?: boolean }
+- { type: "None" }
+
+Simple values include gravityX, gravityY, radial, colorEase, tintFill, blendMode, particleBringToTop, sortOrderAsc, sortProperty, follow and trackVisible. Timing values use the upstream aliases _duration, _stopAfter, _frequency, _timeScale, _maxAliveParticles, _maxParticles and _advance. Numeric values and arrays are accepted as Static and Random shorthands. The current Codogma editor model supports one particle animationKey; multiple _anim entries are rejected instead of being silently truncated.
 
 Workflow for creating content:
 1. \`ide-get-all-scenes-in-project\` and \`assets-get-available-textures\` to know what exists.
@@ -2164,9 +2465,13 @@ defTool(
             const found = findObjects(doc, [u.id], [u.id])
             if (!found.length) throw new Error(`Object not found: ${u.id}`)
             const obj = found[0].obj
-            obj["Arcade.active"] = true
-            if (obj["body.physicsType"] === undefined) obj["body.physicsType"] = 0
-            if (obj["body.geometry"] === undefined) obj["body.geometry"] = 1
+            if (!ARCADE_CAPABLE_TYPES.has(obj.type)) {
+                throw new Error(`Object type "${obj.type}" does not expose an Arcade physics component in this editor build.`)
+            }
+            obj["ArcadeComponent.active"] = true
+            delete obj["Arcade.active"]
+            if (obj.physicsType === undefined) obj.physicsType = 0
+            if (obj.bodyGeometry === undefined) obj.bodyGeometry = 1
             enabled.push({ id: obj.id, label: obj.label })
         }
         writeSceneFile(file, doc)
@@ -2193,11 +2498,15 @@ defTool(
             if (!found.length) throw new Error(`Object not found: ${id}`)
             const obj = found[0].obj
             delete obj["Arcade.active"]
+            delete obj["ArcadeComponent.active"]
             for (const k of Object.keys(obj)) {
                 if (k === "body" || k.startsWith("body.")) delete obj[k]
             }
+            for (const key of Object.values(ARCADE_PROPERTY_ALIASES)) {
+                if (key !== "ArcadeComponent.active") delete obj[key]
+            }
             if (Array.isArray(obj.components)) {
-                obj.components = obj.components.filter(c => c !== "Arcade")
+                obj.components = obj.components.filter(name => name !== "Arcade" && name !== "ArcadeComponent")
                 if (obj.components.length === 0) delete obj.components
             }
             disabled.push({ id: obj.id, label: obj.label })
