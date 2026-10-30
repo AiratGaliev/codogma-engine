@@ -69,14 +69,12 @@ npm run quality:report # non-blocking Knip + dependency-cruiser reports
 
 The quality pilot deliberately uses root-locked ESLint, Prettier, Knip and
 dependency-cruiser versions rather than duplicating tool dependencies in this
-package's lockfile. Prettier currently gates the package manifest and new
-tooling configuration files; existing source/test/CLI formatting is not
-mass-rewritten in this pilot, while those files remain covered by strict
-typecheck, scoped ESLint and unit tests. A full package-source formatting
-ratchet is a separate follow-up so it can be reviewed without mixing formatting
-churn into toolchain bootstrap. Run the root `npm ci` first, then `npm ci` here for the
-package's pinned TypeScript compiler. The strict TypeScript compiler options
-remain package-local; no lint/type gate is enabled across the legacy editor tree.
+package's lockfile. Prettier checks the complete package-owned source, test and
+CLI scope together with its manifest and tooling configuration. This keeps
+formatting changes local to the strict package boundary. Run the root `npm ci`
+first, then `npm ci` here for the package's pinned TypeScript compiler. The
+strict TypeScript compiler options remain package-local; no lint/type/format
+gate is enabled across the legacy editor tree.
 
 `quality:report` is report-only: Knip uses `--no-exit-code`; dependency-cruiser
 rules use warning severity. Review findings before promoting either report to a
