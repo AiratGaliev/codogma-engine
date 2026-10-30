@@ -123,17 +123,6 @@ jobs:
         run: npm run quality:check && npm run quality:report
         working-directory: packages/localization
 
-      - name: Temporary collect formatted localization files
-        if: github.event.pull_request.number == 18
-        shell: bash
-        run: |
-          set -euo pipefail
-          for file in packages/localization/src/*.ts packages/localization/tests/*.mjs packages/localization/bin/*.mjs; do
-            echo "PRETTIER_FILE:$file"
-            base64 -w0 "$file"
-            echo
-          done
-
       - name: Localization project diagnostics CLI (COD-64)
         run: npm run test:localization:project
 
