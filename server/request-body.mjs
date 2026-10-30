@@ -31,6 +31,8 @@ export function readRequestBuffer(req, maxBytes) {
             req.off("data", onData)
             req.off("end", onEnd)
             req.off("error", onError)
+            req.off("aborted", onAborted)
+            req.off("close", onClose)
         }
 
         const onData = chunk => {
@@ -65,8 +67,22 @@ export function readRequestBuffer(req, maxBytes) {
             reject(error)
         }
 
+        const onAborted = () => {
+            onError(new Error("Request body aborted before completion"))
+        }
+
+        const onClose = () => {
+            // IncomingMessage emits close after a complete request as well as
+            // after an interrupted one. Only an incomplete message is an error.
+            if (req.complete === false) {
+                onError(new Error("Request body closed before completion"))
+            }
+        }
+
         req.on("data", onData)
         req.on("end", onEnd)
         req.on("error", onError)
+        req.on("aborted", onAborted)
+        req.on("close", onClose)
     })
 }
