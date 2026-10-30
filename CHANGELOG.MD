@@ -1,5 +1,12 @@
 # Change Log
 
+## Unreleased (2026-10-30 — filesystem security documentation reconciliation)
+
+### Documentation
+
+* Reconciled README, roadmap and capability matrix with the descriptor-backed implementation already integrated in `dev`: verified file reads/content writes, Linux descriptor-anchored directory mutations/copy/listing and their adversarial symlink-swap tests.
+* Clarified that non-Linux pathname-based mutation fallback and moving an already-open directory outside the project root remain unaccepted race boundaries; cross-platform acceptance stays in CODQA-7.
+
 ## Unreleased (2026-10-29 — mini-service network hardening)
 
 ### Security
