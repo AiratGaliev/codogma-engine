@@ -35,7 +35,7 @@ This direction does **not** mean every planned engine subsystem already exists. 
 | Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
 | Editable tilemaps | Tilemap authoring tools, layers, tilesets, painting operations and MCP tools for modifying tilemap data. |
 | Physics authoring | Arcade Physics-related scene tooling and Box2D body/world authoring and code generation. Box2D runtime setup may be needed in the game project separately. |
-| MCP integration | Official <code>@phaserjs/editor-mcp-server</code> package connected through the local MCP bridge, plus built-in fallback entry points. |
+| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> in <code>packages/editor-mcp-server/</code> exposes the engine-owned tool registry over stdio and forwards requests to the local <code>POST /editor/mcp</code> endpoint. npm publication is deferred; the older WebSocket bridge remains for legacy editor workflows. |
 | AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
 This table is a practical overview, not a guarantee that every feature has identical behaviour in every runtime. Tools that open a scene in the live editor or capture a screenshot require the editor UI to be running and connected. Some generated game code can also require runtime modules that are not included in the core Phaser bundle. Verify the relevant feature and runtime dependencies before shipping a game.
@@ -102,8 +102,9 @@ The server uses these defaults unless overridden:
 | <code>PROJECT_DIR</code> | <code>tests/workspace/test-typescript</code> | Game project files served and edited by the IDE. |
 | <code>EDITOR_DIR</code> | <code>source/editor</code> | Editor client directory served by the server. |
 | <code>DEV_MODE</code> | Unset / disabled | Set to <code>1</code> to load plugin development scripts where available. |
-| <code>MCP_BRIDGE_PORT</code> | <code>1902</code> | Port used for the MCP bridge. |
-| <code>MCP_BRIDGE_HOST</code> | <code>127.0.0.1</code> | Host passed to the official MCP server launcher. |
+| <code>CODOGMA_MCP_URL</code> | <code>http://127.0.0.1:3000/editor/mcp</code> | Loopback HTTP MCP endpoint used by <code>@codogma/editor-mcp-server</code>; only the exact local endpoint path is accepted. |
+| <code>MCP_BRIDGE_PORT</code> | <code>1902</code> | Port for the legacy WebSocket bridge used by older editor-side MCP configuration. The new stdio package does not use this port. |
+| <code>MCP_BRIDGE_HOST</code> | <code>127.0.0.1</code> | Host for the legacy local bridge. |
 | <code>AI_CHAT_SERVICE</code> | <code>http://127.0.0.1:3031</code> | URL of the optional AI Chat backend. |
 
 Use a project directory you control. Avoid pointing the development server at a directory containing private files that should not be accessible to the editor or its tools.
@@ -113,9 +114,11 @@ Use a project directory you control. Avoid pointing the development server at a 
 | Path | Responsibility |
 |---|---|
 | <code>server/server.mjs</code> | Local HTTP server, editor/project APIs, file operations, play-mode serving, AI Chat endpoint and MCP bridge. |
-| <code>server/mcp-launcher.mjs</code> | Starts the official MCP package when installed; otherwise falls back to the built-in stdio implementation. |
-| <code>server/mcp-stdio.mjs</code> | Built-in stdio MCP entry point. |
-| <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and official MCP package compatibility. |
+| <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package when installed and built; otherwise falls back to the dependency-free stdio implementation. |
+| <code>server/mcp-stdio.mjs</code> | Dependency-free stdio MCP fallback entry point. |
+| <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses the engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
+| <code>mini-services/phaser-editor-mcp/</code> | Legacy HTTP/WebSocket bridge retained for existing editor-side MCP workflows; not used by the new package. |
+| <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and MCP compatibility. |
 | <code>source/editor/</code> | Browser-based editor client, TypeScript sources, plugins, assets, product metadata and client build configuration. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
@@ -126,7 +129,7 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>BUILD.md</code> | Additional build notes. |
 | <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
 
-**Target package architecture (planned):** the Editor Host is intended to move from `source/editor/` to `src/editor/`, while independently addressable package sources will live under `packages/*` and be developed with npm Workspaces. Consumer projects will declare only selected packages and their required transitive dependencies; `node_modules/` is an install output, not a source directory. A planned Feature/Capability Registry will describe engine capabilities, feature-level dependencies and project/target build selection independently of npm package installation. Packages that extend the editor will integrate through a versioned Extension API, not by patching Editor Host sources. These target capabilities are not implemented in the current checkout. Until the dedicated migration and workspace changes are merged, the paths and commands in this README describe the current `source/editor/` layout.
+**Package source layout:** the first standalone tooling package now follows the TЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root/editor/local package boundaries and lockfiles remain separate. The planned Editor Host move from `source/editor/` to `src/editor/`, npm Workspaces migration, Feature/Capability Registry and versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
 
 ## Daily development commands
 
@@ -139,10 +142,12 @@ Run these commands from the repository root unless noted otherwise.
 | <code>npm run dev:proxy</code> | Like <code>npm run dev</code>, but accept any `Host` header from loopback peers (<code>CODOGMA_ALLOWED_HOSTS=*</code>) and any browser `Origin` (<code>CODOGMA_ALLOWED_ORIGINS=*</code>, overridable) for publishing behind a trusted local reverse proxy. |
 | <code>npm run build</code> | Build/type-check the editor client through TypeScript project references. |
 | <code>npm run watch</code> | Run the editor TypeScript compiler in watch mode. Start the server separately if you need to use the editor. |
-| <code>npm run mcp</code> | Start the MCP launcher for a connected MCP client. The editor server must be running. |
-| <code>npm run mcp:builtin</code> | Start the built-in stdio MCP implementation. |
-| <code>npm run test:e2e</code> | Run the MCP integration test driver. Start the editor server first. |
-| <code>npm run test:all</code> | Run unit, security, mini-service, localization, project-diagnostics, localization-runtime acceptance and MCP E2E checks. Install dependencies in each package first and start the editor server for MCP E2E. |
+| <code>npm run mcp</code> | Start the Codogma stdio MCP package through the launcher (when package dependencies are installed and built); the editor server must be running. |
+| <code>npm run mcp:builtin</code> | Start the dependency-free stdio MCP fallback. |
+| <code>npm run build:mcp</code> | Build the standalone MCP package TypeScript sources. |
+| <code>npm run test:mcp-package</code> | Run isolated stdio/HTTP bridge contract tests for the package. |
+| <code>npm run test:e2e</code> | Run the engine MCP integration test driver. Start the editor server first. |
+| <code>npm run test:all</code> | Run unit, security, mini-service, localization, package, project-diagnostics, localization-runtime acceptance and MCP E2E checks. Install dependencies in each package first and start the editor server for MCP E2E. |
 
 For a typical local code change:
 
@@ -193,7 +198,7 @@ The local server exposes editor routes including:
 - <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint;
 - <code>/archive/</code> and <code>/archive/&lt;filename&gt;</code> — development-only download of a prepared full-project snapshot (see below).
 
-The server also listens on the MCP bridge port (default <code>1902</code>) for the contract used by the official MCP package. Keep the HTTP port and MCP bridge port distinct.
+The legacy editor-side WebSocket MCP bridge listens on port <code>1902</code> by default. The new <code>@codogma/editor-mcp-server</code> does not use that port: it sends JSON-RPC requests to <code>POST /editor/mcp</code> on the main local HTTP server.
 
 ### Full-project development snapshots
 
@@ -208,11 +213,34 @@ The <code>/archive/</code> endpoint is a development hand-off mechanism for retr
 
 ## MCP and AI tooling
 
-Codogma can expose editor tools over MCP. The default launcher uses the official <code>@phaserjs/editor-mcp-server</code> npm dependency and connects it to the running server through the local bridge. Built-in MCP implementations are available as fallback entry points.
+Codogma now owns a private TypeScript MCP stdio package at
+<code>packages/editor-mcp-server/</code>. Its npm package name is
+<code>@codogma/editor-mcp-server</code>. The adapter uses the official MCP TypeScript SDK,
+but it does not define a second copy of the editor tools: it fetches the actual JSON
+Schemas from the engine and forwards tool calls to <code>POST /editor/mcp</code>.
+The registry, instructions, validation and execution remain owned by
+<code>server/mcp.mjs</code>.
 
-Start the editor server first. Then configure your MCP host to launch <code>server/mcp-launcher.mjs</code> from this checkout. Use an absolute path in client configuration and make sure the root dependencies have been installed.
+The package is private while its API and release process are being validated. It is
+not published to npm yet. The <code>npx</code> configuration below is the target form
+after a future publication, not a currently installable public package.
 
-Example configuration shape:
+### Local development
+
+Start the editor server:
+
+~~~bash
+npm start
+~~~
+
+In another terminal, install and build the package dependencies:
+
+~~~bash
+npm --prefix packages/editor-mcp-server ci
+~~~
+
+Configure the MCP host to launch the package-backed launcher from this checkout
+(use an absolute path):
 
 ~~~json
 {
@@ -221,15 +249,45 @@ Example configuration shape:
       "command": "node",
       "args": ["/absolute/path/to/codogma-engine/server/mcp-launcher.mjs"],
       "env": {
-        "phaser-editor-mcp-port": "1902",
-        "phaser-editor-mcp-hostname": "127.0.0.1"
+        "CODOGMA_MCP_URL": "http://127.0.0.1:3000/editor/mcp"
       }
     }
   }
 }
 ~~~
 
-Tools that manipulate project files can work through the server bridge. Tools that need the active scene, live editor state or screenshots require the editor page to be open and the editor-side bridge connected.
+The launcher starts <code>packages/editor-mcp-server/dist/cli.js</code> when the
+package and its dependencies are installed. Otherwise it explicitly falls back
+to the dependency-free <code>server/mcp-stdio.mjs</code> implementation.
+
+After a future npm publication, the intended direct configuration will be:
+
+~~~json
+{
+  "mcpServers": {
+    "codogma-engine": {
+      "command": "npx",
+      "args": ["-y", "@codogma/editor-mcp-server"],
+      "env": {
+        "CODOGMA_MCP_URL": "http://127.0.0.1:3000/editor/mcp"
+      }
+    }
+  }
+}
+~~~
+
+The stdio adapter loads the tool list when its process starts. Restart the MCP process
+after changing the engine or its tool registry. Project/file operations are executed by
+the engine server. Tools that need the active scene, screenshots or other live editor
+state also require the editor page to be open and its SSE bridge connected.
+
+### Legacy bridge
+
+<code>mini-services/phaser-editor-mcp/</code> and port <code>1902</code> remain for
+older editor-side WebSocket workflows. The new Codogma MCP package does not use
+that service. The legacy bridge has a separate security and lifecycle surface and
+must not be exposed to an untrusted network; its remaining security work is tracked
+separately in the capability matrix/roadmap.
 
 ### Optional AI Chat service
 
@@ -249,9 +307,9 @@ CI is designed to check changes quickly and to run MCP integration tests on prom
 
 | Workflow / job | Trigger | Main checks |
 |---|---|---|
-| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization dependencies, validates PR routing, builds the editor client, runs unit regression and security checks, smoke-tests the server/editor, and tests localization package, project diagnostics and runtime acceptance. |
-| **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Starts the server and MCP bridge, then runs the MCP integration test driver. |
-| **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
+| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization/MCP-package dependencies, validates PR routing, builds the editor client, runs unit/security/package tests, smoke-tests the server/editor and checks localization/project diagnostics. |
+| **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Installs/builds the standalone MCP package, starts the engine server and tests the stdio adapter through <code>POST /editor/mcp</code>. UI-dependent acceptance remains separate. |
+| **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client and MCP package, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
 
 The release workflow uploads a GitHub Actions artifact; it does not automatically publish a GitHub Release. The archive contains the server, editor client and selected root metadata/documentation. Check <code>.github/workflows/release.yml</code> before assuming an optional service or development fixture is included in the package.
 
@@ -349,7 +407,7 @@ If a promotion gate fails, stop the promotion. Fix the issue in the appropriate 
 
 ### Local checks before a PR
 
-Run commands from the repository root. Root, editor and localization dependencies are installed separately:
+Run commands from the repository root. Root, editor, localization and standalone MCP package dependencies are installed separately (there are no npm Workspaces yet):
 
 ~~~bash
 npm ci
@@ -362,8 +420,13 @@ cd packages/localization
 npm ci
 npm audit --audit-level=low
 cd ../..
+cd packages/editor-mcp-server
+npm ci
+npm audit --audit-level=low
+cd ../..
 npm run build
 npm run test:security
+npm run test:mcp-package
 ~~~
 
 Then run checks relevant to the change:
@@ -371,7 +434,7 @@ Then run checks relevant to the change:
 | Change type | Required local acceptance |
 |---|---|
 | Any change | Run `npm run build` before requesting merge; CI runs it as well |
-| Dependencies | Run `npm audit --audit-level=low` from the root and `source/editor`; CI blocks any reported vulnerability |
+| Dependencies | Run `npm audit --audit-level=low` from the root, `source/editor` and each separately installed package; CI blocks any reported vulnerability |
 | Server, bridge or MCP tools | Run `npm run test:security`; start the server with `npm start`; in a second terminal run `npm run test:e2e` |
 | Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
 | Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |

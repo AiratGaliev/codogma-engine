@@ -133,7 +133,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [x] Интеграция Phaser 4.2.1, типы и адаптации компилятора/редактора.
 - [x] Существующие инструменты Scene Editor, Inspector, Prefabs/Components, Assets/Pack, Animations, Tilemap и связанные с ними editor plugins.
 - [x] Контракт файлового доступа `IFileStorage`, registry расширений и базовая инфраструктура Undo/Redo в существующем клиенте.
-- [x] MCP bridge и необязательный AI Chat service.
+- [x] Engine-owned MCP tool registry и local HTTP endpoint; legacy WebSocket bridge для старых editor-side workflows.
+- [x] Private TypeScript stdio adapter `@codogma/editor-mcp-server` в `packages/editor-mcp-server/`, с собственным manifest/lockfile и проверками; публичная npm publication и npm Workspaces остаются отдельными задачами.
 - [x] CI Fast: проверка маршрута PR, install dependencies, build редактора и server smoke test.
 - [x] MCP integration workflow на PR в `test`/`main`.
 - [x] Release workflow формирует ZIP GitHub Actions artifact на `main`.

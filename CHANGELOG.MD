@@ -31,6 +31,7 @@ MCP robustness, and regression suites for every defect found along the way.
 
 ### Server / MCP
 
+* Add private TypeScript package `@codogma/editor-mcp-server` in `packages/editor-mcp-server/`. It exposes the engine-owned MCP registry over stdio and forwards the original tool schemas/calls through loopback `POST /editor/mcp`; the primary launcher no longer routes through the Phaser WebSocket bridge. npm publication remains deferred.
 * Fix: MCP launcher probes the official-package bridge and falls back to the
   built-in stdio server when the bridge is served by another process or has
   no connected editor — external MCP hosts keep working in any deployment

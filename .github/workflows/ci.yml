@@ -32,6 +32,7 @@ jobs:
             package-lock.json
             source/editor/package-lock.json
             packages/localization/package-lock.json
+            packages/editor-mcp-server/package-lock.json
 
       - name: Validate pull request routing
         if: github.event_name == 'pull_request'
@@ -127,3 +128,15 @@ jobs:
 
       - name: Localization runtime acceptance (server + fixture tables)
         run: npm run test:localization:acceptance
+
+      - name: Install locked dependencies (MCP package)
+        run: npm ci
+        working-directory: packages/editor-mcp-server
+
+      - name: Audit MCP package dependencies
+        run: npm audit --audit-level=low
+        working-directory: packages/editor-mcp-server
+
+      - name: Build and test Codogma MCP stdio package
+        run: npm test
+        working-directory: packages/editor-mcp-server

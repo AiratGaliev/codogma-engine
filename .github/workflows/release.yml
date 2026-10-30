@@ -31,6 +31,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             source/editor/package-lock.json
+            packages/editor-mcp-server/package-lock.json
 
       - name: Install locked dependencies (root)
         run: npm ci
@@ -38,6 +39,10 @@ jobs:
       - name: Install locked dependencies (editor client)
         run: npm ci
         working-directory: source/editor
+
+      - name: Install and build standalone MCP package
+        run: npm ci
+        working-directory: packages/editor-mcp-server
 
       - name: Build editor client
         run: npm run build
@@ -58,10 +63,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          zip -qr release/codogma-engine.zip server source/editor \
+          zip -qr release/codogma-engine.zip server source/editor packages/editor-mcp-server \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
             -x "source/editor/node_modules/*" \
             -x "source/editor/.vscode/*" \
+            -x "packages/editor-mcp-server/node_modules/*" \
             -x "*.log"
 
       - name: Upload release archive

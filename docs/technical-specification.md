@@ -60,7 +60,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
 | Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
-| AI/MCP | Есть MCP-интеграция и отдельный необязательный AI Chat service |
+| AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует исходные tool schemas/calls без второго реестра. Отдельно остаётся legacy WebSocket bridge для старых editor-side workflows; AI Chat service необязателен |
 | CI | `fast-checks` проверяет маршрутизацию PR, сборку редактора и server smoke test; `mcp-integration` выполняет MCP E2E при продвижении в `test` и `main` |
 | TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
