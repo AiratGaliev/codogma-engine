@@ -45,10 +45,13 @@
 * Normalized the complete package-owned TypeScript source, Node tests and CLI with Prettier. `format:check` now runs read-only over the full source/test/CLI/config scope.
 * CI Fast runs clean installs, package quality checks and reports before existing localization diagnostics/runtime acceptance. Strict/lint/format gates remain scoped to this package and are not enabled across the legacy editor tree.
 
-## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
+## Unreleased (dev; обновлять при каждом принятом изменении)
 
-P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
-MCP robustness, and regression suites for every defect found along the way.
+Unreleased work tracked here: editor reliability, FX and Box2D codegen/runtime follow-ups, Svelte PoC, MCP robustness and regression suites. The heading is not evidence that browser/runtime acceptance is complete; see the explicit open gates below.
+
+### Box2D / code generation
+
+* Fix: prefab body generation selects the world ID according to the consuming scene's configured mode. Exposed world-generation/debug settings in Inspector, declares the generated `worldId` property and imports `PhaserDebugDraw` from the separate helper file. Incomplete standalone B2Body/B2Shape nodes are deferred until their Inspector/schema/body-ID/prefab/runtime contracts are complete. Browser/runtime acceptance remains a separate gate.
 
 ### Editor
 
@@ -67,8 +70,11 @@ MCP robustness, and regression suites for every defect found along the way.
   empty with an error alert and `[object Object]` outline rows before
   (258cbe0).
 * Fix: Undo/redo reliability, Enter commit in Inspector fields, scene data
-  migrations, update command (86b9baa); TOCTOU write gap closed in the file
-  API (62c5ac6).
+  migrations and update command (86b9baa). The file API now validates the opened
+  descriptor before truncating/writing existing content (62c5ac6). This narrows
+  the write-path race, but does **not** close every filesystem TOCTOU: folder
+  creation and path-based rename/copy/move/delete still need race-resistant
+  treatment and explicit concurrency tests.
 * Feat: Godot editor icons integrated with light/dark variants (249227e).
 * Feat: limited Svelte 5 PoC plugin (`phasereditor2d.sveltepoc`) with live and
   mock bridges, isolated build toolchain and ADR-0004 decision record; the

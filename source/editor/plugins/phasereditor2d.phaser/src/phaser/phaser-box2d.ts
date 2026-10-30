@@ -1,15 +1,14 @@
 /**
- * Ambient type declarations for the Phaser Box2D physics runtime module.
+ * Legacy ambient declarations for the historical object-oriented
+ * Phaser.Box2D.World/Body API. They are not the low-level named-export C API
+ * used by current generated scenes (PhaserBox2D.js).
  *
- * IMPORTANT: Box2D is NOT part of the Phaser 4.2.1 core dist bundled with this editor
- * (see `phaser.ts`): it ships as a separate Phaser runtime module. These declarations
- * cover the API surface the scene editor and the generated scene code rely on, so the
- * editor compiles without the runtime. The generated code runs as soon as the user's
- * game includes the Box2D runtime module and exposes it under the `Phaser.Box2D`
- * namespace.
+ * These declarations do not ship a runtime or prove that named exports exist.
+ * Legacy namespace callers need a matching runtime; current generated scenes
+ * import from PhaserBox2D.js and optional debug drawing from PhaserDebugDraw.js.
  *
- * Declared here (in a separate file, `phaser.ts` is generated and must not be edited)
- * following the same ambient-declaration style of the Phaser types.
+ * Keep phaser.ts generated. Change this declaration surface only together with
+ * the matching runtime/package and generated-game acceptance fixture.
  */
 
 declare namespace Phaser {
