@@ -31,10 +31,12 @@ const PLUGINS_DIR = path.join(ROOT, "source", "editor", "plugins")
 loadEditorBundles(PLUGINS_DIR)
 
 const packCore = globalThis.phasereditor2d.pack.core
+const packUi = globalThis.phasereditor2d.pack.ui
 const coreCode = globalThis.phasereditor2d.scene.core.code
 const sceneUi = globalThis.phasereditor2d.scene.ui
 const json = globalThis.colibri.core.json
 const FileUtils = globalThis.colibri.ui.ide.FileUtils
+const controls = globalThis.colibri.ui.controls
 
 /**
  * Runs `fn` with FileUtils resolving no files and no images (data-only mode:
@@ -420,4 +422,188 @@ test("ThumbnailCache clearing is safe before the database exists", async () => {
     const cache = new sceneUi.ThumbnailCache("test-thumb-db")
 
     await assert.doesNotReject(() => cache.clearCache())
+})
+
+
+/* ======================= blob URL lifecycle ======================= */
+
+async function withBlobUrlStubs(fn) {
+    const originalCreateElement = document.createElement
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    const revoked = []
+    const listeners = new Map()
+    const image = {
+        src: "",
+        addEventListener(type, listener, options) {
+            const entries = listeners.get(type) || []
+            entries.push({ listener, options })
+            listeners.set(type, entries)
+        }
+    }
+    let nextUrlId = 0
+
+    try {
+        URL.createObjectURL = () => `blob:codogma-thumbnail-${++nextUrlId}`
+        URL.revokeObjectURL = url => revoked.push(url)
+        document.createElement = tag => tag === "img" ? image : originalCreateElement.call(document, tag)
+
+        await fn({ image, listeners, revoked })
+    } finally {
+        document.createElement = originalCreateElement
+        URL.createObjectURL = originalCreateObjectURL
+        URL.revokeObjectURL = originalRevokeObjectURL
+    }
+}
+
+test("Controls.createImageFromBlob revokes its object URL after load", async () => {
+    await withBlobUrlStubs(async ({ image, listeners, revoked }) => {
+        const result = controls.Controls.createImageFromBlob(new Blob(["thumbnail"]))
+        assert.equal(result, image)
+        assert.equal(image.src, "blob:codogma-thumbnail-1")
+
+        for (const type of ["load", "error"]) {
+            const entries = listeners.get(type) || []
+            assert.equal(entries.length, 1, `one ${type} cleanup listener must be installed`)
+            assert.equal(entries[0].options?.once, true, `${type} cleanup listener must be one-shot`)
+        }
+
+        const [loadListener] = listeners.get("load")
+        loadListener.listener(new Event("load"))
+        assert.deepEqual(revoked, ["blob:codogma-thumbnail-1"],
+            "a successfully decoded thumbnail must release its object URL")
+    })
+})
+
+test("Controls.createImageFromBlob revokes its object URL after error", async () => {
+    await withBlobUrlStubs(async ({ image, listeners, revoked }) => {
+        const result = controls.Controls.createImageFromBlob(new Blob(["broken thumbnail"]))
+        assert.equal(result, image)
+        assert.equal(image.src, "blob:codogma-thumbnail-1")
+
+        const [errorListener] = listeners.get("error")
+        assert.ok(errorListener, "failed image decoding must still have a cleanup listener")
+        assert.equal(errorListener.options?.once, true)
+        errorListener.listener(new Event("error"))
+
+        assert.deepEqual(revoked, ["blob:codogma-thumbnail-1"],
+            "a failed thumbnail must release its object URL too")
+    })
+})
+
+
+test("ThumbnailCache recovers from IndexedDB read failures using a fresh image", async () => {
+    const localForage = window["localforage"]
+    assert.ok(localForage && typeof localForage.createInstance === "function",
+        "the real localForage module must be loaded by the editor bundle loader")
+
+    const originalCreateInstance = localForage.createInstance
+    const originalLog = console.log
+    const image = {
+        preload: async () => controls.PreloadResult.NOTHING_LOADED,
+        getImageElement: () => null
+    }
+    let createImageCalls = 0
+    localForage.createInstance = () => ({
+        getItem: async () => { throw new Error("simulated IndexedDB read failure") },
+        setItem: async () => { throw new Error("read-failure fallback must not try to persist") },
+        clear: async () => {}
+    })
+    console.log = () => {}
+
+    try {
+        class TestThumbnailCache extends sceneUi.ThumbnailCache {
+            constructor() { super("test-thumbnail-read-failure") }
+            computeObjectHash() { return "test-hash" }
+            computeObjectKey() { return "test-object" }
+            createObjectImage() { createImageCalls += 1; return image }
+        }
+
+        const cache = new TestThumbnailCache()
+        const file = { id: "test-file" }
+        await assert.doesNotReject(() => cache.preload(file))
+        assert.equal(createImageCalls, 1, "cache read errors must fall back to a fresh image")
+        assert.equal(cache.getContent(file), image, "fallback image must be retained by ContentCache")
+    } finally {
+        localForage.createInstance = originalCreateInstance
+        console.log = originalLog
+    }
+})
+
+test("ThumbnailCache recovers when persisting a successfully loaded thumbnail fails", async () => {
+    const localForage = window["localforage"]
+    assert.ok(localForage && typeof localForage.createInstance === "function",
+        "the real localForage module must be loaded by the editor bundle loader")
+
+    const originalCreateInstance = localForage.createInstance
+    const originalCreateBlobFromImage = controls.Controls.createBlobFromImage
+    const originalWarn = console.warn
+    const imageElement = {}
+    const image = {
+        preload: async () => controls.PreloadResult.RESOURCES_LOADED,
+        getImageElement: () => imageElement
+    }
+    let persistedKeys = 0
+    localForage.createInstance = () => ({
+        getItem: async () => null,
+        setItem: async () => {
+            persistedKeys += 1
+            throw new Error("simulated IndexedDB write failure")
+        },
+        clear: async () => {}
+    })
+    controls.Controls.createBlobFromImage = async () => new Blob(["thumbnail"])
+    console.warn = () => {}
+
+    try {
+        class TestThumbnailCache extends sceneUi.ThumbnailCache {
+            constructor() { super("test-thumbnail-write-failure") }
+            computeObjectHash() { return "test-hash" }
+            computeObjectKey() { return "test-object" }
+            createObjectImage() { return image }
+        }
+
+        const cache = new TestThumbnailCache()
+        const file = { id: "test-file" }
+        await assert.doesNotReject(() => cache.preload(file))
+        assert.equal(persistedKeys, 1, "the cache must attempt to persist the generated blob")
+        assert.equal(cache.getContent(file), image,
+            "a successful preview must remain available when IndexedDB persistence fails")
+    } finally {
+        localForage.createInstance = originalCreateInstance
+        controls.Controls.createBlobFromImage = originalCreateBlobFromImage
+        console.warn = originalWarn
+    }
+})
+
+
+test("AudioPreviewSection resolves string, array, and { type, url } descriptor URLs", () => {
+    const sectionPrototype = packUi.properties.AudioPreviewSection.prototype
+    const originalLookup = packCore.AssetPackUtils.getFileFromPackUrl
+    const resolved = new Map([
+        ["audio/single.ogg", "/project/audio/single.ogg"],
+        ["audio/array.mp3", "/project/audio/array.mp3"],
+        ["audio/descriptor.webm", "/project/audio/descriptor.webm"]
+    ])
+    packCore.AssetPackUtils.getFileFromPackUrl = (_pack, url) => {
+        const resolvedUrl = resolved.get(url)
+        return resolvedUrl ? { getUrl: () => resolvedUrl } : null
+    }
+
+    try {
+        const run = data => {
+            const section = Object.create(sectionPrototype)
+            section.getSelectionFirstElement = () => new packCore.AudioAssetPackItem(null, data)
+            return section.getSelectedAudioUrl()
+        }
+
+        assert.equal(run({ url: "audio/single.ogg" }), "/project/audio/single.ogg")
+        assert.equal(run({ url: ["audio/missing.ogg", "audio/array.mp3"] }), "/project/audio/array.mp3")
+        assert.equal(run({ url: [
+            { type: "audio/ogg", url: "audio/descriptor.webm" }
+        ] }), "/project/audio/descriptor.webm")
+        assert.equal(run({ url: [{ type: "audio/ogg" }, 42, null, { url: " " }] }), null)
+    } finally {
+        packCore.AssetPackUtils.getFileFromPackUrl = originalLookup
+    }
 })
