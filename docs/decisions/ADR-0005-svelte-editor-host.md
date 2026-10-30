@@ -1,6 +1,6 @@
 # ADR-0005: Независимый Svelte Editor Host и staged replacement Colibri
 
-**Статус:** Proposed — целевое направление для планирования; реализация не начата.
+**Статус:** Accepted as target UI direction; implementation not started.
 **Дата:** 30.10.2026
 **Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [ADR-0004: Svelte PoC](ADR-0004-svelte-poc.md).
 
