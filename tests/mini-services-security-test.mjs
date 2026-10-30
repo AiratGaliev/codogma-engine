@@ -95,7 +95,8 @@ async function assertRemoteBindRejected(serviceDir, script, env, label) {
 
         assert.equal(outcome.type, "exit", `${label} must refuse an external bind instead of starting`)
         assert.notEqual(outcome.code, 0, `${label} must exit unsuccessfully for a non-loopback bind`)
-        assert.match(service.logs(), /refusing non-loopback bind/i, `${label} must explain the rejected bind`)
+        assert.match(service.logs(), /refusing non-loopback bind/i,
+            `${label} must explain the rejected bind:\n${service.logs()}`)
     } finally {
         await stopChild(service.child)
     }
