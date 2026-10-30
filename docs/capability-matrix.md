@@ -1,6 +1,6 @@
 # Матрица возможностей Codogma Engine
 
-**Снимок:** ветка `dev`, commit `754edaa1f7313409e99c3462a802d5fd430a9a01` (27.10.2026).  
+**Снимок:** ветка `dev`, commit `8cd494e0634d4b679fab62ca8379c39487395dd9` (30.10.2026).  
 **Метод:** статический аудит структуры/исходников и сопоставление с README, ТЗ, roadmap, CI и описанием PR #10. Это не построчная проверка всех legacy-файлов и не runtime/browser acceptance.
 
 ## Как читать статус
@@ -15,7 +15,8 @@
 
 | Подсистема | Состояние по исходникам | Evidence / область проверки | Автоматическое покрытие и ограничения | Приоритет |
 |---|---|---|---|---|
-| Browser IDE / Editor Host | Есть в исходниках | `source/editor/`, Colibri workbench, plugin registry, editor product metadata | CI компилирует TypeScript-проекты редактора и делает HTTP smoke; это не доказывает качество визуального UX или всех workflows | **P0 — модернизировать существующий UI/workbench и качество изменяемого кода без полной переписи** |
+| Browser IDE / Legacy Editor Host | Реализован legacy client на Colibri; целевой SolidJS Host пока не реализован | `source/editor/`, Colibri workbench, plugin registry, editor product metadata; новая цель `src/editor/` описана в ADR-0005 и `docs/editor-ui-migration.md` | CI компилирует legacy TypeScript client и делает HTTP smoke; это не подтверждает UI acceptance нового Host. Dual-run proxy, concurrent-write policy и MCP SSE ownership ещё не реализованы | **P0/P1 — поэтапная замена Colibri на SolidJS; legacy сохраняется до cutover** |
+| SolidJS Editor Host / Tailwind UI | Не реализован; SolidJS принят как целевой UI framework, implementation не начата | `docs/editor-ui-migration.md`, ADR-0005; отдельный `src/editor/` app ещё предстоит создать | Нет самостоятельного приложения в `src/editor/`, Vite proxy, Unity-подобного Workbench или production cutover; legacy Colibri продолжает обслуживать текущие workflows | **P0 — начать полноценный Unity-like Workbench на SolidJS без отдельного PoC** |
 | Scene Editor / scene persistence | Есть в исходниках; требуется систематическая приёмка | `source/editor/plugins/phasereditor2d.scene/`, fixtures в `tests/workspace/test-typescript/scenes/` | Нужны browser/regression tests для save/reopen, Undo/Redo, hierarchy, selection, Transform и вложенных объектов | **P0 — улучшать и проверять текущий Scene Editor на существующих contracts** |
 | Inspector / user components | Есть в исходниках; live runtime contract частичный | Scene Editor, component editor и `tests/workspace/test-typescript/components/` | UI/генерация не доказывают sync с live runtime; текущие поля и workflows можно улучшать до Core integration | **P0 для текущего Inspector; Core/live-runtime sync — следующий зависимый этап** |
 | Prefabs / Undo-Redo | Есть в исходниках | Scene Editor и fixture-сцены Prefab | Нужны регрессионные проверки вложенности, update/override, undo/redo и сохранения | P0 — данные и workflow |
