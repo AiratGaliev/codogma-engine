@@ -1527,6 +1527,70 @@ Editable tilemaps are plain objects whose tile data can be painted in the scene 
 3. \`scene-add-tileset-to-editable-tilemap\` / \`scene-delete-tileset-from-editable-tilemap\` rebases the layer ids automatically. \`scene-resize-editable-tilemap-layer\` and \`scene-add-editable-tilemap-layer\` manage the layers.
 4. The layer game objects (\`EditableTilemapLayer\`) are regular game objects: move/scale them with scene-update-game-objects.
 5. \`scene-get-editable-tilemap-layer-selection-data\` returns the tile region currently selected in the running editor (requires an editor tab connected to the MCP bridge).
+## Scene editing and object hierarchy
+
+- For scene-scoped tools, provide one scene selector: sceneId, scenePath or sceneKey. sceneId comes from ide-get-all-scenes-in-project or scene-get-scene-data; scenePath is project-relative; sceneKey is the filename without the .scene extension.
+- scene-add-game-objects accepts objects: [{ type, properties }]. Use a type from the list above and a unique JavaScript-identifier label. Read the instructions before using a type-specific configuration you have not used before.
+- scene-update-game-objects accepts objects: [{ id, properties }]. id can be an object id or label; properties should contain only the fields to change. For prefab instances include unlock with every property that the instance is intended to keep editable.
+- scene-delete-game-objects accepts objectIds, each an id or label. scene-clear-scene removes all display-list objects; inspect the scene first and prefer delete for a selected subset.
+- scene-get-scene-data returns displayList, plainObjects, lists and prefabProperties. scene-get-objects-data returns selected objects by ids or labels.
+- scene-move-game-object-in-render-list takes objectIds and move: Up, Down, Top or Bottom. scene-move-game-objects-to-parent takes objectIds and optional parentId; omit parentId to return objects to the scene root. The parent must be a container-like object that supports children.
+- scene-pack-objects-in-container takes objectIds and optional label. It creates a container and repositions its children to produce compact bounds.
+
+## Plain objects and Tiled maps
+
+Plain objects are stored in scene.plainObjects, separately from displayList. Use scene-add-plain-objects, scene-update-plain-objects and scene-delete-plain-objects for this collection; do not send plain objects through scene-add-game-objects.
+- scene-add-plain-objects accepts objects. A Tiled map entry uses type Tilemap and properties containing key (from assets-get-available-tilemaps) plus optional tilesets. A Collider entry uses type Collider and properties object1 and object2; optional fields are overlapOnly, scope, processCallback, collideCallback and callbackContext. Other plain-object records are copied as supplied, with type, id/label and their data.
+- scene-update-plain-objects accepts objects: [{ id, properties }]. scene-delete-plain-objects accepts objectIds. Both tools resolve ids or labels.
+- A Tiled Tilemap is a plain object in this build. Editable Tilemaps are a separate subsystem and use scene-add-editable-tilemap and the dedicated scene-*editable-tilemap-layer tools. TilemapLayer is a display-list object created by the map workflow.
+
+## Prefabs and nested prefab instances
+
+- A prefab is a reusable game-object class stored in a scene file whose sceneType is PREFAB. Create it with ide-create-new-prefab-scene, then immediately add its root object using scene-add-game-objects; the first display-list object becomes the prefab root.
+- ide-get-all-prefabs-in-project lists prefab ids, paths, root object types and inheritance targets. ide-get-prefab-inheritance takes prefabId and returns the chain from that prefab to its root ancestor.
+- Create a prefab instance with properties.prefabId set to the prefab scene id. The instance root type must match the prefab root type. Use prefabProps for declared user-property values.
+- Prefab instance properties are locked by default. Supply unlock as an array of property names the instance may override. Preserve all properties that should remain unlocked when updating an instance; do not replace the unlock array with only the field changed in the current call.
+- scene-get-nested-prefabs-instances takes the id or label of a prefab instance and returns nested instances. Update a nested instance by its own id; do not treat a nested instance as an ordinary child that can be independently deleted.
+- scene-declare-prefab-property requires sceneId of a PREFAB scene, name, type object with id and optional isArray/options, and defValue. Supported type ids are number, string, boolean, color, keycode, expression, option, objectVar, object-ref, constructor, event, texture-config, animation-key, audio-key, asset-key, scene-key, spine-skin-name, spine-animation-name and spine-event. Option properties need options; arrays use type.isArray and may provide defArrayValue. customDefinition=true suppresses generation of a class field.
+- scene-delete-prefab-property takes sceneId and name. Check ide-get-all-prefabs-in-project before changing a prefab and re-read its scene data afterwards.
+
+## Object lists
+
+- scene-add-object-list accepts lists: [{ label, scope?, objectIds? }]. label should be a valid JavaScript identifier. objectIds may contain ids or labels; existing object labels are resolved to ids.
+- scope may be LOCAL, PUBLIC, METHOD, CLASS or NESTED_PREFAB. It controls the generated variable or field scope.
+- scene-update-object-list takes id (or label) and optional label, scope and objectIds. scene-remove-object-list takes listIds (ids or labels). Lists are stored in the scene-level lists collection and can be inspected with scene-get-scene-data.
+
+## Phaser 4 filters
+
+Supported filter types in this build are Glow, Shadow, Pixelate, Blur, Barrel, Displacement, Bokeh, Blend, ObjectMask, TextureMask, Threshold and ColorMatrix.
+- scene-add-game-object-filters accepts objects: [{ type, parentId, internal?, properties? }]. parentId is a game-object id or label. properties contains filter-specific fields. internal=true places the filter in the object's pre-FX list; internal=false places it in the scene/external filter list. If omitted, the default is internal for Image, Sprite, Text, TileSprite, RenderTexture and Video; other parents default to external.
+- scene-update-game-object-filters accepts objects: [{ id, type, properties?, internal? }]. Use the filter id returned by the add call. internal can move the filter between internal and external pipelines.
+- scene-delete-game-object-filters takes filterIds (ids or labels). scene-update-game-object-filter-list takes filterId and internal.
+- Filter properties depend on the selected filter type. Do not invent a generic property set; use the Phaser 4 contract for that filter type and inspect the resulting scene data after applying it.
+
+## Arcade physics
+
+- Enable and disable bodies with scene-enable-arcade-physics-body and scene-disable-arcade-physics-body. Enable takes updates: [{ id }]; disable takes ids. Use ids from scene-get-scene-data.
+- ArcadeComponent is available on Image, Sprite, BitmapText, Container, TileSprite, NineSlice, ThreeSlice, Text, Rectangle, Ellipse, Triangle, Polygon and SpineGameObject, plus legacy ArcadeImage and ArcadeSprite types. Video, Layer, ParticleEmitter, TilemapLayer and ScriptNode do not expose this component; the enable tool rejects unsupported types.
+- scene-enable-arcade-physics-body initializes a missing body as dynamic (physicsType 0) with rectangular geometry (bodyGeometry 1). Use scene-update-game-objects to change body settings afterwards. Upstream argument aliases Arcade.active and body.* are normalized to current editor keys such as ArcadeComponent.active, physicsType, bodyGeometry, radius, allowGravity, enable, moves and the vector fields.
+- The properties.arcade shorthand is accepted on object creation and update. Known fields include physicsType, geometry, radius, width, height, velocityX/Y, maxVelocityX/Y, accelerationX/Y, dragX/Y, bounceX/Y, gravityX/Y, frictionX/Y, offsetX/Y, allowGravity, immovable, collideWorldBounds, moves, maxSpeed, mass, enable, useDamping, allowDrag, onWorldBounds, allowRotation, pushable, angularVelocity, angularAcceleration, angularDrag, maxAngular, overlapX/Y/R and checkCollisionNone/Up/Down/Left/Right. Unknown shortcut fields are rejected.
+- scene-disable-arcade-physics-body removes the component-active flag and serialized body settings. It does not delete the game object.
+
+## Assets, fonts and project files
+
+- assets-get-available-asset-packs lists asset-pack file names and entries. assets-get-available-textures lists keys from asset packs and loose image files. Use the exact asset key returned; atlas and spritesheet textures may also require a frame.
+- assets-get-texture-size accepts key or texture: { key }. assets-get-texture-binary accepts key or texture: { key, frame? } and returns image content. assets-get-texture-content-bounding-box returns non-transparent content bounds and requires the browser editor SSE bridge.
+- assets-get-available-animations lists sprite animation keys. assets-get-available-bitmapfonts and assets-get-bitmapfont-image inspect bitmap fonts. assets-get-spritesheet-image previews spritesheet frame layout.
+- assets-get-available-tilemaps lists Tiled map keys; assets-get-tilemap-data reads layers, tilesets and objects. Use the Spine workflow above for skeleton data and previews.
+- Google Fonts workflow: assets-get-google-font-families accepts optional filter; assets-get-google-font-info takes the exact family name and returns a TTF URL; assets-add-google-font-to-asset-pack takes assetPackFileName, key and family, with optional url. The key must be unique in the asset pack; Text objects then refer to it using fontFamily. The add tool resolves the TTF URL automatically when url is omitted.
+- project-list-files accepts optional project-relative folder and extension. project-read-file takes path and reads UTF-8 text up to 512 KiB. project-write-file takes path and content, creates parent folders and overwrites text files; it refuses .scene files, which must be changed using scene tools. project-delete-file takes path and removes a file or folder recursively.
+- project-compile-info returns detected game entry files, Phaser version and scene files. Inspect it before modifying game bootstrap code; use project-write-file for code/config files, not generated scene JSON.
+- All project paths are relative to the selected project root. Do not prefix the project folder name, use absolute paths or try to escape the project root.
+
+## UI-dependent commands and verification
+
+The following commands require the running browser editor and its SSE MCP bridge: ide-get-active-scene, ide-open-scene, ide-save-scene, scene-get-screenshot, assets-get-texture-content-bounding-box, scene-get-editable-tilemap-layer-selection-data and assets-get-spine-skin-image. Start the engine server, open the project in the editor and wait for the bridge connection before using them. A timeout means the editor-side command did not complete; verify the editor state before retrying.
+File-only tools can work without an active editor tab. Prefer scene-get-scene-data and scene-get-objects-data to verify structural edits; use scene-get-screenshot or the relevant preview tool for visual verification when the editor bridge is available.
 `
 
 /* ===================== prefab & nested prefab tools ======================= */

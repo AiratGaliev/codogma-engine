@@ -571,3 +571,6 @@ MCP object contract checks additionally cover Shape stroke fields, HitArea prope
 
 
 MCP physics contract coverage includes upstream Arcade aliases, arcade object shorthand, editor-specific ArcadeComponent active/property keys, enable/disable and unsupported-type errors. HitArea and shape stroke fields are included in the object JSON round-trip test.
+
+
+MCP prompt acceptance now covers the user-facing workflows for scenes and object hierarchy, plain objects/Tiled maps, prefabs, nested prefabs, object lists, filters, Arcade component support, assets/Google Fonts, project-file APIs and UI/SSE-dependent commands. The package contract test checks for these sections through the engine-owned get-system-instructions tool.

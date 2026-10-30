@@ -985,3 +985,5 @@ First release under the Codogma Engine name. Rebranded from Phaser Editor 2D (op
 - Normalized upstream Arcade.active/body.* MCP arguments into the current Codogma ArcadeComponent serializer, added explicit support checks for enable/disable, and expanded round-trip coverage for HitArea and Shape stroke properties.
 
 - Corrected Arcade MCP serialization: upstream Arcade.active/body.* fields are mapped to current ArcadeComponent JSON keys. Enable/disable validates editor type support, and regression coverage exercises both direct aliases and arcade shorthand.
+
+- Expanded the engine-owned MCP system instructions to document scene/object workflows, plain objects and Tiled maps, Prefabs/nested instances, object lists, Phaser 4 filters, Arcade support, assets/Google Fonts, project-file APIs and UI/SSE-dependent tools. Package tests assert these sections stay available.

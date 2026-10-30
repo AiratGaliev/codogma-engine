@@ -536,3 +536,6 @@ MCP scene-object round-trip tests also cover editor-specific properties for Spri
 MCP scene-object round-trip coverage also checks Shape stroke fields, HitArea serialization, current-editor ArcadeComponent key normalization, and Arcade enable/disable behaviour on supported display objects; unsupported object types return explicit errors.
 
 Arcade MCP tools preserve the upstream body.* argument contract while translating fields to the current editor's ArcadeComponent serialization. The enable tool rejects object types that do not install ArcadeComponent; the package suite exercises direct aliases, the arcade shortcut, enable and disable paths.
+
+
+The engine-owned get-system-instructions response documents the current scene and tool workflows: object hierarchy, plain objects and Tiled maps, editable tilemaps, prefabs and nested instances, object lists, Phaser 4 filters, Arcade physics, assets and Google Fonts, project-file operations, and UI/SSE requirements for visual tools. Package tests assert that these workflow sections remain present.

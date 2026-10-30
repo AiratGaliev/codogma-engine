@@ -549,6 +549,20 @@ test("real Codogma registry preserves all upstream tools and every JSON Schema c
     assert.match(guidance.content[0].text, /Video/, "system instructions must describe the Video scene object");
     assert.match(guidance.content[0].text, /Hit areas can be configured/, "system instructions must document editor hit areas");
     assert.match(guidance.content[0].text, /Arcade physics is available only/, "system instructions must describe supported Arcade component types");
+    for (const section of [
+        "Scene editing and object hierarchy",
+        "Plain objects and Tiled maps",
+        "Prefabs and nested prefab instances",
+        "Object lists",
+        "Phaser 4 filters",
+        "Arcade physics",
+        "Assets, fonts and project files",
+        "UI-dependent commands and verification",
+        "Spine assets and game objects",
+        "Editable tilemaps (v5)"
+    ]) {
+        assert.ok(guidance.content[0].text.includes(section), `system instructions must document the ${section} workflow`);
+    }
     assert.match(guidance.content[0].text, /Hit areas can be configured/, "system instructions must describe hit-area data");
 });
 

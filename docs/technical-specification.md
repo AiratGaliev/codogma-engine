@@ -910,3 +910,6 @@ CI Fast сейчас не выполняет весь перечисленный
 ---
 
 **Ключевой принцип ТЗ:** Codogma должен постепенно перейти от текущей IDE к целостной среде Web-first 2D-разработки, где проектные данные, TypeScript API, игровой runtime, живой Inspector, сборка и платформенные adapters согласованы между собой. Новая архитектура должна проверяться на реальных проектах, а не считаться успешной только потому, что код компилируется.
+
+
+The get-system-instructions tool is part of the MCP compatibility contract. It must document the Codogma-specific workflows and constraints for scene/object editing, plain objects, Tiled versus editable tilemaps, prefabs and nested instances, object lists, supported Phaser 4 filters, Arcade-capable object types and field normalization, assets/Google Fonts, project-file restrictions, and UI-dependent SSE tools. Changes to the tool catalogue must update this guidance and its package assertions in the same change.
