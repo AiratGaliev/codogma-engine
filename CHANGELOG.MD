@@ -26,6 +26,15 @@
 * MCP project reads no longer use a separate pathname-based `existsSync` before the verified read; Spine JSON metadata uses descriptor-backed file metadata lookup. Added symlink/outside-root and non-overwrite regression tests.
 * This is partial hardening, not a claim that TOCTOU is fully resolved. Non-Linux path-based fallback and races where an opened directory is moved outside after verification still lack a proven cross-platform guarantee and acceptance. Trusted installation metadata (`EDITOR_DIR`/`PLUGINS_DIR`) remains outside the user-project threat boundary.
 
+## Unreleased (2026-10-29 — Particle Emitter codegen regressions)
+
+### Tests
+
+* Added focused tests in `tests/editor-codegen.test.mjs` for Particle Emitter code generation: unset texture uses Phaser's `__DEFAULT` key, configured frames survive code generation, explicit texture keys remain intact, and clearing frames removes stale `frame` config.
+* Added lifecycle regression tests against the real `colibri.ui.controls.Controls.createImageFromBlob()` owner: blob URLs are revoked on both successful image load and decode error. Added recoverability tests for actual `ThumbnailCache` behavior when IndexedDB reads or writes reject: a fresh preview remains available, and optional persistence failures do not fail the preview. Added direct `AudioPreviewSection` tests for string, string-array and `{ type, url }` descriptor paths, including malformed entries.
+
+---
+
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
 P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
