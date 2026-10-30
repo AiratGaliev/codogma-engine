@@ -1,10 +1,10 @@
 # Дорожная карта: Codogma Engine
 
-Дорожная карта строится вокруг требований [технического задания](technical-specification.md). **Ближайший большой исполнительский этап — модернизация существующего редактора в текущей кодовой базе `source/editor/`**: его UX/UI, основные 2D-workflows, качество изменяемого исходного кода и подтверждение runtime-поведения. Новый Core, перенос каталогов и полная смена UI-стека не должны вытеснять эту работу.
+Дорожная карта строится вокруг требований [технического задания](technical-specification.md). **Целевое направление Editor UI — поэтапная замена Colibri-based client самостоятельным SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4 в `src/editor/`**. Legacy client остаётся в `source/editor/` и доступен параллельно до принятой функциональной приёмки и cutover. Это отдельная migration initiative: сохраняем project/runtime/server contracts, переносим UI вертикальными срезами, затем удаляем Colibri. Это не одномоментная перепись всего движка.
 
 Unity 6 и Cocos Creator 4.0 используются как ориентиры по организации профессионального 2D-редактора и качеству рабочих процессов, а не как требование воспроизвести весь функционал больших движков. Цель — сделать Codogma визуально цельным, удобным и технически надёжным редактором, расширяя существующие подсистемы там, где это оправдано. Каждая задача должна давать работающий результат в коде; документация и матрицы — инструменты принятия решений и фиксации доказательств, а не самостоятельная цель исполнительского этапа.
 
-Каждый этап разбивается на независимые PR с воспроизводимыми критериями приёмки. Сохранять работающие подсистемы и переиспользовать существующие контракты — предпочтительнее переписывания; замену делать только после PoC, показывающего конкретное преимущество.
+Каждый этап разбивается на независимые PR с критериями приёмки по реализуемому workflow. Выбор SolidJS зафиксирован в [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md); отдельный framework PoC, сравнительная матрица и повторное голосование по UI-стеку не требуются. [ADR-0004](decisions/ADR-0004-svelte-poc.md) остаётся архивной записью прежнего эксперимента внутри legacy-клиента и не является частью нового плана. Сохранять рабочие domain/data/runtime contracts; старые UI-механизмы не переносить автоматически, если новая реализация может быть проще. Не создавать постоянный Colibri↔SolidJS bridge.
 
 ## Приоритеты и рекомендуемый порядок реализации
 
@@ -13,52 +13,54 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 | Очередь | Рабочий пакет | Приоритет | Измеримый результат / правило |
 |---|---|---|---|
 | 1 | Инженерная база для изменений существующего редактора | **P0 — сразу** | Clean install, воспроизводимые build/typecheck, тесты для затрагиваемого кода, нужные lint/format checks в ограниченном scope. Не вводить массовый строгий gate для всего legacy-дерева. |
-| 2 | Этап 5: визуальная модернизация Editor UX/UI | **P0 — основной видимый результат** | Согласованные панели, toolbar, иерархия, Inspector, assets/workspace, визуальная плотность, типографика, состояния и темы; редактор воспринимается как цельная IDE, а не набор разрозненных legacy-панелей. |
-| 3 | Этап 5: стабилизация основных 2D authoring workflows | **P0 — основной функциональный результат** | Scene/Hierarchy/Transform, selection, Inspector/components, сохранение и повторное открытие, Undo/Redo, Prefabs, Asset Pack и существующие инструменты проходят адресные acceptance-проверки. Улучшать текущую реализацию до замены архитектуры. |
+| 2 | Поддержка legacy UI на период migration | **P0 — ограниченный compatibility scope** | Поддерживать Colibri editor в запускаемом состоянии и исправлять критичные регрессии, необходимые до cutover. Не расширять legacy UI новыми крупными UX/features, если их целевая реализация должна попасть в SolidJS Host. |
+| 3 | SolidJS Editor Host: первый функциональный vertical slice | **P1 — основной migration gate** | Новый Host открывает реальный project/scene, показывает Phaser Canvas, Hierarchy, selection, Transform и Inspector; create/edit/save/reopen/Undo/Redo сохраняют прежнюю data semantics. После этого можно масштабировать перенос инструментов. |
 | 4 | Этап 5: runtime acceptance и регрессии PR #10 | **P0 — подтверждение качества** | FX Circle/Bloom/Gradient/Shine, Box2D, Asset Pack/importers и codegen проверены в реальном browser/runtime; дефекты исправлены, regression tests добавлены. Зелёная сборка сама по себе недостаточна. |
 | 5 | Security residuals для файловых операций и optional mini-services | **P0 для соответствующих API/сервисов** | Reads/content writes уже используют проверенные file descriptors; Linux directory create/delete/rename/list/copy и exclusive MCP scene/Prefab create привязаны к открытым directory descriptors. Residual остаётся для non-Linux pathname-based mutation fallback и перемещения уже открытого каталога наружу после проверки. Standalone MCP/AI Chat остаются loopback-only без общей authentication; non-loopback/public exposure запрещена до отдельной auth design и service-level tests. |
 | 6 | Этап 1: адресное исследование и toolchain migration | **P0 — непрерывно** | Матрицы обновляются по мере реальной проверки; ESLint/Prettier/tests применяются к новому и изменяемому Codogma-owned scope. Полная инвентаризация всего legacy не блокирует исправление подтверждённого дефекта. |
-| 7 | Сравнительный PoC Svelte / UI toolchain | **P1 — параллельно, ограниченный scope** | Рабочий прототип на репрезентативной панели, сравнение с текущим Colibri/workbench, решение на evidence. До такого решения не переписывать редактор целиком; обычные улучшения текущего UI не ждут PoC. |
+| 7 | Полная staged migration Colibri UI → SolidJS Editor Host | **P1 — отдельная крупная initiative** | Новый независимый Host в src/editor/, SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4; legacy source/editor/ остаётся доступным на переходе. Совместимость backend/project/MCP контрактов, dual-run на разных origins/ports, запрет конкурентной записи одного проекта и session-aware MCP routing входят в acceptance. Colibri удаляется только после cutover gates; подробный план — docs/editor-ui-migration.md. |
 | 8 | Этап 2: Project Model и минимальный Codogma Core | **P1 — после первой стабилизации редактора или отдельным независимым потоком** | Малый проверяемый Project/Scene/Node/Component slice без импорта legacy UI. Core contracts не должны задерживать улучшения, которые можно безопасно сделать на текущей модели. |
 | 9 | Этап 3–4A: Preview Host и headless HTML5 build | **P1 — следующие сквозные возможности** | Browser preview, live Inspector и воспроизводимая game build принимаются отдельно после готовности зависимых contracts; существующий `npm run build` не считать сборкой игры. |
 | 10 | Platform Services, Tauri, Package Manager и расширенная ecosystem | **P2 / по готовности зависимостей** | Yandex Games раньше последующих targets; Tauri, package ecosystem, PixiJS, дополнительные physics backends и advanced features не отвлекают от текущего редактора без конкретного обоснования. |
 
 ## Текущее состояние и границы блокеров (30.10.2026)
 
-Базовая точка `dev` после интеграции PR #21 и #22 — `60ec3798bbbb58a8c6af88d4aba68285444af663` (30.10.2026). PR #21 с Box2D codegen/runtime contracts и PR #22 с first-party MCP stdio package уже смержены. Инженерная интеграция и CI Fast подтверждены; фактическая browser/runtime Box2D acceptance остаётся в [CODQA-1](https://linear.app/codogma-engine/issue/CODQA-1/provesti-browserruntime-acceptance-generated-box2d-scenes-i-prefab), live stdio/Editor/SSE acceptance — в [CODQA-8](https://linear.app/codogma-engine/issue/CODQA-8/provesti-live-acceptance-first-party-codogma-mcp-stdio-adapter-i). По filesystem security Linux descriptor-anchored implementation и regression tests уже интегрированы; cross-platform и moved-open-directory residual остаётся отдельной приёмкой [CODQA-7](https://linear.app/codogma-engine/issue/CODQA-7/provesti-cross-platform-acceptance-fajlovoj-bezopasnosti). Статусы CI необходимо проверять по live checks точного SHA; CI Fast подтверждает только выполненные workflow jobs, а не browser/runtime или multi-platform acceptance.
+Базовая точка `dev` после интеграции PR #21–#24 — `8cd494e0634d4b679fab62ca8379c39487395dd9` (30.10.2026). PR #21 с Box2D codegen/runtime contracts, PR #22 с first-party MCP stdio package, PR #23 с Linear ownership docs и PR #24 с filesystem security reconciliation смержены. Инженерная интеграция и CI Fast подтверждены; фактическая browser/runtime Box2D acceptance остаётся в [CODQA-1](https://linear.app/codogma-engine/issue/CODQA-1/provesti-browserruntime-acceptance-generated-box2d-scenes-i-prefab), live stdio/Editor/SSE acceptance — в [CODQA-8](https://linear.app/codogma-engine/issue/CODQA-8/provesti-live-acceptance-first-party-codogma-mcp-stdio-adapter-i). По filesystem security Linux descriptor-anchored implementation и regression tests уже интегрированы; cross-platform и moved-open-directory residual остаётся отдельной приёмкой [CODQA-7](https://linear.app/codogma-engine/issue/CODQA-7/provesti-cross-platform-acceptance-fajlovoj-bezopasnosti). Статусы CI необходимо проверять по live checks точного SHA; CI Fast подтверждает только выполненные workflow jobs, а не browser/runtime или multi-platform acceptance.
+
+**Editor UI migration status:** PR #13 содержит архивный Svelte-эксперимент внутри legacy Colibri, описанный в ADR-0004. Он не является основой нового приложения и не определяет выбранный framework. SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4 приняты в ADR-0005; `src/editor/` и самостоятельный Host пока не реализованы. Реализация начинается непосредственно с Unity-подобного Workbench, без отдельного framework PoC.
 
 ### Можно начинать сейчас
 
-- **Сразу переходить к изменениям кода существующего редактора.** Матрица возможностей и архитектурные документы уже дают достаточную исходную точку. Дополнять их по мере реализации и проверок, а не превращать их полное заполнение в отдельный большой этап перед первой правкой.
-- **Первым потоком делать инженерную надёжность и UX/UI редактора:** необходимые проверки в существующих package roots, улучшение основных панелей и рабочих сценариев, единая визуальная система, темизация и иконки.
+- **Начать migration preparation и новый Host bootstrap.** Инвентаризировать реальные workflows/Colibri coupling, подготовить `src/editor/` и dual-run dev topology. В legacy Colibri выполнять только исправления, необходимые для стабильной работы старого редактора на время перехода.
+- **Новый UX/UI и общую визуальную систему строить сразу в SolidJS Host:** SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4, semantic design tokens, панели, layout, keyboard/focus, темы и accessibility states. Не вкладываться в масштабный косметический рефакторинг Colibri, который придётся выбросить при cutover.
 - **Закрывать подтверждённые проблемы PR #10** отдельными функциональными задачами: FX, Box2D, Asset Pack, импорт ресурсов, генерация кода. Статус «работает» выставлять только после соответствующего runtime/browser acceptance.
 - **Параллельно закрывать security residuals**, не смешивая их с UI-рефакторингом. Linux уже использует descriptor-anchored операции для создания/удаления/переименования/копирования/перечисления; не дублировать эту реализацию и не описывать её как pathname-only. Следующий security gate — cross-platform acceptance non-Linux fallback, race tests на заявленных ОС/файловых системах и анализ перемещения уже открытого каталога за пределы project root (CODQA-7). До подтверждения portable guarantees сохранять loopback-only exposure. Standalone mini-services не имеют общей authentication: не открывать non-loopback bind и не публиковать через proxy до отдельной auth design и service-level tests.
 - **Core pilot разрешён параллельно, но не должен быть основной целью ближайшей большой задачи.** Он должен быть изолирован и не блокировать исправление функций, уже реализуемых текущим редактором.
-- **Svelte/Vite/dockview/CodeMirror/Monaco исследуются через небольшой рабочий PoC.** Не нужно сначала устанавливать новый стек для всего приложения: сначала сравнить его на одной репрезентативной области, а текущий UI продолжать улучшать.
+- **Готовить новый Editor Host как самостоятельное SolidJS-приложение, не как панель внутри Colibri.** Подробный scope и переходные ограничения — `docs/editor-ui-migration.md`. Пока новый Host не проходит gates, поддерживать legacy editor для существующих workflows и дефектов; новые крупные UI features по возможности планировать уже для `src/editor/`. Не ставить Dockview/Monaco как обязательные зависимости без подтверждённого workflow.
 
-### P0 — ближайшая исполнительская очередь
+### P0/P1 — ближайшая очередь Editor UI migration
 
 1. Подготовить безопасный контур изменений: воспроизводимые clean-install/build/typecheck checks, тестовую инфраструктуру и точечные lint/format проверки для затрагиваемого кода. Новые инструменты внедрять совместимо с текущими root/editor package roots; не форсировать repo-wide строгий режим для legacy.
-2. Провести code-level triage по текущему редактору на основе `docs/capability-matrix.md`: выбрать самые заметные UX-пробелы и подтверждённые дефекты, указать файлы/контракты после изучения реализации и сразу приступать к исправлениям. Не заканчивать работу только обновлением таблицы.
-3. Модернизировать существующую оболочку/панели редактора: единый визуальный язык, иерархия, toolbar, работа с панелями и tabs, состояния loading/empty/error/disabled/selected, читаемая плотность интерфейса, keyboard navigation/shortcuts и согласованная работа светлой/тёмной тем. Сначала проверить возможности Colibri workbench и расширять их вместо создания конкурирующей оболочки.
-4. Реализовать централизованную систему иконок и theme-specific assets на основе закреплённого набора Godot Editor Icons. Инвентаризация IDs, выбор 2D-значков и проверка MIT notices — обязательные шаги реализации, но не основание отложить задачу без срока; итогом должны стать работающий код и визуальная проверка обеих тем.
-5. Закрыть основные workflows существующей базы: scene open/edit/save/reopen, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая изменённая возможность должна иметь regression test и ручной/browser acceptance там, где поведение визуальное.
+2. Провести migration inventory по `docs/capability-matrix.md`: для каждого существующего workflow определить Colibri dependencies, reusable domain contracts, data format, owner, fixtures и статус `migrated / deferred / retired`. Не превращать inventory в полный построчный аудит всего legacy-кода.
+3. Создать самостоятельный SolidJS Host shell: workspace layout, tabs/split panes, panel lifecycle, menu/dialog primitives, commands/shortcuts, keyboard/focus handling, notifications, theme tokens и workspace persistence. Colibri capabilities изучаются как reference/acceptance inventory, но новый Host не встраивается внутрь старого Workbench.
+4. Реализовать централизованную систему иконок и theme-specific assets для нового SolidJS Host на основе закреплённого набора Godot Editor Icons. Legacy Colibri icon IDs инвентаризировать только для mapping/проверки нужных возможностей; в новую оболочку переносить выбранные 2D assets с source mapping и MIT notices, а не старый icon loader.
+5. Перенести первый основной authoring slice в новый Host: scene open/edit/save/reopen, Phaser Canvas, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая возможность получает regression fixture и browser acceptance; старый редактор остаётся для сравнения, но не источником новой UI-архитектуры.
 6. Закрыть runtime follow-ups PR #10: FX generated output vs editor preview, Box2D на 30/60/120 FPS и stop/restart/cleanup, Asset Pack/importer error paths и кодогенерацию. Добавить фикстуры для повторения дефектов.
 7. Пройти cross-platform acceptance уже внедрённой filesystem hardening: подтвердить фактическую матрицу поддерживаемых ОС/файловых систем, проверить non-Linux pathname fallback на symlink/reparse-point races и исследовать сценарий перемещения уже открытого каталога наружу. Linux descriptor-anchored mutation helpers и существующие adversarial tests сохранять как базовый контракт; новые write/package APIs не строить поверх pathname-only операций. Результаты и границы фиксировать в CODQA-7. Для standalone mini-services сохранять loopback-only defaults, Host/Origin/body/WS/time/rate-limit tests и проверку env override behavior; до auth/authorization не экспонировать их как публичный API.
-8. Выполнить ограниченный Svelte PoC на реальной панели или редакторском workflow. Сравнить интеграцию, производительность, состояние, темизацию и стоимость bridge с текущим workbench. По результатам записать решение и переходить дальше; не ждать PoC для независимых исправлений текущих панелей.
+8. Не повторять ограниченный SolidJS PoC: он уже выполнен и документирован в ADR-0004. Перейти от PoC к отдельному SolidJS Host по ADR-0005 и `docs/editor-ui-migration.md`; не создавать постоянный SolidJS↔Colibri bridge и не запускать full rewrite одним PR.
 
-### Что не блокирует модернизацию текущего редактора
+### Что можно выполнять параллельно Editor UI migration
 
 - Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и всех legacy project configs. Эти сведения пополняются по мере работы и до публикации/массовой архитектурной миграции; они не должны задерживать изолированную исправимую задачу.
 - Реализация нового Project Model/Core, runtime adapter или оптимизированного ECS. Это следующий архитектурный поток, а не предусловие для каждой правки текущего Scene Editor, Inspector или Asset Pack.
-- Перенос `source/editor` → `src/editor` и npm Workspaces. Они потребуют отдельного миграционного PR до тесной интеграции Editor Host с новыми packages, но не нужны для первой серии UX/bug fixes на текущих путях.
-- Полное решение о Svelte. PoC необходимо, чтобы принять архитектурное решение; до результата можно и нужно улучшать текущий UI без необратимой переписи.
+- Создание нового SolidJS Editor Host в `src/editor/` и последующее удаление legacy Colibri client из `source/editor/` — отдельная staged UI migration по `docs/editor-ui-migration.md`; это не механическое перемещение старого дерева. npm Workspaces остаются отдельной инфраструктурной миграцией.
+- Реализация нового Project Model/Core, runtime adapter, Preview Host и HTML5 build pipeline. Они могут идти отдельными потоками, если сохраняются совместимые contracts; готовность Core не является предварительным условием для первого нового Editor Host slice.
 - Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
 - Tauri, замена Phaser на PixiJS, второй ECS/runtime, дополнительные physics backends и public package registry. Они не входят в основной scope этого этапа.
 
 ### Что не следует делать параллельно «на всякий случай»
 
-- Не переписывать Colibri/Editor Host целиком и не переносить весь интерфейс на Svelte без сравнительного PoC и плана совместного существования подсистем.
+- Не встраивать SolidJS views внутрь Colibri как долгосрочную архитектуру. Не переносить всё в одном giant PR; old/new UI должны быть независимыми applications с отдельными origins, общими backend/data contracts и проверяемыми cutover gates.
 - Не останавливать исправление существующего редактора, пока проектируют идеальный Core. Для каждой задачи выбирать минимальный контракт, необходимый именно ей.
 - Не сводить модернизацию к замене цветов/иконок: визуальная работа должна включать и функциональные состояния, клавиатурный workflow, layout панелей и связанные пользовательские сценарии.
 - Не оставлять icon migration только в виде карты: после инвентаризации выполнить внедрение в согласованном UI scope, с отдельными light/dark variants и attribution.
@@ -75,7 +77,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 4. Новый модуль проходит критерии и сравнивается с legacy-сценарием до удаления старой реализации.
 5. Не создавать вторую сущность, сцену или игровой цикл там, где можно добавить adapter к существующей реализации.
 6. Исходники самостоятельных, независимо подключаемых возможностей оформлять как пакеты в `packages/` внутри монорепозитория; не создавать пакет на каждый класс. Публичную публикацию выполнять только после стабилизации API, SemVer/compatibility policy, тестов и документации. Локальную совместную разработку связывать через npm Workspaces.
-7. Для архитектурных рисков сначала создать PoC и критерии решения. Не считать выбор Tauri, Svelte, PixiJS или ECS доказанным только потому, что существует удачный open-source пример.
+7. Для новых архитектурных рисков формулировать проверяемую гипотезу и критерии решения. Выбор SolidJS для UI уже закреплён в ADR-0005 и не требует повторного PoC; это не означает автоматического выбора Tauri, PixiJS или ECS.
 8. Значимые пользовательские изменения фиксировать в `CHANGELOG.MD`; обновлять ТЗ и roadmap, когда меняется цель, формат проекта или критерии этапа.
 9. Сохранять применимые upstream-уведомления и лицензии. Удаление legacy-кода не означает автоматического права убрать авторские уведомления.
 
@@ -100,18 +102,18 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### С чего начинается реализация
 
-**Первое агентное задание должно быть кодовым: модернизировать существующий Editor Host и его основные 2D-workflows на текущей базе.** Документы этого PR служат входным контекстом, а не очередным deliverable для агента. Не поручать исполнителю повторно собирать эти же матрицы/ADR до начала работы, кроме адресного уточнения конкретного спорного поведения.
+**Первое агентное задание по UI migration должно быть кодовым: создать независимый SolidJS Editor Host shell в `src/editor/`, а не встраивать SolidJS в Colibri.** Сначала обеспечить отдельный запуск на Vite и безопасный backend proxy; legacy Colibri остаётся доступным. Документы этого плана служат входным контекстом, а не поводом повторно собирать те же матрицы/ADR.
 
 Ожидаемый рабочий порядок:
 1. Проверить актуальный `dev`, установить проект согласно README, запустить доступные build/typecheck/smoke checks и зафиксировать фактический baseline.
-2. Выбрать конечную группу связанных UI/functional workflows (например, Scene Editor + Hierarchy/Inspector или Asset Pack) и начать с реального кода. Указанные в матрице runtime gaps PR #10 включать в ближайшие задачи, когда соответствующая подсистема затрагивается.
+2. После минимального shell перейти к первому реальному vertical slice: Scene Editor + Phaser Canvas + Hierarchy/Inspector + save/reopen/Undo/Redo. Runtime gaps PR #10 включать в соответствующие migration slices, а не переносить UI без проверки поведения.
 3. Добавить/настроить tests и lint/format для изменяемого Codogma-owned scope. Не включать новые строгие правила на всё legacy-дерево без исправления/миграционного плана.
-4. Реализовать согласованную UI-систему и иконки как видимые продуктовые deliverables, включая светлую и тёмную тему. Провести browser acceptance на целевых размерах окна, приложить screenshots до/после или эквивалентные воспроизводимые результаты.
-5. Провести сравнительный Svelte PoC отдельным небольшим scope, не блокируя независимые исправления текущего workbench.
+4. Реализовать согласованную UI-систему и иконки непосредственно в новом SolidJS Host, включая light/dark/lightBlue themes, keyboard/focus states и density. Провести browser acceptance на целевых размерах окна, приложить screenshots или эквивалентные воспроизводимые результаты.
+5. Не повторять SolidJS PoC: он выполнен и сохранён в ADR-0004. Использовать его как входное evidence для независимого Editor Host; не создавать долгосрочный Colibri↔SolidJS bridge.
 6. Для каждого крупного набора изменений открыть отдельный PR с регрессионными тестами и перечислением фактически пройденных проверок; обновить соответствующие части матрицы/worklog по результатам.
-7. После первой стабилизации редактора выбрать следующий Core/Preview/HTML5 build slice на основе зависимостей, а не переписывать весь legacy editor заранее.
+7. После прохождения первого SolidJS Host vertical slice выбирать следующий Core/Preview/HTML5 build slice на основе реальных зависимостей; не переписывать legacy UI заранее и не удалять его до cutover.
 
-Полная инвентаризация source tree, фактические performance measurements, migration `source/editor` → `src/editor` и npm Workspaces остаются отдельными задачами, необходимыми к соответствующим gates. Они не используются как повод откладывать независимую модернизацию редактора.
+Полная инвентаризация Colibri coupling и фактические performance measurements выполняются поэтапно. `src/editor/` создаётся как новое приложение, не как перенос старого `source/editor/`; legacy дерево удаляется только после cutover. npm Workspaces остаются отдельной инфраструктурной задачей и не являются предусловием для первого Vite/SolidJS Host.
 
 ### Подготовленные reference-документы — использовать, не пересоздавать
 
@@ -150,15 +152,15 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ## Этап 1 — аудит исходников, модель данных и архитектурные решения
 
-**Цель:** дать достаточно фактов, чтобы безопасно модернизировать существующий Editor Host, а не превратить подготовительный этап в отдельный документационный проект. Основные матрицы, ADR и baseline-протоколы уже созданы; неизвестные области уточняются непосредственно перед изменением соответствующего кода.
+**Цель:** дать достаточно фактов, чтобы безопасно создать новый SolidJS Editor Host и перенести в него реальные workflows, не повторяя legacy UI-механизмы автоматически. Основные матрицы, ADR и baseline-протоколы уже созданы; неизвестные области Colibri coupling уточняются непосредственно перед переносом соответствующей функции.
 
 ### Внутренняя очередь выполнения
 
-1. **Начинать с текущего кода:** изучить выбранную подсистему, реальные UX/behavior gaps, существующие contracts, tests и runtime path. Для подтверждённой проблемы сразу формировать implementation PR, а не ждать полной инвентаризации всего репозитория.
+1. **Начинать с независимого Host:** изучить существующие UI/runtime paths, зафиксировать backend/data contracts и создать минимальное SolidJS/Vite приложение. Далее переносить выбранную подсистему с тестами и browser acceptance; не ждать полной инвентаризации всего репозитория.
 2. **Ввести необходимые quality checks в изменяемом scope:** clean install, TypeScript build, targeted tests, ESLint/Prettier для нового/изменяемого Codogma-owned кода; Knip/dependency-cruiser сначала работают в report mode. Не ломать массово legacy Colibri.
 3. **Пополнять матрицы по evidence:** фиксировать, что реализовано, что исправлено, какие тесты прошли и что осталось непроверенным. Документация обновляется вместе с соответствующим кодом и не заменяет его.
-4. **Оформлять архитектурные решения по необходимости:** strict toolchain pilot, Core contracts и migration plans нужны для новых модулей и тесной интеграции; они не являются gate для независимых UI/bug fixes существующего редактора.
-5. **Отдельный gate перед тесной интеграцией нового Core:** принять ADR-0001/0002, пройти toolchain pilot и contract tests. Перенос `source/editor` → `src/editor` и npm Workspaces выполнять отдельными проверяемыми миграционными PR до интеграции в общий Editor Host; не объединять миграцию с массовым рефакторингом.
+4. **Оформлять архитектурные решения по необходимости:** ADR-0005 и `docs/editor-ui-migration.md` определяют цель и transition constraints. Core contracts, package/Workspace migration и public Extension API развиваются отдельно и не блокируют bootstrap нового Host.
+5. **Отдельный gate перед тесной интеграцией нового Core:** принять ADR-0001/0002, пройти toolchain pilot и contract tests. Создание нового SolidJS Editor Host в `src/editor/`, staged replacement Colibri и npm Workspaces выполнять отдельными проверяемыми миграционными PR; не объединять UI migration с массовым Core/refactor изменением.
 
 ### Задачи
 
@@ -170,7 +172,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Для каждой возможности указать: существующая реализация, публичный/внутренний контракт, покрывающие тесты, ограничения и gap относительно целевого UX.
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
 - [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
-- [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
+- [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, Colibri plugin registry и Undo/Redo: отделить reusable domain/data operations от UI lifecycle/callback dependencies, которые придётся переписать в SolidJS Host.
 - [x] Создать первоначальную `docs/dependency-capability-matrix.md` для текущих direct package roots, Phaser bundle и Box2D runtime path.
 - [ ] Завершить транзитивную dependency/SBOM, license и provenance инвентаризацию; проверить ограничения и стоимость обновления значимых зависимостей до публикации пакетов.
 - [ ] Для нового Core toolchain зафиксировать pinned devDependencies, scripts и lockfile; legacy TSLint dependency уже отсутствует, но `lint.sh`/`tslint.json` остаются неактивными артефактами. Удалить или заменить их отдельным cleanup после пилота.
@@ -180,7 +182,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [x] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile и scope нового Core, ESLint/Prettier/Node unit tests, Knip/dependency-cruiser report mode и staged CI ratchet.
   - Прогресс COD-19: подготовлен изолированный pilot в `packages/localization/` — отдельный ESLint scope для strict TS/Node tests, package-local Prettier profile, typecheck/lint/format/unit scripts, report-only Knip/dependency-cruiser и запуск quality checks в CI Fast. Дождаться CI, прежде чем отмечать pilot завершённым.
 - [ ] Поддерживать `docs/decisions/ADR-0003-package-architecture-and-management.md` как нормативное решение: целевые исходники Editor Host в `src/editor`, самостоятельные package roots в `packages/*`, `@codogma/cge` в `packages/cge`, npm Workspaces для локальной разработки, selective installation в пользовательские проекты и Extension API; точная metadata schema и детали migration/workspace tooling проходят PoC.
-- [ ] После фиксации capability/dependency baseline подготовить и выполнить отдельный migration PR `source/editor` → `src/editor`: сохранить внутреннюю структуру и TypeScript project references; обновить root scripts, server `EDITOR_DIR`, CI/cache paths, release archive, `BUILD.md` и README; проверить root/editor clean install, сборку, HTTP smoke и состав ZIP. Не объединять перенос каталога с workspace/lockfile migration.
+- [ ] Немедленно создать самостоятельный SolidJS/Vite app в `src/editor/` и начать полноценный Unity-подобный Workbench; не ждать завершения полной capability/dependency inventory и не перемещать туда legacy tree. Настроить отдельный dev command/port, strict loopback bind, exact-Origin Vite proxy и адресные build/typecheck checks. `source/editor/` продолжает обслуживать Colibri до cutover; после acceptance его удаление выполняется отдельным cleanup PR. Не объединять создание нового Host с npm Workspaces/lockfile migration.
 - [x] Создать `docs/performance-baseline.md` с fixtures и протоколом воспроизводимых измерений без выдуманных порогов.
 - [ ] Выполнить и сохранить фактические performance measurements на согласованном окружении; не вводить budgets до получения повторяемых raw samples.
 
@@ -194,7 +196,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Выделены минимальные контракты Project Model, Runtime Adapter и Preview Host.
 - [ ] Подтверждено, какие возможности надо расширять внутри текущего редактора, а какие — изолировать или заменять.
 - [ ] Отдельная миграция `source/editor` → `src/editor` принята после сборки редактора, server smoke, CI/release path audit и проверки ZIP без лишних файлов; рабочие команды и README указывают на реально существующие пути.
-- [ ] Технологические кандидаты не записаны как окончательное решение без PoC.
+- [ ] Не принимать новые технологические кандидаты без ADR/обоснования; принятое решение SolidJS для Editor UI повторно не пересматривается в рамках этой migration.
 - [ ] Риски совместимости и лицензирования описаны с владельцами/планом проверки.
 
 ---
@@ -365,15 +367,15 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ---
 
-## Этап 5 — качество существующего редактора и 2D-производственные инструменты
+## Этап 5 — staged replacement Colibri UI и 2D authoring workflows
 
-**Цель:** сделать текущую кодовую базу основой профессионального 2D-редактора, сопоставимого по качеству основных рабочих процессов и цельности интерфейса с Unity 6 и Cocos Creator 4.0. Это основной исполнительский этап: он должен приводить к изменениям в `source/editor/`, regression tests и проверяемому runtime-поведению, а не только к дополнительным документам.
+**Цель:** обеспечить профессиональные 2D-authoring workflows в новом SolidJS Editor Host. Legacy Colibri client в `source/editor/` служит временной рабочей и контрольной реализацией; новые UI workflows постепенно реализуются в `src/editor/`, а проверенные domain/project/runtime mechanisms переиспользуются без переноса старой UI-инфраструктуры. Эта фаза должна приводить к работающему новому приложению, regression tests и browser/runtime acceptance, а не только к документам.
 
-**Зависимости:** текущая реализация и её existing data/file/plugin/Undo-Redo contracts. Полная готовность нового Core, Preview Host, HTML5 pipeline, перенос `source/editor` → `src/editor` и npm Workspaces **не являются предусловиями** для задач, которые можно корректно выполнить на нынешней базе. Если функция действительно зависит от нового контракта, изолировать только эту подзадачу; не блокировать ею остальную модернизацию.
+**Зависимости:** текущие project/file/serialization/codegen/Undo-Redo/runtime contracts и аудит их связности с Colibri. Новый Host может использовать текущие backend endpoints до готовности Core; новые Core/Preview/HTML5 contracts развиваются независимо. `source/editor/` не переносится в `src/editor/` механически: `src/editor/` создаётся как новая SolidJS app, legacy остаётся отдельно до cutover.
 
 ### Задачи
 
-- [ ] Сначала проверить существующие Colibri/workbench capabilities (панели, вкладки, dock/resize/layout, shortcuts, commands) и усиливать их вместо реализации конкурирующей оболочки.
+- [ ] Инвентаризировать существующие Colibri/workbench capabilities (панели, вкладки, dock/resize/layout, shortcuts, commands) как reference и acceptance baseline. Не переносить их реализацию автоматически; новые primitives реализовать в SolidJS Host и использовать Colibri только для поддержки legacy клиента до cutover.
 - [ ] Сформировать и реализовать согласованную визуальную систему редактора: типографика, spacing/density, размеры контролов, toolbar/menu patterns, focus/hover/disabled/selected/error/loading/empty states, keyboard navigation и базовые accessibility expectations.
 - [ ] Привести главную рабочую среду к профессиональному 2D-editor workflow: Scene/Game view, Hierarchy, Inspector, Assets/Pack и Console/diagnostics должны иметь понятную роль, согласованную визуальную иерархию и эффективный default layout. Не создавать фиктивные панели без работающего содержания.
 - [ ] Проверить поведение панелей при изменении размера окна/панелей, сохранение/восстановление рабочих раскладок и доступность ключевых команд через keyboard shortcuts; переиспользовать существующие механизмы, а новые добавлять только при доказанном gap.
@@ -394,15 +396,17 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Проверить точечные importer extensions (PSD/Aseprite) через общий asset metadata/reimport contract, а не через отдельные несогласованные форматы.
 - [ ] Рассмотреть UI layout tools: anchors, responsive layout, scale modes, interactive states и mobile safe areas.
 - [ ] Улучшать graphics/audio/assets workflow на основе capability matrix и production pain points.
-- [ ] Провести отдельный аудит icon identifiers Colibri и подготовить карту перехода на [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons): оставить только значки общих UI-команд и поддерживаемых 2D-возможностей, исключить 3D-only icons.
-- [ ] Для отобранных значков подготовить и проверить отдельные варианты для светлой и тёмной тем, включая контраст и применимые UI-состояния; зафиксировать source commit, исходный файл, mapping и необходимые MIT notices. Не выполнять массовую замену до ревью карты и плановой задачи.
-- [x] Выполнить ограниченный Svelte PoC на одной существующей панели/workflow и сравнить с текущим Colibri/workbench; проверить совместимость с состоянием редактора, API, темизацией, сборкой, отладкой и стоимостью bridge. *(Выполнено: плагин `phasereditor2d.sveltepoc` с live/mock мостами, панель Scene Stats рядом с Inspector; commit 21bda49, ADR-0004; live-измерения: бандл 70.3 kB, mount 1.9 ms, 1000/1000 selection-событий через полный workbench-путь.)*
-- [x] По результатам PoC принять явное решение: продолжать текущий workbench, интегрировать Svelte для ограниченного слоя или постепенно мигрировать выбранные views. Полная миграция не является автоматическим результатом успешного PoC. *(Решение зафиксировано в ADR-0004: мост технически дёшев, но ценность миграции не доказана — доминирующая стоимость в паритете инфраструктуры UI; продолжаем текущий workbench, плагин PoC остаётся executable-справкой.)*
-- [ ] Если новая UI оболочка доказано полезна, переносить views по одной; legacy и новый view сосуществуют только через явный bridge и общий state/model, а не два независимых источника данных.
+- [ ] Провести аудит icon identifiers Colibri как входной инвентарь и подготовить mapping отобранных общих UI/2D значков к [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons). Интегрировать выбранные assets в SolidJS Host; не переносить Colibri icon loader или весь набор 3D-only icons.
+- [ ] Для отобранных значков подготовить и проверить варианты для light/dark themes нового Host, включая контраст и interactive states; зафиксировать source commit, исходный файл, mapping и MIT notices.
+- [ ] Создать отдельную parent Engineering issue для staged Colibri UI replacement через SolidJS Editor Host. *(Целевое направление принято в ADR-0005: SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4; implementation не начата. Подзадачи должны покрывать bootstrap, первый Scene vertical slice, перенос workflows, cutover и удаление legacy.)*
+- [ ] Создать самостоятельный SolidJS Host в `src/editor/`. На период migration запускать его через Vite на отдельном loopback port (по умолчанию 5173), а legacy editor оставить на текущем backend (по умолчанию 3000). Vite проксирует `/editor/*` backend routes; использовать точный `CODOGMA_ALLOWED_ORIGINS`, не wildcard. Два UI не встраиваются друг в друга и не обмениваются UI state через постоянный bridge.
+- [ ] На время dual-run запретить concurrent writes в один `PROJECT_DIR`. Для параллельной write acceptance использовать отдельные project copies/backend instances. Legacy MCP SSE bridge пока может принадлежать только одному editor client: current server broadcasts events всем `bridgeClients`; session-aware routing требуется до подключения нового Host к общему SSE bridge.
+- [ ] Переносить инструменты вертикальными workflow slices: shell/layout/keyboard/theme → Scene/Hierarchy/Inspector/Canvas → save/reopen/Undo/Redo → assets/Prefabs/codegen → animation/tilemap/physics/FX/Spine → project/MCP/settings. Для каждого slice — regression fixtures и browser acceptance.
+- [ ] После достижения согласованного feature parity переключить production `/editor/` на новый bundle, оставить legacy route на ограниченное rollback window, затем удалить Colibri, legacy UI plugins/build assets и зависимости отдельным cleanup PR.
 
 ### Очередность внутри этапа
 
-**A — P0: модернизация рабочей среды и базовый authoring на существующей базе.**
+**A — P0: Unity-подобный SolidJS Workbench и первый рабочий Scene workflow.**
 - Сохранение/повторное открытие сцены, hierarchy/Transform, безопасные Undo/Redo и согласованность Prefab/Component metadata с Project Model.
 - Input и преобразование координат (mouse/keyboard/touch, UI versus world, camera/viewport), focus loss и cleanup listeners.
 - Базовый Sprite workflow: импорт/slicing, trim/pivot, sorting и collision shapes; результат должен сохраняться и соответствовать runtime.
@@ -425,9 +429,11 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - RTL/complex text shaping и расширенная accessibility — только после проверки ограничений текущего text/runtime backend.
 - Ручные renderer optimizations — только если profiler подтверждает конкретный bottleneck.
 
-**P0 — иконки и темы как часть модернизации редактора.** В рамках первого UI-modernization пакета составить mapping используемых IDs и команд, выбрать и внедрить подходящие Godot Editor Icons для общих UI-команд и существующих 2D-возможностей, исключить 3D-only assets, подготовить отдельные light/dark-варианты и сохранить source mapping/MIT notices. Карта — промежуточный шаг, а не завершение задачи: обязательны рабочая интеграция в интерфейс и browser acceptance в обеих темах. Это не требует остановить независимую работу над Core, но должно быть включено в ближайший объём реализации редактора.
+**P0 — иконки и темы нового SolidJS Host.** Реализовать единые semantic tokens и theme switching, интегрировать отобранные Godot Editor Icons для общих UI-команд и поддерживаемых 2D-возможностей, исключить 3D-only assets, сохранить source mapping/MIT notices. Обязательны browser acceptance dark/light/lightBlue (или согласованных theme variants), focus/hover/disabled/selected/error states и проверка контраста.
 
-**Полная перепись UI-стека — не P0; ограниченный PoC — P1.** Svelte/Vite/dockview/CodeMirror/Monaco сравнить на небольшой реальной панели или workflow, а не по абстрактным преимуществам. До завершения PoC продолжать улучшать текущий workbench. Если новый стек докажет преимущество, переносить views по одному через явный bridge и единый источник данных, сохраняя browser acceptance.
+**Полная замена Colibri UI — планируемая staged initiative, не одномоментная задача.** Направление SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4 выбрано для дальнейшего планирования на основании PoC и продуктовой цели. Не внедрять промежуточные SolidJS-вью внутри Colibri как долгосрочную архитектуру. Docking/layout library, CodeMirror и Monaco оцениваются отдельно только при наличии конкретного workflow; они не являются обязательными компонентами миграции.
+
+См. полный migration scope, портовую схему, ограничения API/MCP и критерии cutover: [docs/editor-ui-migration.md](editor-ui-migration.md).
 
 ### Критерии приёмки
 
