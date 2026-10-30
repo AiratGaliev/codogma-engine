@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/server";
-import Ajv, { type AnySchema, type ValidateFunction } from "ajv";
+import { Ajv, type AnySchema, type ValidateFunction } from "ajv";
 import type { CallToolResult, ListToolsResult, ServerOptions, Tool } from "@modelcontextprotocol/server";
 
 export const MCP_SERVER_NAME = "codogma-editor-mcp-server";

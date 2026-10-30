@@ -7,7 +7,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import Ajv from "ajv";
+import { Ajv } from "ajv";
 
 import { createCodogmaMcpServer, resolveEngineMcpUrl } from "../dist/index.js";
 import { dispatchTool, getBridgeToolsList, initMcp } from "../../../server/mcp.mjs";
