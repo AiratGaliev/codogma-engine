@@ -40,6 +40,7 @@ import {
 } from "./mcp.mjs"
 import { isInsideBase, safeJoin, openSafeProjectFileForWrite } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
+import { readRequestBuffer } from "./request-body.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
@@ -394,55 +395,6 @@ ${scripts.map(s => `    <script src="${s}"></script>`).join("\n")}
 
 /* =============================== API layer =============================== */
 
-function readRequestBuffer(req, maxBytes) {
-    return new Promise((resolve, reject) => {
-        const chunks = []
-        let size = 0
-        let settled = false
-
-        const cleanup = () => {
-            req.off("data", onData)
-            req.off("end", onEnd)
-            req.off("error", onError)
-        }
-
-        const onData = chunk => {
-            if (settled) return
-            size += chunk.length
-
-            if (size > maxBytes) {
-                settled = true
-                cleanup()
-                req.resume()
-                const error = new Error("Request body too large")
-                error.statusCode = 413
-                reject(error)
-                return
-            }
-
-            chunks.push(chunk)
-        }
-
-        const onEnd = () => {
-            if (settled) return
-            settled = true
-            cleanup()
-            resolve(Buffer.concat(chunks))
-        }
-
-        const onError = error => {
-            if (settled) return
-            settled = true
-            cleanup()
-            reject(error)
-        }
-
-        req.on("data", onData)
-        req.on("end", onEnd)
-        req.on("error", onError)
-    })
-}
-
 async function readBodyJSON(req) {
     const body = await readRequestBuffer(req, MAX_API_BODY_BYTES)
     return JSON.parse(body.toString("utf8") || "{}")
@@ -471,7 +423,11 @@ async function handleAPI(req, res) {
     try {
         reqData = await readBodyJSON(req)
     } catch (e) {
-        return apiError(res, "invalid request body")
+        return apiError(
+            res,
+            e.statusCode === 413 ? e.message : "invalid request body",
+            e.statusCode || 400
+        )
     }
     const method = reqData.method
     const body = reqData.body || {}
