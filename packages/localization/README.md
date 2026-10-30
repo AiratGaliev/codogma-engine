@@ -63,7 +63,7 @@ cd packages/localization
 npm ci          # package-lock: TypeScript 5.3.3
 npm run build   # strict typecheck + emit dist/
 npm test        # build + node --test contract/service/validation/fixture/CLI tests
-npm run quality:check  # strict typecheck, scoped ESLint, package format check and unit tests
+npm run quality:check  # strict typecheck, scoped ESLint, config-format check and unit tests
 npm run quality:report # non-blocking Knip + dependency-cruiser reports
 ~~~
 
