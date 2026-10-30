@@ -249,7 +249,7 @@ CI is designed to check changes quickly and to run MCP integration tests on prom
 
 | Workflow / job | Trigger | Main checks |
 |---|---|---|
-| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization dependencies, validates PR routing, builds the editor client, runs unit regression and security checks, smoke-tests the server/editor, and tests localization package, project diagnostics and runtime acceptance. |
+| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization dependencies, validates PR routing, builds the editor client, runs unit regression, main-server and standalone mini-service security checks, smoke-tests the server/editor, and tests localization package, project diagnostics and runtime acceptance. |
 | **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Starts the server and MCP bridge, then runs the MCP integration test driver. |
 | **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
 
