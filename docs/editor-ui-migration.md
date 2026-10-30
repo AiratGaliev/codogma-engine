@@ -1,6 +1,6 @@
 # План миграции Editor UI: Colibri → Svelte 5 + Tailwind CSS 4
 
-**Статус:** proposed target plan; реализация нового Host ещё не начата.
+**Статус:** approved target plan; реализация нового Host ещё не начата.
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.
 **Решение:** [ADR-0005](decisions/ADR-0005-svelte-editor-host.md).
 **Нормативные требования:** [Техническое задание, разделы 1, 4, 12 и 13](technical-specification.md).
