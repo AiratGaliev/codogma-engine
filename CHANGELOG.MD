@@ -6,8 +6,9 @@
 
 * Added a quality-pilot surface for the already-strict `packages/localization` module:
   scoped TypeScript/Node ESLint coverage, a package-local Prettier profile, and `typecheck` / `lint` / `format:check` / existing Node unit-test scripts.
-* Added report-only Knip and dependency-cruiser configuration with explicit package entry points and non-blocking severities. Existing Node `node:test` coverage remains; no new test framework or duplicate toolchain dependencies are added to the package lockfile.
-* CI Fast now runs the package quality checks and reports before existing localization diagnostics/runtime acceptance. No lint or strict TypeScript gate is enabled across the legacy editor tree.
+* Added report-only Knip and dependency-cruiser configuration with explicit package entry points, shared-tool exclusions and non-blocking severities. Knip has no unused findings in the accepted CI report; dependency-cruiser reports no violations for the 8-module/15-dependency package graph. Existing Node `node:test` coverage remains; no new test framework or duplicate toolchain dependencies are added to the package lockfile.
+* Normalized the complete package-owned TypeScript source, Node tests and CLI with Prettier. `format:check` now runs read-only over the full source/test/CLI/config scope.
+* CI Fast runs clean installs, package quality checks and reports before existing localization diagnostics/runtime acceptance. Strict/lint/format gates remain scoped to this package and are not enabled across the legacy editor tree.
 
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
