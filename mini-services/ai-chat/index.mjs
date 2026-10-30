@@ -21,8 +21,6 @@
 
 import { createServer } from "node:http"
 
-import ZAI from "z-ai-web-dev-sdk"
-
 const HOST = process.env["AI_CHAT_HOST"] || "127.0.0.1"
 const PORT = Number(process.env["AI_CHAT_PORT"] || 3031)
 
@@ -42,7 +40,9 @@ let zaiPromise = null
 function getZai() {
 
     if (!zaiPromise) {
-        zaiPromise = ZAI.create()
+        // The optional provider SDK is needed only for /chat, not for starting
+        // the local service or enforcing its loopback/Host/Origin boundary.
+        zaiPromise = import("z-ai-web-dev-sdk").then(({ default: ZAI }) => ZAI.create())
     }
 
     return zaiPromise
@@ -50,7 +50,17 @@ function getZai() {
 
 function isLoopbackHostname(hostname) {
 
-    return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost"
+    let normalized = hostname.toLowerCase()
+
+    if (normalized.startsWith("[") && normalized.endsWith("]")) {
+        normalized = normalized.slice(1, -1)
+    }
+
+    if (normalized.endsWith(".")) {
+        normalized = normalized.slice(0, -1)
+    }
+
+    return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost"
 }
 
 /**
@@ -62,8 +72,11 @@ function isAllowedHost(hostHeader) {
     if (typeof hostHeader !== "string" || hostHeader.length === 0) return false
 
     try {
-        const hostname = new URL("http://" + hostHeader).hostname.toLowerCase().replace(/\.$/, "")
-        return isLoopbackHostname(hostname)
+        const parsed = new URL("http://" + hostHeader)
+
+        if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return false
+
+        return isLoopbackHostname(parsed.hostname)
     } catch {
         return false
     }
@@ -341,12 +354,21 @@ const server = createServer(async (req, res) => {
 
 })
 
-server.listen(PORT, HOST, () => {
+server.headersTimeout = 10_000
+server.requestTimeout = 30_000
+server.keepAliveTimeout = 5_000
 
-    console.log(`phaser-editor-ai-chat listening on http://${HOST}:${PORT} (loopback-only by default)`)
+// AI Chat has no remote authentication protocol and must remain loopback-only.
+if (!isLoopbackHostname(HOST.toLowerCase())) {
 
-    if (HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
+    console.error("phaser-editor-ai-chat: refusing non-loopback bind host " + HOST + ".")
+    process.exitCode = 1
 
-        console.warn(`phaser-editor-ai-chat: AI_CHAT_HOST="${HOST}" exposes this service beyond loopback.`)
-    }
-})
+} else {
+
+    server.listen(PORT, HOST, () => {
+
+        console.log(`phaser-editor-ai-chat listening on http://${HOST}:${PORT} (loopback-only by default)`)
+
+    })
+}

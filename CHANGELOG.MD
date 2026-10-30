@@ -1,5 +1,16 @@
 # Change Log
 
+## Unreleased (2026-10-29 — mini-service network hardening)
+
+### Security
+
+* The standalone MCP bridge now validates loopback `Host` headers for HTTP and WebSocket
+  upgrades, refuses non-loopback bind addresses, and uses bounded HTTP header/request timers.
+* AI Chat now fails closed when configured to bind outside loopback, normalizes IPv6 Host
+  headers correctly, and uses bounded HTTP header/request timers.
+* Added negative regression coverage for foreign HTTP/WebSocket Host headers and attempted
+  external binds. Remote service access remains unsupported without an authenticated tunnel.
+
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
 P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
