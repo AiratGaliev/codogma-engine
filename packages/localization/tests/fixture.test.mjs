@@ -14,11 +14,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import {
-    LocalizationService,
-    parseLocalizationTable,
-    validateLocalizationProject
-} from "../dist/index.js"
+import { LocalizationService, parseLocalizationTable, validateLocalizationProject } from "../dist/index.js"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURE_LOCALE_DIR = path.join(HERE, "..", "..", "..", "tests", "workspace", "test-typescript", "locale")
@@ -26,9 +22,7 @@ const FIXTURE_LOCALE_DIR = path.join(HERE, "..", "..", "..", "tests", "workspace
 const TABLE_FILES = ["en-US.json", "ru-RU.json", "en-GB.json"]
 
 function loadProjectTables() {
-
     return TABLE_FILES.map(file => {
-
         const sourceText = readFileSync(path.join(FIXTURE_LOCALE_DIR, file), "utf8")
 
         return parseLocalizationTable(sourceText, `locale/${file}`)
@@ -36,17 +30,13 @@ function loadProjectTables() {
 }
 
 describe("fixture: game project localization tables", () => {
-
     it("exists in the fixture project", () => {
-
         const tables = loadProjectTables()
         assert.equal(tables.length, TABLE_FILES.length)
     })
 
     it("contains structurally valid tables for every locale file", () => {
-
         for (const result of loadProjectTables()) {
-
             assert.deepEqual(
                 result.diagnostics,
                 [],
@@ -57,14 +47,14 @@ describe("fixture: game project localization tables", () => {
     })
 
     it("defines the same locales as the contract files", () => {
-
-        const locales = loadProjectTables().map(result => result.table.locale).sort()
+        const locales = loadProjectTables()
+            .map(result => result.table.locale)
+            .sort()
 
         assert.deepEqual(locales, ["en-GB", "en-US", "ru-RU"])
     })
 
     it("passes project validation with only the expected en-GB fallback warnings", () => {
-
         const tables = loadProjectTables().map(result => ({ table: result.table }))
 
         const diagnostics = validateLocalizationProject(tables, { fallbackLocale: "en-US" })
@@ -72,7 +62,10 @@ describe("fixture: game project localization tables", () => {
         // en-GB is deliberately sparse: every key except menu.play must be
         // reported as a missing-key warning. No errors and no extra keys are
         // expected in the fixture.
-        assert.equal(diagnostics.some(item => item.severity === "error"), false)
+        assert.equal(
+            diagnostics.some(item => item.severity === "error"),
+            false
+        )
         assert.deepEqual(
             diagnostics.map(item => [item.code, item.locale]),
             [
@@ -84,7 +77,6 @@ describe("fixture: game project localization tables", () => {
     })
 
     it("resolves en-US and ru-RU texts for the same keys", () => {
-
         const tables = loadProjectTables().map(result => result.table)
         const keys = tables.find(table => table.locale === "en-US").messages.map(entry => entry.id)
 
@@ -92,7 +84,6 @@ describe("fixture: game project localization tables", () => {
         const ruService = new LocalizationService({ tables, locale: "ru-RU" })
 
         for (const key of keys) {
-
             // Provide all placeholders so a clean fixture stays clean.
             const params = {}
             for (const name of enService.getMessagePlaceholders(key)) {
@@ -116,7 +107,6 @@ describe("fixture: game project localization tables", () => {
     })
 
     it("falls back from en-GB to en-US for keys the sparse table lacks", () => {
-
         const tables = loadProjectTables().map(result => result.table)
         const service = new LocalizationService({ tables, locale: "en-GB", fallbackLocale: "en-US" })
 
@@ -133,7 +123,6 @@ describe("fixture: game project localization tables", () => {
         const usTable = tables.find(table => table.locale === "en-US")
 
         for (const { id } of usTable.messages) {
-
             if (id === "menu.play") {
                 continue
             }
@@ -150,7 +139,6 @@ describe("fixture: game project localization tables", () => {
     })
 
     it("switches locale at runtime and keeps parameters", () => {
-
         const tables = loadProjectTables().map(result => result.table)
         const service = new LocalizationService({ tables, locale: "en-US", fallbackLocale: "en-US" })
 
