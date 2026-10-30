@@ -13,7 +13,7 @@ import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, readFileSafely, readFilePrefixSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, writeNewFileSafely, readFileSafely, readFilePrefixSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely, statProjectDirectorySafelySync } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -609,6 +609,82 @@ test("copyProjectEntrySafely rejects a source-parent swap to an outside symlink"
         fsp.open = originalOpen
         try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
         try { fs.renameSync(parkedAssets, assets) } catch {}
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("writeNewFileSafely never overwrites an existing project file", () => {
+    const t = createTempTree()
+    const target = path.join(t.base, "file.txt")
+
+    try {
+        assert.equal(writeNewFileSafely(t.base, target, "replacement"), false)
+        assert.equal(fs.readFileSync(target, "utf8"), "content",
+            "exclusive create must preserve the original file bytes")
+    } finally {
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("writeNewFileSafely rejects a parent symlink swap and does not create outside files", { skip: process.platform !== "linux" }, () => {
+    const t = createTempTree()
+    const parent = path.join(t.base, "assets")
+    const parkedParent = path.join(t.base, "assets-internal")
+    const target = path.join(parent, "new-scene.scene")
+    const outsideTarget = path.join(t.outside, "new-scene.scene")
+    const originalOpen = fs.openSync
+    let swapped = false
+
+    try {
+        fs.openSync = function (filePath, ...args) {
+            if (!swapped && typeof filePath === "string" && /^\/proc\/self\/fd\/\d+\/new-scene\.scene$/.test(filePath)) {
+                fs.renameSync(parent, parkedParent)
+                fs.symlinkSync(t.outside, parent, "dir")
+                swapped = true
+            }
+            return originalOpen.call(fs, filePath, ...args)
+        }
+
+        assert.equal(writeNewFileSafely(t.base, target, "scene-data"), false)
+        assert.equal(swapped, true, "the test must replace the parent immediately before the descriptor-anchored create")
+        assert.equal(fs.existsSync(outsideTarget), false, "the outside directory must not receive the created file")
+        assert.equal(fs.existsSync(path.join(parkedParent, "new-scene.scene")), false,
+            "a rejected create must clean up its own staged file")
+    } finally {
+        fs.openSync = originalOpen
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("statProjectDirectorySafelySync returns the opened directory metadata after a pathname swap", { skip: process.platform !== "linux" }, () => {
+    const t = createTempTree()
+    const parent = path.join(t.base, "assets")
+    const parkedParent = path.join(t.base, "assets-internal")
+    const expected = fs.statSync(parent)
+    const outside = fs.statSync(t.outside)
+    const originalFstat = fs.fstatSync
+    let calls = 0
+    let swapped = false
+
+    try {
+        fs.fstatSync = function (fd, ...args) {
+            calls += 1
+            if (calls === 2 && !swapped) {
+                fs.renameSync(parent, parkedParent)
+                fs.symlinkSync(t.outside, parent, "dir")
+                swapped = true
+            }
+            return originalFstat.call(fs, fd, ...args)
+        }
+
+        const actual = statProjectDirectorySafelySync(t.base, parent)
+        assert.ok(actual, "the already-open in-project directory should remain stat-able")
+        assert.equal(swapped, true, "the test must swap the pathname immediately before descriptor fstat")
+        assert.equal(actual.dev, expected.dev)
+        assert.equal(actual.ino, expected.ino)
+        assert.notEqual(actual.ino, outside.ino, "metadata must belong to the opened project directory, not the outside symlink target")
+    } finally {
+        fs.fstatSync = originalFstat
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
