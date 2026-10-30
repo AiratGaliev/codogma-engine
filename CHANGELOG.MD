@@ -96,6 +96,9 @@ Unreleased work tracked here: editor reliability, FX and Box2D codegen/runtime f
   rewrite headers (0545a29, fb03067); guarded `/archive/` snapshot route
   (1094f1c).
 
+* Added the private first-party TypeScript package `@codogma/editor-mcp-server` under `packages/editor-mcp-server/`. It exposes the Engine-owned MCP registry over stdio via loopback `POST /editor/mcp`; the main launcher prefers this package and retains the dependency-free stdio fallback. npm publication remains deferred.
+* Added contract coverage for the 59 upstream Phaser MCP tool names, unique names, Ajv compilation of the Engine-owned JSON Schemas, nested/alternative argument validation and image content blocks. Spine skin PNG preview uses the active editor/SSE thumbnail renderer; live browser acceptance remains separate (CODQA-8).
+
 ### Tests
 
 * `tests/editor-color-values.test.mjs` — 11 regression tests for color

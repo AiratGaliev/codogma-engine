@@ -16,4 +16,4 @@ node_modules/
 tool-results/
 .idea/
 worklog.md
-packages/localization/dist/
+**/dist/

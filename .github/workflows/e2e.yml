@@ -29,10 +29,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            packages/editor-mcp-server/package-lock.json
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Install and build standalone MCP package
+        run: npm ci
+        working-directory: packages/editor-mcp-server
 
       - name: Start server and run MCP integration tests
         shell: bash
@@ -40,7 +46,7 @@ jobs:
           set -euo pipefail
           SERVER_LOG="$RUNNER_TEMP/codogma-engine-e2e.log"
           export PORT=3100
-          export MCP_BRIDGE_PORT=1903
+          export CODOGMA_MCP_URL=http://127.0.0.1:3100/editor/mcp
           export PROJECT_DIR="$GITHUB_WORKSPACE/tests/workspace/test-typescript"
 
           node server/server.mjs >"$SERVER_LOG" 2>&1 &
@@ -54,10 +60,10 @@ jobs:
           ready=false
           for attempt in {1..30}; do
             if curl -fsS http://127.0.0.1:3100/editor/product.json >/dev/null \
-              && curl -fsS -X POST http://127.0.0.1:1903 \
+              && curl -fsS -X POST http://127.0.0.1:3100/editor/mcp \
                 -H "Content-Type: application/json" \
-                --data '{"tool":"ide-get-all-scenes-in-project","args":{}}' \
-                | grep -q "scenes"; then
+                --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+                | grep -q '"tools"'; then
               ready=true
               break
             fi
@@ -66,7 +72,7 @@ jobs:
 
           if [[ "$ready" != "true" ]]; then
             cat "$SERVER_LOG"
-            echo "::error::Codogma Engine server or MCP bridge did not become ready."
+            echo "::error::Codogma Engine server or HTTP MCP endpoint did not become ready."
             exit 1
           fi
 

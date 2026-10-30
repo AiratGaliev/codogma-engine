@@ -817,7 +817,7 @@ namespace phasereditor2d.scene {
             return this._spineThumbnailCache;
         }
 
-        buildSpineSkinThumbnailImage(skinItem: pack.core.SpineSkinItem) {
+        buildSpineSkinThumbnailImage(skinItem: pack.core.SpineSkinItem, animationName?: string) {
 
             const { spineAsset, spineAtlasAsset, skinName } = skinItem;
 
@@ -845,7 +845,7 @@ namespace phasereditor2d.scene {
                 } as any
             };
 
-            return new ui.SceneThumbnailImage(data);
+            return new ui.SceneThumbnailImage(data, animationName);
         }
     }
 

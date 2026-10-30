@@ -255,6 +255,93 @@
         });
     }
 
+    /**
+     * Render a Spine skin/animation through the editor's normal thumbnail renderer.
+     * This preserves support for both JSON and binary Spine skeleton assets.
+     */
+    async function cmdSpineSkinImage(args) {
+
+        const packCore = phasereditor2d.pack.core;
+        const packs = await packCore.AssetPackUtils.getAllPacks();
+        let spineAsset = null;
+        let atlasAsset = null;
+
+        for (const assetPack of packs) {
+
+            for (const item of assetPack.getItems()) {
+
+                if (!spineAsset && item instanceof packCore.SpineAssetPackItem && item.getKey() === args.dataKey) {
+                    spineAsset = item;
+                }
+
+                if (!atlasAsset && item instanceof packCore.SpineAtlasAssetPackItem && item.getKey() === args.atlasKey) {
+                    atlasAsset = item;
+                }
+            }
+        }
+
+        if (!spineAsset) {
+            throw new Error(`Spine skeleton "${args.dataKey}" was not found in the asset packs.`);
+        }
+
+        if (!atlasAsset) {
+            throw new Error(`Spine atlas "${args.atlasKey}" was not found in the asset packs.`);
+        }
+
+        await spineAsset.preload();
+
+        const skeleton = spineAsset.buildSkeleton(atlasAsset);
+        if (!skeleton) {
+            throw new Error(`Could not build Spine skeleton "${args.dataKey}" with atlas "${args.atlasKey}".`);
+        }
+
+        const skinExists = skeleton.skins.some(skin => skin.name === args.skinName)
+            || skeleton.defaultSkin?.name === args.skinName;
+        if (!skinExists) {
+            throw new Error(`Spine skin "${args.skinName}" does not exist in skeleton "${args.dataKey}".`);
+        }
+
+        if (!skeleton.animations.some(animation => animation.name === args.animationName)) {
+            throw new Error(`Spine animation "${args.animationName}" does not exist in skeleton "${args.dataKey}".`);
+        }
+
+        const skinItem = new packCore.SpineSkinItem(spineAsset, atlasAsset, args.skinName);
+        const thumbnail = phasereditor2d.scene.ScenePlugin.getInstance()
+            .buildSpineSkinThumbnailImage(skinItem, args.animationName);
+
+        await thumbnail.preload();
+
+        const imageElement = thumbnail.getImageElement();
+        if (!imageElement) {
+            throw new Error("Spine thumbnail renderer returned no image.");
+        }
+
+        const width = Math.max(1, Math.ceil(thumbnail.getWidth()));
+        const height = Math.max(1, Math.ceil(thumbnail.getHeight()));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+            throw new Error("Could not create a 2D canvas context for the Spine thumbnail.");
+        }
+
+        context.drawImage(imageElement, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL("image/png");
+        const comma = dataUrl.indexOf(",");
+        if (comma < 0) {
+            throw new Error("Spine thumbnail renderer returned an invalid PNG data URL.");
+        }
+
+        return {
+            __image: true,
+            data: dataUrl.slice(comma + 1),
+            mimeType: "image/png"
+        };
+    }
+
     async function cmdTextureBBox(args) {
 
         const url = args.url ? ("./project/" + args.url + "?m=" + Date.now()) : null;
@@ -427,6 +514,7 @@
         "ide-save-scene": cmdSaveScene,
         "scene-get-screenshot": cmdSceneScreenshot,
         "assets-get-texture-content-bounding-box": cmdTextureBBox,
+        "assets-get-spine-skin-image": cmdSpineSkinImage,
         "scene-get-editable-tilemap-layer-selection-data": cmdGetTilemapSelectionData
     };
 

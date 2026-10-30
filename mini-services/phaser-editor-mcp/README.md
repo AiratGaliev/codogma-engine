@@ -1,5 +1,7 @@
 # phaser-editor-mcp-bridge
 
+> **Legacy compatibility service.** This WebSocket bridge remains for older editor-side MCP workflows and the legacy configuration UI. New Codogma MCP clients use `packages/editor-mcp-server/` (`@codogma/editor-mcp-server`) and the engine-owned `POST /editor/mcp` endpoint; they do not use this service. Keep this bridge bound to loopback and do not expose it to untrusted networks. Its independent security follow-up is not closed by the new adapter.
+
 Standalone mini-service that connects the **official** @phaserjs/editor-mcp-server npm
 package with the Codogma Engine browser client used in this
 workspace. The official npm package is reused as-is — this service only implements the

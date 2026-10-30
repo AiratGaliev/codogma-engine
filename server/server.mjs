@@ -1294,7 +1294,8 @@ server.listen(PORT, "127.0.0.1", () => {
     log(`  editor:   ${EDITOR_DIR}`)
     log(`  dev mode: ${DEV_MODE}`)
     log(`  mcp:      http://localhost:${PORT}/editor/mcp (Streamable HTTP)`)
-    log(`            official stdio: npx @phaserjs/editor-mcp-server  (bridge port ${MCP_BRIDGE_PORT})`)
+    log(`  stdio:    node server/mcp-launcher.mjs (@codogma/editor-mcp-server)`)
+    log(`            set CODOGMA_MCP_URL=http://127.0.0.1:${PORT}/editor/mcp when using a non-default HTTP port`)
 })
 
 const bridgeServer = http.createServer(async (req, res) => {
@@ -1325,7 +1326,7 @@ const bridgeServer = http.createServer(async (req, res) => {
 })
 
 bridgeServer.listen(MCP_BRIDGE_PORT, "127.0.0.1", () => {
-    log(`  mcp bridge: http://127.0.0.1:${MCP_BRIDGE_PORT} (official @phaserjs/editor-mcp-server contract)`)
+    log(`  legacy MCP bridge: http://127.0.0.1:${MCP_BRIDGE_PORT} (older editor-side WebSocket clients)`)
 })
 
 bridgeServer.on("error", (e) => {

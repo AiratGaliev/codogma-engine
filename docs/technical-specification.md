@@ -60,7 +60,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
 | Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
-| AI/MCP | Есть MCP-интеграция и отдельный необязательный AI Chat service |
+| AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует исходные tool schemas/calls без второго реестра. Отдельно остаётся legacy WebSocket bridge для старых editor-side workflows; AI Chat service необязателен |
 | CI | `fast-checks` проверяет маршрутизацию PR, сборку редактора и server smoke test; `mcp-integration` выполняет MCP E2E при продвижении в `test` и `main` |
 | TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
@@ -822,6 +822,14 @@ Acceptance: новый engine module не принимается без strict t
 
 **Нормативное направление:** исходники самостоятельных пакетов Codogma развиваются в монорепозитории в стиле EVA.js. npm и npm Workspaces предоставляют стандартный механизм зависимостей и совместной разработки. Unity Package Manager служит ориентиром пользовательского workflow и жизненного цикла пакетов; Codogma не копирует его формат пакетов и не реализует альтернативный npm resolver. Подробные решения фиксируются в [ADR-0003](decisions/ADR-0003-package-architecture-and-management.md).
 
+#### Existing editor MCP tooling package
+
+The current implementation includes a standalone private package `@codogma/editor-mcp-server` at `packages/editor-mcp-server/`. It is an stdio adapter to the engine-owned `POST /editor/mcp` registry, not a second tool implementation or a copy of the Phaser package. It must preserve every upstream tool name and the capabilities that the current Codogma editor implements; the compatibility contract is covered by a test that compares all 59 tool names from `phaserjs/editor-mcp-server` v1.0.6 with the engine registry. Codogma-specific project/file operations remain additive. Scene creation must preserve editor-specific serialized properties for Sprite, TileSprite, NineSlice, ThreeSlice, Text, BitmapText, shapes, ParticleEmitter, Video and SpineGameObject. ParticleEmitter operation objects must be translated to the editor's discriminated property-set representation rather than stored as an ignored nested config. Shape stroke fields and HitArea data must round-trip into the editor's dotted component properties. Legacy upstream Arcade.active/body.* argument names must normalize to the current ArcadeComponent.active, physicsType, bodyGeometry and component property keys; enable/disable operations must reject object types without ArcadeComponent support. HitArea and shape stroke properties (isStroked, strokeColor, strokeAlpha, lineWidth) must persist using their current dotted/component serialization names.
+
+The engine-side catalog includes scene, game-object, plain-object, Prefab, editable-tilemap, Arcade Physics, filter, object-list, asset-pack, Spine, Google Fonts and project-file operations. Spine support includes serializing `SpineGameObject` configuration (skeleton/atlas keys, skin, bounds-provider settings, animation mixes, default mix and time scale) and the `assets-get-spine-skin-image` PNG preview. The preview is rendered inside the active browser editor via SSE; a green headless package test does not constitute visual renderer acceptance.
+
+The adapter preserves the engine's JSON Schemas without converting them to a second schema model, compiles each advertised schema with Ajv and validates stdio `tools/call` arguments before forwarding. The engine remains authoritative for tool definitions, system instructions, editor-state operations and project-file security. The old WebSocket mini-service and editor configuration/log dialogs are retained as a separate legacy compatibility path; the new adapter does not depend on that port or service.
+
 #### Core package
 
 - Целевое имя публичного ядра — `@codogma/cge`; его исходный корень в монорепозитории — `packages/cge/`.
@@ -977,3 +985,6 @@ CI Fast сейчас не выполняет весь перечисленный
 ---
 
 **Ключевой принцип ТЗ:** Codogma должен постепенно перейти от текущей IDE к целостной среде Web-first 2D-разработки, где проектные данные, TypeScript API, игровой runtime, живой Inspector, сборка и платформенные adapters согласованы между собой. Новая архитектура должна проверяться на реальных проектах, а не считаться успешной только потому, что код компилируется.
+
+
+The get-system-instructions tool is part of the MCP compatibility contract. It must document the Codogma-specific workflows and constraints for scene/object editing, plain objects, Tiled versus editable tilemaps, prefabs and nested instances, object lists, supported Phaser 4 filters, Arcade-capable object types and field normalization, assets/Google Fonts, project-file restrictions, and UI-dependent SSE tools. Changes to the tool catalogue must update this guidance and its package assertions in the same change.
