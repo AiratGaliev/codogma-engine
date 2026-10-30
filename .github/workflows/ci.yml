@@ -32,6 +32,8 @@ jobs:
             package-lock.json
             source/editor/package-lock.json
             packages/localization/package-lock.json
+            mini-services/ai-chat/package-lock.json
+            mini-services/phaser-editor-mcp/package-lock.json
 
       - name: Validate pull request routing
         if: github.event_name == 'pull_request'
@@ -110,6 +112,22 @@ jobs:
 
       - name: Security smoke tests (local access, symlinks, MCP compatibility)
         run: npm run test:security
+
+      - name: Install locked AI Chat service dependencies
+        run: npm ci
+        working-directory: mini-services/ai-chat
+
+      - name: Audit AI Chat service dependencies
+        run: npm audit --audit-level=low
+        working-directory: mini-services/ai-chat
+
+      - name: Install locked MCP bridge service dependencies
+        run: npm ci
+        working-directory: mini-services/phaser-editor-mcp
+
+      - name: Audit MCP bridge service dependencies
+        run: npm audit --audit-level=low
+        working-directory: mini-services/phaser-editor-mcp
 
       - name: Mini-services security tests (loopback, Host/Origin, limits and WebSocket)
         run: npm run test:mini-services
