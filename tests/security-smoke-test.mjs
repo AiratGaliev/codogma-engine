@@ -69,13 +69,17 @@ async function stopChild(child) {
 }
 
 function createMcpClient(bridgePort, projectDir) {
-    const child = spawn(process.execPath, [path.join(ROOT, "server", "mcp-launcher.mjs")], {
+    // Keep this smoke test focused on the legacy official package + port-1902
+    // bridge contract. The primary launcher is now covered by the Codogma
+    // package's own stdio/HTTP contract tests and the promotion MCP E2E.
+    const officialServer = path.join(ROOT, "node_modules", "@phaserjs", "editor-mcp-server", "build", "index.js")
+    const child = spawn(process.execPath, [officialServer], {
         cwd: ROOT,
         env: {
             ...process.env,
             PROJECT_DIR: projectDir,
-            MCP_BRIDGE_PORT: String(bridgePort),
-            MCP_BRIDGE_HOST: "127.0.0.1"
+            "phaser-editor-mcp-port": String(bridgePort),
+            "phaser-editor-mcp-hostname": "127.0.0.1"
         },
         stdio: ["pipe", "pipe", "pipe"]
     })
