@@ -36,9 +36,12 @@ MCP robustness, and regression suites for every defect found along the way.
   built-in stdio server when the bridge is served by another process or has
   no connected editor — external MCP hosts keep working in any deployment
   (1e7f9d4).
-* Extended MCP e2e: JSON Schema validity of all 66 tools under the forced Zod
-  4.6.7 override, malformed-argument rejection without killing the server,
-  and post-failure liveness (1e7f9d4).
+* Extended MCP contract coverage: all 58 upstream Phaser MCP tool names are
+  checked against the Codogma registry; every engine JSON Schema is compiled
+  with Ajv; invalid nested/alternative arguments are rejected before forwarding;
+  image content blocks are preserved. Spine skin previews use the existing
+  editor thumbnail renderer through the SSE bridge. The new package tests also
+  verify SpineGameObject configuration survives scene serialization.
 * Fix: reverse-proxy Host allow-list and Origin guard for gateways that
   rewrite headers (0545a29, fb03067); guarded `/archive/` snapshot route
   (1094f1c).

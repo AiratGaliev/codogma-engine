@@ -34,7 +34,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.4.0"
+    "@modelcontextprotocol/server": "2.4.0",
+    "ajv": "8.20.0"
   },
   "devDependencies": {
     "@types/node": "22.18.0",

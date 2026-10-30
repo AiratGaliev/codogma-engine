@@ -256,7 +256,9 @@ function buildObjectJson(type, props, doc) {
         "letterSpacing", "displayWidth", "displayHeight", "width", "height",
         "radius", "isFilled", "fillColor", "fillAlpha", "strokeColor", "strokeAlpha", "strokeWidth",
         "list", "scrollFactorX", "scrollFactorY",
-        "dataKey", "atlasKey", "skeleton", "skin", "animation", "boundsProviderType"
+        "dataKey", "atlasKey", "skinName", "bpType", "bpSkin", "bpAnimation", "bpTimeStep",
+        "animationMixes", "defaultMix", "timeScale",
+        "skeleton", "skin", "animation", "boundsProviderType"
     ]
     for (const k of copyKeys) {
         if (props[k] !== undefined) obj[k] = props[k]
@@ -915,9 +917,11 @@ defTool(
             texture: {
                 type: "object",
                 properties: { key: { type: "string" }, frame: { description: "Optional frame." } },
+                required: ["key"],
                 description: "Alternative official shape: { texture: { key, frame } }."
             }
-        }
+        },
+        anyOf: [{ required: ["key"] }, { required: ["texture"] }]
     },
     async (args) => {
         const key = textureKeyOf(args)
@@ -1161,7 +1165,7 @@ const SYSTEM_INSTRUCTIONS = `You are a game development assistant specialized in
 
 Scenes are JSON files (\`.scene\`) with an \`id\`, \`settings\` (\`sceneKey\`), a \`displayList\` of game objects, and \`plainObjects\`. Each object has a unique \`id\`, a \`type\`, a \`label\` (valid JS identifier, unique in the scene) and flat properties (dotted names allowed for component properties, e.g. \`body.velocity.x\`).
 
-Game object types: Image, Sprite, Text, BitmapText, Container, Layer, TileSprite, NineSlice, Rectangle, Ellipse, Triangle, ParticleEmitter, Tilemap, TilemapLayer, ScriptNode.
+Game object types: Image, Sprite, Text, BitmapText, Container, Layer, TileSprite, NineSlice, ThreeSlice, Rectangle, Ellipse, Triangle, Polygon, ParticleEmitter, Tilemap, TilemapLayer, ScriptNode, SpineGameObject.
 
 Common properties (all optional unless noted):
 
@@ -1202,6 +1206,17 @@ Workflow for creating content:
 4. \`scene-get-scene-data\` / \`scene-get-screenshot\` to verify the result.
 5. Modify game code (\`project-read-file\` + \`project-write-file\`) to register scenes in the game entry (main.ts / game.js: \`game.scene.add("MyScene", MyScene)\`), load the asset pack in a Boot scene, and add gameplay code.
 6. \`ide-open-scene\` to show the result to the user in the editor.
+
+## Spine assets and game objects
+
+Use these tools in order when working with Spine assets:
+1. `assets-get-available-spine-skeletons` and `assets-get-available-spine-atlases` to discover the exact skeleton and atlas keys.
+2. `assets-get-spine-skeleton-info` to inspect skins and animations when the skeleton is JSON. Binary `.skel` assets are loaded by the editor runtime; this file parser does not enumerate their metadata.
+3. `assets-get-spine-skin-image` to render a PNG preview for an exact `dataKey`, `atlasKey`, `skinName` and `animationName`. This tool requires the browser editor page and its SSE MCP bridge to be connected.
+4. Add a scene object with `scene-add-game-objects`, type `SpineGameObject` and `properties.dataKey` / `properties.atlasKey`. Optional properties include `skinName`, `bpType`, `bpSkin`, `bpAnimation`, `bpTimeStep`, `animationMixes`, `defaultMix` and `timeScale`.
+5. Use `scene-get-scene-data` to verify the serialized Spine configuration. The editor renderer is required for visual preview.
+
+`bpType` is 0 (`SETUP_TYPE`) or 1 (`SKINS_AND_ANIMATION`). `bpSkin` is 0 (`ALL_SKINS`) or 1 (`CURRENT_SKIN`). `animationMixes` is an array of `[fromAnimation, toAnimation, durationSeconds]` tuples.
 
 ## Editable tilemaps (v5)
 
@@ -2018,9 +2033,6 @@ defTool(
     }
 )
 
-notSupported("assets-get-spine-skin-image",
-    "rendering a Spine skin requires the editor UI renderer (open the spine asset in the editor to preview it)")
-
 defTool(
     "ide-create-new-prefab-scene",
     "Create a new prefab scene file (an empty prefab: a reusable game-object class). Add the prefab root object right after with scene-add-game-objects (the first added object becomes the prefab object).",
@@ -2577,8 +2589,14 @@ defTool(
         type: "object",
         properties: {
             key: { type: "string", description: "The key of the texture." },
-            texture: { type: "object", properties: { key: { type: "string" } }, description: "Alternative official shape." }
-        }
+            texture: {
+                type: "object",
+                properties: { key: { type: "string" } },
+                required: ["key"],
+                description: "Alternative official shape."
+            }
+        },
+        anyOf: [{ required: ["key"] }, { required: ["texture"] }]
     },
     async (args) => {
         const key = textureKeyOf(args)
@@ -2694,6 +2712,22 @@ defTool(
             skins, animations: Object.keys(data.animations || {})
         }, null, 2))
     }
+)
+
+defTool(
+    "assets-get-spine-skin-image",
+    "Get a PNG preview of a Spine skin and animation from the selected skeleton and atlas.",
+    {
+        type: "object",
+        properties: {
+            dataKey: { type: "string", description: "The key of the Spine skeleton asset." },
+            atlasKey: { type: "string", description: "The key of the Spine atlas asset." },
+            skinName: { type: "string", description: "The exact Spine skin name." },
+            animationName: { type: "string", description: "The exact Spine animation name." }
+        },
+        required: ["dataKey", "atlasKey", "skinName", "animationName"]
+    },
+    async (args) => forwardToEditor("assets-get-spine-skin-image", args)
 )
 
 defTool(

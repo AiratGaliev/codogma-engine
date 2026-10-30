@@ -28,7 +28,7 @@ This package is deliberately an adapter, not a second implementation of editor t
 
 - It requests `tools/list` from the engine and exposes the returned schemas without rebuilding or translating them.
 - It forwards `tools/call` arguments and returns the engine's MCP content blocks, including images.
-- The engine remains the source of truth for tool registration, argument validation, editor state and project-file security.
+- The engine remains the source of truth for tool registration, schemas, instructions, editor state and project-file security. The stdio adapter compiles every advertised JSON Schema with Ajv and validates arguments before forwarding; the engine still enforces operation-specific runtime and filesystem constraints.
 - `get-system-instructions` remains an engine-owned tool. The engine's initialization instructions are passed through to the stdio server.
 - The tool list is read when this process starts. Restart the MCP process after updating the engine or its tool registry.
 
@@ -113,6 +113,6 @@ Requests are limited to 32 MiB and responses to 64 MiB. Diagnostics go to stderr
 
 - This adapter uses the official `@modelcontextprotocol/server` SDK and the low-level `Server` API because the engine already owns complete JSON Schemas. Returning these schemas unchanged avoids a second schema registry or lossy schema conversion.
 - The engine currently serves a stateless JSON-RPC MCP endpoint. This package performs the engine-side initialize handshake before exposing its own stdio transport.
-- Invalid tool arguments and editor/runtime errors are validated and reported by the engine's actual tool handlers; this adapter does not attempt to reimplement them.
+- Invalid tool arguments are rejected by the adapter's Ajv validation against the unmodified engine JSON Schemas before they reach the engine. Editor/runtime and project-file errors are still reported by the engine's actual tool handlers.
 - The legacy `server/mcp-stdio.mjs` remains as a dependency-free fallback. The old `mini-services/phaser-editor-mcp` WebSocket bridge is retained for legacy editor-side compatibility and security testing; this new package does not depend on it.
 - This package does not install dependencies into game projects and is not a Core/runtime package. It is editor/developer tooling and must stay out of production game bundles.

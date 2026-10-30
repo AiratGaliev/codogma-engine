@@ -1,5 +1,5 @@
 /**
- * Проверка MCP stdio через официальный @phaserjs/editor-mcp-server и мост Codogma Engine.
+ * Проверка MCP stdio через @codogma/editor-mcp-server и HTTP MCP endpoint Codogma Engine.
  *
  * По умолчанию проверяются протокол и инструменты, работающие на стороне сервера.
  * Для проверки скриншотов и открытия сцены нужен подключённый браузер редактора:
@@ -36,7 +36,7 @@ child.stdout.on("data", (chunk) => {
                 pending.delete(msg.id)
             }
         } catch {
-            // Официальный MCP-сервер может писать диагностические строки в stdout.
+            // Игнорируем не-JSON строки: MCP diagnostics должны идти в stderr.
         }
     }
 })
@@ -110,19 +110,19 @@ async function main() {
         "ide-create-new-scene",
         "scene-add-game-objects",
         "ide-get-all-prefabs-in-project",
-        "assets-get-texture-size"
+        "assets-get-texture-size",
+        "assets-get-spine-skin-image"
     ]
     for (const name of requiredTools) {
         assert.ok(toolNames.includes(name), `В MCP не найден обязательный инструмент: ${name}`)
     }
     console.log(`\n== tools/list == ${toolNames.length} tools`)
 
-    // --- расширенная проверка совместимости Zod 4 / tool-schema (P0 follow-up) ---
-    // Официальный пакет собран под zod ^3, проект форсирует zod 4.6.7 (overrides).
-    // Проверяем, что при Zod 4 каждая схема инструмента остаётся валидным
-    // JSON Schema, ошибки валидации не роняют сервер, а контракт результата
-    // tools/call (content: array) соблюдается на живых вызовах ниже.
-    console.log("\n== tool input schemas (Zod 4 -> JSON Schema) ==")
+    // --- engine JSON Schema / stdio adapter contract ---
+    // Package contract tests compile every real registry schema with Ajv and
+    // exercise nested, alternative and required argument validation. Here we
+    // check the live MCP surface and content-array responses on the real engine.
+    console.log("\n== tool input schemas (JSON Schema) ==")
     for (const tool of list.result.tools) {
         const schema = tool.inputSchema
         assert.ok(schema && typeof schema === "object" && !Array.isArray(schema),
@@ -140,7 +140,7 @@ async function main() {
             }
         }
     }
-    console.log(`${list.result.tools.length} tools: схемы валидны при Zod 4`)
+    console.log(`${list.result.tools.length} tools: JSON Schema contracts exposed`)
 
     console.log("\n== validation rejects malformed arguments without killing the server ==")
     // 1) неверный тип значения (Zod invalid_type)

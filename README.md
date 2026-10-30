@@ -159,7 +159,7 @@ For a typical local code change:
 
 ### MCP integration tests
 
-The standard test command checks MCP initialization and required tool registration, queries scenes, creates a temporary scene, adds objects, exercises prefab/asset tools and verifies that a texture size can be read. It removes the generated test scene during cleanup.
+The standard test command checks MCP initialization and tool registration (including the upstream Spine skin-image tool), queries scenes, creates a temporary scene, adds objects, exercises prefab/asset tools and verifies that a texture size can be read. The package contract suite also compares the full upstream tool-name set, compiles every real engine JSON Schema and checks nested/alternative argument validation plus image-content forwarding. The generated test scene is removed during cleanup. The Spine image renderer itself remains a browser/SSE acceptance path, not part of the default headless E2E.
 
 Terminal 1:
 
@@ -495,10 +495,10 @@ Run <code>npm run build</code> from the repository root or <code>npm run watch</
 
 ### MCP tools cannot connect
 
-- Start the editor server before starting an MCP client.
-- Confirm that the server's MCP bridge port and the client's <code>phaser-editor-mcp-port</code> agree (default <code>1902</code>).
-- Check whether the bridge port is already occupied.
-- For tools that require UI state, open the editor page and wait for the editor-side connection.
+- Start the Codogma Engine HTTP server before starting an MCP client.
+- Confirm that <code>CODOGMA_MCP_URL</code> points to the exact loopback endpoint <code>http://127.0.0.1:3000/editor/mcp</code> (adjust the port when the engine HTTP server uses a non-default port).
+- For active-scene, screenshot, tile-selection and Spine image-preview tools, open the editor page and wait for the SSE MCP bridge connection.
+- The <code>phaser-editor-mcp-port</code> setting and port <code>1902</code> belong only to the retained legacy WebSocket bridge; the new stdio adapter does not use them.
 
 ### MCP E2E fails
 

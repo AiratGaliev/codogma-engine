@@ -751,6 +751,14 @@ Acceptance: новый engine module не принимается без strict t
 
 **Нормативное направление:** исходники самостоятельных пакетов Codogma развиваются в монорепозитории в стиле EVA.js. npm и npm Workspaces предоставляют стандартный механизм зависимостей и совместной разработки. Unity Package Manager служит ориентиром пользовательского workflow и жизненного цикла пакетов; Codogma не копирует его формат пакетов и не реализует альтернативный npm resolver. Подробные решения фиксируются в [ADR-0003](decisions/ADR-0003-package-architecture-and-management.md).
 
+#### Existing editor MCP tooling package
+
+The current implementation includes a standalone private package `@codogma/editor-mcp-server` at `packages/editor-mcp-server/`. It is an stdio adapter to the engine-owned `POST /editor/mcp` registry, not a second tool implementation or a copy of the Phaser package. It must preserve every upstream tool name and the capabilities that the current Codogma editor implements; the compatibility contract is covered by a test that compares all 58 tool names from `phaserjs/editor-mcp-server` v1.0.6 with the engine registry. Codogma-specific project/file operations remain additive.
+
+The engine-side catalog includes scene, game-object, plain-object, Prefab, editable-tilemap, Arcade Physics, filter, object-list, asset-pack, Spine, Google Fonts and project-file operations. Spine support includes serializing `SpineGameObject` configuration (skeleton/atlas keys, skin, bounds-provider settings, animation mixes, default mix and time scale) and the `assets-get-spine-skin-image` PNG preview. The preview is rendered inside the active browser editor via SSE; a green headless package test does not constitute visual renderer acceptance.
+
+The adapter preserves the engine's JSON Schemas without converting them to a second schema model, compiles each advertised schema with Ajv and validates stdio `tools/call` arguments before forwarding. The engine remains authoritative for tool definitions, system instructions, editor-state operations and project-file security. The old WebSocket mini-service and editor configuration/log dialogs are retained as a separate legacy compatibility path; the new adapter does not depend on that port or service.
+
 #### Core package
 
 - Целевое имя публичного ядра — `@codogma/cge`; его исходный корень в монорепозитории — `packages/cge/`.

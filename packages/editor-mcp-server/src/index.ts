@@ -1,4 +1,5 @@
 import { Server } from "@modelcontextprotocol/server";
+import Ajv, { type AnySchema, type ValidateFunction } from "ajv";
 import type { CallToolResult, ListToolsResult, ServerOptions, Tool } from "@modelcontextprotocol/server";
 
 export const MCP_SERVER_NAME = "codogma-editor-mcp-server";
@@ -7,6 +8,7 @@ export const DEFAULT_ENGINE_MCP_URL = "http://127.0.0.1:3000/editor/mcp";
 
 const MAX_REQUEST_BYTES = 32 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+const ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: false, useDefaults: false, removeAdditional: false, validateFormats: false });
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 120_000;
@@ -319,7 +321,18 @@ export async function createCodogmaMcpServer(
 
     const initialize = await bridge.initialize();
     const tools = await bridge.listTools();
-    const toolNames = new Set(tools.map(tool => tool.name));
+    const validators = new Map<string, ValidateFunction>();
+
+    for (const tool of tools) {
+        try {
+            validators.set(tool.name, ajv.compile(tool.inputSchema as AnySchema));
+        } catch (error) {
+            throw new Error(
+                `Codogma MCP tool '${tool.name}' exposes an unsupported JSON Schema: ${errorMessage(error)}`,
+                { cause: error }
+            );
+        }
+    }
 
     const serverOptions: ServerOptions = {
         capabilities: {
@@ -341,13 +354,24 @@ export async function createCodogmaMcpServer(
 
     server.setRequestHandler("tools/call", async (request): Promise<CallToolResult> => {
         const name = request.params.name;
-        if (!toolNames.has(name)) {
+        const validate = validators.get(name);
+        if (!validate) {
             return toolError(`Unknown Codogma Engine tool: ${name}`);
         }
 
         const args = request.params.arguments ?? {};
         if (!isRecord(args)) {
             return toolError(`Arguments for '${name}' must be a JSON object.`);
+        }
+
+        if (!validate(args)) {
+            const issues = (validate.errors ?? []).map(error => {
+                const location = error.instancePath || "/";
+                return `- [path=${location}] [${error.keyword}]: ${error.message ?? "invalid value"}`;
+            }).join("\n");
+            return toolError(
+                `Tool '${name}' validation error:\n${issues}\nPlease correct the arguments and try again.`
+            );
         }
 
         try {
