@@ -20,7 +20,6 @@ import {
 
 /** One localization table file of a project, as read from disk or network. */
 export interface LocalizationSourceFile {
-
     /** Project-relative path, e.g. `locale/en-US.json`; kept in diagnostics. */
     path: string;
 
@@ -30,7 +29,6 @@ export interface LocalizationSourceFile {
 
 /** Result of the project-level localization check. */
 export interface LocalizationProjectValidationResult {
-
     /** All parse and cross-locale diagnostics. */
     diagnostics: LocalizationDiagnostic[];
 
@@ -42,12 +40,10 @@ export function validateLocalizationSources(
     files: readonly LocalizationSourceFile[],
     options: ValidateLocalizationProjectOptions = {}
 ): LocalizationProjectValidationResult {
-
     const diagnostics: LocalizationDiagnostic[] = [];
     const tables: LocalizationProjectTable[] = [];
 
     for (const file of files) {
-
         const parsed = parseLocalizationTable(file.text, file.path);
 
         diagnostics.push(...parsed.diagnostics);
