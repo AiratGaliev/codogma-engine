@@ -12,7 +12,7 @@ The current implementation provides a browser-based authoring environment, a loc
 
 ## Project direction
 
-Codogma is being developed as its own engine. For the next major implementation stage, the priority is to modernize the existing editor and its source code in place: improve the visual system and workspace, strengthen core 2D authoring workflows, and prove runtime behaviour with focused tests. Unity 6 and Cocos Creator 4.0 are references for editor UX and common 2D workflows, not a promise to reproduce every feature or rewrite the current codebase. New Core/runtime architecture is developed in staged, independently testable slices and must not displace improvements that can be safely made in the existing editor.
+Codogma is being developed as its own engine. The current browser editor is the legacy Colibri-based client under `source/editor/`. The selected target is an independent **SolidJS + TypeScript/TSX Editor Host** styled with Tailwind CSS 4. This is a direct implementation decision, not a framework PoC or a claim that the new editor already exists. The new Unity-like Workbench will be built in `src/editor/`; the legacy client remains under `source/editor/` during the transition so existing workflows stay available. The UI migration does not rewrite the Phaser runtime, server APIs, project formats or code generation. See [Editor UI migration plan](docs/editor-ui-migration.md) and [ADR-0005](docs/decisions/ADR-0005-solidjs-editor-host.md).
 
 Development priorities:
 
@@ -121,7 +121,8 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses the engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
 | <code>mini-services/phaser-editor-mcp/</code> | Legacy HTTP/WebSocket bridge retained for existing editor-side MCP workflows; not used by the new package. |
 | <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and MCP compatibility. |
-| <code>source/editor/</code> | Browser-based editor client, TypeScript sources, plugins, assets, product metadata and client build configuration. |
+| <code>source/editor/</code> | Legacy Colibri-based browser editor client, TypeScript sources, plugins, assets, product metadata and client build configuration; retained only during the staged migration. |
+| <code>src/editor/</code> | **Planned, not present yet:** independent SolidJS + TypeScript/TSX Editor Host and Tailwind CSS 4 UI. This becomes the primary client after staged migration and cutover. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
 | <code>tests/workspace/test-typescript/</code> | Default fixture project for development and CI. |
@@ -131,7 +132,9 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>BUILD.md</code> | Additional build notes. |
 | <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
 
-**Package source layout:** the first standalone tooling package now follows the TЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root/editor/local package boundaries and lockfiles remain separate. The planned Editor Host move from `source/editor/` to `src/editor/`, npm Workspaces migration, Feature/Capability Registry and versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
+**Package source layout:** the first standalone tooling package follows the ТЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root/editor/local package boundaries and lockfiles remain separate. The SolidJS Editor Host is a new application under `src/editor/`, not a mechanical move of the legacy tree. The Colibri client stays under `source/editor/` during migration and is removed only after cutover acceptance. npm Workspaces, Feature/Capability Registry and a public/versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
+
+**SolidJS frontend model:** the new Host uses JSX/TSX and fine-grained reactivity. Solid compiles JSX into DOM operations and updates nodes that depend on changed signals/stores; it does not use Virtual DOM reconciliation. Its JSX is familiar to React developers, but its component execution and reactive-state model are different: components are not re-rendered as React function components on each state update. Use Solid primitives such as `createSignal`, `createMemo`, `createStore`, `createEffect` and `onCleanup`, and the `vite-plugin-solid` integration rather than copying React Hooks patterns.
 
 ## Daily development commands
 
@@ -186,6 +189,23 @@ The current implementation has three main runtime areas:
 3. **Game project/runtime** — the editable project is selected by <code>PROJECT_DIR</code>. The editor integrates with Phaser 4.2.1 and generates game code; the game project's runtime dependencies still need to be appropriate for the code it uses.
 
 The server also integrates with the optional AI Chat backend. That backend is a separate service and can be run independently.
+
+### Transitional dual-editor development
+
+During the migration, the two UIs run as separate browser applications:
+
+| UI host | Development address | Role |
+|---|---|---|
+| Legacy Colibri editor | `http://127.0.0.1:3000/editor/` | Existing client served by the Node.js backend |
+| New SolidJS Editor Host | `http://127.0.0.1:5173/` | Independent Vite dev server; configurable port with strict-port behaviour |
+
+The intended development topology is **two UI hosts, one backend API**. The Vite server proxies the existing `/editor/*` project/API routes to the Node.js server on port 3000; browser code should call relative proxied paths rather than making direct cross-origin requests to the backend. The Node server supports an exact Origin allow-list: configure only `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173` for the Vite origin. Do not use `*`, do not bind either development server to a public interface, and keep the backend's loopback and Host protections enabled. The Vite port is not the Node server's `PORT` variable.
+
+Both clients may be open for visual comparison, but **do not edit the same project from both clients at the same time**. They maintain independent in-browser state, selection, undo histories and caches; the current project-file API does not provide a cross-client editing lock or conflict-resolution protocol. Use one writer at a time, or separate fixture/project copies and independent backend instances for write acceptance.
+
+The current MCP editor SSE bridge also broadcasts commands to every connected editor client and accepts the first matching result. Until the bridge becomes session-aware, only one UI may own that SSE connection. Initially the legacy client remains the MCP SSE owner; the new UI must not attach to the same bridge. This restriction is separate from HTTP MCP tools that do not need a live editor session.
+
+The two-port arrangement is a development/transition setup, not a permanent production requirement. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the legacy route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
 
 ### HTTP endpoints
 
