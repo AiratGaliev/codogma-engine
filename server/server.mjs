@@ -38,7 +38,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -521,30 +521,19 @@ async function handleAPI(req, res) {
             case "CreateFolder": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
-                const realBase = realBaseOrNull()
-                let existed = false
-                try {
-                    existed = fs.lstatSync(full).isDirectory()
-                } catch (e) {
-                    if (e.code !== "ENOENT") return apiError(res, "invalid path")
-                }
-                if (existed) {
-                    // mkdir(recursive) is a no-op for existing folders, but the
-                    // pre-existing path must still resolve inside the project.
-                    try {
-                        if (!realBase || !isInsideBase(realBase, fs.realpathSync(full))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
+
+                // Read metadata from the verified directory descriptor. A
+                // second fsp.stat(pathname) here would reopen a race window
+                // after the descriptor-anchored validation/creation.
+                let st = statProjectDirectorySafelySync(PROJECT_DIR, full)
+                if (!st) {
+                    if (!await ensureProjectDirectorySafely(PROJECT_DIR, full)) {
                         return apiError(res, "invalid path")
                     }
-                    const st = await fsp.stat(full)
-                    return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
+                    st = statProjectDirectorySafelySync(PROJECT_DIR, full)
                 }
-                if (!await ensureProjectDirectorySafely(PROJECT_DIR, full)) {
-                    return apiError(res, "invalid path")
-                }
-                const st = await fsp.stat(full)
+
+                if (!st || !st.isDirectory()) return apiError(res, "invalid path")
                 return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
             }
 
