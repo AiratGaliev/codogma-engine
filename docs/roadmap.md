@@ -53,7 +53,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 - Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и всех legacy project configs. Эти сведения пополняются по мере работы и до публикации/массовой архитектурной миграции; они не должны задерживать изолированную исправимую задачу.
 - Реализация нового Project Model/Core, runtime adapter или оптимизированного ECS. Это следующий архитектурный поток, а не предусловие для каждой правки текущего Scene Editor, Inspector или Asset Pack.
-- Перенос `source/editor` → `src/editor` и npm Workspaces. Они потребуют отдельного миграционного PR до тесной интеграции Editor Host с новыми packages, но не нужны для первой серии UX/bug fixes на текущих путях.
+- Создание нового Svelte Editor Host в `src/editor/` и последующее удаление legacy Colibri client из `source/editor/` — отдельная staged UI migration по `docs/editor-ui-migration.md`; это не механическое перемещение старого дерева. npm Workspaces остаются отдельной инфраструктурной миграцией.
 - Полное решение о Svelte. PoC необходимо, чтобы принять архитектурное решение; до результата можно и нужно улучшать текущий UI без необратимой переписи.
 - Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
 - Tauri, замена Phaser на PixiJS, второй ECS/runtime, дополнительные physics backends и public package registry. Они не входят в основной scope этого этапа.
@@ -160,7 +160,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 2. **Ввести необходимые quality checks в изменяемом scope:** clean install, TypeScript build, targeted tests, ESLint/Prettier для нового/изменяемого Codogma-owned кода; Knip/dependency-cruiser сначала работают в report mode. Не ломать массово legacy Colibri.
 3. **Пополнять матрицы по evidence:** фиксировать, что реализовано, что исправлено, какие тесты прошли и что осталось непроверенным. Документация обновляется вместе с соответствующим кодом и не заменяет его.
 4. **Оформлять архитектурные решения по необходимости:** strict toolchain pilot, Core contracts и migration plans нужны для новых модулей и тесной интеграции; они не являются gate для независимых UI/bug fixes существующего редактора.
-5. **Отдельный gate перед тесной интеграцией нового Core:** принять ADR-0001/0002, пройти toolchain pilot и contract tests. Перенос `source/editor` → `src/editor` и npm Workspaces выполнять отдельными проверяемыми миграционными PR до интеграции в общий Editor Host; не объединять миграцию с массовым рефакторингом.
+5. **Отдельный gate перед тесной интеграцией нового Core:** принять ADR-0001/0002, пройти toolchain pilot и contract tests. Создание нового Svelte Editor Host в `src/editor/`, staged replacement Colibri и npm Workspaces выполнять отдельными проверяемыми миграционными PR; не объединять UI migration с массовым Core/refactor изменением.
 
 ### Задачи
 
