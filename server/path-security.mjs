@@ -1027,3 +1027,93 @@ export async function copyProjectEntrySafely(base, fromTarget, toTarget) {
         return false
     }
 }
+
+/**
+ * Return metadata for the directory object selected by the kernel, not by a
+ * second pathname lookup after validation. The descriptor remains the object
+ * of record if the directory pathname is concurrently replaced.
+ */
+export function statProjectDirectorySafelySync(base, target) {
+    const opened = openSafeProjectDirectorySync(base, target)
+    if (!opened) return null
+
+    try {
+        return fs.fstatSync(opened.fd)
+    } catch {
+        return null
+    } finally {
+        try { fs.closeSync(opened.fd) } catch {}
+    }
+}
+
+/**
+ * Create a new project file without replacing an existing entry.
+ *
+ * The parent is opened and verified first. On Linux, O_EXCL creation is
+ * anchored to that directory descriptor through /proc/self/fd, so a parent
+ * pathname swap cannot redirect the create to an outside symlink. Existing
+ * files are never truncated by this operation.
+ */
+export function writeNewFileSafely(base, target, content) {
+    if (typeof target !== "string") return false
+
+    const lexicalBase = path.resolve(base)
+    const full = path.resolve(target)
+    if (!isInsideBase(lexicalBase, full) || full === lexicalBase) return false
+
+    const parentPath = path.dirname(full)
+    const leaf = path.basename(full)
+    if (!leaf || leaf === "." || leaf === ".." || leaf.includes(path.sep)) return false
+
+    const parent = openSafeProjectDirectorySync(base, parentPath)
+    if (!parent) return false
+
+    const operationPath = entryPathAtDirectoryHandle(parent, parentPath, leaf)
+    let fd
+    let created = false
+    let written = false
+
+    try {
+        const flags = fs.constants.O_WRONLY
+            | fs.constants.O_CREAT
+            | fs.constants.O_EXCL
+            | (fs.constants.O_NOFOLLOW ?? 0)
+
+        fd = fs.openSync(operationPath, flags, 0o666)
+        created = true
+
+        if (!isSafeOpenFileHandle(base, full, fd)
+            || !isSafeOpenProjectDirectory(base, parentPath, parent.fd)) {
+            return false
+        }
+
+        fs.writeFileSync(fd, content)
+        written = true
+        return true
+    } catch {
+        return false
+    } finally {
+        // Remove only the inode created by this call. The path is still
+        // anchored to the opened parent on Linux; lstat prevents unlinking a
+        // replacement symlink or another process' replacement file.
+        if (created && !written && fd !== undefined) {
+            try {
+                const opened = fs.fstatSync(fd)
+                const entry = fs.lstatSync(operationPath)
+                if (!entry.isSymbolicLink()
+                    && entry.isFile()
+                    && entry.dev === opened.dev
+                    && entry.ino === opened.ino) {
+                    fs.unlinkSync(operationPath)
+                }
+            } catch {
+                // Best-effort cleanup; never follow a replacement symlink.
+            }
+        }
+
+        if (fd !== undefined) {
+            try { fs.closeSync(fd) } catch {}
+        }
+        try { fs.closeSync(parent.fd) } catch {}
+    }
+}
