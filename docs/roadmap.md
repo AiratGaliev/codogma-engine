@@ -13,8 +13,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 | Очередь | Рабочий пакет | Приоритет | Измеримый результат / правило |
 |---|---|---|---|
 | 1 | Инженерная база для изменений существующего редактора | **P0 — сразу** | Clean install, воспроизводимые build/typecheck, тесты для затрагиваемого кода, нужные lint/format checks в ограниченном scope. Не вводить массовый строгий gate для всего legacy-дерева. |
-| 2 | Этап 5: визуальная модернизация Editor UX/UI | **P0 — основной видимый результат** | Согласованные панели, toolbar, иерархия, Inspector, assets/workspace, визуальная плотность, типографика, состояния и темы; редактор воспринимается как цельная IDE, а не набор разрозненных legacy-панелей. |
-| 3 | Этап 5: стабилизация основных 2D authoring workflows | **P0 — основной функциональный результат** | Scene/Hierarchy/Transform, selection, Inspector/components, сохранение и повторное открытие, Undo/Redo, Prefabs, Asset Pack и существующие инструменты проходят адресные acceptance-проверки. Улучшать текущую реализацию до замены архитектуры. |
+| 2 | Поддержка legacy UI на период migration | **P0 — ограниченный compatibility scope** | Поддерживать Colibri editor в запускаемом состоянии и исправлять критичные регрессии, необходимые до cutover. Не расширять legacy UI новыми крупными UX/features, если их целевая реализация должна попасть в Svelte Host. |
+| 3 | Svelte Editor Host: первый функциональный vertical slice | **P1 — основной migration gate** | Новый Host открывает реальный project/scene, показывает Phaser Canvas, Hierarchy, selection, Transform и Inspector; create/edit/save/reopen/Undo/Redo сохраняют прежнюю data semantics. После этого можно масштабировать перенос инструментов. |
 | 4 | Этап 5: runtime acceptance и регрессии PR #10 | **P0 — подтверждение качества** | FX Circle/Bloom/Gradient/Shine, Box2D, Asset Pack/importers и codegen проверены в реальном browser/runtime; дефекты исправлены, regression tests добавлены. Зелёная сборка сама по себе недостаточна. |
 | 5 | Security residuals для файловых операций и optional mini-services | **P0 для соответствующих API/сервисов** | Reads/content writes уже используют проверенные file descriptors; Linux directory create/delete/rename/list/copy и exclusive MCP scene/Prefab create привязаны к открытым directory descriptors. Residual остаётся для non-Linux pathname-based mutation fallback и перемещения уже открытого каталога наружу после проверки. Standalone MCP/AI Chat остаются loopback-only без общей authentication; non-loopback/public exposure запрещена до отдельной auth design и service-level tests. |
 | 6 | Этап 1: адресное исследование и toolchain migration | **P0 — непрерывно** | Матрицы обновляются по мере реальной проверки; ESLint/Prettier/tests применяются к новому и изменяемому Codogma-owned scope. Полная инвентаризация всего legacy не блокирует исправление подтверждённого дефекта. |
@@ -31,36 +31,36 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### Можно начинать сейчас
 
-- **Сразу переходить к изменениям кода существующего редактора.** Матрица возможностей и архитектурные документы уже дают достаточную исходную точку. Дополнять их по мере реализации и проверок, а не превращать их полное заполнение в отдельный большой этап перед первой правкой.
-- **Первым потоком делать инженерную надёжность и UX/UI редактора:** необходимые проверки в существующих package roots, улучшение основных панелей и рабочих сценариев, единая визуальная система, темизация и иконки.
+- **Начать migration preparation и новый Host bootstrap.** Инвентаризировать реальные workflows/Colibri coupling, подготовить `src/editor/` и dual-run dev topology. В legacy Colibri выполнять только исправления, необходимые для стабильной работы старого редактора на время перехода.
+- **Новый UX/UI и общую визуальную систему строить сразу в Svelte Host:** Svelte 5 + TypeScript + Vite + Tailwind CSS 4, semantic design tokens, панели, layout, keyboard/focus, темы и accessibility states. Не вкладываться в масштабный косметический рефакторинг Colibri, который придётся выбросить при cutover.
 - **Закрывать подтверждённые проблемы PR #10** отдельными функциональными задачами: FX, Box2D, Asset Pack, импорт ресурсов, генерация кода. Статус «работает» выставлять только после соответствующего runtime/browser acceptance.
 - **Параллельно закрывать security residuals**, не смешивая их с UI-рефакторингом. Linux уже использует descriptor-anchored операции для создания/удаления/переименования/копирования/перечисления; не дублировать эту реализацию и не описывать её как pathname-only. Следующий security gate — cross-platform acceptance non-Linux fallback, race tests на заявленных ОС/файловых системах и анализ перемещения уже открытого каталога за пределы project root (CODQA-7). До подтверждения portable guarantees сохранять loopback-only exposure. Standalone mini-services не имеют общей authentication: не открывать non-loopback bind и не публиковать через proxy до отдельной auth design и service-level tests.
 - **Core pilot разрешён параллельно, но не должен быть основной целью ближайшей большой задачи.** Он должен быть изолирован и не блокировать исправление функций, уже реализуемых текущим редактором.
 - **Готовить новый Editor Host как самостоятельное Svelte-приложение, не как панель внутри Colibri.** Подробный scope и переходные ограничения — `docs/editor-ui-migration.md`. Пока новый Host не проходит gates, поддерживать legacy editor для существующих workflows и дефектов; новые крупные UI features по возможности планировать уже для `src/editor/`. Не ставить Dockview/Monaco как обязательные зависимости без подтверждённого workflow.
 
-### P0 — ближайшая исполнительская очередь
+### P0/P1 — ближайшая очередь Editor UI migration
 
 1. Подготовить безопасный контур изменений: воспроизводимые clean-install/build/typecheck checks, тестовую инфраструктуру и точечные lint/format проверки для затрагиваемого кода. Новые инструменты внедрять совместимо с текущими root/editor package roots; не форсировать repo-wide строгий режим для legacy.
-2. Провести code-level triage по текущему редактору на основе `docs/capability-matrix.md`: выбрать самые заметные UX-пробелы и подтверждённые дефекты, указать файлы/контракты после изучения реализации и сразу приступать к исправлениям. Не заканчивать работу только обновлением таблицы.
-3. Модернизировать существующую оболочку/панели редактора: единый визуальный язык, иерархия, toolbar, работа с панелями и tabs, состояния loading/empty/error/disabled/selected, читаемая плотность интерфейса, keyboard navigation/shortcuts и согласованная работа светлой/тёмной тем. Сначала проверить возможности Colibri workbench и расширять их вместо создания конкурирующей оболочки.
-4. Реализовать централизованную систему иконок и theme-specific assets на основе закреплённого набора Godot Editor Icons. Инвентаризация IDs, выбор 2D-значков и проверка MIT notices — обязательные шаги реализации, но не основание отложить задачу без срока; итогом должны стать работающий код и визуальная проверка обеих тем.
-5. Закрыть основные workflows существующей базы: scene open/edit/save/reopen, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая изменённая возможность должна иметь regression test и ручной/browser acceptance там, где поведение визуальное.
+2. Провести migration inventory по `docs/capability-matrix.md`: для каждого существующего workflow определить Colibri dependencies, reusable domain contracts, data format, owner, fixtures и статус `migrated / deferred / retired`. Не превращать inventory в полный построчный аудит всего legacy-кода.
+3. Создать самостоятельный Svelte Host shell: workspace layout, tabs/split panes, panel lifecycle, menu/dialog primitives, commands/shortcuts, keyboard/focus handling, notifications, theme tokens и workspace persistence. Colibri capabilities изучаются как reference/acceptance inventory, но новый Host не встраивается внутрь старого Workbench.
+4. Реализовать централизованную систему иконок и theme-specific assets для нового Svelte Host на основе закреплённого набора Godot Editor Icons. Legacy Colibri icon IDs инвентаризировать только для mapping/проверки нужных возможностей; в новую оболочку переносить выбранные 2D assets с source mapping и MIT notices, а не старый icon loader.
+5. Перенести первый основной authoring slice в новый Host: scene open/edit/save/reopen, Phaser Canvas, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая возможность получает regression fixture и browser acceptance; старый редактор остаётся для сравнения, но не источником новой UI-архитектуры.
 6. Закрыть runtime follow-ups PR #10: FX generated output vs editor preview, Box2D на 30/60/120 FPS и stop/restart/cleanup, Asset Pack/importer error paths и кодогенерацию. Добавить фикстуры для повторения дефектов.
 7. Пройти cross-platform acceptance уже внедрённой filesystem hardening: подтвердить фактическую матрицу поддерживаемых ОС/файловых систем, проверить non-Linux pathname fallback на symlink/reparse-point races и исследовать сценарий перемещения уже открытого каталога наружу. Linux descriptor-anchored mutation helpers и существующие adversarial tests сохранять как базовый контракт; новые write/package APIs не строить поверх pathname-only операций. Результаты и границы фиксировать в CODQA-7. Для standalone mini-services сохранять loopback-only defaults, Host/Origin/body/WS/time/rate-limit tests и проверку env override behavior; до auth/authorization не экспонировать их как публичный API.
-8. Выполнить ограниченный Svelte PoC на реальной панели или редакторском workflow. Сравнить интеграцию, производительность, состояние, темизацию и стоимость bridge с текущим workbench. По результатам записать решение и переходить дальше; не ждать PoC для независимых исправлений текущих панелей.
+8. Не повторять ограниченный Svelte PoC: он уже выполнен и документирован в ADR-0004. Перейти от PoC к отдельному Svelte Host по ADR-0005 и `docs/editor-ui-migration.md`; не создавать постоянный Svelte↔Colibri bridge и не запускать full rewrite одним PR.
 
-### Что не блокирует модернизацию текущего редактора
+### Что можно выполнять параллельно Editor UI migration
 
 - Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и всех legacy project configs. Эти сведения пополняются по мере работы и до публикации/массовой архитектурной миграции; они не должны задерживать изолированную исправимую задачу.
 - Реализация нового Project Model/Core, runtime adapter или оптимизированного ECS. Это следующий архитектурный поток, а не предусловие для каждой правки текущего Scene Editor, Inspector или Asset Pack.
 - Создание нового Svelte Editor Host в `src/editor/` и последующее удаление legacy Colibri client из `source/editor/` — отдельная staged UI migration по `docs/editor-ui-migration.md`; это не механическое перемещение старого дерева. npm Workspaces остаются отдельной инфраструктурной миграцией.
-- Полное решение о Svelte. PoC необходимо, чтобы принять архитектурное решение; до результата можно и нужно улучшать текущий UI без необратимой переписи.
+- Реализация нового Project Model/Core, runtime adapter, Preview Host и HTML5 build pipeline. Они могут идти отдельными потоками, если сохраняются совместимые contracts; готовность Core не является предварительным условием для первого нового Editor Host slice.
 - Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
 - Tauri, замена Phaser на PixiJS, второй ECS/runtime, дополнительные physics backends и public package registry. Они не входят в основной scope этого этапа.
 
 ### Что не следует делать параллельно «на всякий случай»
 
-- Не переписывать Colibri/Editor Host целиком и не переносить весь интерфейс на Svelte без сравнительного PoC и плана совместного существования подсистем.
+- Не встраивать Svelte views внутрь Colibri как долгосрочную архитектуру. Не переносить всё в одном giant PR; old/new UI должны быть независимыми applications с отдельными origins, общими backend/data contracts и проверяемыми cutover gates.
 - Не останавливать исправление существующего редактора, пока проектируют идеальный Core. Для каждой задачи выбирать минимальный контракт, необходимый именно ей.
 - Не сводить модернизацию к замене цветов/иконок: визуальная работа должна включать и функциональные состояния, клавиатурный workflow, layout панелей и связанные пользовательские сценарии.
 - Не оставлять icon migration только в виде карты: после инвентаризации выполнить внедрение в согласованном UI scope, с отдельными light/dark variants и attribution.
@@ -367,7 +367,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ---
 
-## Этап 5 — качество существующего редактора и 2D-производственные инструменты
+## Этап 5 — staged replacement Colibri UI и 2D authoring workflows
 
 **Цель:** обеспечить профессиональные 2D-authoring workflows в новом Svelte Editor Host. Legacy Colibri client в `source/editor/` служит временной рабочей и контрольной реализацией; новые UI workflows постепенно реализуются в `src/editor/`, а проверенные domain/project/runtime mechanisms переиспользуются без переноса старой UI-инфраструктуры. Эта фаза должна приводить к работающему новому приложению, regression tests и browser/runtime acceptance, а не только к документам.
 
@@ -375,7 +375,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### Задачи
 
-- [ ] Сначала проверить существующие Colibri/workbench capabilities (панели, вкладки, dock/resize/layout, shortcuts, commands) и усиливать их вместо реализации конкурирующей оболочки.
+- [ ] Инвентаризировать существующие Colibri/workbench capabilities (панели, вкладки, dock/resize/layout, shortcuts, commands) как reference и acceptance baseline. Не переносить их реализацию автоматически; новые primitives реализовать в Svelte Host и использовать Colibri только для поддержки legacy клиента до cutover.
 - [ ] Сформировать и реализовать согласованную визуальную систему редактора: типографика, spacing/density, размеры контролов, toolbar/menu patterns, focus/hover/disabled/selected/error/loading/empty states, keyboard navigation и базовые accessibility expectations.
 - [ ] Привести главную рабочую среду к профессиональному 2D-editor workflow: Scene/Game view, Hierarchy, Inspector, Assets/Pack и Console/diagnostics должны иметь понятную роль, согласованную визуальную иерархию и эффективный default layout. Не создавать фиктивные панели без работающего содержания.
 - [ ] Проверить поведение панелей при изменении размера окна/панелей, сохранение/восстановление рабочих раскладок и доступность ключевых команд через keyboard shortcuts; переиспользовать существующие механизмы, а новые добавлять только при доказанном gap.
@@ -396,8 +396,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Проверить точечные importer extensions (PSD/Aseprite) через общий asset metadata/reimport contract, а не через отдельные несогласованные форматы.
 - [ ] Рассмотреть UI layout tools: anchors, responsive layout, scale modes, interactive states и mobile safe areas.
 - [ ] Улучшать graphics/audio/assets workflow на основе capability matrix и production pain points.
-- [ ] Провести отдельный аудит icon identifiers Colibri и подготовить карту перехода на [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons): оставить только значки общих UI-команд и поддерживаемых 2D-возможностей, исключить 3D-only icons.
-- [ ] Для отобранных значков подготовить и проверить отдельные варианты для светлой и тёмной тем, включая контраст и применимые UI-состояния; зафиксировать source commit, исходный файл, mapping и необходимые MIT notices. Не выполнять массовую замену до ревью карты и плановой задачи.
+- [ ] Провести аудит icon identifiers Colibri как входной инвентарь и подготовить mapping отобранных общих UI/2D значков к [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons). Интегрировать выбранные assets в Svelte Host; не переносить Colibri icon loader или весь набор 3D-only icons.
+- [ ] Для отобранных значков подготовить и проверить варианты для light/dark themes нового Host, включая контраст и interactive states; зафиксировать source commit, исходный файл, mapping и MIT notices.
 - [x] Выполнить ограниченный Svelte PoC на одной существующей панели/workflow и сравнить с текущим Colibri/workbench; проверить совместимость с состоянием редактора, API, темизацией, сборкой, отладкой и стоимостью bridge. *(Выполнено: плагин `phasereditor2d.sveltepoc` с live/mock мостами, панель Scene Stats рядом с Inspector; commit 21bda49, ADR-0004; live-измерения: бандл 70.3 kB, mount 1.9 ms, 1000/1000 selection-событий через полный workbench-путь.)*
 - [x] Завершить ограниченный Svelte PoC и зафиксировать его измерения/ограничения. *(Исторический результат в ADR-0004; панель Scene Stats и mock/live bridge остаются executable reference.)*
 - [ ] Принять target direction полного Colibri UI replacement через отдельный Svelte Editor Host. *(Предложение ADR-0005: Svelte 5 + TypeScript + Vite + Tailwind CSS 4; implementation не начата, требует отдельной parent Engineering issue и поэтапных acceptance gates.)*
@@ -408,7 +408,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### Очередность внутри этапа
 
-**A — P0: модернизация рабочей среды и базовый authoring на существующей базе.**
+**A — P0: первый проверяемый Svelte Host vertical slice.**
 - Сохранение/повторное открытие сцены, hierarchy/Transform, безопасные Undo/Redo и согласованность Prefab/Component metadata с Project Model.
 - Input и преобразование координат (mouse/keyboard/touch, UI versus world, camera/viewport), focus loss и cleanup listeners.
 - Базовый Sprite workflow: импорт/slicing, trim/pivot, sorting и collision shapes; результат должен сохраняться и соответствовать runtime.
@@ -431,7 +431,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - RTL/complex text shaping и расширенная accessibility — только после проверки ограничений текущего text/runtime backend.
 - Ручные renderer optimizations — только если profiler подтверждает конкретный bottleneck.
 
-**P0 — иконки и темы как часть модернизации редактора.** В рамках первого UI-modernization пакета составить mapping используемых IDs и команд, выбрать и внедрить подходящие Godot Editor Icons для общих UI-команд и существующих 2D-возможностей, исключить 3D-only assets, подготовить отдельные light/dark-варианты и сохранить source mapping/MIT notices. Карта — промежуточный шаг, а не завершение задачи: обязательны рабочая интеграция в интерфейс и browser acceptance в обеих темах. Это не требует остановить независимую работу над Core, но должно быть включено в ближайший объём реализации редактора.
+**P0 — иконки и темы нового Svelte Host.** Реализовать единые semantic tokens и theme switching, интегрировать отобранные Godot Editor Icons для общих UI-команд и поддерживаемых 2D-возможностей, исключить 3D-only assets, сохранить source mapping/MIT notices. Обязательны browser acceptance dark/light/lightBlue (или согласованных theme variants), focus/hover/disabled/selected/error states и проверка контраста.
 
 **Полная замена Colibri UI — планируемая staged initiative, не одномоментная задача.** Направление Svelte 5 + TypeScript + Vite + Tailwind CSS 4 выбрано для дальнейшего планирования на основании PoC и продуктовой цели. Не внедрять промежуточные Svelte-вью внутри Colibri как долгосрочную архитектуру. Docking/layout library, CodeMirror и Monaco оцениваются отдельно только при наличии конкретного workflow; они не являются обязательными компонентами миграции.
 
