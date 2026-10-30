@@ -111,6 +111,9 @@ jobs:
       - name: Security smoke tests (local access, symlinks, MCP compatibility)
         run: npm run test:security
 
+      - name: Mini-services security tests (loopback, Host/Origin, limits and WebSocket)
+        run: npm run test:mini-services
+
       - name: Install locked dependencies (localization package)
         run: npm ci
         working-directory: packages/localization
