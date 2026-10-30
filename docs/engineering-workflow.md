@@ -1,6 +1,41 @@
 # Правила разработки и ведения задач Codogma Engine
 
 Этот документ — обязательная памятка для каждой новой задачи. Он дополняет, а не заменяет существующие правила в [README.md](../README.md), нормативное [техническое задание](technical-specification.md), [дорожную карту](roadmap.md) и [матрицу возможностей](capability-matrix.md).
+## 0. Команды Linear и распределение ответственности
+
+В проекте Linear используются две отдельные команды. Выбирай команду по типу результата задачи, а не по тому, кто её создал или кто будет выполнять ручную проверку.
+
+| Команда | Идентификатор задач | Ответственность | Какие задачи создавать |
+|---|---|---|---|
+| **Codogma-engine (COD)** | **COD-N** | Engineering delivery | Реализация, исправления, архитектура, API/контракты, автоматизированные тесты, CI/tooling и изменения инженерной документации. |
+| **Codogma QA (CODQA)** | **CODQA-N** | Functional и Release acceptance | Проверка пользовательских сценариев, browser/runtime acceptance подсистем и приёмка конкретных release candidates. |
+
+Обе команды входят в проект [Codogma Engine](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63). Ведущая команда проекта — COD; это не меняет распределение ответственности за QA-задачи.
+
+### Выбор типа и команды
+
+- В COD заводить только Engineering issues с типом Engineering. Здесь остаются реализация, исправление найденных дефектов и инженерная работа по созданию инструментов/процесса приёмки.
+- В CODQA заводить Functional acceptance для независимой проверки подсистемы или пользовательского workflow и Release acceptance для проверки конкретного release candidate.
+- Не создавать QA issue в COD и не переносить реализацию в CODQA ради удобства доски. Если acceptance выявила дефект, QA issue фиксирует результат/ссылку на дефект, а исправление заводится отдельной Engineering/Bug issue в COD.
+- QA issue разрешено связывать с engineering issue из другой команды через parent/sub-issue или relation. Сохраняй эту связь: она показывает, какую реализацию проверяет acceptance, но не меняет ownership исходной Engineering issue.
+- Для задач проекта используй общий проект Codogma Engine; не создавай дубли проекта только из-за разделения команд.
+
+### Назначение двух досок
+
+- [Development Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/development-kanban-4db756f5f1c6) — инженерный backlog команды COD.
+- [QA Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/qa-kanban-918c848c9880) — задачи команды CODQA. Сохранённое представление проверяется по результатам фильтрации Linear; не заменяй эту доску общим project backlog.
+
+### Acceptance lifecycle
+
+- Functional acceptance — отдельная задача на реальную проверку подсистемы/сценария в работающем редакторе или generated game. В ней фиксируются build/commit SHA, fixture, браузер/ОС, шаги, expected/actual result и evidence.
+- Release acceptance — отдельная задача на каждый promotion candidate, который переносится из dev в test. В ней обязателен точный commit SHA кандидата, результаты обязательных CI/E2E checks, browser/runtime/manual evidence, ограничения и решение о принятии.
+- Не переиспользуй закрытую release-acceptance issue для следующего SHA: каждый новый candidate получает отдельную QA issue.
+- Acceptance не должна блокировать независимую Engineering delivery: инженерная задача может быть Done, когда её собственные implementation criteria, автоматизированные tests, CI Fast и evidence готовы, а PR создан/привязан. GitHub review и merge обязательны до фактической интеграции в dev, но не являются условием удержания такой Linear issue в In Review.
+- QA issue переводится в Done только после подтверждения её собственных критериев и записи evidence. Если acceptance не пройдена, QA issue остаётся/возвращается в работу, а найденный дефект оформляется отдельной Engineering issue в COD.
+
+Для оперативной работы используй командные страницы и документы в Linear: [Codogma-engine (COD)](https://linear.app/codogma-engine/team/COD) и [Codogma QA (CODQA)](https://linear.app/codogma-engine/team/CODQA).
+
+Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
 
 ## 1. Перед началом каждой задачи
 
