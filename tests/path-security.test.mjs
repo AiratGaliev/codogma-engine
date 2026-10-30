@@ -13,7 +13,7 @@ import fsp from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, writeNewFileSafely, readFileSafely, readFilePrefixSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely, statProjectDirectorySafelySync } from "../server/path-security.mjs"
+import { safeJoin, isWithinRealBase, isInsideBase, writeFileSafely, writeNewFileSafely, readFileSafely, readFilePrefixSafely, removeProjectEntrySafely, renameProjectEntrySafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, copyProjectEntrySafely, statProjectDirectorySafelySync, statProjectFileSafely } from "../server/path-security.mjs"
 
 function createTempTree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "path-security-"))
@@ -685,6 +685,26 @@ test("statProjectDirectorySafelySync returns the opened directory metadata after
         assert.notEqual(actual.ino, outside.ino, "metadata must belong to the opened project directory, not the outside symlink target")
     } finally {
         fs.fstatSync = originalFstat
+        fs.rmSync(t.root, { recursive: true, force: true })
+    }
+})
+
+test("statProjectFileSafely returns metadata from an opened in-project file and rejects outside symlinks", async () => {
+    const t = createTempTree()
+    const inside = path.join(t.base, "file.txt")
+    const outsideLink = path.join(t.base, "outside-file-link")
+
+    try {
+        const expected = fs.statSync(inside)
+        const actual = await statProjectFileSafely(t.base, inside)
+        assert.ok(actual)
+        assert.equal(actual.dev, expected.dev)
+        assert.equal(actual.ino, expected.ino)
+
+        withSymlinks(t, () => {})
+        assert.equal(await statProjectFileSafely(t.base, outsideLink), null,
+            "metadata lookup must not follow a project symlink to an outside file")
+    } finally {
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
