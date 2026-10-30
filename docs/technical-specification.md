@@ -3,7 +3,7 @@
 | Поле | Значение |
 |---|---|
 | Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
-| Версия документа | 1.10 |
+| Версия документа | 1.12 |
 | Дата | 30.10.2026 |
 | Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
 | Связанный документ | [Дорожная карта](roadmap.md) |
@@ -14,7 +14,7 @@
 
 Codogma Engine должен развиться в самостоятельный **Web-first 2D Game Engine**: редактор, runtime-API, модель проекта, средства отладки, конвейер ресурсов и сборки, а также платформенные интеграции в одном согласованном рабочем процессе.
 
-Главная ближайшая задача — **существенно модернизировать существующий редактор и его исходный код на текущей базе**, чтобы он стал цельной, удобной и надёжной средой разработки 2D-игр. Сюда входят визуальная система и layout рабочего пространства, Scene/Hierarchy/Inspector, работа с ресурсами, Undo/Redo, Prefabs/Components и подтверждение поведения уже реализованных runtime-функций. Это должно выражаться в работающем коде и приёмке, а не только в проектных документах.
+Главная UI-цель — **поэтапно заменить Colibri-based client самостоятельным SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4**, сохранив рабочие editor workflows и project data. Это не переписывание Phaser runtime, server API, serializers или code generation с нуля: новый Host создаётся отдельно, существующие domain/API contracts переиспользуются, UI переносится вертикальными slices, а Colibri удаляется только после cutover. Старый и новый UI временно сосуществуют как независимые приложения. Портовая схема, backend proxy, write ownership и MCP SSE ограничения определены в [Editor UI migration plan](editor-ui-migration.md) и [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).
 
 [Unity 6](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d) и [Cocos Creator 4.0](https://docs.cocos.com/creator/4.0/manual/en/) — ориентиры по качеству редакторского UX и типовым 2D-workflows. Из них следует изучать организацию Scene/Game view, Hierarchy, Inspector, Assets, panels/layouts, компоненты, Prefabs, Undo/Redo, анимацию, физику, live preview и диагностику. **Цель — сопоставимость основных 2D-сценариев и профессионального ощущения редактора, а не полный feature parity**, копирование чужой архитектуры или API. Codogma должен оставаться TypeScript-native и Web-first.
 
@@ -30,11 +30,11 @@ Codogma Engine должен развиться в самостоятельный
 
 ### 1.2. Порядок поставки и границы начального MVP
 
-Работу следует принимать по проверяемым сценариям на существующей кодовой базе, а не по числу новых классов, документационных файлов или панелей. Первая программа реализации — модернизация текущего редактора; новый Core и отдельный build pipeline развиваются следующими независимыми этапами, не блокируя задачи, которые можно корректно реализовать на существующих contracts.
+Работу следует принимать по проверяемым сценариям, а не по числу новых компонентов или перенесённых файлов. Целевая программа UI — независимый SolidJS Editor Host, который постепенно принимает существующие workflows. Пока он не прошёл соответствующие gates, legacy Colibri editor остаётся доступным и пригодным для регрессионного сравнения. Новый Core и отдельный build pipeline развиваются независимо и не должны искусственно блокировать UI-перенос, если существующие file/project contracts достаточны.
 
 | Gate | Что должно работать | Как подтверждается |
 |---|---|---|
-| **A — Existing Editor Modernization** | Согласованный UI/UX и темы; Scene/Hierarchy/Inspector/Assets; редактирование, save/reopen, Undo/Redo и текущие Prefab/Component workflows; проверенные существующие инструменты. | Browser acceptance на зафиксированных viewport; regression tests для данных и команд; визуальная проверка light/dark и ключевых UI states. Существующие подсистемы расширяются, а не переписываются автоматически. |
+| **A — SolidJS Editor Host migration** | Новый самостоятельный SolidJS + TypeScript/TSX UI с Tailwind CSS 4; оболочка Workbench, Scene/Hierarchy/Inspector/Assets; перенос workflows с сохранением project/runtime contracts. | Отдельный UI host запускается независимо от Colibri; browser acceptance на fixtures; save/reopen, Undo/Redo, themes, keyboard workflows, MCP routing и отсутствие регрессий. Legacy UI остаётся до прохождения gates; Colibri удаляется только после cutover. |
 | **B — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая schema/metadata для Inspector/serialization/runtime, версионированное сохранение и загрузка сцены напрямую из данных без обязательного generated TS-класса на каждый уровень. | Изолированный fixture проходит создание/изменение/save/reopen; запускает сериализованную сцену с явно зарегистрированным TypeScript-компонентом без файла класса сцены; lifecycle, миграции и ошибки ссылок покрыты тестами; Core тестируется без UI редактора. |
 | **C — Browser Preview** | Preview Host запускает сцену из Project Model через целевой loader/runtime adapter, связывает runtime entity/component с моделью, выдаёт runtime state и log/error diagnostics. Legacy generated-code path остаётся совместимым до отдельной приёмки перехода. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart на data-driven fixture без per-scene generated TS class. Preview не требует Tauri и не создаёт второй игровой цикл. |
 | **D — Независимая HTML5-сборка** | Headless build из валидированных сериализованных сцен, зарегистрированных TypeScript-модулей, ресурсов и настроек adapter; per-scene generated TS file не является обязательным входом. | CI/fixture собирает и запускает проект без editor UI/server, проверяет asset/component refs и подтверждает, что editor-only зависимости не попали в game bundle. |
@@ -42,7 +42,7 @@ Codogma Engine должен развиться в самостоятельный
 
 Каждый gate подтверждается отдельно. Для текущих editor features не требуется ждать реализации нового Core, если изменение безопасно работает с существующими форматами и contracts. Если функция зависит от новой модели или runtime service, зависимую часть нужно выделить, не блокируя независимые UI и bug fixes.
 
-**Не входят в первый исполнительский этап:** массовое переписывание Colibri или немедленный перевод всего UI на Svelte; замена Phaser на PixiJS; EVA.js как второй runtime; data-oriented ECS без измеримого сценария; несколько physics backends; обязательная Tauri-упаковка; публичная plugin/npm ecosystem; все платформенные интеграции одновременно. Svelte и другие UI-кандидаты проверяются через небольшой PoC, но обычная модернизация текущего UI может идти до и во время него.
+**Не входят в первый migration slice:** переписывание всего UI одним PR; замена Phaser на PixiJS; EVA.js как второй runtime; data-oriented ECS без измеримого сценария; несколько physics backends; обязательная Tauri-упаковка; публичная plugin/npm ecosystem; все платформенные интеграции одновременно. Выбор SolidJS + Tailwind CSS 4 уже принят как окончательное направление UI. Повторный framework bake-off и отдельный SolidJS PoC не требуются: реализация начинается непосредственно с полноценного Unity-подобного Editor Workbench и продолжается вертикальными feature slices.
 
 P0/P1/P2 в разделе 9.3 задаёт относительный приоритет возможностей 2D-редактора и не означает выполнять весь уровень одним большим спринтом. Практическая очередность и зависимые gates определяются [дорожной картой](roadmap.md).
 
@@ -55,7 +55,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Область | Фактическая база |
 |---|---|
 | Клиент редактора | TypeScript-клиент в `source/editor/`, основанный на открытом клиенте Phaser Editor 2D v3 |
-| Рабочая среда | В Colibri уже есть workbench, registry расширений, UI-контролы, редакторы, операции Undo/Redo и инспектор |
+| Рабочая среда | Текущий legacy-клиент использует Colibri workbench, registry расширений, UI-контролы, редакторы, операции Undo/Redo и Inspector; новый SolidJS Editor Host в src/editor/ пока не реализован |
 | Работа с файлами | Существует контракт `IFileStorage` и HTTP-реализация файлового доступа; конкретные методы и текущие ограничения нужно сохранять в capability inventory |
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
@@ -65,7 +65,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
-Эта база содержит значительное количество существующего UI и логики. Поэтому **нельзя начинать развитие с автоматического переписывания Colibri или всей редакторской системы на новый UI-фреймворк**. Сначала надо определить реальные пробелы и границы связанности, затем заменять только то, что мешает целевому продукту.
+Эта база содержит значительное количество Colibri UI и редакторской логики. **Полная замена UI является принятым направлением, но не одномоментной переписью всего движка.** Новый SolidJS Host создаётся как отдельное приложение сразу; полная инвентаризация Colibri coupling выполняется параллельно и по мере переноса конкретных workflows, а не блокирует старт Workbench. Domain/API contracts сохраняются, функции переносятся вертикальными срезами, Colibri удаляется после cutover. Legacy client не превращается в долгосрочный host для SolidJS и не получает новые крупные подсистемы, предназначенные для нового Editor Host.
 
 #### Уточнение: фактическая интеграция Phaser 4.2.1
 
@@ -131,7 +131,7 @@ Security smoke проверяет конкретные локальные сце
 - Одновременная поддержка большого числа игровых runtime «на всякий случай».
 - Собственный renderer, физический движок, bundler, тестовый runner или визуальный редактор каждого вида контента, если зрелое решение закрывает потребность.
 - Разработка всех жанровых систем в ядре: диалоги, квесты, поведение NPC, волны Tower Defense и аналогичные инструменты предпочтительно оформлять как расширения.
-- Массовое переписывание существующего редактора ради выбора нового фреймворка или полного удаления унаследованного кода.
+- Одномоментное переписывание всего существующего редактора в одном PR или удаление Colibri до прохождения migration acceptance. Поэтапная замена Colibri отдельным SolidJS Editor Host входит в целевое направление и регулируется ADR-0005.
 - Публикация всех пакетов в публичный npm registry до стабилизации их контрактов.
 
 ## 4. Целевая архитектура и границы ответственности
@@ -166,6 +166,8 @@ Independent HTML5 Game Build
 
 Схема выражает логические границы и направления зависимостей, а не прямое соответствие слоям каталогов. В целевой структуре исходники самостоятельных Codogma packages находятся в `packages/<package-name>/`, а приложение редактора — в `src/editor/`. Не каждый логический слой обязан быть отдельным пакетом: внутренние детали остаются внутри пакета, которому принадлежат. До отдельной миграции фактический путь редактора остаётся `source/editor/`.
 
+**Целевой Editor Host:** `src/editor/` — одно SolidJS + TypeScript/TSX SPA на Vite с Tailwind CSS 4. Применяются `vite-plugin-solid`, `jsx: preserve` и `jsxImportSource: solid-js`. SolidJS использует fine-grained reactivity без Virtual DOM: JSX компилируется в DOM-операции, а сигналы/сторы обновляют только зависимые узлы. Компонентная функция не трактуется как React-компонент, повторно вызываемый при каждом изменении состояния; реактивность задаётся Solid-примитивами. Tailwind отвечает за utility styling поверх Codogma design tokens/CSS variables. Phaser остаётся владельцем игрового Canvas/runtime renderer. Панели и редакторские функции — feature modules одного приложения; новый Host не импортирует Colibri и не использует постоянный bridge между UI-фреймворками.
+
 Помимо редакторского интерфейса, проект должен получить headless-интерфейс к тем же Project Model, importer и build API. CLI/CI не зависит от открытого editor UI: он может валидировать проект, проверять dependency graph и выполнять HTML5 build. Это разделение требуется для воспроизводимых сборок и автоматических проверок, а не для дублирования бизнес-логики.
 
 ### 4.2. Редактор и системный backend
@@ -180,6 +182,14 @@ Independent HTML5 Game Build
 - VS Code и другие редакторы могут получать интеграции в будущем, но они не должны становиться обязательной зависимостью ядра проекта.
 
 Tauri и Electron не выбираются только по размеру дистрибутива. На целевых ОС необходимо проверить WebGL, производительность Game View, задержки Inspector, файловые операции и воспроизводимость поведения. Tauri использует системный WebView, Electron поставляет Chromium; это компромисс между весом и управляемостью браузерного окружения.
+
+#### Переходный режим двух Editor Host
+
+- Legacy Colibri UI продолжает открываться через Node server по http://127.0.0.1:3000/editor/. Новый SolidJS UI запускается отдельным Vite dev server по http://127.0.0.1:5173/ (отдельная настройка `VITE_PORT`, `strictPort: true`, bind только на `127.0.0.1`). Это разные browser origins и независимые UI runtime. Новый Host сразу реализует Unity-подобный Workbench; отдельная демонстрационная панель или framework comparison не являются этапом миграции.
+- Vite proxy пересылает относительные запросы /editor/* к backend на 127.0.0.1:3000, чтобы UI использовал те же POST /editor/api, project-file, upload, MCP HTTP и прочие действующие endpoints без прямого browser-to-backend CORS. Для proxy-origin в backend задаётся точный CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173; wildcard Origin запрещён. Реальная proxy конфигурация должна быть проверена вместе с server/request-origin.mjs.
+- По умолчанию оба UI могут использовать один backend/PROJECT_DIR, но редактировать один проект одновременно нельзя: current API не даёт cross-client lock/optimistic concurrency contract, а selection, undo history и caches принадлежат отдельным browser sessions. Для write acceptance использовать один активный writer либо отдельные fixture copies и backend instances.
+- Текущий server/mcp.mjs рассылает editor SSE command всем подключённым bridge clients (bridgeClients is a Set) и разрешает pending command по первому результату. Поэтому в dual-run режиме SSE bridge подключается только к одной UI-сессии — сначала к legacy editor. Новый Host подключается к нему лишь после реализации и acceptance session-aware routing либо получает отдельный изолированный backend/bridge instance.
+- Два порта — только development topology. Production cutover выполняется через Node server: SolidJS bundle становится основным `/editor/`, а legacy UI удерживается ограниченное время для rollback. Постоянные два production backend или второй editor API не требуются.
 
 ### 4.3. Зависимости должны идти в одном направлении
 
@@ -746,7 +756,7 @@ codogma-engine/
 └── package.json                 # корень репозитория / npm Workspaces
 ```
 
-Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Текущий редактор физически находится в `source/editor/`; перенос в `src/editor/` выполняется отдельной миграцией с обновлением путей сервера, scripts, CI, release archive и документации. До завершения миграции README и рабочие команды должны продолжать описывать фактические пути.
+Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Текущий legacy Colibri client физически находится в source/editor/; новый SolidJS Editor Host создаётся в src/editor/ как самостоятельное приложение. Не выполнять механический перенос старого дерева в src/editor/: legacy и новый UI сосуществуют до cutover. После приёмки нового Host source/editor/ и его Colibri-only build/config/assets удаляются отдельным cleanup PR с обновлением server paths, scripts, CI, release archive и документации.
 
 ### Правила границ пакетов
 
@@ -755,7 +765,7 @@ codogma-engine/
 - Наличие исходников пакета в монорепозитории не означает немедленную публичную публикацию. Выпуск в npm требует стабилизированного API, совместимости версий, тестов, документации, проверки лицензий и поддерживаемого release process.
 - Названия пакетов отражают ответственность, а не обязательный префикс `plugin-`. Например, `@codogma/cge`, `@codogma/editor-api`, `@codogma/tilemap-tools` и `@codogma/platform-yandex-games` — иллюстративные имена, а не полный утверждённый каталог.
 - Логические области Core, Project Model, Runtime, Runtime Adapters, Editor, Build/CLI, DevTools и Platform Services не обязаны соответствовать один к одному отдельным npm-пакетам. Физическая граница определяется ответственностью, зависимостями и потребностью в независимом подключении.
-- Существующий Colibri/plugin registry — база для аудита и возможного повторного использования. Новый Extension API должен учитывать legacy-механизмы, но не считать их автоматически готовым решением для установки npm-пакетов, проверки совместимости и безопасного lifecycle.
+- Существующий Colibri/plugin registry — только legacy implementation и источник inventory существующих возможностей. Новый SolidJS Editor Host не должен зависеть от Colibri registry или private Colibri APIs. Новый Extension API проектируется отдельно; до его готовности внутренние editor features могут регистрироваться внутри одного приложения и не обязаны упаковываться каждая в npm package.
 
 ### 12.1. TypeScript-first engineering toolchain
 
@@ -840,8 +850,8 @@ The adapter preserves the engine's JSON Schemas without converting them to a sec
 
 #### Editor Host и Extension API
 
-- Целевой путь приложения редактора — `src/editor/`. Редактор выступает **Editor Host**: предоставляет UI и публичные точки интеграции для возможностей, которые поставляются пакетами.
-- Контракты расширения должны быть типизированы, документированы и версионированы; целевой пакет для них — `@codogma/editor-api` с исходниками в `packages/editor-api/`. Точный API и совместимость с существующим Colibri/plugin registry подтверждаются PoC.
+- Целевой путь нового SolidJS приложения редактора — src/editor/. Редактор выступает **Editor Host**: предоставляет UI и точки интеграции для встроенных возможностей и будущих расширений. Legacy Colibri client остаётся в source/editor/ только на переходный период.
+- Если внешний Extension API потребуется, его контракты должны быть типизированы, документированы и версионированы; целевой пакет — @codogma/editor-api с исходниками в packages/editor-api/. Он не должен копировать Colibri extension contracts или делать legacy registry зависимостью нового Host. MVP нового SolidJS Host может работать на встроенной feature registration без внешнего plugin API.
 - Пакет с UI-функциональностью может явно объявлять editor-extension entry point и регистрировать через публичный API команды, пункты меню, горячие клавиши, панели/views, настройки приложения/проекта, custom Inspector editors, validators, asset importers, gizmos/brushes, profiler views и build hooks.
 - Метаданные пакета должны описывать назначение, поддерживаемые scopes/targets, версию Editor Extension API и явные точки входа. Установка npm-пакета сама по себе не означает автоматического исполнения любого кода: Editor Host обнаруживает и активирует только соответствующие пакеты, явно объявленные в зависимостях и включённые для активного проекта. В начальной модели расширения имеют project scope; глобальная установка editor extensions вне проекта не входит в MVP.
 - Предусмотреть понятные статусы активации, диагностику несовместимости и возможность отключать editor extension без удаления npm-зависимости, если это подтверждается архитектурой lifecycle. Отключение расширения не должно изменять сериализованные игровые данные.
@@ -924,7 +934,11 @@ CI Fast сейчас не выполняет весь перечисленный
 ### 13.3. Правила миграции
 
 - Каждая задача и миграция делаются небольшим PR с одним понятным результатом.
-- Существующее поведение фиксируется тестом/fixture до переписывания.
+- Существующее поведение фиксируется тестом/fixture до переноса соответствующего workflow в новый SolidJS Host.
+- UI migration идёт как legacy Colibri Host + new SolidJS Host, но не как embedding SolidJS внутри Colibri; между ними нет долгосрочного UI adapter layer.
+- Для локальной разработки старый и новый Host имеют отдельные origins/ports, а API остаётся на loopback Node backend. Точные Origin allow-lists, Vite proxy, project write ownership и MCP SSE ownership входят в acceptance.
+- На период dual-run один проект не редактируется одновременно обеими UI-сессиями. Для параллельного write acceptance используются отдельные project copies/backend instances.
+- Удаление Colibri начинается только после feature inventory sign-off, browser acceptance нового Host, cutover и подтверждённого rollback window.
 - Новая реализация проходит критерии до удаления старой.
 - Для scene workflow: legacy codegen не удаляется и не меняется по смыслу до тех пор, пока data-driven loader не проходит согласованный runtime/preview/build acceptance и не описан путь миграции существующих проектов; при необходимости временно поддерживаются оба пути с явной границей.
 - Не держать два источника истины для HP/Transform/состояния компонентов или иных переносимых данных.
