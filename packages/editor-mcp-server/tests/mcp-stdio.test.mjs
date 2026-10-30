@@ -73,7 +73,8 @@ const UPSTREAM_TOOL_NAMES = [
     "assets-get-tilemap-data",
     "assets-get-google-font-families",
     "assets-get-google-font-info",
-    "assets-add-google-font-to-asset-pack"
+    "assets-add-google-font-to-asset-pack",
+    "get-system-instructions"
 ];
 
 function readRequest(req) {

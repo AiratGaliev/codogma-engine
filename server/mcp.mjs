@@ -1210,13 +1210,13 @@ Workflow for creating content:
 ## Spine assets and game objects
 
 Use these tools in order when working with Spine assets:
-1. `assets-get-available-spine-skeletons` and `assets-get-available-spine-atlases` to discover the exact skeleton and atlas keys.
-2. `assets-get-spine-skeleton-info` to inspect skins and animations when the skeleton is JSON. Binary `.skel` assets are loaded by the editor runtime; this file parser does not enumerate their metadata.
-3. `assets-get-spine-skin-image` to render a PNG preview for an exact `dataKey`, `atlasKey`, `skinName` and `animationName`. This tool requires the browser editor page and its SSE MCP bridge to be connected.
-4. Add a scene object with `scene-add-game-objects`, type `SpineGameObject` and `properties.dataKey` / `properties.atlasKey`. Optional properties include `skinName`, `bpType`, `bpSkin`, `bpAnimation`, `bpTimeStep`, `animationMixes`, `defaultMix` and `timeScale`.
-5. Use `scene-get-scene-data` to verify the serialized Spine configuration. The editor renderer is required for visual preview.
+1. \`assets-get-available-spine-skeletons\` and \`assets-get-available-spine-atlases\` to discover the exact skeleton and atlas keys.
+2. \`assets-get-spine-skeleton-info\` to inspect skins and animations when the skeleton is JSON. Binary \`.skel\` assets are loaded by the editor runtime; this file parser does not enumerate their metadata.
+3. \`assets-get-spine-skin-image\` to render a PNG preview for an exact \`dataKey\`, \`atlasKey\`, \`skinName\` and \`animationName\`. This tool requires the browser editor page and its SSE MCP bridge to be connected.
+4. Add a scene object with \`scene-add-game-objects\`, type \`SpineGameObject\` and \`properties.dataKey\` / \`properties.atlasKey\`. Optional properties include \`skinName\`, \`bpType\`, \`bpSkin\`, \`bpAnimation\`, \`bpTimeStep\`, \`animationMixes\`, \`defaultMix\` and \`timeScale\`.
+5. Use \`scene-get-scene-data\` to verify the serialized Spine configuration. The editor renderer is required for visual preview.
 
-`bpType` is 0 (`SETUP_TYPE`) or 1 (`SKINS_AND_ANIMATION`). `bpSkin` is 0 (`ALL_SKINS`) or 1 (`CURRENT_SKIN`). `animationMixes` is an array of `[fromAnimation, toAnimation, durationSeconds]` tuples.
+\`bpType\` is 0 (\`SETUP_TYPE\`) or 1 (\`SKINS_AND_ANIMATION\`). \`bpSkin\` is 0 (\`ALL_SKINS\`) or 1 (\`CURRENT_SKIN\`). \`animationMixes\` is an array of \`[fromAnimation, toAnimation, durationSeconds]\` tuples.
 
 ## Editable tilemaps (v5)
 

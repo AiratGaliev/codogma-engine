@@ -36,7 +36,7 @@ MCP robustness, and regression suites for every defect found along the way.
   built-in stdio server when the bridge is served by another process or has
   no connected editor — external MCP hosts keep working in any deployment
   (1e7f9d4).
-* Extended MCP contract coverage: all 58 upstream Phaser MCP tool names are
+* Extended MCP contract coverage: all 59 upstream Phaser MCP tool names are
   checked against the Codogma registry; every engine JSON Schema is compiled
   with Ajv; invalid nested/alternative arguments are rejected before forwarding;
   image content blocks are preserved. Spine skin previews use the existing
