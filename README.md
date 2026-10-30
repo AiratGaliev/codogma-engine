@@ -272,6 +272,18 @@ A successful server-side MCP test, TypeScript build or security smoke test does 
 The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
 
 For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`) and the task-start/review/acceptance checklist, follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). In particular, `In Review` means implementation is finished but evidence or acceptance is still pending; `Done` requires all applicable criteria to be verified.
+### Linear teams and issue ownership
+
+Linear work is split by responsibility across two teams in the shared **Codogma Engine** project:
+
+| Team | Issue identifiers | Owns |
+|---|---|---|
+| **Codogma-engine (COD)** | **COD-N** | Engineering delivery: implementation, fixes, architecture, automated tests and CI/tooling. |
+| **Codogma QA (CODQA)** | **CODQA-N** | Functional acceptance of editor/game workflows and release-candidate acceptance. |
+
+Create Engineering issues in COD and QA/acceptance issues in CODQA. Keep cross-team parent/sub-issue or related links so an acceptance task points to the Engineering work it verifies. A defect discovered during QA becomes a separate Engineering/Bug issue in COD; do not move implementation work into the QA team.
+
+Both teams belong to the same [Codogma Engine Linear project](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63), whose lead team remains COD. Use the [Development Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/development-kanban-4db756f5f1c6) for engineering work and [QA Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/qa-kanban-918c848c9880) for QA work. Detailed ownership, Work type labels, acceptance evidence and state semantics are defined in [docs/engineering-workflow.md](docs/engineering-workflow.md).
 
 ### Permanent branches
 
