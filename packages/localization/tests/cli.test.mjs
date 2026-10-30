@@ -9,12 +9,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { spawnSync } from "node:child_process"
-import {
-    mkdtempSync,
-    mkdirSync,
-    rmSync,
-    writeFileSync
-} from "node:fs"
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -60,9 +55,7 @@ function validTable(locale) {
 }
 
 describe("validate-localization CLI (COD-64)", () => {
-
     it("returns exit 0 and structured empty diagnostics for a valid project", t => {
-
         const projectDir = createProject(t)
         writeTable(projectDir, "en-US.json", validTable("en-US"))
         writeTable(projectDir, "ru-RU.json", validTable("ru-RU"))
@@ -77,7 +70,6 @@ describe("validate-localization CLI (COD-64)", () => {
     })
 
     it("returns exit 1 with file context for invalid localization JSON", t => {
-
         const projectDir = createProject(t)
         writeTable(projectDir, "en-US.json", "{ broken json")
 
@@ -92,7 +84,6 @@ describe("validate-localization CLI (COD-64)", () => {
     })
 
     it("returns exit 2 and a structured file diagnostic when locale directory is missing", t => {
-
         const projectDir = createProject(t, { withLocaleDir: false })
 
         const result = runCli(projectDir, "--json")
@@ -106,7 +97,6 @@ describe("validate-localization CLI (COD-64)", () => {
     })
 
     it("ignores directories ending in .json instead of reading them as files", t => {
-
         const projectDir = createProject(t)
         writeTable(projectDir, "en-US.json", validTable("en-US"))
         mkdirSync(path.join(projectDir, "locale", "ignored.json"))
