@@ -39,8 +39,7 @@ namespace phasereditor2d.scene.core.json {
             public box2dWorld_scale = 30,
             public importFileExtension = false,
             public box2dGenerateWorldCode = false,
-            public box2dSceneGenerateDebugCode = false,
-            public box2dDebugEditor = false
+            public box2dSceneGenerateDebugCode = false
         ) {
 
         }
@@ -82,7 +81,6 @@ namespace phasereditor2d.scene.core.json {
             write(data, "importFileExtension", this.importFileExtension, false);
             write(data, "box2dGenerateWorldCode", this.box2dGenerateWorldCode, false);
             write(data, "box2dSceneGenerateDebugCode", this.box2dSceneGenerateDebugCode, false);
-            write(data, "box2dDebugEditor", this.box2dDebugEditor, false);
 
             return data;
         }
@@ -122,7 +120,6 @@ namespace phasereditor2d.scene.core.json {
             this.importFileExtension = read(data, "importFileExtension", false);
             this.box2dGenerateWorldCode = read(data, "box2dGenerateWorldCode", false);
             this.box2dSceneGenerateDebugCode = read(data, "box2dSceneGenerateDebugCode", false);
-            this.box2dDebugEditor = read(data, "box2dDebugEditor", false);
         }
     }
 }
