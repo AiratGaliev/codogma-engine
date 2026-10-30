@@ -21,7 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely } from "./path-security.mjs"
+import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, writeNewFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -134,13 +134,18 @@ function readSceneFile(rel) {
     }
 }
 
-function writeSceneFile(rel, data) {
+function writeSceneFile(rel, data, options = {}) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full) throw new Error("invalid scene path: " + rel)
     if (!ensureProjectDirectorySafelySync(PROJECT_DIR, path.dirname(full))) throw new Error("invalid scene path: " + rel)
     const serialized = JSON.stringify(data, null, 4)
-    if (!writeFileSafely(PROJECT_DIR, full, serialized)) {
-        throw new Error("invalid scene path: " + rel)
+    const written = options.exclusive
+        ? writeNewFileSafely(PROJECT_DIR, full, serialized)
+        : writeFileSafely(PROJECT_DIR, full, serialized)
+    if (!written) {
+        throw new Error(options.exclusive
+            ? "scene file already exists or cannot be created safely: " + rel
+            : "invalid scene path: " + rel)
     }
     notifyFilesChanged()
 }
@@ -433,8 +438,7 @@ defTool(
         const rel = path.posix.join(dir, clean + ".scene")
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid folder")
-        if (fs.existsSync(full)) throw new Error(`Scene file already exists: ${rel}`)
-        writeSceneFile(rel, newSceneDoc(clean))
+        writeSceneFile(rel, newSceneDoc(clean), { exclusive: true })
         return text(`Scene file created: ${rel} (sceneKey "${clean}")`)
     }
 )
@@ -2047,10 +2051,9 @@ defTool(
         const rel = path.posix.join(dir, clean + ".scene")
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid folder")
-        if (fs.existsSync(full)) throw new Error(`Prefab file already exists: ${rel}`)
         const doc = newSceneDoc(clean)
         doc.sceneType = "PREFAB"
-        writeSceneFile(rel, doc)
+        writeSceneFile(rel, doc, { exclusive: true })
         return text(`Prefab scene file created: ${rel} (id ${doc.id}). Now add the prefab root object with scene-add-game-objects.`)
     }
 )
