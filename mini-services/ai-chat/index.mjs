@@ -21,8 +21,6 @@
 
 import { createServer } from "node:http"
 
-import ZAI from "z-ai-web-dev-sdk"
-
 const HOST = process.env["AI_CHAT_HOST"] || "127.0.0.1"
 const PORT = Number(process.env["AI_CHAT_PORT"] || 3031)
 
@@ -42,7 +40,9 @@ let zaiPromise = null
 function getZai() {
 
     if (!zaiPromise) {
-        zaiPromise = ZAI.create()
+        // The optional provider SDK is needed only for /chat, not for starting
+        // the local service or enforcing its loopback/Host/Origin boundary.
+        zaiPromise = import("z-ai-web-dev-sdk").then(({ default: ZAI }) => ZAI.create())
     }
 
     return zaiPromise
