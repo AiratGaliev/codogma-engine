@@ -76,7 +76,37 @@ function log(text) {
 
 function isLoopbackHostname(hostname) {
 
-    return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost";
+    let normalized = hostname.toLowerCase();
+
+    if (normalized.startsWith("[") && normalized.endsWith("]")) {
+        normalized = normalized.slice(1, -1);
+    }
+
+    if (normalized.endsWith(".")) {
+        normalized = normalized.slice(0, -1);
+    }
+
+    return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost";
+}
+
+function isAllowedHost(hostHeader) {
+
+    if (typeof hostHeader !== "string" || hostHeader.length === 0) return false;
+
+    try {
+
+        const parsed = new URL("http://" + hostHeader);
+
+        if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+            return false;
+        }
+
+        return isLoopbackHostname(parsed.hostname);
+
+    } catch (e) {
+
+        return false;
+    }
 }
 
 /**
@@ -220,6 +250,15 @@ function sendToEditors(message) {
 
 const server = createServer(async (req, res) => {
 
+    // Require a loopback Host as well as a loopback/allow-listed Origin. This
+    // blocks DNS-rebinding requests before status/data or editor tools are reached.
+    if (!isAllowedHost(req.headers.host)) {
+
+        reject(res, 403, "Forbidden host.", req);
+
+        return;
+    }
+
     // Browser callers with a foreign Origin cannot drive editor tools.
     if (!isAllowedOrigin(req.headers.origin)) {
 
@@ -345,6 +384,14 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 
 server.on("upgrade", (req, socket, head) => {
 
+    if (!isAllowedHost(req.headers.host)) {
+
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+
+        return;
+    }
+
     if (!isAllowedOrigin(req.headers.origin)) {
 
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
@@ -413,15 +460,25 @@ wss.on("connection", (ws) => {
     });
 });
 
-server.listen(PORT, HOST, () => {
+server.headersTimeout = 10_000;
+server.requestTimeout = 30_000;
+server.keepAliveTimeout = 5_000;
 
-    console.log(`phaser-editor-mcp-bridge listening on http://${HOST}:${PORT} (loopback-only by default)`);
-    console.log(`- GET  /  : status endpoint ({status, clients})`);
-    console.log(`- POST /  : official MCP server requests ({tool, args})`);
-    console.log(`- WS   /  : editor clients connect here`);
+// This helper has no remote-authentication protocol. Never bind it to LAN/public
+// interfaces: remote access should use an authenticated tunnel instead.
+if (!isLoopbackHostname(HOST.toLowerCase())) {
 
-    if (HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
+    console.error("phaser-editor-mcp-bridge: refusing non-loopback bind host " + HOST + ".");
+    process.exitCode = 1;
 
-        console.warn(`phaser-editor-mcp-bridge: MCP_BRIDGE_HOST="${HOST}" exposes this service beyond loopback.`);
-    }
-});
+} else {
+
+    server.listen(PORT, HOST, () => {
+
+        console.log(`phaser-editor-mcp-bridge listening on http://${HOST}:${PORT} (loopback-only by default)`);
+        console.log(`- GET  /  : status endpoint ({status, clients})`);
+        console.log(`- POST /  : official MCP server requests ({tool, args})`);
+        console.log(`- WS   /  : editor clients connect here`);
+
+    });
+}

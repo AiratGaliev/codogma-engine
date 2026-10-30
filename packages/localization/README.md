@@ -60,10 +60,26 @@ duplicate ids are always detectable.
 
 ~~~bash
 cd packages/localization
-npm ci          # locked dev dependencies (TypeScript 5.3.3)
+npm ci          # package-lock: TypeScript 5.3.3
 npm run build   # strict typecheck + emit dist/
 npm test        # build + node --test contract/service/validation/fixture/CLI tests
+npm run quality:check  # strict typecheck, scoped ESLint, config-format check and unit tests
+npm run quality:report # non-blocking Knip + dependency-cruiser reports
 ~~~
+
+The quality pilot deliberately uses root-locked ESLint, Prettier, Knip and
+dependency-cruiser versions rather than duplicating tool dependencies in this
+package's lockfile. Prettier checks all package-owned source, test and CLI files
+together with the manifest and tooling configuration. The package files were
+normalized in the pilot branch and the CI check now runs in read-only check
+mode. Run the root `npm ci` first, then `npm ci` here for the package's pinned
+TypeScript compiler. Strict TypeScript, ESLint and formatting gates remain
+scoped to this package; they are not applied to the legacy editor tree.
+
+`quality:report` is report-only: Knip uses `--no-exit-code`; dependency-cruiser
+rules use warning severity. Review findings before promoting either report to a
+blocking gate. Explicit Knip entries cover the public ESM entry, CLI and tests;
+generated `dist/` and fixtures are excluded from unused-file findings. The four shared tool binaries are explicitly ignored because their versions are owned by the root manifest/lockfile rather than duplicated in this package.
 
 Repository-level commands (from the root):
 

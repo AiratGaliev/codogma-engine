@@ -77,6 +77,46 @@ async function stopChild(child) {
     await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2000))])
 }
 
+async function assertRemoteBindRejected(serviceDir, script, env, label) {
+    const service = spawnService(serviceDir, script, env)
+
+    try {
+        // "close" fires after stdout/stderr streams are drained, so the
+        // startup-rejection message is available for the assertion below.
+        const exitPromise = once(service.child, "close")
+        let timer
+        const outcome = await Promise.race([
+            exitPromise.then(([code, signal]) => ({ type: "exit", code, signal })),
+            new Promise(resolve => {
+                timer = setTimeout(() => resolve({ type: "timeout" }), 5000)
+            })
+        ])
+        clearTimeout(timer)
+
+        assert.equal(outcome.type, "exit", `${label} must refuse an external bind instead of starting`)
+        assert.notEqual(outcome.code, 0, `${label} must exit unsuccessfully for a non-loopback bind`)
+        assert.match(service.logs(), /refusing non-loopback bind/i,
+            `${label} must explain the rejected bind:\n${service.logs()}`)
+    } finally {
+        await stopChild(service.child)
+    }
+}
+
+async function testRemoteBindGuards() {
+    await assertRemoteBindRejected(
+        path.join(ROOT, "mini-services", "ai-chat"),
+        "index.mjs",
+        { AI_CHAT_PORT: "0", AI_CHAT_HOST: "0.0.0.0" },
+        "ai-chat"
+    )
+    await assertRemoteBindRejected(
+        path.join(ROOT, "mini-services", "phaser-editor-mcp"),
+        "index.mjs",
+        { PORT: "0", MCP_BRIDGE_HOST: "0.0.0.0" },
+        "phaser-editor-mcp"
+    )
+}
+
 async function waitForHttp(port, service, probe) {
     const deadline = Date.now() + 15000
     while (Date.now() < deadline) {
@@ -115,6 +155,14 @@ async function testAiChat() {
 
         const rebinding = await request(port, "/health", { headers: { host: "attacker.example" } })
         assert.equal(rebinding.status, 403, "non-loopback Host header must be rejected (DNS rebinding guard)")
+
+        const ipv6LoopbackHost = await request(port, "/health", { headers: { host: `[::1]:${port}` } })
+        assert.equal(ipv6LoopbackHost.status, 200, "IPv6 loopback Host headers must be normalized and accepted")
+
+        const ipv6LoopbackOrigin = await request(port, "/health", {
+            headers: { host, origin: `http://[::1]:${port}` }
+        })
+        assert.equal(ipv6LoopbackOrigin.status, 200, "IPv6 loopback Origin headers must be normalized and accepted")
 
         const csrf = await request(port, "/chat", {
             method: "POST",
@@ -202,6 +250,9 @@ async function testMcpBridge() {
         assert.equal(status.status, 200, "loopback status check must pass")
         assert.equal(JSON.parse(status.body).status, "ok")
 
+        const rebinding = await request(port, "/", { headers: { host: "attacker.example" } })
+        assert.equal(rebinding.status, 403, "the MCP bridge must reject foreign Host headers even without Origin")
+
         const foreignOrigin = await request(port, "/", {
             headers: { host, origin: "https://attacker.example" }
         })
@@ -213,6 +264,12 @@ async function testMcpBridge() {
         assert.equal(editorOrigin.status, 200, "the editor page origin (loopback) must be accepted")
         assert.equal(editorOrigin.headers["access-control-allow-origin"], "http://127.0.0.1:3000",
             "CORS must echo the specific allowed origin, not a wildcard")
+
+        const ipv6Origin = await request(port, "/", {
+            headers: { host, origin: "http://[::1]:3000" }
+        })
+        assert.equal(ipv6Origin.status, 200, "IPv6 loopback origins must be accepted")
+        assert.equal(ipv6Origin.headers["access-control-allow-origin"], "http://[::1]:3000")
 
         const preflight = await request(port, "/", {
             method: "OPTIONS",
@@ -303,13 +360,26 @@ async function testMcpBridge() {
         assert.notEqual(wsOutcome, "opened", "WebSocket upgrades from foreign origins must be rejected")
         hostileWs.terminate()
 
-        console.log("phaser-editor-mcp: origin guards, body caps, validation and WS forwarding passed")
+        const hostileHostWs = new WebSocket(`ws://127.0.0.1:${port}/`, {
+            headers: { host: "attacker.example" }
+        })
+        const hostOutcome = await new Promise(resolve => {
+            const timer = setTimeout(() => resolve("closed"), 2000)
+            hostileHostWs.once("open", () => { clearTimeout(timer); resolve("opened") })
+            hostileHostWs.once("unexpected-response", () => { clearTimeout(timer); resolve("rejected") })
+            hostileHostWs.once("error", () => { clearTimeout(timer); resolve("rejected") })
+        })
+        assert.notEqual(hostOutcome, "opened", "WebSocket upgrades with a foreign Host must be rejected")
+        hostileHostWs.terminate()
+
+        console.log("phaser-editor-mcp: Host/Origin guards, body caps, validation and WS forwarding passed")
     } finally {
         await stopChild(service.child)
     }
 }
 
 async function main() {
+    await testRemoteBindGuards()
     await testAiChat()
     await testMcpBridge()
     console.log("Mini-services security checks passed.")

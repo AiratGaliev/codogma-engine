@@ -20,6 +20,47 @@ async function freePort() {
     return address.port
 }
 
+function requestHeadersOnly(port, requestPath, headers) {
+    return new Promise((resolve, reject) => {
+        const socket = net.connect(port, "127.0.0.1")
+        let responseHead = ""
+        let settled = false
+
+        const finish = (error, status) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            socket.destroy()
+            if (error) reject(error)
+            else resolve({ status })
+        }
+
+        const timer = setTimeout(() => {
+            finish(new Error(`Timed out waiting for early HTTP rejection for ${requestPath}`))
+        }, 5000)
+
+        socket.on("connect", () => {
+            const lines = [
+                `POST ${requestPath} HTTP/1.1`,
+                ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+                "",
+                ""
+            ]
+            socket.write(lines.join("\r\n"))
+        })
+        socket.on("data", chunk => {
+            responseHead += chunk.toString("latin1")
+            const headerEnd = responseHead.indexOf("\r\n\r\n")
+            if (headerEnd < 0) return
+            const statusLine = responseHead.slice(0, responseHead.indexOf("\r\n"))
+            const match = statusLine.match(/^HTTP\/\d(?:\.\d)? (\d{3})/)
+            if (!match) return finish(new Error(`Invalid HTTP status line: ${statusLine}`))
+            finish(null, Number(match[1]))
+        })
+        socket.on("error", error => finish(error))
+    })
+}
+
 function request(port, requestPath, { method = "GET", headers = {}, body } = {}) {
     return new Promise((resolve, reject) => {
         const req = http.request({
@@ -207,6 +248,32 @@ async function main() {
     try {
         await waitForHttpServer(port, server, () => logs)
         const host = `127.0.0.1:${port}`
+
+        // Declared oversize bodies must be rejected from headers without
+        // buffering the claimed body or returning an HTTP 200 error payload.
+        const oversizedJson = await requestHeadersOnly(port, "/editor/api", {
+            host,
+            "content-type": "application/json",
+            "content-length": String(32 * 1024 * 1024 + 1),
+            connection: "close"
+        })
+        assert.equal(oversizedJson.status, 413, "oversized JSON API bodies must receive HTTP 413")
+
+        const oversizedUpload = await requestHeadersOnly(port, "/editor/upload", {
+            host,
+            "content-type": "multipart/form-data; boundary=codogma-limit-test",
+            "content-length": String(128 * 1024 * 1024 + 1),
+            connection: "close"
+        })
+        assert.equal(oversizedUpload.status, 413, "oversized multipart bodies must receive HTTP 413")
+
+        const malformedJson = await request(port, "/editor/api", {
+            method: "POST",
+            headers: { host, "content-type": "application/json" },
+            body: "{"
+        })
+        assert.equal(malformedJson.status, 400, "malformed JSON API bodies must receive HTTP 400")
+        assert.equal(JSON.parse(malformedJson.body).error, "invalid request body")
 
         const allowed = await request(port, "/editor/product.json", { headers: { host } })
         assert.equal(allowed.status, 200, "loopback request should be accepted")

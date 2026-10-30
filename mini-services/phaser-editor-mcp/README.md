@@ -28,8 +28,11 @@ re-implement the MCP protocol.
   `[{ type: "text", text: "…" }]` or `[{ type: "image", data: "<base64>", mimeType: "image/png" }]`.
 - `GET /` returns `{ status: "ok", clients: <n>, … }` — used by the editor's
   *AI → MCP Server Configuration* dialog to verify connectivity.
-- CORS headers (`Access-Control-Allow-Origin: *`) are sent on every response so the editor
-  page (served from a different origin/port) can call the status endpoint.
+- HTTP and WebSocket requests require a loopback `Host`; browser `Origin` values are
+  validated separately and CORS only echoes a permitted origin (never a wildcard).
+- This service has no remote-authentication protocol and refuses to bind to non-loopback
+  interfaces. Use an authenticated SSH tunnel for remote development; do not expose port
+  `1902` directly to a LAN or public network.
 
 ## Run
 
@@ -39,7 +42,10 @@ npm install
 npm run dev        # node --watch index.mjs (dev)  |  npm start for plain node index.mjs
 ```
 
-The bridge listens on `http://127.0.0.1:1902` (override with the `PORT` env var).
+The bridge listens on `http://127.0.0.1:1902` (override the port with `PORT`).
+`MCP_BRIDGE_HOST` may select a loopback address (`127.0.0.1`, `localhost`, or `::1`);
+a non-loopback bind is rejected because this helper does not implement remote authentication.
+HTTP headers and request bodies have explicit time limits, and request bodies are size-capped.
 
 > **Workspace note:** in this sandbox the **production** server (`node server/server.mjs`)
 > is already running on port `1902` and serves the editor plus its own built-in MCP bridge

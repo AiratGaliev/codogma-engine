@@ -11,6 +11,7 @@
  *     fixed in this branch: one broken prefab reference aborting the whole
  *     origin migration)
  *   - the code-DOM code generators (JavaScript + TypeScript output)
+ *   - Particle Emitter texture fallback and frame configuration lifecycle
  *   - variable-name / JSON formatting helpers used by codegen
  */
 
@@ -31,6 +32,7 @@ const coreJson = globalThis.phasereditor2d.scene.core.json
 const coreCode = globalThis.phasereditor2d.scene.core.code
 const migrations = globalThis.phasereditor2d.scene.core.migrations
 const isValidSceneData = coreJson.isValidSceneData
+const SceneSettings = globalThis.phasereditor2d.scene.core.json.SceneSettings
 
 /* ===================== property serialization ===================== */
 
@@ -81,6 +83,20 @@ test("scene Serializer.write keeps non-default values and drops default ones", (
     serializer.write("visible", false, true) // differs from default → kept
 
     assert.equal(data.visible, false)
+})
+
+test("legacy Box2D debug flag round-trips without enabling the current generated debug-draw option", () => {
+    const settings = new SceneSettings()
+    settings.readJSON({ box2dDebugDraw: true })
+
+    assert.equal(settings.box2dDebugDraw, true,
+        "old scene metadata must remain readable for compatibility")
+    assert.equal(settings.box2dSceneGenerateDebugCode, false,
+        "the legacy flag must not silently change the new generator option")
+
+    const data = settings.toJSON()
+    assert.equal(data.box2dDebugDraw, true,
+        "the legacy setting must survive serialization")
 })
 
 /* ===================== scene-data migrations ===================== */
@@ -226,6 +242,54 @@ test("TypeScript unit generator emits typed fields", () => {
     assert.match(output, /sprite: Phaser\.GameObjects\.Sprite/, "TypeScript output must carry field type annotations")
 })
 
+test("Box2D world ID expression preserves legacy variables and template-owned scene/prefab IDs", () => {
+    const component = globalThis.phasereditor2d.scene.ui.sceneobjects.Box2DBodyComponent;
+
+    assert.equal(component.getWorldIdExpression(false, false), "box2dWorldId");
+    assert.equal(component.getWorldIdExpression(false, true), "box2dWorldId",
+        "legacy prefab code must use the world variable created in the consuming scene");
+    assert.equal(component.getWorldIdExpression(true, false), "this.worldId");
+    assert.equal(component.getWorldIdExpression(true, true), "this.scene.worldId");
+})
+
+test("ES module import paths use emitted .js extensions for scene and TypeScript sources", () => {
+    const FilePath = globalThis.colibri.core.io.FilePath;
+    const codeUtils = globalThis.phasereditor2d.ide.core.code;
+    const root = new FilePath(null, {
+        name: "project",
+        isFile: false,
+        size: 0,
+        modTime: 0,
+        children: [{
+            name: "scenes",
+            isFile: false,
+            size: 0,
+            modTime: 0,
+            children: [
+                { name: "main.scene", isFile: true, size: 0, modTime: 0 },
+                { name: "prefabs", isFile: false, size: 0, modTime: 0, children: [
+                    { name: "enemy.scene", isFile: true, size: 0, modTime: 0 }
+                ] },
+                { name: "components", isFile: false, size: 0, modTime: 0, children: [
+                    { name: "Player.ts", isFile: true, size: 0, modTime: 0 },
+                    { name: "Helper.js", isFile: true, size: 0, modTime: 0 }
+                ] }
+            ]
+        }]
+    });
+
+    const scenes = root.getFile("scenes");
+    const scene = scenes.getFile("main.scene");
+    const prefab = scenes.getFile("prefabs").getFile("enemy.scene");
+    const component = scenes.getFile("components").getFile("Player.ts");
+    const helper = scenes.getFile("components").getFile("Helper.js");
+
+    assert.equal(codeUtils.getImportPath(scene, prefab, true).importPath, "./prefabs/enemy.js");
+    assert.equal(codeUtils.getImportPath(scene, component, true).importPath, "./components/Player.js");
+    assert.equal(codeUtils.getImportPath(scene, helper, true).importPath, "./components/Helper.js");
+    assert.equal(codeUtils.getImportPath(scene, prefab, false).importPath, "./prefabs/enemy");
+})
+
 /* =========================== code helpers =========================== */
 
 test("formatToValidVarName produces identifier-safe names", () => {
@@ -262,4 +326,56 @@ test("SceneFinder rejects syntactically valid but structurally invalid scene dat
 
     assert.equal(isValidSceneData({ displayList: [] }), true)
     assert.equal(isValidSceneData({ displayList: [], settings: {} }), true)
+})
+
+
+/* ====================== Particle Emitter codegen ====================== */
+
+const sceneObjects = globalThis.phasereditor2d.scene.ui.sceneobjects
+
+function buildParticleEmitterFactoryArgs(texture, frame) {
+    const emitter = {
+        x: 12,
+        y: 34,
+        configTexture: texture,
+        configFrame: frame
+    }
+
+    // Exercise the real compiler-config builder without constructing Phaser's
+    // runtime emitter (which requires a live Scene and WebGL/DOM services).
+    const support = Object.create(sceneObjects.ParticleEmitterEditorSupport.prototype)
+    support.getObject = () => emitter
+    support.isUnlockedProperty = () => false
+    support.isPrefabInstance = () => false
+    emitter.getEditorSupport = () => support
+
+    const builder = Object.create(sceneObjects.ParticleEmitterCodeDOMBuilder.prototype)
+    const call = builder.buildCreateObjectWithFactoryCodeDOM({
+        obj: emitter,
+        gameObjectFactoryExpr: "this.add"
+    })
+
+    return call.getArgs()
+}
+
+test("Particle Emitter codegen uses Phaser's __DEFAULT texture and preserves configured frames", () => {
+    const args = buildParticleEmitterFactoryArgs(undefined, [0, 1])
+
+    assert.deepEqual(args.slice(0, 2), ["12", "34"])
+    assert.equal(args[2], '"__DEFAULT"', "unset texture must use Phaser's default particle texture")
+    assert.match(args[3], /\bframe\b/, "configured frames must be included in generated config")
+    assert.match(args[3], /\[0, 1\]/, "generated config must keep the complete frame list")
+})
+
+test("Particle Emitter codegen omits removed frames and uses an explicit texture key", () => {
+    const configuredArgs = buildParticleEmitterFactoryArgs("spark", [2])
+    const clearedArgs = buildParticleEmitterFactoryArgs("spark", [])
+
+    assert.equal(configuredArgs[2], '"spark"')
+    assert.match(configuredArgs[3], /\bframe\b/)
+    assert.match(configuredArgs[3], /\[2\]/)
+
+    assert.equal(clearedArgs[2], '"spark"')
+    assert.doesNotMatch(clearedArgs[3], /\bframe\b/,
+        "clearing the frame selection must remove the stale frame config from generated code")
 })

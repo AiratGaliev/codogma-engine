@@ -33,6 +33,8 @@ jobs:
             source/editor/package-lock.json
             packages/localization/package-lock.json
             packages/editor-mcp-server/package-lock.json
+            mini-services/ai-chat/package-lock.json
+            mini-services/phaser-editor-mcp/package-lock.json
 
       - name: Validate pull request routing
         if: github.event_name == 'pull_request'
@@ -112,6 +114,25 @@ jobs:
       - name: Security smoke tests (local access, symlinks, MCP compatibility)
         run: npm run test:security
 
+      - name: Install locked AI Chat service dependencies
+        run: npm ci
+        working-directory: mini-services/ai-chat
+
+      - name: Audit AI Chat service dependencies
+        run: npm audit --audit-level=low
+        working-directory: mini-services/ai-chat
+
+      - name: Install locked MCP bridge service dependencies
+        run: npm ci
+        working-directory: mini-services/phaser-editor-mcp
+
+      - name: Audit MCP bridge service dependencies
+        run: npm audit --audit-level=low
+        working-directory: mini-services/phaser-editor-mcp
+
+      - name: Mini-services security tests (loopback, Host/Origin, limits and WebSocket)
+        run: npm run test:mini-services
+
       - name: Install locked dependencies (localization package)
         run: npm ci
         working-directory: packages/localization
@@ -120,15 +141,15 @@ jobs:
         run: npm audit --audit-level=low
         working-directory: packages/localization
 
-      - name: Build and test localization package (COD-62/COD-64)
-        run: npm run test:localization
+      - name: Build, test and quality-pilot localization package (COD-19/COD-62/COD-64)
+        run: npm run quality:check && npm run quality:report
+        working-directory: packages/localization
 
       - name: Localization project diagnostics CLI (COD-64)
         run: npm run test:localization:project
 
       - name: Localization runtime acceptance (server + fixture tables)
         run: npm run test:localization:acceptance
-
       - name: Install locked dependencies (MCP package)
         run: npm ci
         working-directory: packages/editor-mcp-server

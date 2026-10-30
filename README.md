@@ -23,6 +23,8 @@ Development priorities:
 
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
+Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL loss/recovery, iframe host contracts, resource/memory budgets, storage failures and mobile/embedded-host acceptance are explicit requirements. See [the architecture risk register](docs/architecture-risk-register.md).
+
 ## Current capabilities
 
 | Area | Available today |
@@ -34,7 +36,7 @@ This direction does **not** mean every planned engine subsystem already exists. 
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
 | Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
 | Editable tilemaps | Tilemap authoring tools, layers, tilesets, painting operations and MCP tools for modifying tilemap data. |
-| Physics authoring | Arcade Physics-related scene tooling and Box2D body/world authoring and code generation. Box2D runtime setup may be needed in the game project separately. |
+| Physics authoring | Arcade Physics tooling; component-based Box2D body/world settings and code generation on existing Phaser GameObjects. External Box2D runtime setup may be required. Standalone B2Body/B2Shape object nodes are not currently supported. |
 | MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> in <code>packages/editor-mcp-server/</code> exposes the engine-owned tool registry over stdio and forwards requests to the local <code>POST /editor/mcp</code> endpoint. npm publication is deferred; the older WebSocket bridge remains for legacy editor workflows. |
 | AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
@@ -71,11 +73,11 @@ Open **http://localhost:3000/editor/**.
 
 The server should respond at that address, and product metadata should be available at [http://localhost:3000/editor/product.json](http://localhost:3000/editor/product.json).
 
-**Security boundary:** the editor server and MCP bridge bind to IPv4 loopback (`127.0.0.1`) and are intended for local development, not direct public-network exposure. Browser requests with a mismatched `Origin` or `Host` are rejected. File operations also reject paths that escape the chosen project through symbolic links, and request bodies have explicit size limits. These checks are defense-in-depth, not a substitute for keeping your machine and project files trusted.
+**Security boundary:** the main editor server (`server/server.mjs`) and its built-in MCP bridge bind to IPv4 loopback (`127.0.0.1`) and are intended for trusted local development, not direct public-network exposure. Host/Origin, body-size and common path/symlink escapes are checked. Content-file writes verify the opened file handle before truncation, but pathname-based operations such as folder creation, rename, copy, move and delete still have a documented local-process TOCTOU residual; do not treat the entire filesystem API as race-proof. The optional standalone services under `mini-services/` are separate processes and do **not** inherit the main server's guard. Both currently default to loopback and implement Host/Origin validation and request limits, but host binding can be overridden by environment variables and neither is an authenticated public API. Keep them local; do not bind them to a public interface or expose them through a multi-user proxy without separate authentication/authorization design and service-level security tests.
 
-**Running behind a reverse proxy:** a local proxy that publishes the editor (a sandbox preview, a tunnel, a container port-mapping) connects from loopback but forwards the public `Host` header, which the guard above rejects by default. Set <code>CODOGMA_ALLOWED_HOSTS</code> to a comma-separated list of public hostnames — or `*` when the hostname is dynamic — to accept those `Host` headers from loopback peers. `npm run dev:proxy` does this in one command. The same-origin `Origin` enforcement and the loopback-only peer check keep applying, so cross-site browser attacks stay blocked; keep the server itself off public interfaces.
+**Running behind a reverse proxy:** a local proxy that publishes the editor (a sandbox preview, a tunnel, a container port-mapping) connects from loopback but forwards the public `Host` header, which the guard above rejects by default. Prefer an explicit comma-separated `CODOGMA_ALLOWED_HOSTS` allow-list. `npm run dev:proxy` is a convenience for a trusted development tunnel, not a production-safe security profile: it sets wildcard Host/Origin allowances unless overridden. Loopback binding protects the local server socket from direct remote connections; it does **not** protect users from malicious requests sent through a proxy that is already exposed to the network.
 
-**Gateways that rewrite the `Host` header:** some platforms serve the page from one domain while the local gateway forwards an internal `Host` name the browser never sees, so the browser `Origin` can never equal `Host` and every API call would get a 403. For those deployments set <code>CODOGMA_ALLOWED_ORIGINS</code> to a comma-separated list of trusted browser origins: exact entries (<code>https://editor.example.com</code>), scheme-locked subdomain wildcards (<code>https://*.space-z.ai</code>), or `*` for everything (trusted environments only). A listed origin bypasses only the same-host comparison — the loopback-peer and `Host` checks still apply, and non-listed origins stay rejected. Prefer the narrowest list that works, for example <code>CODOGMA_ALLOWED_ORIGINS='https://*.space-z.ai' npm run dev:proxy</code>.
+**Gateways that rewrite the `Host` header:** some platforms serve the page from one domain while the local gateway forwards an internal `Host` name the browser never sees, so the browser `Origin` can never equal `Host` and every API call would get a 403. Set <code>CODOGMA_ALLOWED_ORIGINS</code> to the narrowest trusted browser-origin allow-list that works (exact origins first; scheme-locked subdomain wildcards only when required). Setting it to `*` disables the effective Origin allow-list and accepts requests from any browser origin; this is **not** protected by a claim that same-origin checks still block cross-site requests. Never use a wildcard Origin on a public or multi-user proxy. Prefer, for example, <code>CODOGMA_ALLOWED_ORIGINS='https://editor.example.com' CODOGMA_ALLOWED_HOSTS='editor.example.com' npm start</code> in a trusted private environment, and keep the server bound to loopback.
 
 ### Select a game project
 
@@ -307,7 +309,7 @@ CI is designed to check changes quickly and to run MCP integration tests on prom
 
 | Workflow / job | Trigger | Main checks |
 |---|---|---|
-| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization/MCP-package dependencies, validates PR routing, builds the editor client, runs unit/security/package tests, smoke-tests the server/editor and checks localization/project diagnostics. |
+| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization and standalone mini-service dependencies, validates PR routing, builds the editor client, runs unit regression and security checks for the main server and mini-services, smoke-tests the server/editor, and tests localization package, project diagnostics and runtime acceptance. |
 | **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Installs/builds the standalone MCP package, starts the engine server and tests the stdio adapter through <code>POST /editor/mcp</code>. UI-dependent acceptance remains separate. |
 | **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client and MCP package, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
 
@@ -330,6 +332,18 @@ A successful server-side MCP test, TypeScript build or security smoke test does 
 The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
 
 For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`) and the task-start/review/acceptance checklist, follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). In particular, `In Review` means implementation is finished but evidence or acceptance is still pending; `Done` requires all applicable criteria to be verified.
+### Linear teams and issue ownership
+
+Linear work is split by responsibility across two teams in the shared **Codogma Engine** project:
+
+| Team | Issue identifiers | Owns |
+|---|---|---|
+| **Codogma-engine (COD)** | **COD-N** | Engineering delivery: implementation, fixes, architecture, automated tests and CI/tooling. |
+| **Codogma QA (CODQA)** | **CODQA-N** | Functional acceptance of editor/game workflows and release-candidate acceptance. |
+
+Create Engineering issues in COD and QA/acceptance issues in CODQA. Keep cross-team parent/sub-issue or related links so an acceptance task points to the Engineering work it verifies. A defect discovered during QA becomes a separate Engineering/Bug issue in COD; do not move implementation work into the QA team.
+
+Both teams belong to the same [Codogma Engine Linear project](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63), whose lead team remains COD. Use the [Development Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/development-kanban-4db756f5f1c6) for engineering work and [QA Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/qa-kanban-918c848c9880) for QA work. Detailed ownership, Work type labels, acceptance evidence and state semantics are defined in [docs/engineering-workflow.md](docs/engineering-workflow.md). Team landing guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
 
 ### Permanent branches
 

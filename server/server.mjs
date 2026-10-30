@@ -38,8 +38,9 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForWrite } from "./path-security.mjs"
+import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
+import { readRequestBuffer } from "./request-body.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
@@ -150,28 +151,29 @@ function rejectNonLocalRequest(req, res) {
     return true
 }
 
-function walkTree(dirPath, relPrefix, files, folders) {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+function walkTree(dirPath, relPrefix, files, folders, metadata = new Map()) {
+    const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dirPath)
+    if (!entries) return metadata
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix ? relPrefix + "/" + entry.name : entry.name
         const full = path.join(dirPath, entry.name)
-        if (entry.isDirectory()) {
+        if (entry.isDirectory) {
             folders.push(rel)
-            walkTree(full, rel, files, folders)
-        } else if (entry.isFile()) {
+            metadata.set(rel, entry)
+            walkTree(full, rel, files, folders, metadata)
+        } else if (entry.isFile) {
             files.push(rel)
+            metadata.set(rel, entry)
         }
     }
+    return metadata
 }
 
 /*
- * The IDE client sends file paths as `getFullName()`, which includes the
- * project root folder name as the first segment (e.g.
- * "test-typescript/scenes/Level.scene"), while GET URLs (`/editor/project/*`)
- * use paths relative to the project root ("scenes/Level.scene").
- * The official server accepts both; we normalize by stripping the leading
- * segment when it matches the project folder name.
+ * The IDE client sends file paths with the project root folder as the first
+ * segment, while /editor/project URLs are relative to the project root.
  */
 function apiPath(p) {
     if (typeof p !== "string" || p.length === 0) return p
@@ -182,55 +184,58 @@ function apiPath(p) {
     return p
 }
 
+/**
+ * Return metadata from a verified parent-directory enumeration rather than
+ * following a client-controlled pathname with stat().
+ */
 function fileData(projectDir, relPath) {
     const full = safeJoin(projectDir, relPath)
-    if (!full) return null
-    try {
-        const st = fs.statSync(full)
-        return {
-            name: path.basename(relPath),
-            isFile: st.isFile(),
-            size: st.isFile() ? st.size : 0,
-            modTime: Math.floor(st.mtimeMs),
-            children: st.isFile() ? undefined : []
-        }
-    } catch (e) {
-        return null
+    if (!full || full === projectDir) return null
+    const entries = readProjectDirectoryEntriesSafelySync(projectDir, path.dirname(full))
+    if (!entries) return null
+    const entry = entries.find(candidate => candidate.name === path.basename(full))
+    if (!entry || entry.isSymbolicLink || (!entry.isFile && !entry.isDirectory)) return null
+    return {
+        name: path.basename(relPath),
+        isFile: entry.isFile,
+        size: entry.isFile ? entry.size : 0,
+        modTime: Math.floor(entry.mtimeMs),
+        children: entry.isFile ? undefined : []
     }
 }
 
 function buildRootFileData(projectDir) {
     const name = path.basename(projectDir)
     const children = []
-    const entries = fs.readdirSync(projectDir, { withFileTypes: true })
+    const entries = readProjectDirectoryEntriesSafelySync(projectDir, projectDir) || []
     for (const entry of entries) {
-        if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const full = path.join(projectDir, entry.name)
-        const st = fs.statSync(full)
-        if (st.isDirectory()) {
-            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(st.mtimeMs), children: [] }
-            buildFolderData(full, entry.name, sub)
+        if (entry.isDirectory) {
+            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(entry.mtimeMs), children: [] }
+            buildFolderData(projectDir, full, entry.name, sub)
             children.push(sub)
-        } else if (st.isFile()) {
-            children.push({ name: entry.name, isFile: true, size: st.size, modTime: Math.floor(st.mtimeMs) })
+        } else if (entry.isFile) {
+            children.push({ name: entry.name, isFile: true, size: entry.size, modTime: Math.floor(entry.mtimeMs) })
         }
     }
     return { name, isFile: false, size: 0, modTime: Date.now(), children }
 }
 
-function buildFolderData(dirPath, relPrefix, node) {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+function buildFolderData(projectRoot, dirPath, relPrefix, node) {
+    const entries = readProjectDirectoryEntriesSafelySync(projectRoot, dirPath)
+    if (!entries) return
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix + "/" + entry.name
         const full = path.join(dirPath, entry.name)
-        const st = fs.statSync(full)
-        if (st.isDirectory()) {
-            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(st.mtimeMs), children: [] }
-            buildFolderData(full, rel, sub)
+        if (entry.isDirectory) {
+            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(entry.mtimeMs), children: [] }
+            buildFolderData(projectRoot, full, rel, sub)
             node.children.push(sub)
-        } else {
-            node.children.push({ name: entry.name, isFile: true, size: st.size, modTime: Math.floor(st.mtimeMs) })
+        } else if (entry.isFile) {
+            node.children.push({ name: entry.name, isFile: true, size: entry.size, modTime: Math.floor(entry.mtimeMs) })
         }
     }
 }
@@ -242,14 +247,12 @@ function computeProjectHash() {
     if (hashCache.value && now - hashCache.stamp < 1000) {
         return hashCache.value
     }
-    const files = [], folders = []
-    walkTree(PROJECT_DIR, "", files, folders)
+    const files = [], folders = [], metadata = new Map()
+    walkTree(PROJECT_DIR, "", files, folders, metadata)
     const parts = []
     for (const rel of files.concat(folders).sort()) {
-        try {
-            const st = fs.statSync(path.join(PROJECT_DIR, rel))
-            parts.push(`${rel}|${Math.floor(st.mtimeMs)}|${st.size}`)
-        } catch (e) { /* ignore */ }
+        const entry = metadata.get(rel)
+        if (entry) parts.push(`${rel}|${Math.floor(entry.mtimeMs)}|${entry.size}`)
     }
     const value = crypto.createHash("sha1").update(parts.join("\n")).digest("hex")
     hashCache.value = value
@@ -259,12 +262,9 @@ function computeProjectHash() {
 
 /* ============================== image size =============================== */
 
-function getImageSize(absPath) {
-    const buf = Buffer.alloc(65536)
-    const fd = fs.openSync(absPath, "r")
-    const bytes = fs.readSync(fd, buf, 0, buf.length, 0)
-    fs.closeSync(fd)
-    const data = buf.subarray(0, bytes)
+function getImageSize(input, extension) {
+    if (!Buffer.isBuffer(input)) return null
+    const data = input.subarray(0, 65536)
 
     // PNG
     if (data.length > 24 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) {
@@ -315,7 +315,7 @@ function getImageSize(absPath) {
     }
 
     // SVG
-    const ext = path.extname(absPath).toLowerCase()
+    const ext = String(extension || "").toLowerCase()
     if (ext === ".svg") {
         const text = data.toString("utf8")
         const w = text.match(/width\s*=\s*["']([\d.]+)/)
@@ -394,55 +394,6 @@ ${scripts.map(s => `    <script src="${s}"></script>`).join("\n")}
 
 /* =============================== API layer =============================== */
 
-function readRequestBuffer(req, maxBytes) {
-    return new Promise((resolve, reject) => {
-        const chunks = []
-        let size = 0
-        let settled = false
-
-        const cleanup = () => {
-            req.off("data", onData)
-            req.off("end", onEnd)
-            req.off("error", onError)
-        }
-
-        const onData = chunk => {
-            if (settled) return
-            size += chunk.length
-
-            if (size > maxBytes) {
-                settled = true
-                cleanup()
-                req.resume()
-                const error = new Error("Request body too large")
-                error.statusCode = 413
-                reject(error)
-                return
-            }
-
-            chunks.push(chunk)
-        }
-
-        const onEnd = () => {
-            if (settled) return
-            settled = true
-            cleanup()
-            resolve(Buffer.concat(chunks))
-        }
-
-        const onError = error => {
-            if (settled) return
-            settled = true
-            cleanup()
-            reject(error)
-        }
-
-        req.on("data", onData)
-        req.on("end", onEnd)
-        req.on("error", onError)
-    })
-}
-
 async function readBodyJSON(req) {
     const body = await readRequestBuffer(req, MAX_API_BODY_BYTES)
     return JSON.parse(body.toString("utf8") || "{}")
@@ -471,7 +422,11 @@ async function handleAPI(req, res) {
     try {
         reqData = await readBodyJSON(req)
     } catch (e) {
-        return apiError(res, "invalid request body")
+        return apiError(
+            res,
+            e.statusCode === 413 ? e.message : "invalid request body",
+            e.statusCode || 400
+        )
     }
     const method = reqData.method
     const body = reqData.body || {}
@@ -493,7 +448,7 @@ async function handleAPI(req, res) {
                 const configPath = safeJoin(PROJECT_DIR, "phasereditor2d.json")
                 if (configPath && fs.existsSync(configPath)) {
                     try {
-                        return sendJSON(res, JSON.parse(fs.readFileSync(configPath, "utf8")))
+                        return sendJSON(res, JSON.parse(readFileSafely(PROJECT_DIR, configPath, "utf8", 1024 * 1024)))
                     } catch (e) { /* fallthrough */ }
                 }
                 return sendJSON(res, {})
@@ -522,45 +477,26 @@ async function handleAPI(req, res) {
             case "CreateFolder": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
-                const realBase = realBaseOrNull()
-                let existed = false
-                try {
-                    existed = fs.lstatSync(full).isDirectory()
-                } catch (e) {
-                    if (e.code !== "ENOENT") return apiError(res, "invalid path")
-                }
-                if (existed) {
-                    // mkdir(recursive) is a no-op for existing folders, but the
-                    // pre-existing path must still resolve inside the project.
-                    try {
-                        if (!realBase || !isInsideBase(realBase, fs.realpathSync(full))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
+
+                // Read metadata from the verified directory descriptor. A
+                // second fsp.stat(pathname) here would reopen a race window
+                // after the descriptor-anchored validation/creation.
+                let st = statProjectDirectorySafelySync(PROJECT_DIR, full)
+                if (!st) {
+                    if (!await ensureProjectDirectorySafely(PROJECT_DIR, full)) {
                         return apiError(res, "invalid path")
                     }
-                    const st = await fsp.stat(full)
-                    return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
+                    st = statProjectDirectorySafelySync(PROJECT_DIR, full)
                 }
-                await fsp.mkdir(full, { recursive: true })
-                // Re-verify containment after the syscall: a parent directory
-                // swapped for an outside symlink between safeJoin() and mkdir()
-                // would place the new folder outside the project; roll back the
-                // only artifact this call created.
-                let real = null
-                try { real = fs.realpathSync(full) } catch { real = null }
-                if (!realBase || !real || !isInsideBase(realBase, real)) {
-                    await fsp.rm(full, { recursive: true, force: true }).catch(() => { })
-                    return apiError(res, "invalid path")
-                }
-                const st = await fsp.stat(full)
+
+                if (!st || !st.isDirectory()) return apiError(res, "invalid path")
                 return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
             }
 
             case "SetFileString": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
                 if (!full) return apiError(res, "invalid path")
-                await fsp.mkdir(path.dirname(full), { recursive: true })
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) return apiError(res, "invalid path")
                 const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
                 if (!handle) return apiError(res, "invalid path")
                 let st
@@ -581,26 +517,12 @@ async function handleAPI(req, res) {
             }
 
             case "DeleteFiles": {
-                const realBase = realBaseOrNull()
                 for (const p of (body.paths || [])) {
                     const full = safeJoin(PROJECT_DIR, apiPath(p))
                     if (!full || full === PROJECT_DIR) continue
-                    // Re-check the entry type immediately before the destructive
-                    // call: a symlink is unlinked (the link itself, never its
-                    // target), and anything else must still resolve inside the
-                    // project's real base at deletion time.
-                    try {
-                        const lst = fs.lstatSync(full)
-                        if (lst.isSymbolicLink()) {
-                            await fsp.unlink(full)
-                            continue
-                        }
-                        if (realBase && !isInsideBase(realBase, fs.realpathSync(full))) continue
-                    } catch (e) {
-                        if (e.code === "ENOENT") continue
-                        throw e
+                    if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) {
+                        return apiError(res, "invalid path")
                     }
-                    await fsp.rm(full, { recursive: true, force: true })
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
@@ -609,24 +531,13 @@ async function handleAPI(req, res) {
             case "RenameFile": {
                 const from = safeJoin(PROJECT_DIR, apiPath(body.oldPath))
                 const to = safeJoin(PROJECT_DIR, apiPath(body.newPath))
-                if (!from || !to) return apiError(res, "invalid path")
-                await fsp.mkdir(path.dirname(to), { recursive: true })
-                // rename(2) replaces a symlink destination atomically instead of
-                // writing through it, but a parent directory swapped for an
-                // outside symlink between safeJoin() and rename() would still
-                // move the entry out of the project. Re-verify the destination
-                // parent immediately before the syscall to shrink the window.
-                const realBase = realBaseOrNull()
-                if (realBase) {
-                    try {
-                        if (!isInsideBase(realBase, fs.realpathSync(path.dirname(to)))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
-                        return apiError(res, "invalid path")
-                    }
+                if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(to))) {
+                    return apiError(res, "invalid path")
                 }
-                await fsp.rename(from, to)
+                if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
+                    return apiError(res, "invalid path")
+                }
                 hashCache.value = ""
                 return sendJSON(res, {})
             }
@@ -634,43 +545,9 @@ async function handleAPI(req, res) {
             case "CopyFile": {
                 const from = safeJoin(PROJECT_DIR, apiPath(body.fromPath))
                 const to = safeJoin(PROJECT_DIR, apiPath(body.toPath))
-                if (!from || !to) return apiError(res, "invalid path")
-                const realBase = realBaseOrNull()
-                // Unlike rename(2), cp() writes through a symlink destination,
-                // which would overwrite the file it points to (possibly outside
-                // the project). Reject symlink targets outright.
-                let destExisted = false
-                try {
-                    const lst = fs.lstatSync(to)
-                    if (lst.isSymbolicLink()) return apiError(res, "invalid path")
-                    destExisted = true
-                } catch (e) {
-                    if (e.code !== "ENOENT") return apiError(res, "invalid path")
-                }
-                await fsp.mkdir(path.dirname(to), { recursive: true })
-                // Re-verify the destination parent right before the copy; the
-                // post-copy containment check below closes the remaining swap
-                // window by removing exactly what this call created.
-                if (realBase) {
-                    try {
-                        if (!isInsideBase(realBase, fs.realpathSync(path.dirname(to)))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
-                        return apiError(res, "invalid path")
-                    }
-                }
-                await fsp.cp(from, to, { recursive: true })
-                if (realBase) {
-                    let realTo = null
-                    try { realTo = fs.realpathSync(to) } catch { realTo = null }
-                    if (!realTo || !isInsideBase(realBase, realTo)) {
-                        if (!destExisted) {
-                            await fsp.rm(to, { recursive: true, force: true }).catch(() => { })
-                        }
-                        return apiError(res, "invalid path")
-                    }
-                }
+                if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
+                if (!await copyProjectEntrySafely(PROJECT_DIR, from, to)) return apiError(res, "invalid path")
+
                 hashCache.value = ""
                 return sendJSON(res, { file: fileData(PROJECT_DIR, apiPath(body.toPath)) })
             }
@@ -678,25 +555,15 @@ async function handleAPI(req, res) {
             case "MoveFiles": {
                 const toDir = safeJoin(PROJECT_DIR, apiPath(body.movingToPath))
                 if (!toDir) return apiError(res, "invalid path")
-                const realBase = realBaseOrNull()
-                if (realBase) {
-                    // Re-verify the destination folder right before the moves;
-                    // renames through a parent swapped for an outside symlink
-                    // would move entries out of the project.
-                    try {
-                        if (!isInsideBase(realBase, fs.realpathSync(toDir))) {
-                            return apiError(res, "invalid path")
-                        }
-                    } catch {
-                        return apiError(res, "invalid path")
-                    }
-                }
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, toDir)) return apiError(res, "invalid path")
+
                 for (const p of (body.movingPaths || [])) {
                     const from = safeJoin(PROJECT_DIR, apiPath(p))
-                    if (!from) continue
+                    if (!from || from === PROJECT_DIR) continue
                     const to = path.join(toDir, path.basename(p))
-                    await fsp.mkdir(path.dirname(to), { recursive: true })
-                    await fsp.rename(from, to)
+                    if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
+                        return apiError(res, "invalid path")
+                    }
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
@@ -704,8 +571,18 @@ async function handleAPI(req, res) {
 
             case "GetImageSize": {
                 const full = safeJoin(PROJECT_DIR, apiPath(body.path))
-                if (!full || !fs.existsSync(full)) return apiError(res, "file not found")
-                const size = getImageSize(full)
+                if (!full) return apiError(res, "file not found")
+                const handle = await openSafeProjectFileForRead(PROJECT_DIR, full)
+                if (!handle) return apiError(res, "file not found")
+                let data
+                try {
+                    const buffer = Buffer.alloc(65536)
+                    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+                    data = buffer.subarray(0, bytesRead)
+                } finally {
+                    await handle.close().catch(() => {})
+                }
+                const size = getImageSize(data, path.extname(full))
                 if (!size) return apiError(res, "cannot read image size")
                 return sendJSON(res, size)
             }
@@ -771,8 +648,8 @@ async function handleUpload(req, res) {
                 const fileFull = safeJoin(PROJECT_DIR, path.join(uploadTo, fileName))
                 if (!fileFull) return apiError(res, "invalid upload path")
 
-                await fsp.mkdir(dirFull, { recursive: true })
-                // Same TOCTOU discipline as SetFileString: O_NOFOLLOW at open,
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, dirFull)) return apiError(res, "invalid upload path")
+                // Same TOCTOU discipline as SetFileString: verified handle at open,
                 // kernel-path re-verification after the open.
                 const handle = await openSafeProjectFileForWrite(PROJECT_DIR, fileFull)
                 if (!handle) return apiError(res, "invalid upload path")
@@ -820,29 +697,40 @@ function listArchiveSnapshots() {
             .filter(entry => entry.isFile() && ARCHIVE_NAME_PATTERN.test(entry.name))
             .map(entry => {
                 const full = path.join(ROOT, entry.name)
-                return { name: entry.name, full, mtimeMs: fs.statSync(full).mtimeMs }
+                const stat = fs.lstatSync(full)
+                if (stat.isSymbolicLink() || !stat.isFile()) return null
+                return { name: entry.name, full, mtimeMs: stat.mtimeMs }
             })
-    } catch (e) {
+            .filter(Boolean)
+    } catch {
         return []
     }
 }
 
-function serveArchive(req, res, name) {
+async function serveArchive(req, res, name) {
     if (!ARCHIVE_NAME_PATTERN.test(name) || path.dirname(path.join(ROOT, name)) !== ROOT) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
         res.end(req.method === "HEAD" ? undefined : "Invalid archive name")
         return
     }
 
+    const archivePath = path.join(ROOT, name)
+    let handle
     let st
     try {
-        // lstat deliberately rejects a matching archive name that is a symlink;
-        // this endpoint serves only archives created as regular root-level files.
-        st = fs.lstatSync(path.join(ROOT, name))
-        if (st.isSymbolicLink() || !st.isFile()) {
-            throw Object.assign(new Error("Archive is not a regular file"), { code: "ENOENT" })
+        // Stream only the actual object selected by a validated descriptor.
+        // The initial lstat/name validation alone would leave a swap window.
+        handle = await fsp.open(
+            archivePath,
+            fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+        )
+        if (!isSafeOpenFileHandle(ROOT, archivePath, handle.fd)) {
+            throw new Error("Archive is not a safe regular file")
         }
-    } catch (e) {
+        st = await handle.stat()
+        if (!st.isFile()) throw new Error("Archive is not a regular file")
+    } catch {
+        if (handle) await handle.close().catch(() => {})
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" })
         res.end(req.method === "HEAD" ? undefined : "Archive not found — GET /archive/ lists the newest snapshot")
         return
@@ -856,61 +744,92 @@ function serveArchive(req, res, name) {
     })
 
     if (req.method === "HEAD") {
+        await handle.close().catch(() => {})
         res.end()
         return
     }
 
-    fs.createReadStream(path.join(ROOT, name)).pipe(res)
+    const stream = handle.createReadStream({ autoClose: true })
+    stream.on("error", error => {
+        if (!res.destroyed) res.destroy(error)
+    })
+    stream.pipe(res)
 }
 
-function serveFile(req, res, absPath, cacheControl) {
-    let st
-    try {
-        st = fs.statSync(absPath)
-    } catch (e) {
-        res.writeHead(404, { "Content-Type": "text/plain" })
-        res.end("Not Found")
-        return
-    }
-    if (st.isDirectory()) {
-        const index = path.join(absPath, "index.html")
-        if (fs.existsSync(index)) {
-            return serveFile(req, res, index, cacheControl)
+async function serveFile(req, res, absPath, cacheControl, projectBase) {
+    // Determine directories through a verified directory handle rather than a
+    // path-based stat()/existsSync() pair that can follow a swapped symlink.
+    const directoryEntries = readProjectDirectoryEntriesSafelySync(projectBase, absPath)
+    if (directoryEntries !== null) {
+        const indexEntry = directoryEntries.find(entry =>
+            entry.name === "index.html" && entry.isFile && !entry.isSymbolicLink
+        )
+        if (indexEntry) {
+            return serveFile(req, res, path.join(absPath, "index.html"), cacheControl, projectBase)
         }
         res.writeHead(404, { "Content-Type": "text/plain" })
         res.end("Not Found")
         return
     }
 
-    const ext = path.extname(absPath).toLowerCase()
-    const mime = MIME[ext] || "application/octet-stream"
-    const headers = {
-        "Content-Type": mime,
-        "Content-Length": st.size,
-        "Cache-Control": cacheControl || "no-cache",
-        "Last-Modified": st.mtime.toUTCString()
+    // Re-open and validate the object actually selected by the OS. The
+    // response body is streamed from this verified descriptor, not from the
+    // pathname (which could be retargeted after safeJoin/stat).
+    let handle = await openSafeProjectFileForRead(projectBase, absPath)
+    if (!handle) {
+        res.writeHead(404, { "Content-Type": "text/plain" })
+        res.end("Not Found")
+        return
     }
 
-    if (req.method === "HEAD") {
+    let streamOwnsHandle = false
+    try {
+        const st = await handle.stat()
+        if (!st.isFile()) {
+            res.writeHead(404, { "Content-Type": "text/plain" })
+            res.end("Not Found")
+            return
+        }
+
+        const ext = path.extname(absPath).toLowerCase()
+        const mime = MIME[ext] || "application/octet-stream"
+        const headers = {
+            "Content-Type": mime,
+            "Content-Length": st.size,
+            "Cache-Control": cacheControl || "no-cache",
+            "Last-Modified": st.mtime.toUTCString()
+        }
+
+        if (req.method === "HEAD") {
+            res.writeHead(200, headers)
+            res.end()
+            return
+        }
+
+        const inm = req.headers["if-none-match"]
+        const etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`
+        headers["ETag"] = etag
+        if (inm === etag) {
+            res.writeHead(304, headers)
+            res.end()
+            return
+        }
+
         res.writeHead(200, headers)
-        res.end()
-        return
-    }
-
-    const inm = req.headers["if-none-match"]
-    const etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`
-    headers["ETag"] = etag
-    if (inm === etag) {
-        res.writeHead(304, headers)
-        res.end()
-        return
-    }
-
-    res.writeHead(200, headers)
-    if (req.method === "GET") {
-        fs.createReadStream(absPath).pipe(res)
-    } else {
-        res.end()
+        if (req.method === "GET") {
+            const stream = handle.createReadStream({ autoClose: true })
+            streamOwnsHandle = true
+            stream.on("error", error => {
+                if (!res.destroyed) res.destroy(error)
+            })
+            stream.pipe(res)
+        } else {
+            res.end()
+        }
+    } finally {
+        if (!streamOwnsHandle) {
+            await handle.close().catch(() => {})
+        }
     }
 }
 
@@ -988,7 +907,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (urlPath === "/favicon.png") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600")
+            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600", EDITOR_DIR)
         }
 
         if (!urlPath.startsWith("/editor/")) {
@@ -1008,11 +927,11 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (rest === "product.json") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "product.json"), "no-store")
+            return serveFile(req, res, path.join(EDITOR_DIR, "product.json"), "no-store", EDITOR_DIR)
         }
 
         if (rest === "static/favicon.png") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600")
+            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600", EDITOR_DIR)
         }
 
         // api
@@ -1043,7 +962,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Forbidden")
                 return
             }
-            return serveFile(req, res, full, "no-cache")
+            return serveFile(req, res, full, "no-cache", PLUGINS_DIR)
         }
 
         // project files (editor views)
@@ -1055,7 +974,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Forbidden")
                 return
             }
-            return serveFile(req, res, full, "no-cache")
+            return serveFile(req, res, full, "no-cache", PROJECT_DIR)
         }
 
         // play mode
@@ -1067,7 +986,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Forbidden")
                 return
             }
-            return serveFile(req, res, full, "no-cache")
+            return serveFile(req, res, full, "no-cache", PROJECT_DIR)
         }
 
         res.writeHead(404, { "Content-Type": "text/plain" })
@@ -1186,21 +1105,16 @@ async function buildAttachmentsContext(attachments) {
 
         try {
 
-            let buf = await fsp.readFile(att.abs)
+            const attachment = await readFilePrefixSafely(PROJECT_DIR, att.abs, AI_CHAT_ATTACHMENT_MAX_BYTES)
+            const buf = attachment.buffer
 
             if (buf.subarray(0, Math.min(buf.length, 8000)).includes(0)) {
                 warnings.push(`${att.rel}: binary file — not included`)
-                lines.push(`#### ${att.rel}`, `[binary file, ${buf.length} bytes — text content not included]`, "")
+                lines.push(`#### ${att.rel}`, `[binary file, ${attachment.size} bytes — text content not included]`, "")
                 continue
             }
 
-            let truncated = false
-
-            if (buf.length > AI_CHAT_ATTACHMENT_MAX_BYTES) {
-                buf = buf.subarray(0, AI_CHAT_ATTACHMENT_MAX_BYTES)
-                truncated = true
-            }
-
+            const truncated = attachment.truncated
             let text = buf.toString("utf8")
 
             if (truncated) {

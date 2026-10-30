@@ -1,6 +1,6 @@
 # Матрица зависимостей и capabilities
 
-**Снимок:** `dev` на `754edaa1f7313409e99c3462a802d5fd430a9a01`, 27.10.2026.  
+**Scope note:** эта матрица перечисляет direct package roots и пути поставки bundle; это не текущий SBOM или scan каждого нового head. Наличие `PhaserBox2D.js` в test fixture не доказывает совместимость любой внешней версии runtime/helper.
 **Статус:** первоначальная инвентаризация непосредственных зависимостей и путей доставки. Это не полный SBOM и не юридическое заключение по лицензиям всех транзитивных пакетов.
 
 ## Активные package roots
@@ -15,7 +15,7 @@
 | `mini-services/phaser-editor-mcp` | `@phaserjs/editor-mcp-server` | `^1.0.6` | Самостоятельный bridge package | Имеет отдельный manifest/lockfile; не смешивать с root server/MCP path без решения |
 | `mini-services/phaser-editor-mcp` | `ws` | `^8.22.0` | WebSocket transport standalone bridge | Проверить отдельно, требуется ли поддерживать этот альтернативный bridge в текущем product workflow |
 | Editor/runtime artifacts | Phaser runtime bundle | `4.2.1` (вендорный) | `scripts/phaser.min.js` production и `scripts/phaser.js` development, подключаются через editor plugin | Phaser не входит в root/editor npm dependency graph; TypeScript declarations не поставляют runtime; feature-pruned bundle не доказан |
-| Сгенерированные игровые проекты | `PhaserBox2D.js` | Внешний runtime-файл | Box2D API/runtime, ожидаемый codegen | Не считать ambient `phaser-box2d.ts` поставкой runtime; нужен check/diagnostic и acceptance в exported game |
+| Текущие сгенерированные игровые проекты (legacy editor/codegen path) | `PhaserBox2D.js` | Внешний runtime-файл | Box2D API/runtime, необходимый отдельным сценариям текущего codegen | Это зависимость текущего legacy-пути, а не требование к будущему data-driven Core по умолчанию. Не считать ambient `phaser-box2d.ts` поставкой runtime; нужна проверка зависимости и acceptance экспортированной игры.
 | Legacy editor client | Colibri / Phaser Editor 2D-derived source | Вендорный/сохранённый source tree | `source/editor/plugins/colibri` и `phasereditor2d.*` plugins | Сохранять исходные notices и license compliance; не считать такую vendor dependency управляемой как обычный npm package |
 | New/modified Codogma-owned code (editor modernization first; Core later) | Strict TS where appropriate, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, test runner | Не внедрено в baseline | Toolchain для нового и целенаправленно изменяемого кода редактора/будущих пакетов | Внедрять постепенно в отдельном pilot и применимом изменяемом scope; не включать repo-wide lint gate на всё legacy-дерево |
 
@@ -34,4 +34,4 @@
 3. Проверить root override Zod 4.6.7 на все используемые схемы MCP прежде, чем обновлять официальный пакет или Zod.
 4. Перед решением о Phaser modularization сделать один воспроизводимый build fixture: сравнить API coverage, runtime dependencies и raw/gzip размер, проверить generated game без editor UI.
 5. Перед npm Workspaces отдельно проверить TypeScript references, root/editor scripts, server path, release ZIP, CI/cache paths и чистую установку; не удалять editor lockfile до зелёного PoC.
-6. Не передавать пакетному менеджеру файловые операции, пока TOCTOU риск в server file API не закрыт race-resistant механизмом либо не утверждена проверяемая модель угроз.
+6. Не передавать Package Manager файловые операции до закрытия остаточного filesystem TOCTOU: content-file write paths уже проверяют открытый descriptor, но folder creation/rename/copy/move/delete остаются pathname-based. Нужны OS-aware mutation design и adversarial concurrent-race tests либо документированная модель угроз с ограничением экспозиции.

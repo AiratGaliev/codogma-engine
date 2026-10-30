@@ -386,13 +386,17 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                                 : `const ${compVarName} = new ${compName}(${args.objectVarName});`
                         ));
 
+                    const sceneFinder = ScenePlugin.getInstance().getSceneFinder();
+                    const sceneSettings = sceneFinder.getSceneSettings(args.sceneFile);
+                    const importExt = sceneSettings ? sceneSettings.importFileExtension : false;
+
                     const { importPath, asDefault } = code.getImportPath(args.sceneFile, new io.FilePath(compInfo.file.getParent(), {
                         isFile: true,
                         modTime: 0,
                         name: compName,
                         size: 0,
                         children: []
-                    }));
+                    }), importExt);
 
                     args.unit.addImport(compName, importPath, asDefault);
                 }
@@ -420,13 +424,17 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                         const compInfo = finder.getUserComponentByName(compName);
 
+                        const sceneFinder2 = ScenePlugin.getInstance().getSceneFinder();
+                        const sceneSettings2 = sceneFinder2.getSceneSettings(args.sceneFile);
+                        const importExt = sceneSettings2 ? sceneSettings2.importFileExtension : false;
+
                         const importData = code.getImportPath(args.sceneFile, new io.FilePath(compInfo.file.getParent(), {
                             isFile: true,
                             modTime: 0,
                             name: compName,
                             size: 0,
                             children: []
-                        }));
+                        }), importExt);
 
                         args.unit.addImport(compName, importData.importPath, importData.asDefault);
                     }

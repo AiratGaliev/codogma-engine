@@ -21,7 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { writeFileSafely } from "./path-security.mjs"
+import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, writeNewFileSafely, statProjectFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -34,7 +34,9 @@ export function initMcp(options) {
 /** Official asset tools pass `{ texture: { key, frame } }`; accept flat `{ key }` too. */
 function textureKeyOf(args) {
     const key = args.key ?? args.texture?.key
-    if (!key) throw new Error('Missing texture key: pass { "key" } or { "texture": { "key" } }.')
+    if (typeof key !== "string" || key.trim().length === 0) {
+        throw new Error('Missing or invalid texture key: pass a non-empty string as { "key" } or { "texture": { "key" } }.')
+    }
     return key
 }
 
@@ -105,18 +107,15 @@ function normPath(p) {
 }
 
 function walkFiles(dir, relPrefix, out = []) {
-    let entries
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true })
-    } catch (e) {
-        return out
-    }
+    const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dir)
+    if (!entries) return out
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix ? relPrefix + "/" + entry.name : entry.name
         const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) walkFiles(full, rel, out)
-        else if (entry.isFile()) out.push(rel)
+        if (entry.isDirectory) walkFiles(full, rel, out)
+        else if (entry.isFile) out.push(rel)
     }
     return out
 }
@@ -129,21 +128,26 @@ function sceneFiles() {
 
 function readSceneFile(rel) {
     const full = safeJoin(PROJECT_DIR, rel)
-    if (!full || !fs.existsSync(full)) return null
+    if (!full) return null
     try {
-        return JSON.parse(fs.readFileSync(full, "utf8"))
+        return JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 4 * 1024 * 1024))
     } catch (e) {
         return null
     }
 }
 
-function writeSceneFile(rel, data) {
+function writeSceneFile(rel, data, options = {}) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full) throw new Error("invalid scene path: " + rel)
-    fs.mkdirSync(path.dirname(full), { recursive: true })
+    if (!ensureProjectDirectorySafelySync(PROJECT_DIR, path.dirname(full))) throw new Error("invalid scene path: " + rel)
     const serialized = JSON.stringify(data, null, 4)
-    if (!writeFileSafely(PROJECT_DIR, full, serialized)) {
-        throw new Error("invalid scene path: " + rel)
+    const written = options.exclusive
+        ? writeNewFileSafely(PROJECT_DIR, full, serialized)
+        : writeFileSafely(PROJECT_DIR, full, serialized)
+    if (!written) {
+        throw new Error(options.exclusive
+            ? "scene file already exists or cannot be created safely: " + rel
+            : "invalid scene path: " + rel)
     }
     notifyFilesChanged()
 }
@@ -628,7 +632,9 @@ function parseAssetPacks() {
     const packs = []
     for (const rel of findAssetPacks()) {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(PROJECT_DIR, rel), "utf8"))
+            const full = safeJoin(PROJECT_DIR, rel)
+            if (!full) continue
+            const data = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 8 * 1024 * 1024))
             const entries = []
             for (const section of Object.values(data)) {
                 if (section && Array.isArray(section.files)) {
@@ -695,8 +701,7 @@ defTool(
         const rel = path.posix.join(dir, clean + ".scene")
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid folder")
-        if (fs.existsSync(full)) throw new Error(`Scene file already exists: ${rel}`)
-        writeSceneFile(rel, newSceneDoc(clean))
+        writeSceneFile(rel, newSceneDoc(clean), { exclusive: true })
         return text(`Scene file created: ${rel} (sceneKey "${clean}")`)
     }
 )
@@ -1198,8 +1203,8 @@ defTool(
         }
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
-        const buf = fs.readFileSync(full)
+        if (!full) throw new Error(`Texture file not found: ${url}`)
+        const buf = readFileSafely(PROJECT_DIR, full)
         const mime = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".svg": "image/svg+xml" }[path.extname(full).toLowerCase()] || "application/octet-stream"
         return image(buf.toString("base64"), mime)
     }
@@ -1349,9 +1354,8 @@ defTool(
     async ({ path: p }) => {
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
-        if (!full || !fs.existsSync(full) || !fs.statSync(full).isFile()) throw new Error(`File not found: ${rel}`)
-        if (fs.statSync(full).size > 1024 * 512) throw new Error("File too large")
-        return text(fs.readFileSync(full, "utf8"))
+        if (!full) throw new Error("invalid path")
+        return text(readFileSafely(PROJECT_DIR, full, "utf8", 1024 * 512))
     }
 )
 
@@ -1368,8 +1372,15 @@ defTool(
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
         if (rel.toLowerCase().endsWith(".scene")) throw new Error("Use the scene-* tools to modify scene files")
-        await fsp.mkdir(path.dirname(full), { recursive: true })
-        await fsp.writeFile(full, content ?? "", "utf8")
+        if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) throw new Error("invalid path")
+        const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
+        if (!handle) throw new Error("invalid path")
+        try {
+            await handle.truncate(0)
+            await handle.writeFile(content ?? "", "utf8")
+        } finally {
+            await handle.close().catch(() => {})
+        }
         notifyFilesChanged()
         return text(`Written: ${rel} (${Buffer.byteLength(content || "")} bytes)`)
     }
@@ -1383,7 +1394,7 @@ defTool(
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full || full === PROJECT_DIR) throw new Error("invalid path")
-        await fsp.rm(full, { recursive: true, force: true })
+        if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) throw new Error("invalid path")
         notifyFilesChanged()
         return text(`Deleted: ${rel}`)
     }
@@ -1400,7 +1411,9 @@ defTool(
         const phaserFile = walkFiles(PROJECT_DIR, "").find(f => /(^|\/)(phaser\.js|phaser\.min\.js)$/.test(f))
         if (phaserFile) {
             try {
-                const head = fs.readFileSync(path.join(PROJECT_DIR, phaserFile), "utf8").slice(0, 300)
+                const full = safeJoin(PROJECT_DIR, phaserFile)
+                if (!full) throw new Error("invalid path")
+                const head = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024).slice(0, 300)
                 const m = head.match(/Phaser v([\d.]+)/) || head.match(/version:\s*["']([\d.]+)/)
                 if (m) phaserVersion = m[1]
             } catch (e) { /* ignore */ }
@@ -1669,9 +1682,9 @@ function resolveTilesetImage(imageKey) {
 
     const full = safeJoin(PROJECT_DIR, url)
 
-    if (!full || !fs.existsSync(full)) throw new Error(`Tileset image file not found: ${url}`)
+    if (!full) throw new Error(`Tileset image file not found: ${url}`)
 
-    const size = parseImageSize(fs.readFileSync(full))
+    const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
 
     if (!size || !size.width || !size.height) throw new Error(`Cannot read the image size of "${imageKey}" (${url}).`)
 
@@ -2417,10 +2430,9 @@ defTool(
         const rel = path.posix.join(dir, clean + ".scene")
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid folder")
-        if (fs.existsSync(full)) throw new Error(`Prefab file already exists: ${rel}`)
         const doc = newSceneDoc(clean)
         doc.sceneType = "PREFAB"
-        writeSceneFile(rel, doc)
+        writeSceneFile(rel, doc, { exclusive: true })
         return text(`Prefab scene file created: ${rel} (id ${doc.id}). Now add the prefab root object with scene-add-game-objects.`)
     }
 )
@@ -2976,8 +2988,8 @@ defTool(
         const url = findTextureUrl(key)
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
-        const size = parseImageSize(fs.readFileSync(full))
+        if (!full) throw new Error(`Texture file not found: ${url}`)
+        const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
         if (!size) throw new Error(`Cannot parse image size of ${url}`)
         return text(JSON.stringify({ key, url, ...size }, null, 2))
     }
@@ -2995,9 +3007,9 @@ defTool(
                 const imgUrl = e.textureFilename
                     || e.url.replace(/\.(fnt|xml|json)$/i, ".png")
                 const full = safeJoin(PROJECT_DIR, imgUrl)
-                if (!full || !fs.existsSync(full)) throw new Error(`Bitmap font image not found: ${imgUrl}`)
+                if (!full) throw new Error(`Bitmap font image not found: ${imgUrl}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
-                return image(fs.readFileSync(full).toString("base64"), mime)
+                return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
         }
         throw new Error(`Bitmap font "${key}" not found`)
@@ -3013,9 +3025,9 @@ defTool(
             const e = pack.entries.find(e => e.key === key && e.type === "spritesheet")
             if (e) {
                 const full = safeJoin(PROJECT_DIR, e.url)
-                if (!full || !fs.existsSync(full)) throw new Error(`Spritesheet image not found: ${e.url}`)
+                if (!full) throw new Error(`Spritesheet image not found: ${e.url}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
-                return image(fs.readFileSync(full).toString("base64"), mime)
+                return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
         }
         throw new Error(`Spritesheet "${key}" not found`)
@@ -3073,11 +3085,13 @@ defTool(
         }
         if (!url) throw new Error(`Spine skeleton "${dataKey}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Spine data file not found: ${url}`)
+        if (!full) throw new Error(`Spine data file not found: ${url}`)
+        const fileStat = await statProjectFileSafely(PROJECT_DIR, full)
+        if (!fileStat?.isFile()) throw new Error(`Spine data file not found: ${url}`)
         if (!url.toLowerCase().endsWith(".json")) {
             return text(`Skeleton "${dataKey}" is binary (.skel): parse it in the editor for full info.`)
         }
-        const data = JSON.parse(fs.readFileSync(full, "utf8"))
+        const data = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024))
         const skins = (Array.isArray(data.skins) ? data.skins : [])
             .map(s => typeof s === "string" ? s : s.name).filter(Boolean)
         return text(JSON.stringify({
@@ -3115,8 +3129,8 @@ defTool(
         }
         if (!url) throw new Error(`Tilemap "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Tilemap file not found: ${url}`)
-        const raw = fs.readFileSync(full, "utf8")
+        if (!full) throw new Error(`Tilemap file not found: ${url}`)
+        const raw = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024)
         if (url.toLowerCase().endsWith(".json")) {
             const data = JSON.parse(raw)
             return text(JSON.stringify({
@@ -3192,7 +3206,7 @@ defTool(
     async ({ assetPackFileName, key, family, url }) => {
         const rel = normPath(assetPackFileName)
         const full = safeJoin(PROJECT_DIR, rel)
-        if (!full || !fs.existsSync(full)) throw new Error(`Asset pack not found: ${rel}`)
+        if (!full) throw new Error(`Asset pack not found: ${rel}`)
         if (!url) {
             const info = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}`, { headers: { "User-Agent": "" } })
             const css = await info.text()
@@ -3200,7 +3214,7 @@ defTool(
             if (!m) throw new Error(`Could not resolve the TTF URL for family "${family}"`)
             url = m[1]
         }
-        const pack = JSON.parse(fs.readFileSync(full, "utf8"))
+        const pack = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 8 * 1024 * 1024))
         const sectionName = Object.keys(pack).find(k => pack[k] && Array.isArray(pack[k].files)) || "section1"
         pack[sectionName] = pack[sectionName] || { files: [] }
         if (pack[sectionName].files.some(f => f.key === key)) throw new Error(`Key "${key}" already exists in ${rel}`)

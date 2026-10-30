@@ -161,9 +161,22 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 );
             }
 
-            const { importPath } = code.getImportPath(sceneFile, libFile);
+            const sceneFinderB2 = ScenePlugin.getInstance().getSceneFinder();
+            const sceneSettingsB2 = sceneFinderB2.getSceneSettings(sceneFile);
+            const b2ImportExt = sceneSettingsB2 ? sceneSettingsB2.importFileExtension : false;
+            const { importPath } = code.getImportPath(sceneFile, libFile, b2ImportExt);
 
             unit.addImport(elementName, importPath, false);
+        }
+
+        static getWorldIdExpression(generateWorldCode: boolean, isPrefabInstance: boolean): string {
+
+            if (!generateWorldCode) {
+
+                return "box2dWorldId";
+            }
+
+            return isPrefabInstance ? "this.scene.worldId" : "this.worldId";
         }
 
         static isBodyEnabled(obj: ISceneGameObject) {
@@ -261,15 +274,10 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const objES = this.getEditorSupport();
             const scene = objES.getScene();
 
-            if (scene.isPrefabSceneType()) {
+            const settings = scene.getSettings();
+            const generateWorld = settings.box2dGenerateWorldCode || settings.box2dEnabled;
 
-                // the world is created by the consuming scene,
-                // the bodies are compiled there, for each prefab instance.
-
-                return;
-            }
-
-            if (!scene.getSettings().box2dEnabled) {
+            if (scene.isPrefabSceneType() || !generateWorld) {
 
                 return;
             }
@@ -285,6 +293,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             // AddSpriteToWorld links the created body to its display object.
 
             const unit = args.unit;
+
+            // Prefab instances must use the world mode of their consuming scene.
+            const isPrefabInstance = args.prefabSerializer !== undefined && args.prefabSerializer !== null;
+            const worldVar = Box2DBodyComponent.getWorldIdExpression(
+                settings.box2dGenerateWorldCode, isPrefabInstance);
 
             const bodyParts = ["...b2DefaultBodyDef()"];
             const shapeParts = ["...b2DefaultShapeDef()"];
@@ -342,7 +355,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             createBodyCall.setDeclareReturnToVar(true);
             createBodyCall.setReturnToVar(varName);
-            createBodyCall.arg("box2dWorldId");
+            createBodyCall.arg(worldVar);
             createBodyCall.arg(`{ ${bodyParts.join(", ")} }`);
 
             args.statements.push(createBodyCall);
@@ -382,7 +395,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const addSpriteToWorld = new code.MethodCallCodeDOM("AddSpriteToWorld");
 
-            addSpriteToWorld.arg("box2dWorldId");
+            addSpriteToWorld.arg(worldVar);
             addSpriteToWorld.arg(args.objectVarName);
             addSpriteToWorld.arg(`{ bodyId: ${varName} }`);
 

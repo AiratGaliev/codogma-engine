@@ -1,7 +1,7 @@
 # ADR-0003: Архитектура пакетов и менеджер пакетов Codogma
 
 **Статус:** целевое направление принято; детали API metadata, миграции и workspace configuration требуют аудита и PoC.  
-**Дата:** 27.10.2026  
+**Дата:** 29.10.2026  
 **Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [каталог технических источников](../REFERENCE-SOURCES.md).
 
 ## Контекст
@@ -80,7 +80,14 @@ Codogma Engine развивается из существующего редак
 - После неудачной операции сервис должен обнаруживать несогласованность manifest/lockfile и предоставлять тестируемое восстановление. Атомарность нельзя обещать без проверенного механизма.
 - Поддерживаемые источники — npm registry/scoped registry, local/file, Git и tarball поэтапно; для Git/tarball нужны pinning, безопасная работа с credentials и понятная диагностика. Токены не сохраняются в tracked project files.
 - Lifecycle scripts, лицензии, vulnerabilities и provenance оцениваются по явной политике. Не считать пакет безопасным только потому, что npm install завершился успешно.
-- File containment — отдельная граница доверия: недостаточно проверить строковый префикс или real path, а затем без дополнительной защиты открыть/перезаписать путь. Текущий follow-up из PR #10 фиксирует TOCTOU-риск между проверкой symlink и файловой операцией; Package Manager Service не должен переиспользовать такую схему как race-safe. До передачи ему файловых операций требуется устранить гонку и добавить регрессионный тест либо явно утвердить документированную модель угроз.
+- File containment — отдельная граница доверия: недостаточно проверить строковый префикс или real path, а затем без дополнительной защиты открыть/перезаписать путь. `SetFileString`/upload paths, использующие `openSafeProjectFileForWrite`, открывают handle без truncate и проверяют descriptor до записи; это целевое усиление content-write path. Однако `CreateFolder`, `RenameFile`, `CopyFile`, `MoveFiles` и `DeleteFiles` остаются pathname-based и сохраняют TOCTOU race window при локальной подмене parent symlink. Package Manager не должен считать весь file API race-safe: до передачи ему mutation APIs нужны OS-aware handle-relative strategy, adversarial concurrent-race tests и зафиксированный список поддерживаемых ОС либо явная threat model.
+### 9. Trust boundary расширений и зависимостей
+
+- `codogma` metadata, feature descriptors и allow-list capabilities не образуют sandbox и не доказывают безопасность JavaScript/TypeScript пакета.
+- Discovery читает декларативные metadata; исполнение extension entry point происходит после явного разрешения пользователя и проверки совместимости. Установка/обновление npm package учитывает lifecycle scripts и отображает источник/версию; разрешение package manager не означает автоматического разрешения editor extension.
+- До появления отдельной sandbox boundary расширения считаются доверенным кодом с правами текущего editor/runtime контекста. Для недоверенных расширений нужна реальная архитектура изоляции и threat model, а не обещание безопасности на основании manifest scope.
+- Package installation/build не должен обходить выбранный project root, подмешивать credentials в tracked files или позволять extension выполнять произвольные файловые операции через неограниченный Editor Host API.
+
 ## Последовательность реализации
 
 1. Провести инвентаризацию root/editor manifests, lockfiles, scripts, CI и release packaging; подтвердить dependency/capability baseline.

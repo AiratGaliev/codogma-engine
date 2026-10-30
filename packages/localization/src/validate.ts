@@ -17,7 +17,6 @@ import { canonicalLocaleTag } from "./locale-tag.js";
 
 /** One validated project table with its optional source file path. */
 export interface LocalizationProjectTable {
-
     table: LocalizationTableV1;
 
     /** Project-relative path of the table file, when known. */
@@ -25,7 +24,6 @@ export interface LocalizationProjectTable {
 }
 
 export interface ValidateLocalizationProjectOptions {
-
     /**
      * Configured fallback locale of the localization service. When it is not
      * registered as a table, a `LOC_UNKNOWN_FALLBACK_LOCALE` diagnostic is
@@ -35,16 +33,15 @@ export interface ValidateLocalizationProjectOptions {
 }
 
 type DiagnosticSpec = {
-    code: LocalizationDiagnostic["code"],
-    severity: LocalizationDiagnostic["severity"],
-    message: string,
-    locale?: string | undefined,
-    messageId?: string | undefined,
-    file?: string | undefined
+    code: LocalizationDiagnostic["code"];
+    severity: LocalizationDiagnostic["severity"];
+    message: string;
+    locale?: string | undefined;
+    messageId?: string | undefined;
+    file?: string | undefined;
 };
 
 function diagnostic(spec: DiagnosticSpec): LocalizationDiagnostic {
-
     const result: LocalizationDiagnostic = {
         code: spec.code,
         severity: spec.severity,
@@ -76,7 +73,6 @@ export function validateLocalizationProject(
     projectTables: readonly LocalizationProjectTable[],
     options: ValidateLocalizationProjectOptions = {}
 ): LocalizationDiagnostic[] {
-
     const diagnostics: LocalizationDiagnostic[] = [];
 
     const localesInOrder: string[] = [];
@@ -84,34 +80,36 @@ export function validateLocalizationProject(
     const filesByLocale = new Map<string, string | undefined>();
 
     for (const entry of projectTables) {
-
         const { table, file } = entry;
         const { locale } = table;
         const canonicalLocale = canonicalLocaleTag(locale);
 
         if (canonicalLocale === undefined || canonicalLocale !== locale) {
-
-            diagnostics.push(diagnostic({
-                code: "LOC_INVALID_LOCALE",
-                severity: "error",
-                message: `Locale "${locale}" is not a canonical locale tag`
-                    + (canonicalLocale === undefined ? "." : `; use "${canonicalLocale}".`),
-                locale,
-                file
-            }));
+            diagnostics.push(
+                diagnostic({
+                    code: "LOC_INVALID_LOCALE",
+                    severity: "error",
+                    message:
+                        `Locale "${locale}" is not a canonical locale tag` +
+                        (canonicalLocale === undefined ? "." : `; use "${canonicalLocale}".`),
+                    locale,
+                    file
+                })
+            );
 
             continue;
         }
 
         if (localesInOrder.includes(locale)) {
-
-            diagnostics.push(diagnostic({
-                code: "LOC_DUPLICATE_LOCALE",
-                severity: "error",
-                message: `Locale "${locale}" is defined by more than one localization table.`,
-                locale,
-                file
-            }));
+            diagnostics.push(
+                diagnostic({
+                    code: "LOC_DUPLICATE_LOCALE",
+                    severity: "error",
+                    message: `Locale "${locale}" is defined by more than one localization table.`,
+                    locale,
+                    file
+                })
+            );
 
             continue;
         }
@@ -130,31 +128,33 @@ export function validateLocalizationProject(
     const fallbackLocale = options.fallbackLocale;
 
     if (fallbackLocale !== undefined) {
-
         const canonicalFallback = canonicalLocaleTag(fallbackLocale);
 
         if (canonicalFallback === undefined || canonicalFallback !== fallbackLocale) {
-
-            diagnostics.push(diagnostic({
-                code: "LOC_INVALID_LOCALE",
-                severity: "error",
-                message: `Fallback locale "${fallbackLocale}" is not a canonical locale tag`
-                    + (canonicalFallback === undefined ? "." : `; use "${canonicalFallback}".`),
-                locale: fallbackLocale
-            }));
+            diagnostics.push(
+                diagnostic({
+                    code: "LOC_INVALID_LOCALE",
+                    severity: "error",
+                    message:
+                        `Fallback locale "${fallbackLocale}" is not a canonical locale tag` +
+                        (canonicalFallback === undefined ? "." : `; use "${canonicalFallback}".`),
+                    locale: fallbackLocale
+                })
+            );
 
             return diagnostics;
         }
     }
 
     if (fallbackLocale !== undefined && !localesInOrder.includes(fallbackLocale)) {
-
-        diagnostics.push(diagnostic({
-            code: "LOC_UNKNOWN_FALLBACK_LOCALE",
-            severity: "error",
-            message: `Configured fallback locale "${fallbackLocale}" has no localization table.`,
-            locale: fallbackLocale
-        }));
+        diagnostics.push(
+            diagnostic({
+                code: "LOC_UNKNOWN_FALLBACK_LOCALE",
+                severity: "error",
+                message: `Configured fallback locale "${fallbackLocale}" has no localization table.`,
+                locale: fallbackLocale
+            })
+        );
 
         return diagnostics;
     }
@@ -164,11 +164,8 @@ export function validateLocalizationProject(
     let referenceLocale: string;
 
     if (fallbackLocale !== undefined) {
-
         referenceLocale = fallbackLocale;
-
     } else {
-
         const sortedLocales = [...localesInOrder].sort();
         const countByLocale = new Map<string, number>();
 
@@ -180,7 +177,6 @@ export function validateLocalizationProject(
         let bestCount = -1;
 
         for (const locale of sortedLocales) {
-
             const count = countByLocale.get(locale) ?? -1;
 
             if (count > bestCount) {
@@ -195,7 +191,6 @@ export function validateLocalizationProject(
     const placeholdersByLocale = new Map<string, Map<string, string[]>>();
 
     for (const table of tables) {
-
         const placeholdersById = new Map<string, string[]>();
 
         for (const entry of table.messages) {
@@ -211,7 +206,6 @@ export function validateLocalizationProject(
     // --- missing and extra keys ----------------------------------------------------
 
     for (const locale of localesInOrder) {
-
         if (locale === referenceLocale) {
             continue;
         }
@@ -219,35 +213,37 @@ export function validateLocalizationProject(
         const placeholders = placeholdersByLocale.get(locale) ?? new Map<string, string[]>();
 
         for (const key of referenceKeys) {
-
             if (!placeholders.has(key)) {
-
-                diagnostics.push(diagnostic({
-                    code: "LOC_MISSING_KEY",
-                    severity: "warning",
-                    message: `Localization key "${key}" is missing in locale "${locale}"`
-                        + ` (present in reference locale "${referenceLocale}").`
-                        + " The fallback locale is used at runtime.",
-                    locale,
-                    messageId: key,
-                    file: filesByLocale.get(locale)
-                }));
+                diagnostics.push(
+                    diagnostic({
+                        code: "LOC_MISSING_KEY",
+                        severity: "warning",
+                        message:
+                            `Localization key "${key}" is missing in locale "${locale}"` +
+                            ` (present in reference locale "${referenceLocale}").` +
+                            " The fallback locale is used at runtime.",
+                        locale,
+                        messageId: key,
+                        file: filesByLocale.get(locale)
+                    })
+                );
             }
         }
 
         for (const key of [...placeholders.keys()].sort()) {
-
             if (!referencePlaceholders.has(key)) {
-
-                diagnostics.push(diagnostic({
-                    code: "LOC_EXTRA_KEY",
-                    severity: "warning",
-                    message: `Localization key "${key}" exists in locale "${locale}" but not`
-                        + ` in reference locale "${referenceLocale}".`,
-                    locale,
-                    messageId: key,
-                    file: filesByLocale.get(locale)
-                }));
+                diagnostics.push(
+                    diagnostic({
+                        code: "LOC_EXTRA_KEY",
+                        severity: "warning",
+                        message:
+                            `Localization key "${key}" exists in locale "${locale}" but not` +
+                            ` in reference locale "${referenceLocale}".`,
+                        locale,
+                        messageId: key,
+                        file: filesByLocale.get(locale)
+                    })
+                );
             }
         }
     }
@@ -263,11 +259,9 @@ export function validateLocalizationProject(
     }
 
     for (const key of [...allKeys].sort()) {
-
         const sets = new Map<string, string[]>();
 
         for (const locale of localesInOrder) {
-
             const placeholders = placeholdersByLocale.get(locale)?.get(key);
 
             if (placeholders !== undefined) {
@@ -289,7 +283,6 @@ export function validateLocalizationProject(
         const referenceSignature = JSON.stringify([...referenceSet].sort());
 
         for (const locale of localesInOrder) {
-
             if (locale === referenceLocale) {
                 continue;
             }
@@ -301,19 +294,21 @@ export function validateLocalizationProject(
             }
 
             if (JSON.stringify([...placeholders].sort()) !== referenceSignature) {
-
-                diagnostics.push(diagnostic({
-                    code: "LOC_PLACEHOLDER_MISMATCH",
-                    severity: "error",
-                    message: `Localization key "${key}" uses different placeholders in locale`
-                        + ` "${locale}" (${placeholders.join(", ") || "none"}) than in reference`
-                        + ` locale "${referenceLocale}" (${referenceSet?.join(", ") || "none"}).`
-                        + " At runtime the mismatching placeholder stays visible in the text"
-                        + " with a LOC_MISSING_PARAM diagnostic.",
-                    locale,
-                    messageId: key,
-                    file: filesByLocale.get(locale)
-                }));
+                diagnostics.push(
+                    diagnostic({
+                        code: "LOC_PLACEHOLDER_MISMATCH",
+                        severity: "error",
+                        message:
+                            `Localization key "${key}" uses different placeholders in locale` +
+                            ` "${locale}" (${placeholders.join(", ") || "none"}) than in reference` +
+                            ` locale "${referenceLocale}" (${referenceSet?.join(", ") || "none"}).` +
+                            " At runtime the mismatching placeholder stays visible in the text" +
+                            " with a LOC_MISSING_PARAM diagnostic.",
+                        locale,
+                        messageId: key,
+                        file: filesByLocale.get(locale)
+                    })
+                );
             }
         }
     }

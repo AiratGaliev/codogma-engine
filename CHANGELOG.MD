@@ -1,9 +1,57 @@
 # Change Log
 
-## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
+## Unreleased (2026-10-29 — mini-service network hardening)
 
-P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
-MCP robustness, and regression suites for every defect found along the way.
+### Security
+
+* The standalone MCP bridge now validates loopback `Host` headers for HTTP and WebSocket
+  upgrades, refuses non-loopback bind addresses, and uses bounded HTTP header/request timers.
+* AI Chat now fails closed when configured to bind outside loopback, normalizes IPv6 Host
+  headers correctly, and uses bounded HTTP header/request timers.
+* Added negative regression coverage for foreign HTTP/WebSocket Host headers and attempted
+  external binds. Remote service access remains unsupported without an authenticated tunnel.
+
+## Unreleased (2026-10-29 — descriptor-verified project file access)
+
+### Security
+
+* Added descriptor-verified project file reads. MCP file/text/asset metadata reads now consume bytes from an opened descriptor validated against the project root; HTTP project/editor static responses stream from a validated file handle instead of reopening a pathname.
+* Routed MCP `project-write-file` through the existing validated write-handle primitive rather than `fsp.writeFile(path)`.
+* Added Linux descriptor-anchored helpers for project directory creation, deletion and rename; wired the HTTP project API and MCP project-file tools to use them. Added deterministic parent-symlink-swap regressions for delete, rename and directory creation.
+* Added descriptor-verified one-level directory enumeration for the HTTP project file tree and MCP project file listing; Linux reads metadata through the verified `/proc/self/fd` directory handle and skips symlink entries.
+* Added deterministic regression tests that swap a parent directory for an outside symlink immediately before open and assert that neither read nor write exposes/modifies the outside file.
+* Replaced HTTP `CopyFile`'s path-based recursive `fsp.cp()` with descriptor-aware recursive copying: source files use verified handles without following final symlinks, destination files are staged in a temporary sibling and committed with an anchored rename on Linux, and symbolic-link entries are rejected. Tests cover file/tree copies and source/destination parent-symlink swaps.
+* Bounded AI-chat attachment ingestion to a 24 KiB prefix read from a verified handle rather than loading the full file before truncation. Static project/editor files and `/archive/<name>` content are streamed from validated descriptors; directory index lookup uses verified directory enumeration rather than path-based `stat`/`existsSync`.
+* HTTP `CreateFolder` reads final directory metadata with descriptor-backed `fstat`. MCP Scene/Prefab create operations use exclusive, descriptor-anchored creation and cannot overwrite a file that appears after an earlier existence check.
+* MCP project reads no longer use a separate pathname-based `existsSync` before the verified read; Spine JSON metadata uses descriptor-backed file metadata lookup. Added symlink/outside-root and non-overwrite regression tests.
+* This is partial hardening, not a claim that TOCTOU is fully resolved. Non-Linux path-based fallback and races where an opened directory is moved outside after verification still lack a proven cross-platform guarantee and acceptance. Trusted installation metadata (`EDITOR_DIR`/`PLUGINS_DIR`) remains outside the user-project threat boundary.
+
+## Unreleased (2026-10-29 — Particle Emitter codegen regressions)
+
+### Tests
+
+* Added focused tests in `tests/editor-codegen.test.mjs` for Particle Emitter code generation: unset texture uses Phaser's `__DEFAULT` key, configured frames survive code generation, explicit texture keys remain intact, and clearing frames removes stale `frame` config.
+* Added lifecycle regression tests against the real `colibri.ui.controls.Controls.createImageFromBlob()` owner: blob URLs are revoked on both successful image load and decode error. Added recoverability tests for actual `ThumbnailCache` behavior when IndexedDB reads or writes reject: a fresh preview remains available, and optional persistence failures do not fail the preview. Added direct `AudioPreviewSection` tests for string, string-array and `{ type, url }` descriptor paths, including malformed entries.
+
+---
+
+## Unreleased (2026-10-29 — scoped TypeScript quality pilot)
+
+### Tooling
+
+* Added a quality-pilot surface for the already-strict `packages/localization` module:
+  scoped TypeScript/Node ESLint coverage, a package-local Prettier profile, and `typecheck` / `lint` / `format:check` / existing Node unit-test scripts.
+* Added report-only Knip and dependency-cruiser configuration with explicit package entry points, shared-tool exclusions and non-blocking severities. Knip has no unused findings in the accepted CI report; dependency-cruiser reports no violations for the 8-module/15-dependency package graph. Existing Node `node:test` coverage remains; no new test framework or duplicate toolchain dependencies are added to the package lockfile.
+* Normalized the complete package-owned TypeScript source, Node tests and CLI with Prettier. `format:check` now runs read-only over the full source/test/CLI/config scope.
+* CI Fast runs clean installs, package quality checks and reports before existing localization diagnostics/runtime acceptance. Strict/lint/format gates remain scoped to this package and are not enabled across the legacy editor tree.
+
+## Unreleased (dev; обновлять при каждом принятом изменении)
+
+Unreleased work tracked here: editor reliability, FX and Box2D codegen/runtime follow-ups, Svelte PoC, MCP robustness and regression suites. The heading is not evidence that browser/runtime acceptance is complete; see the explicit open gates below.
+
+### Box2D / code generation
+
+* Fix: prefab body generation selects the world ID according to the consuming scene's configured mode. Exposed world-generation/debug settings in Inspector, declares the generated `worldId` property and imports `PhaserDebugDraw` from the separate helper file. Incomplete standalone B2Body/B2Shape nodes are deferred until their Inspector/schema/body-ID/prefab/runtime contracts are complete. Browser/runtime acceptance remains a separate gate.
 
 ### Editor
 
@@ -22,8 +70,11 @@ MCP robustness, and regression suites for every defect found along the way.
   empty with an error alert and `[object Object]` outline rows before
   (258cbe0).
 * Fix: Undo/redo reliability, Enter commit in Inspector fields, scene data
-  migrations, update command (86b9baa); TOCTOU write gap closed in the file
-  API (62c5ac6).
+  migrations and update command (86b9baa). The file API now validates the opened
+  descriptor before truncating/writing existing content (62c5ac6). This narrows
+  the write-path race, but does **not** close every filesystem TOCTOU: folder
+  creation and path-based rename/copy/move/delete still need race-resistant
+  treatment and explicit concurrency tests.
 * Feat: Godot editor icons integrated with light/dark variants (249227e).
 * Feat: limited Svelte 5 PoC plugin (`phasereditor2d.sveltepoc`) with live and
   mock bridges, isolated build toolchain and ADR-0004 decision record; the
@@ -31,20 +82,22 @@ MCP robustness, and regression suites for every defect found along the way.
 
 ### Server / MCP
 
-* Add private TypeScript package `@codogma/editor-mcp-server` in `packages/editor-mcp-server/`. It exposes the engine-owned MCP registry over stdio and forwards the original tool schemas/calls through loopback `POST /editor/mcp`; the primary launcher no longer routes through the Phaser WebSocket bridge. npm publication remains deferred.
+* Extracted `readRequestBuffer()` into `server/request-body.mjs` and added unit tests for exact-limit chunked bodies, streaming 413 after the cap, misdeclared Content-Length, early declared oversize rejection, stream errors, invalid limits, aborted requests and premature close before HTTP message completion. Aborted/incomplete streams now reject and remove their listeners rather than leaving an awaiter pending. This exercises stream-enforcement logic using small buffers instead of large CI payloads.
+* Security: reject declared JSON API bodies above 32 MiB and multipart uploads above 128 MiB before buffering their contents; keep the streaming cap for chunked/misdeclared bodies and return HTTP 413 consistently. Malformed JSON is reported as HTTP 400.
 * Fix: MCP launcher probes the official-package bridge and falls back to the
   built-in stdio server when the bridge is served by another process or has
   no connected editor — external MCP hosts keep working in any deployment
   (1e7f9d4).
-* Extended MCP contract coverage: all 59 upstream Phaser MCP tool names are
-  checked against the Codogma registry; every engine JSON Schema is compiled
-  with Ajv; invalid nested/alternative arguments are rejected before forwarding;
-  image content blocks are preserved. Spine skin previews use the existing
-  editor thumbnail renderer through the SSE bridge. The new package tests also
-  verify SpineGameObject configuration survives scene serialization.
+* Extended MCP e2e: JSON Schema validity of all 66 tools under the forced Zod
+  4.6.7 override, malformed-argument rejection without killing the server,
+  and post-failure liveness (1e7f9d4).
+* Strengthened MCP schema acceptance with recursive validation of nested JSON Schema keywords and optional fields in both the built-in tools and the official Zod 4.6.7 bridge; the live E2E also checks nested optional object-list fields and validates the standard `tools/call` content array shape.
 * Fix: reverse-proxy Host allow-list and Origin guard for gateways that
   rewrite headers (0545a29, fb03067); guarded `/archive/` snapshot route
   (1094f1c).
+
+* Added the private first-party TypeScript package `@codogma/editor-mcp-server` under `packages/editor-mcp-server/`. It exposes the Engine-owned MCP registry over stdio via loopback `POST /editor/mcp`; the main launcher prefers this package and retains the dependency-free stdio fallback. npm publication remains deferred.
+* Added contract coverage for the 59 upstream Phaser MCP tool names, unique names, Ajv compilation of the Engine-owned JSON Schemas, nested/alternative argument validation and image content blocks. Spine skin PNG preview uses the active editor/SSE thumbnail renderer; live browser acceptance remains separate (CODQA-8).
 
 ### Tests
 
@@ -979,11 +1032,3 @@ First release under the Codogma Engine name. Rebranded from Phaser Editor 2D (op
 ## Version 3.0.0 - May 5, 2020
 
 [First public release](https://phasereditor2d.com/blog/2020/05/phaser-editor-v3-released-for-the-public-new-online-service-play-phaser-editor-2d)
-
-- Extended MCP scene object serialization to preserve editor-specific Sprite, TileSprite, slice, Text/BitmapText, shape and Video fields, and convert upstream ParticleEmitter operation configs into the editor's stored property-set format.
-
-- Normalized upstream Arcade.active/body.* MCP arguments into the current Codogma ArcadeComponent serializer, added explicit support checks for enable/disable, and expanded round-trip coverage for HitArea and Shape stroke properties.
-
-- Corrected Arcade MCP serialization: upstream Arcade.active/body.* fields are mapped to current ArcadeComponent JSON keys. Enable/disable validates editor type support, and regression coverage exercises both direct aliases and arcade shorthand.
-
-- Expanded the engine-owned MCP system instructions to document scene/object workflows, plain objects and Tiled maps, Prefabs/nested instances, object lists, Phaser 4 filters, Arcade support, assets/Google Fonts, project-file APIs and UI/SSE-dependent tools. Package tests assert these sections stay available.
