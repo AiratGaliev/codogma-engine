@@ -47,7 +47,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 5. Перенести первый основной authoring slice в новый Host: scene open/edit/save/reopen, Phaser Canvas, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая возможность получает regression fixture и browser acceptance; старый редактор остаётся для сравнения, но не источником новой UI-архитектуры.
 6. Закрыть runtime follow-ups PR #10: FX generated output vs editor preview, Box2D на 30/60/120 FPS и stop/restart/cleanup, Asset Pack/importer error paths и кодогенерацию. Добавить фикстуры для повторения дефектов.
 7. Пройти cross-platform acceptance уже внедрённой filesystem hardening: подтвердить фактическую матрицу поддерживаемых ОС/файловых систем, проверить non-Linux pathname fallback на symlink/reparse-point races и исследовать сценарий перемещения уже открытого каталога наружу. Linux descriptor-anchored mutation helpers и существующие adversarial tests сохранять как базовый контракт; новые write/package APIs не строить поверх pathname-only операций. Результаты и границы фиксировать в CODQA-7. Для standalone mini-services сохранять loopback-only defaults, Host/Origin/body/WS/time/rate-limit tests и проверку env override behavior; до auth/authorization не экспонировать их как публичный API.
-8. Не повторять ограниченный SolidJS PoC: он уже выполнен и документирован в ADR-0004. Перейти от PoC к отдельному SolidJS Host по ADR-0005 и `docs/editor-ui-migration.md`; не создавать постоянный SolidJS↔Colibri bridge и не запускать full rewrite одним PR.
+8. Не выполнять framework PoC и не задерживать старт нового Host сравнительными экспериментами. Создать SolidJS application и Unity-подобный Workbench по ADR-0005 и `docs/editor-ui-migration.md`; сохранить project/runtime contracts и не создавать постоянный SolidJS↔Colibri bridge.
 
 ### Что можно выполнять параллельно Editor UI migration
 
@@ -109,7 +109,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 2. После минимального shell перейти к первому реальному vertical slice: Scene Editor + Phaser Canvas + Hierarchy/Inspector + save/reopen/Undo/Redo. Runtime gaps PR #10 включать в соответствующие migration slices, а не переносить UI без проверки поведения.
 3. Добавить/настроить tests и lint/format для изменяемого Codogma-owned scope. Не включать новые строгие правила на всё legacy-дерево без исправления/миграционного плана.
 4. Реализовать согласованную UI-систему и иконки непосредственно в новом SolidJS Host, включая light/dark/lightBlue themes, keyboard/focus states и density. Провести browser acceptance на целевых размерах окна, приложить screenshots или эквивалентные воспроизводимые результаты.
-5. Не повторять SolidJS PoC: он выполнен и сохранён в ADR-0004. Использовать его как входное evidence для независимого Editor Host; не создавать долгосрочный Colibri↔SolidJS bridge.
+5. Не создавать отдельный SolidJS PoC и не начинать с панели внутри Colibri. Сразу реализовывать независимый SolidJS Editor Host и Unity-подобный Workbench; ADR-0004 оставить только исторической записью Svelte-эксперимента.
 6. Для каждого крупного набора изменений открыть отдельный PR с регрессионными тестами и перечислением фактически пройденных проверок; обновить соответствующие части матрицы/worklog по результатам.
 7. После прохождения первого SolidJS Host vertical slice выбирать следующий Core/Preview/HTML5 build slice на основе реальных зависимостей; не переписывать legacy UI заранее и не удалять его до cutover.
 
