@@ -32,6 +32,7 @@ const coreJson = globalThis.phasereditor2d.scene.core.json
 const coreCode = globalThis.phasereditor2d.scene.core.code
 const migrations = globalThis.phasereditor2d.scene.core.migrations
 const isValidSceneData = coreJson.isValidSceneData
+const SceneSettings = globalThis.phasereditor2d.scene.core.json.SceneSettings
 
 /* ===================== property serialization ===================== */
 
@@ -82,6 +83,20 @@ test("scene Serializer.write keeps non-default values and drops default ones", (
     serializer.write("visible", false, true) // differs from default → kept
 
     assert.equal(data.visible, false)
+})
+
+test("legacy Box2D debug flag round-trips without enabling the current generated debug-draw option", () => {
+    const settings = new SceneSettings()
+    settings.readJSON({ box2dDebugDraw: true })
+
+    assert.equal(settings.box2dDebugDraw, true,
+        "old scene metadata must remain readable for compatibility")
+    assert.equal(settings.box2dSceneGenerateDebugCode, false,
+        "the legacy flag must not silently change the new generator option")
+
+    const data = settings.toJSON()
+    assert.equal(data.box2dDebugDraw, true,
+        "the legacy setting must survive serialization")
 })
 
 /* ===================== scene-data migrations ===================== */
@@ -225,6 +240,54 @@ test("TypeScript unit generator emits typed fields", () => {
 
     assert.match(output, /class MyPrefab/)
     assert.match(output, /sprite: Phaser\.GameObjects\.Sprite/, "TypeScript output must carry field type annotations")
+})
+
+test("Box2D world ID expression preserves legacy variables and template-owned scene/prefab IDs", () => {
+    const component = globalThis.phasereditor2d.scene.ui.sceneobjects.Box2DBodyComponent;
+
+    assert.equal(component.getWorldIdExpression(false, false), "box2dWorldId");
+    assert.equal(component.getWorldIdExpression(false, true), "box2dWorldId",
+        "legacy prefab code must use the world variable created in the consuming scene");
+    assert.equal(component.getWorldIdExpression(true, false), "this.worldId");
+    assert.equal(component.getWorldIdExpression(true, true), "this.scene.worldId");
+})
+
+test("ES module import paths use emitted .js extensions for scene and TypeScript sources", () => {
+    const FilePath = globalThis.colibri.core.io.FilePath;
+    const codeUtils = globalThis.phasereditor2d.ide.core.code;
+    const root = new FilePath(null, {
+        name: "project",
+        isFile: false,
+        size: 0,
+        modTime: 0,
+        children: [{
+            name: "scenes",
+            isFile: false,
+            size: 0,
+            modTime: 0,
+            children: [
+                { name: "main.scene", isFile: true, size: 0, modTime: 0 },
+                { name: "prefabs", isFile: false, size: 0, modTime: 0, children: [
+                    { name: "enemy.scene", isFile: true, size: 0, modTime: 0 }
+                ] },
+                { name: "components", isFile: false, size: 0, modTime: 0, children: [
+                    { name: "Player.ts", isFile: true, size: 0, modTime: 0 },
+                    { name: "Helper.js", isFile: true, size: 0, modTime: 0 }
+                ] }
+            ]
+        }]
+    });
+
+    const scenes = root.getFile("scenes");
+    const scene = scenes.getFile("main.scene");
+    const prefab = scenes.getFile("prefabs").getFile("enemy.scene");
+    const component = scenes.getFile("components").getFile("Player.ts");
+    const helper = scenes.getFile("components").getFile("Helper.js");
+
+    assert.equal(codeUtils.getImportPath(scene, prefab, true).importPath, "./prefabs/enemy.js");
+    assert.equal(codeUtils.getImportPath(scene, component, true).importPath, "./components/Player.js");
+    assert.equal(codeUtils.getImportPath(scene, helper, true).importPath, "./components/Helper.js");
+    assert.equal(codeUtils.getImportPath(scene, prefab, false).importPath, "./prefabs/enemy");
 })
 
 /* =========================== code helpers =========================== */

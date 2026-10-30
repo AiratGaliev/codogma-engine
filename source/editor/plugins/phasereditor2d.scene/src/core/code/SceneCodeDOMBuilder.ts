@@ -2,6 +2,7 @@ namespace phasereditor2d.scene.core.code {
 
     import io = colibri.core.io;
     import ISceneGameObject = ui.sceneobjects.ISceneGameObject;
+    import ideCode = phasereditor2d.ide.core.code;
 
     export class SceneCodeDOMBuilder {
 
@@ -113,7 +114,10 @@ namespace phasereditor2d.scene.core.code {
 
                 if (superCls.startsWith("Phaser.")) {
 
-                    unit.addImport("Phaser", "phaser", true);
+                    if (ideCode.projectHasRootPackageJson()) {
+
+                        unit.addImport("Phaser", "phaser", true);
+                    }
 
                 } else {
 
@@ -121,7 +125,7 @@ namespace phasereditor2d.scene.core.code {
 
                     if (superClsFile) {
 
-                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, superClsFile);
+                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, superClsFile, this._scene.getSettings().importFileExtension);
 
                         unit.addImport(superCls, importPath, asDefault);
                     }
@@ -167,6 +171,33 @@ namespace phasereditor2d.scene.core.code {
                     this.buildPrefabPropertiesFields(fields);
                 }
 
+                if (!this._isPrefabScene && settings.box2dGenerateWorldCode
+                    && !fields.some(field => field.getName() === "worldId")) {
+
+                    const worldIdField = new FieldDeclCodeDOM(
+                        "worldId", 'ReturnType<typeof CreateWorld>["worldId"]');
+                    worldIdField.setAllowUndefined(true);
+                    fields.push(worldIdField);
+                }
+
+                if (!this._isPrefabScene && settings.box2dGenerateWorldCode
+                    && settings.box2dSceneGenerateDebugCode) {
+
+                    if (!fields.some(field => field.getName() === "debugGraphics")) {
+
+                        const debugGraphics = new FieldDeclCodeDOM("debugGraphics", "Phaser.GameObjects.Graphics");
+                        debugGraphics.setAllowUndefined(true);
+                        fields.push(debugGraphics);
+                    }
+
+                    if (!fields.some(field => field.getName() === "debugDraw")) {
+
+                        const debugDraw = new FieldDeclCodeDOM("debugDraw", "PhaserDebugDraw");
+                        debugDraw.setAllowUndefined(true);
+                        fields.push(debugDraw);
+                    }
+                }
+
                 clsDecl.getBody().push(...methods);
                 clsDecl.getBody().push(...fields);
 
@@ -210,13 +241,16 @@ namespace phasereditor2d.scene.core.code {
 
                 if (type.startsWith("Phaser.")) {
 
-                    this._unit.addImport("Phaser", "phaser", true);
+                    if (ideCode.projectHasRootPackageJson()) {
+
+                        this._unit.addImport("Phaser", "phaser", true);
+                    }
 
                 } else if (this._fileNameMap.has(type)) {
 
                     const importFile = this._fileNameMap.get(type);
 
-                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, importFile);
+                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, importFile, this._scene.getSettings().importFileExtension);
 
                     this._unit.addImport(type, importPath, asDefault);
                 }
@@ -546,7 +580,13 @@ namespace phasereditor2d.scene.core.code {
 
             const settings = this._scene.getSettings();
 
-            if (this._scene.isPrefabSceneType() || !settings.box2dEnabled) {
+            const generateWorld = settings.box2dGenerateWorldCode || settings.box2dEnabled;
+
+            if (settings.box2dSceneGenerateDebugCode && !settings.box2dGenerateWorldCode) {
+                throw new Error("Box2D debug drawing requires the 'Generate Box2D world code' setting.");
+            }
+
+            if (this._scene.isPrefabSceneType() || !generateWorld) {
 
                 return;
             }
@@ -556,8 +596,8 @@ namespace phasereditor2d.scene.core.code {
                 ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
             }
 
-            // shortcut: the debugDraw setting is not emitted yet, it needs the
-            // PhaserDebugDraw.js project-file plumbing of the official editor
+            // Debug drawing uses the separately imported PhaserDebugDraw.js helper,
+            // and is only valid when the scene owns its generated world ID.
 
             // the editor Y points down, the Box2D world Y points up
             const gravityY = -settings.box2dGravityY;
@@ -565,11 +605,36 @@ namespace phasereditor2d.scene.core.code {
             body.push(
                 new RawCodeDOM(""),
                 new RawCodeDOM("// box2d world creation"),
-                new RawCodeDOM(`SetWorldScale(${this.getBox2DWorldScale()});`),
-                new RawCodeDOM(`const box2dWorld = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
-                    + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
-                    + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
-                new RawCodeDOM(`const box2dWorldId = box2dWorld.worldId;`));
+                new RawCodeDOM(`SetWorldScale(${this.getBox2DWorldScale()});`));
+
+            if (settings.box2dGenerateWorldCode) {
+
+                body.push(
+                    new RawCodeDOM(`const world = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
+                        + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
+                        + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
+                    new RawCodeDOM(`this.worldId = world.worldId;`));
+
+                if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
+
+                    ui.sceneobjects.Box2DBodyComponent.addBox2DImport(
+                        this._unit, "PhaserDebugDraw", this._sceneFile, "PhaserDebugDraw.js");
+                    ui.sceneobjects.Box2DBodyComponent.addBox2DImport(
+                        this._unit, "b2World_Draw", this._sceneFile);
+
+                    body.push(
+                        new RawCodeDOM(`this.debugGraphics = this.add.graphics();`),
+                        new RawCodeDOM(`this.debugDraw = new PhaserDebugDraw(this.debugGraphics, this.game.scale.width, this.game.scale.height, ${this.getBox2DWorldScale()});`));
+                }
+
+            } else {
+
+                body.push(
+                    new RawCodeDOM(`const box2dWorld = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
+                        + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
+                        + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
+                    new RawCodeDOM(`const box2dWorldId = box2dWorld.worldId;`));
+            }
         }
 
         private getBox2DWorldScale(): number {
@@ -594,12 +659,21 @@ namespace phasereditor2d.scene.core.code {
 
             const settings = this._scene.getSettings();
 
-            if (this._scene.isPrefabSceneType() || !settings.box2dEnabled) {
+            const generateWorld = settings.box2dGenerateWorldCode || settings.box2dEnabled;
+
+            if (this._scene.isPrefabSceneType() || !generateWorld) {
 
                 return;
             }
 
-            for (const name of ["b2World_Step", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"]) {
+            const names = ["b2World_Step", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"];
+
+            if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
+
+                names.push("b2World_Draw");
+            }
+
+            for (const name of names) {
 
                 ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
             }
@@ -608,7 +682,10 @@ namespace phasereditor2d.scene.core.code {
                 ? "(_time: number, delta: number)"
                 : "(_time, delta)";
 
-            body.push(
+            const worldVar = ui.sceneobjects.Box2DBodyComponent.getWorldIdExpression(
+                settings.box2dGenerateWorldCode, false);
+
+            const updateBody = [
                 new RawCodeDOM(""),
                 new RawCodeDOM("// box2d world update and cleanup"),
                 new RawCodeDOM("let box2dAccumulator = 0;"),
@@ -618,21 +695,32 @@ namespace phasereditor2d.scene.core.code {
                 new RawCodeDOM("    box2dAccumulator = Math.min(box2dAccumulator + Math.max(0, delta) / 1000, box2dFixedTimeStep * 3);"),
                 new RawCodeDOM("    let box2dSteps = 0;"),
                 new RawCodeDOM("    while (box2dAccumulator >= box2dFixedTimeStep && box2dSteps < 3) {"),
-                new RawCodeDOM("        b2World_Step(box2dWorldId, box2dFixedTimeStep, box2dSubStepCount);"),
+                new RawCodeDOM(`        b2World_Step(${worldVar}, box2dFixedTimeStep, box2dSubStepCount);`),
                 new RawCodeDOM("        box2dAccumulator -= box2dFixedTimeStep;"),
                 new RawCodeDOM("        box2dSteps++;"),
                 new RawCodeDOM("    }"),
-                // SetWorldScale is global in Phaser Box2D; reapply this scene's scale
-                // before converting body transforms back to pixels.
                 new RawCodeDOM(`    SetWorldScale(${this.getBox2DWorldScale()});`),
-                new RawCodeDOM("    UpdateWorldSprites(box2dWorldId);"),
+                new RawCodeDOM(`    UpdateWorldSprites(${worldVar});`)
+            ];
+
+            if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
+
+                updateBody.push(
+                    new RawCodeDOM("    this.debugGraphics.clear();"),
+                    new RawCodeDOM(`    b2World_Draw(${worldVar}, this.debugDraw);`)
+                );
+            }
+
+            updateBody.push(
                 new RawCodeDOM("};"),
                 new RawCodeDOM(`this.events.on("update", updateBox2DWorld);`),
                 new RawCodeDOM(`this.events.once("shutdown", () => {`),
                 new RawCodeDOM(`    this.events.off("update", updateBox2DWorld);`),
-                new RawCodeDOM("    ClearWorldSprites(box2dWorldId);"),
-                new RawCodeDOM("    b2DestroyWorld(box2dWorldId);"),
+                new RawCodeDOM(`    ClearWorldSprites(${worldVar});`),
+                new RawCodeDOM(`    b2DestroyWorld(${worldVar});`),
                 new RawCodeDOM("});"));
+
+            body.push(...updateBody);
         }
 
         private addCreateAllPlainObjectCode(firstStatements: CodeDOM[], lazyStatements: CodeDOM[]) {
@@ -880,7 +968,7 @@ namespace phasereditor2d.scene.core.code {
                         prefabSerializer
                     });
 
-                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, objES.getPrefabFile());
+                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, objES.getPrefabFile(), this._scene.getSettings().importFileExtension);
 
                     this._unit.addImport(clsName, importPath, asDefault);
 
@@ -912,7 +1000,7 @@ namespace phasereditor2d.scene.core.code {
 
                     if (clsFile) {
 
-                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, clsFile);
+                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, clsFile, this._scene.getSettings().importFileExtension);
 
                         this._unit.addImport(clsName, importPath, asDefault);
                     }

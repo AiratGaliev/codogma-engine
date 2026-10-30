@@ -16,23 +16,23 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 | 2 | Этап 5: визуальная модернизация Editor UX/UI | **P0 — основной видимый результат** | Согласованные панели, toolbar, иерархия, Inspector, assets/workspace, визуальная плотность, типографика, состояния и темы; редактор воспринимается как цельная IDE, а не набор разрозненных legacy-панелей. |
 | 3 | Этап 5: стабилизация основных 2D authoring workflows | **P0 — основной функциональный результат** | Scene/Hierarchy/Transform, selection, Inspector/components, сохранение и повторное открытие, Undo/Redo, Prefabs, Asset Pack и существующие инструменты проходят адресные acceptance-проверки. Улучшать текущую реализацию до замены архитектуры. |
 | 4 | Этап 5: runtime acceptance и регрессии PR #10 | **P0 — подтверждение качества** | FX Circle/Bloom/Gradient/Shine, Box2D, Asset Pack/importers и codegen проверены в реальном browser/runtime; дефекты исправлены, regression tests добавлены. Зелёная сборка сама по себе недостаточна. |
-| 5 | Security fixes для файловых операций и optional mini-services | **P0 для соответствующих API/сервисов** | TOCTOU закрыт race-resistant способом до расширения write APIs/Package Manager; mini-services безопасны по умолчанию до сетевого/недоверенного запуска. Эти фиксы могут идти отдельными PR. |
+| 5 | Security residuals для файловых операций и optional mini-services | **P0 для соответствующих API/сервисов** | Content-file writes уже проверяют opened descriptor; pathname-based mutations сохраняют TOCTOU residual до новых write/package APIs. Standalone MCP/AI Chat имеют loopback/Host/Origin/request limits, но не general authentication; non-loopback/public exposure запрещена до отдельной auth design и service-level tests. |
 | 6 | Этап 1: адресное исследование и toolchain migration | **P0 — непрерывно** | Матрицы обновляются по мере реальной проверки; ESLint/Prettier/tests применяются к новому и изменяемому Codogma-owned scope. Полная инвентаризация всего legacy не блокирует исправление подтверждённого дефекта. |
 | 7 | Сравнительный PoC Svelte / UI toolchain | **P1 — параллельно, ограниченный scope** | Рабочий прототип на репрезентативной панели, сравнение с текущим Colibri/workbench, решение на evidence. До такого решения не переписывать редактор целиком; обычные улучшения текущего UI не ждут PoC. |
 | 8 | Этап 2: Project Model и минимальный Codogma Core | **P1 — после первой стабилизации редактора или отдельным независимым потоком** | Малый проверяемый Project/Scene/Node/Component slice без импорта legacy UI. Core contracts не должны задерживать улучшения, которые можно безопасно сделать на текущей модели. |
 | 9 | Этап 3–4A: Preview Host и headless HTML5 build | **P1 — следующие сквозные возможности** | Browser preview, live Inspector и воспроизводимая game build принимаются отдельно после готовности зависимых contracts; существующий `npm run build` не считать сборкой игры. |
 | 10 | Platform Services, Tauri, Package Manager и расширенная ecosystem | **P2 / по готовности зависимостей** | Yandex Games раньше последующих targets; Tauri, package ecosystem, PixiJS, дополнительные physics backends и advanced features не отвлекают от текущего редактора без конкретного обоснования. |
 
-## Текущее состояние и границы блокеров (27.10.2026)
+## Текущее состояние и границы блокеров (30.10.2026)
 
-Текущая базовая точка `dev` — `754edaa1f7313409e99c3462a802d5fd430a9a01`. Документационный PR #5 и feature PR #10 уже слиты в `dev`. Старые формулировки, где PR #10 описывался как Draft/не часть ветки, считаются устаревшими; runtime follow-ups ниже остаются открытыми.
+Базовая точка `dev` на момент ревью — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). PR #21 добавляет изменения Box2D codegen и документирует целевую архитектуру Scene Loader; статус CI необходимо проверять по live checks на точном head PR, а не хранить SHA очередного запуска в постоянной документации. Любой CI Fast подтверждает только выполненные workflow jobs; browser/runtime Box2D acceptance, performance measurements и release-host acceptance остаются отдельными gates.
 
 ### Можно начинать сейчас
 
 - **Сразу переходить к изменениям кода существующего редактора.** Матрица возможностей и архитектурные документы уже дают достаточную исходную точку. Дополнять их по мере реализации и проверок, а не превращать их полное заполнение в отдельный большой этап перед первой правкой.
 - **Первым потоком делать инженерную надёжность и UX/UI редактора:** необходимые проверки в существующих package roots, улучшение основных панелей и рабочих сценариев, единая визуальная система, темизация и иконки.
 - **Закрывать подтверждённые проблемы PR #10** отдельными функциональными задачами: FX, Box2D, Asset Pack, импорт ресурсов, генерация кода. Статус «работает» выставлять только после соответствующего runtime/browser acceptance.
-- **Параллельно закрывать security residuals**, не смешивая их с UI-рефакторингом. Race-resistant file API обязателен до новых файловых write paths/Package Manager; optional mini-services обязаны иметь безопасные настройки до запуска в недоверенной сети.
+- **Параллельно закрывать security residuals**, не смешивая их с UI-рефакторингом. Pathname-based file mutations должны получить OS-aware race-resistant strategy до передачи их Package Manager. Standalone mini-services по умолчанию loopback-only и имеют request/Origin guards, но authentication отсутствует: не открывать non-loopback bind и не публиковать через proxy до отдельной auth design и своих security tests.
 - **Core pilot разрешён параллельно, но не должен быть основной целью ближайшей большой задачи.** Он должен быть изолирован и не блокировать исправление функций, уже реализуемых текущим редактором.
 - **Svelte/Vite/dockview/CodeMirror/Monaco исследуются через небольшой рабочий PoC.** Не нужно сначала устанавливать новый стек для всего приложения: сначала сравнить его на одной репрезентативной области, а текущий UI продолжать улучшать.
 
@@ -44,7 +44,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 4. Реализовать централизованную систему иконок и theme-specific assets на основе закреплённого набора Godot Editor Icons. Инвентаризация IDs, выбор 2D-значков и проверка MIT notices — обязательные шаги реализации, но не основание отложить задачу без срока; итогом должны стать работающий код и визуальная проверка обеих тем.
 5. Закрыть основные workflows существующей базы: scene open/edit/save/reopen, hierarchy/selection/Transform, Inspector/components, Undo/Redo, Prefab updates/overrides и ключевые Assets/Pack flows. Каждая изменённая возможность должна иметь regression test и ручной/browser acceptance там, где поведение визуальное.
 6. Закрыть runtime follow-ups PR #10: FX generated output vs editor preview, Box2D на 30/60/120 FPS и stop/restart/cleanup, Asset Pack/importer error paths и кодогенерацию. Добавить фикстуры для повторения дефектов.
-7. Устранить TOCTOU в файловой безопасности отдельным узким PR; усилить standalone mini-services до безопасных defaults и покрыть negative tests. Не включать новые файловые write operations до race-resistant исправления.
+7. Закрыть остаточный filesystem TOCTOU отдельным узким PR: descriptor validation защищает content writes, но folder/rename/copy/move/delete требуют race-resistant mutation design и adversarial tests. Добавить отдельные security tests standalone mini-services для loopback-only defaults, Host/Origin, body/WS limits, timeout/rate limits and env override behavior. До auth/authorization не экспонировать их как публичный API.
 8. Выполнить ограниченный Svelte PoC на реальной панели или редакторском workflow. Сравнить интеграцию, производительность, состояние, темизацию и стоимость bridge с текущим workbench. По результатам записать решение и переходить дальше; не ждать PoC для независимых исправлений текущих панелей.
 
 ### Что не блокирует модернизацию текущего редактора
@@ -82,6 +82,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ## Как использовать ТЗ, roadmap и технические источники
 
 - [Техническое задание](technical-specification.md) — нормативный контракт продукта, архитектуры и acceptance criteria.
+- [Architecture risk register](architecture-risk-register.md) — Web-first risks, trade-offs reference engines и обязательные release checks.
 - [Каталог источников](REFERENCE-SOURCES.md) — официальные руководства/исходники, версии, кандидаты библиотек и замечания по лицензиям. Ссылка в каталоге является reference, а не утверждением о выборе зависимости.
 - [README](../README.md) — подтверждённые команды локальной разработки, правила веток/PR и действующие CI checks.
 - Для API/runtime decisions в первую очередь сверять [Phaser docs](https://docs.phaser.io/phaser/getting-started/what-is-phaser), [EVA.js repository](https://github.com/eva-engine/eva.js), [Cocos Creator 4.0 manual](https://docs.cocos.com/creator/4.0/manual/en/) и [Unity 6.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d). Cocos Creator manual и исходный репозиторий Cocos 4 — разные источники; Unity/Cocos описывают поведение своих продуктов, но не заменяют проектные решения Codogma.
@@ -172,7 +173,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [x] Создать первоначальную `docs/dependency-capability-matrix.md` для текущих direct package roots, Phaser bundle и Box2D runtime path.
 - [ ] Завершить транзитивную dependency/SBOM, license и provenance инвентаризацию; проверить ограничения и стоимость обновления значимых зависимостей до публикации пакетов.
 - [ ] Для нового Core toolchain зафиксировать pinned devDependencies, scripts и lockfile; legacy TSLint dependency уже отсутствует, но `lint.sh`/`tslint.json` остаются неактивными артефактами. Удалить или заменить их отдельным cleanup после пилота.
-- [ ] Определить вертикальный срез для будущих изменений: сцена → custom TypeScript component → Inspector metadata → save/reopen → preview → live selection/diagnostics → HTML5 build.
+- [ ] Определить вертикальный срез для будущих изменений: сериализованная сцена → зарегистрированный независимый TypeScript-компонент → Inspector metadata → save/reopen → запуск без генерируемого per-scene TS-класса → live selection/diagnostics → HTML5 build.
 - [ ] Подготовить ограниченный TypeScript toolchain pilot для нового Codogma-owned module: strict typecheck, lint, format check, Knip/dependency report и unit test, не затрагивая массово наследуемый Colibri code.
 - [x] Зафиксировать решения первого vertical slice в `docs/decisions/ADR-0001-core-architecture.md`: Project Model, Component-object Core, runtime adapter и browser-first Preview Host. Детальные API signatures остаются test-driven реализационными задачами.
 - [x] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile и scope нового Core, ESLint/Prettier/Node unit tests, Knip/dependency-cruiser report mode и staged CI ratchet.
@@ -205,16 +206,24 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### Внутренняя очередь выполнения
 
-1. **Сначала — формат данных:** схема Project/Scene/Node/Transform/Component/Prefab/Asset Reference, стабильные IDs, сериализация, versioning/migrations и compatibility fixtures.
-2. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, serialization и runtime adapter используют одну схему.
-3. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
-4. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
-5. **Отдельное решение, а не предположение:** data-oriented ECS и дополнительные physics backends не входят в минимальный Core автоматически. Сравнить component-object API и нужные physics capabilities на fixture; усложнять модель только если это оправдано тестами/измерениями.
+1. **Сначала — формат данных:** схема Project/Scene/Node/Transform/Component/Prefab/Asset Reference, стабильные IDs, сериализация, versioning/migrations и compatibility fixtures. Сериализованная сцена — каноническое исходное представление; runtime-объекты, Preview и generated source являются производными представлениями.
+2. **Затем — registry и loader:** явная регистрация TypeScript component modules со стабильными type IDs и metadata; data-driven scene loader выполняет миграцию/валидацию, разрешает ссылки и детерминированно создаёт runtime-иерархию. Сцене не требуется отдельный сгенерированный TS-класс.
+3. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, сериализация, валидация и runtime adapter используют единый контракт.
+4. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
+5. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
+6. **Отдельное решение, а не предположение:** data-oriented ECS и дополнительные physics backends не входят в минимальный Core автоматически. Сравнить component-object API и нужные physics capabilities на fixture; усложнять модель только если это оправдано тестами/измерениями.
 
 ### Задачи
 
 - [ ] Подготовить минимальный npm Workspace/package skeleton с исходниками Core в `packages/cge` и только теми самостоятельными пакетами, которые нужны первому vertical slice. После отдельной миграции добавить `src/editor` в root Workspaces при подтверждённой совместимости; package/lockfile consolidation провести отдельным проверяемым изменением. Не создавать `src/cge` как параллельный корень исходников.
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
+- [ ] Зафиксировать инвариант: в целевом Core сцена хранится как versioned data, а не как обязательный генерируемый TypeScript-класс; стабильные IDs и явные ссылки не зависят от имён файлов/классов.
+- [ ] Реализовать explicit component registry и module manifest с предсказуемым build-time graph; не использовать runtime scanning, угадывание путей или `eval` для подключения игровых скриптов.
+- [ ] Реализовать data-driven scene loader: preflight schema/ref validation, зарегистрированные миграции, детерминированное создание hierarchy/Transform/components, lifecycle activation и rollback/cleanup при ошибке загрузки.
+- [ ] Подтвердить, что один независимо написанный TypeScript component module можно повторно использовать несколькими узлами и сценами без копирования логики в scene-specific code; type ID и instance ID различаются, значения каждого экземпляра независимы.
+- [ ] Разделить persisted properties, editor-only metadata и transient runtime state в общей component schema; Inspector, serializer, validator и runtime adapter читают один schema contract.
+- [ ] Зафиксировать разрешение ссылок на узлы/компоненты по стабильным ID и поведение отсутствующей цели/неподдерживаемой циклической ссылки.
+- [ ] Сохранить текущий scene codegen как legacy/compatibility path до приёмки data-driven loader; отдельно описать совместимость и миграцию существующих проектов, не удалять генератор данным архитектурным шагом.
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 - [ ] Определить версионирование формата и механизм миграции; подготовить compatibility fixtures для текущих проектов.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
@@ -230,6 +239,12 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Работает минимальная сцена с Node, Transform и пользовательским TypeScript-компонентом на текущем Phaser runtime.
+- [ ] Fixture загружает сцену из сериализованной модели и явно зарегистрированного TypeScript-компонента без отдельного генерируемого TS-класса/файла сцены.
+- [ ] Один компонентный модуль успешно используется несколькими узлами (в том числе в разных сценах); его значения остаются независимыми на уровне экземпляров.
+- [ ] Отсутствующий/несовместимый тип компонента, broken asset/node ref или unsupported schema приводит к адресной диагностике и не оставляет частично активную сцену или ресурсы.
+- [ ] Порядок загрузки и lifecycle детерминирован: IDs/иерархия построены до разрешения ссылок и активации компонентов; отмена асинхронной загрузки выполняет cleanup.
+- [ ] Persisted fields проходят round-trip; editor-only/transient fields не попадают молча в сериализованные данные.
+- [ ] Существующий legacy codegen имеет регрессионные проверки и не удаляется до согласованной runtime-паритетности и проверенного migration/compatibility path.
 - [ ] Lifecycle тестируется при создании, активации, отключении, повторной активации и уничтожении объекта.
 - [ ] Добавление/удаление компонентов во время system update безопасно и детерминировано.
 - [ ] Повторное открытие проектного файла сохраняет данные; неизвестные/новые поля не теряются молча.
@@ -244,13 +259,13 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ## Этап 3 — Game Preview Host, live Inspector и runtime debugging
 
-**Цель:** сделать рабочую игру доступной из редактора как реальную runtime-сессию, а не только как результат генерации кода.
+**Цель:** сделать рабочую игру доступной из редактора как реальную runtime-сессию. В целевом Core Preview запускает сцену из сериализованных данных и зарегистрированных компонентов, а не требует предварительной генерации отдельного TS-класса для каждого уровня. Текущий codegen остаётся совместимым legacy-путём до отдельной приёмки перехода.
 
 **Зависимости:** базовые Project Model и Runtime Adapter contracts из этапа 2; первые прототипы можно делать параллельно без ожидания полной ECS.
 
 ### Внутренняя очередь выполнения
 
-1. **Первая цель — Browser Preview:** запустить fixture в обычном браузере, обрабатывать повторные Play/Stop/Restart, ошибки запуска и завершать принадлежащие preview процессы без утечек. Это первый путь; Tauri не требуется.
+1. **Первая цель — Browser Preview:** запустить fixture в обычном браузере через data-driven loader (serialized scene + registered component module), обрабатывать повторные Play/Stop/Restart, ошибки запуска и завершать принадлежащие preview процессы без утечек. Fixture не должен зависеть от per-scene generated TS class; Tauri не требуется.
 2. **Сразу после него — runtime identity и диагностика:** связать runtime entity/component ID с Project Model, получать реальные runtime values, различать runtime mutations и serialized source data, привязывать errors/logs к запуску.
 3. **Следующий UI-слой — Embedded Game View:** подключать после доказанного browser lifecycle. Сравнить отзывчивость редактора под нагрузкой; не обещать изоляцию, если не измерены отдельные context/window/process.
 4. **Только затем — расширенная диагностика:** overlays, time scale и single-step после подтверждения scheduler semantics. Отдельное окно — дополнительный способ проверки fullscreen/input/scaling, а не блокер первой browser-сессии.
@@ -258,6 +273,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Задачи
 
 - [ ] Выделить Game Preview Host с отдельным контрактом от Tauri/Electron и текущего HTTP сервера.
+- [ ] Запускать новый Core Preview из Project Model через тот же loader/adapter contract, который используют runtime/build; legacy generated-code preview поддерживается отдельно, пока не выполнен переход.
 - [ ] Реализовать управление preview: Play, Pause, Resume, Restart/Stop, resize viewport и передачу log/error events.
 - [ ] Поддержать Embedded Game View для быстрой итерации.
 - [ ] Поддержать запуск игры в отдельном окне, чтобы проверять fullscreen, input, scaling и поведение без панелей редактора.
@@ -273,6 +289,9 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Сквозной сценарий: открыть fixture → изменить сцену/компонент → запустить → увидеть игру → выбрать live entity → проверить его компоненты → остановить и повторить запуск.
+- [ ] Target fixture запускается из сериализованной сцены и зарегистрированного TypeScript-компонента без generated TS class для уровня; Start/Stop/Restart очищают runtime-объекты и ресурсы.
+- [ ] Preview связан с фиксированной ревизией/snapshot Project Model; runtime mutations не перезаписывают source data автоматически, а явное применение значения к проекту является отдельной проверяемой операцией.
+- [ ] Запуск Preview с несохранёнными изменениями имеет определённое и отображаемое поведение: либо запускается snapshot рабочей модели, либо сначала требуется сохранить проект — без неоднозначного смешения состояний.
 - [ ] Команды жизненного цикла preview обрабатывают повторные вызовы и ошибки; зависшие server/preview процессы не остаются после Stop/закрытия.
 - [ ] Error/log messages связаны с текущим запуском и доступны для диагностики.
 - [ ] Live Inspector показывает runtime state, а не только сериализованные значения из editor model.
@@ -306,6 +325,13 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Включить состав selected features и причины inclusion/exclusion в build report; проверить на fixture, что выключенные/неподдерживаемые и editor-only contributions не попадают в production bundle там, где это доказуемо import graph/bundler.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
 - [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production; проверить возможность использования [Vite](https://vite.dev/guide/) только после сравнения с текущей сборкой.
+- [ ] Вывести `importFileExtension` в UI настроек генерации сцен и User Components. При включённом флаге локальные ESM imports используют `.js` для emitted modules, даже если исходник имеет расширение `.scene` или `.ts`; покрыть sibling/nested prefab и component regression fixtures.
+- [ ] Для package-based codegen проверить фактическое наличие `phaser` и `@phaserjs/editor-scripts-base` в dependency graph. Один `package.json` не доказывает, что оба модуля объявлены и будут разрешены; отсутствующие зависимости должны давать понятную диагностику до release build.
+- [ ] Зафиксировать поддерживаемые браузеры, WebView и целевые embedded hosts с минимальными версиями; для каждого target указать статус supported/experimental/unsupported, причины и fallback.
+- [ ] Добавить воспроизводимый Web lifecycle fixture: hidden/visible, focus loss, pause/resume с несколькими независимыми причинами, frame stalls и bounded fixed-step catch-up; отдельно тестировать blocked audio до user gesture.
+- [ ] Добавить recovery acceptance для WebGL context loss/restore и interrupted asset loading; проверить stop/restart, повторную подписку listeners и освобождение GPU/decoded resource lifecycle.
+- [ ] Добавить mobile/host acceptance для resize/orientation/DPR, memory pressure, storage quota/denied state и взаимодействия parent iframe с origin-validated message contract. Не требовать COOP/COEP в default target.
+- [ ] Реализовать сборку целевого runtime непосредственно из валидированной Project Model, сериализованных сцен, зарегистрированного графа TypeScript-компонентов, asset graph и настроек adapter; отдельный generated TS-класс на каждую сцену не является обязательным входом.
 - [ ] Реализовать воспроизводимую HTML5-сборку с понятными сообщениями об ошибках и определённым выходным каталогом.
 - [ ] Добавить подходящие обработчики ассетов: атласы, оптимизацию изображений, проверку аудио/шрифтов и другие операции только при подтверждённой потребности.
 - [ ] Подготовить platform-neutral API Platform Services и Mock/Local implementation.
@@ -319,6 +345,9 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Получается независимая HTML5-сборка, работающая без editor server и без Tauri.
+- [ ] HTML5 fixture собирается из сериализованной сцены, зарегистрированного TypeScript-модуля компонента, asset graph и выбранного adapter; отсутствие per-scene generated TS source не блокирует build.
+- [ ] Build report отражает использованную ревизию/schema version, подключённые component type IDs/modules и asset graph; отсутствующие/несовместимые refs завершают сборку структурированными ошибками до выпуска output.
+- [ ] Preview и экспортированная игра создают согласованную hierarchy/component state; build report показывает включённые scene data, scripts и runtime dependencies.
 - [ ] Сборка проходит asset/project validation и сообщает ошибки до публикации.
 - [ ] Platform API работает через mocks локально и через отдельный adapter в целевом окружении.
 - [ ] Rewarded reward выдаётся только после подтверждённого успешного завершения рекламного сценария.
@@ -326,6 +355,9 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] В тестах и документации разделены Yandex Games, VK Mini Apps и VK Play.
 - [ ] Runtime/build-only зависимости не попадают в лишние production bundles.
 - [ ] Feature Registry различает package installed, feature provided/available, feature enabled in project, target-included и runtime/editor-activated states; один статус не переключает другой автоматически. На этапе 4A package-installed/provider state разрешено проверять через тестовый fixture descriptor, не считая финальный package metadata contract уже утверждённым.
+- [ ] Web acceptance подтверждена на зафиксированном browser/device/host matrix и включает hidden-tab lifecycle, audio autoplay denial/recovery, WebGL context loss, asset cancellation, resize/DPR, browser storage failure и origin validation для parent messaging.
+- [ ] Build artifact report сохраняет raw/compressed initial payload, runtime/asset inclusion manifest и измеренные time-to-first-frame; mobile memory/CPU показатели не выводятся из desktop/headless/SwiftShader результатов.
+- [ ] Cross-origin isolation/threaded WASM — отдельный opt-in profile с проверкой headers и совместимости сторонних SDK/ads; unsupported hosting configurations диагностируются до выпуска.
 - [ ] Fixture проверяет feature dependency closure, отсутствующий provider, несовместимую комбинацию/target и структурированную диагностику.
 - [ ] Повторная сборка с той же конфигурацией даёт стабильный список выбранных функций и эквивалентный состав bundle; tree-shaking claims подтверждаются измеримым bundle report, а не одним лишь описанием metadata.
 - [ ] В feature-build acceptance явно разделены логическое отключение функции и физическое исключение её runtime-кода; для Phaser-пути исключение считается доказанным только после проверки конечного bundle на fixture.
@@ -382,7 +414,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - Расширенный Tilemap: reusable brushes, rule tiles/auto-tiling, object/collision layers, Tiled import/export с сообщениями о потерях, затем измерения chunking/culling и большие карты.
 - Audio groups/buses, preview и browser focus/autoplay lifecycle; базовые particles с безопасным повторным запуском preview.
 - Versioned local storage/save migrations и localization tables/fallbacks, если востребованы первыми реальными проектами.
-  - [x] **COD-62 — localization tables/fallback:** версионированный контракт таблиц (v1), runtime-сервис с детерминированным fallback и структурированной диагностикой, валидация (дубликаты ID, версии, расхождения ключей и placeholders), фикстура `tests/workspace/test-typescript/locale/` и проверки `npm run test:localization` / `npm run test:localization:acceptance` в CI Fast. Контракт и ограничения — [docs/localization.md](docs/localization.md); RTL/complex shaping не заявляются.
+  - [x] **COD-62 — localization tables/fallback:** версионированный контракт таблиц (v1), runtime-сервис с детерминированным fallback и структурированной диагностикой, валидация (дубликаты ID, версии, расхождения ключей и placeholders), фикстура `tests/workspace/test-typescript/locale/` и проверки `npm run test:localization` / `npm run test:localization:acceptance` в CI Fast. Контракт и ограничения — [docs/localization.md](localization.md); RTL/complex shaping не заявляются.
 - PSD/Aseprite importers, atlas variants/advanced analysis и skeletal animation — отдельными PR, по одному импортеру/формату с license review.
 - Дополнительные UI layouts и production authoring tools — по capability matrix, а не для формального feature parity.
 
@@ -399,7 +431,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 ### Критерии приёмки
 
 - [ ] Для каждого перенесённого/изменённого инструмента есть checklist основных действий и regression tests.
-- [ ] Undo/Redo, save/reopen, Prefab update и code generation сохраняют ожидаемую семантику.
+- [ ] Undo/Redo, save/reopen, Prefab update и существующий legacy code generation сохраняют ожидаемую семантику; изменения не ломают текущие проекты в ожидании нового Core loader.
 - [ ] Browser workflow остаётся проверяемым в ходе UI миграции.
 - [ ] Набор иконок ограничен общими UI-командами и поддерживаемыми 2D-инструментами; 3D-only иконки не включены и не используются.
 - [ ] Светлая и тёмная темы корректно выбирают свои варианты иконок; проверены читаемость, контраст и применимые состояния интерфейса.
@@ -413,7 +445,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 - [ ] **FX и codegen:** запустить на Phaser 4.2.1 одну fixture-сцену с Circle/Bloom/Gradient/Shine; сравнить редакторский preview и сгенерированную игру, проверить параметры, pre/post FX, вложенные Container, parent transform/alpha, изменение размеров, sibling order, удаление объектов и shutdown/restart. Зафиксировать неподдерживаемое наследование alpha у Gradient как ограничение, пока не появится проверенное решение. Добавить регрессионные проверки синхронизации/пересоздания Circle mask и очистки созданных объектов/listeners.
   - Прогресс (commit 258cbe0): fixture-сцены `fx-acceptance.scene`/`box2d-acceptance.scene` добавлены и проверены вживую в редакторе (Circle preFX + Bloom postFX + вложенный Shine + Gradient; outline/Inspector корректны, ноль ошибок консоли); при приёмке вскрыты и исправлены три реальных дефекта: числовые цвета молча превращались в чёрный tint и персистились в JSON, FX-обёртки падали на строковых методах над числовыми цветами (каждый кадр), render-хелперы FX ломали модель объектов редактора; 11 regression-тестов (tests/editor-color-values.test.mjs). Остаток: сравнение с реально запущенной сгенерированной игрой, sibling order/удаление/shutdown-restart, регрессии пересоздания Circle mask и очистки listeners, фиксация ограничения alpha у Gradient.
-- [ ] **Box2D runtime:** скомпилировать и реально запустить сгенерированную сцену; проверить направление гравитации и преобразование координат/углов, box/circle fixtures, static/kinematic/dynamic bodies, синхронизацию body/sprite, фиксированный timestep и поведение при просадке/паузе на 30/60/120 FPS. Отдельно проверить stop/shutdown/restart без оставшихся listeners/worlds и два одновременно активных мира с разными World Scale. Если глобальное состояние `WorldStep`/`SetWorldScale` в выбранной версии `phaser-box2d` не позволяет безопасную изоляцию миров, устранить конфликт или явно ограничить и проверить поддерживаемый сценарий. Не считать Debug Draw работающим: runtime-код для него пока не генерируется.
+- [ ] **Box2D component runtime:** скомпилировать и реально запустить сгенерированную сцену с компонентами на существующих Phaser GameObjects; проверить legacy prefab и template-owned world ID, gravity/axis/angle conversion, box/circle fixture, static/kinematic/dynamic bodies, body↔sprite sync, fixed-step и stalls/pause на 30/60/120 FPS. Проверить stop/shutdown/restart без оставшихся listeners/worlds, отдельный `PhaserBox2D.js` и, если включён Debug Draw, совместимый `PhaserDebugDraw.js`. Проверка двух миров/different World Scale обязательна до заявления о такой поддержке: если global `SetWorldScale`/`WorldStep` не дают безопасную изоляцию, ограничить контракт и документировать её явно. Отдельно typecheck-нуть JS и TypeScript outputs как пользовательские проекты; TypeScript fixture должен содержать реальные helpers и matching declarations, а не только editor ambient types.
+- [ ] **Standalone Box2D body/shape nodes (отдельная задача, не scope PR #21):** не регистрировать node types, пока не готовы schema и Inspector, body-ID propagation (не world ID), runtime named imports, geometry validation, prefab/root/child semantics, data round-trip и browser acceptance. Проверять generated code против закреплённой версии внешней библиотеки и fixtures с invalid/missing inputs.
 - [ ] **Asset Pack и браузерные API:** проверить загрузку шрифтов и поведение при ошибке/повторе, форматы и доступность compressed textures в целевых браузерах/GPU, вложенные каталоги и несколько batches `DirectoryReader.readEntries()`, продолжение импорта после ошибки одного файла, а также missing/invalid URL и освобождение аудио/видео-ресурсов. Зафиксировать проверенные форматы и браузеры; классификация расширения не равна поддержке preview/runtime.
 - [x] **Regression tests для данных и предпросмотра:** покрыты литералы `undefined` и spread-ключи в JSON/code printer; конфигурация/удаление кадров Particle Emitter и fallback `__DEFAULT`; spritesheet frame lookup с margin/spacing и до/после загрузки изображения; поддерживаемые формы Phaser audio/video URL (строка, массив и `{ type, url }`); ошибки чтения/сохранения thumbnail cache и освобождение `blob:` URL. Ветка `fix/particle-emitter-codegen-regressions-20261029` содержит тесты Particle Emitter, JSON/code printer, spritesheet/audio/video URL и cache clearing. `AudioPreviewSection` проверяет string, string-array и descriptor URL resolution, включая malformed entries; реальный `Controls.createImageFromBlob()` проверяется на `URL.revokeObjectURL` при `load` и `error`, а `ThumbnailCache` — на recovery после сбоев чтения/сохранения IndexedDB. CI Fast на HEAD `08ccef6` прошёл: root suite 89/89, localization suite 81/81, editor build/typecheck, security smoke и localization runtime acceptance — PASS. Результат закрывает тестовый scope COD-13; фактическое browser/runtime Box2D и FX acceptance остаётся отдельными задачами.
   - Прогресс (commits 952361e, 258cbe0): покрыты audio/video URL-формы, spritesheet margin/spacing до/после загрузки (включая найденный и исправленный паритет-дефект парсера кадров), undefined-литералы в JS/TS-принтерах и JSON, thumbnail cache; добавлены regression-тесты цветовых значений (числовые цвета, tint round-trip, FX-хелперы). Новый тестовый срез `fix/particle-emitter-codegen-regressions-20261029` добавляет проверки реального compiler-config builder для fallback `__DEFAULT`, установки списка кадров и удаления `frame` после очистки выбора. Остаток: освобождение `blob:` URL (в исходниках не обнаружен подтверждённый `URL.revokeObjectURL`-путь; нужен отдельный аудит lifecycle, а не фиктивный тест).

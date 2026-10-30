@@ -3,8 +3,8 @@
 | Поле | Значение |
 |---|---|
 | Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
-| Версия документа | 1.7 |
-| Дата | 27.10.2026 |
+| Версия документа | 1.10 |
+| Дата | 30.10.2026 |
 | Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
 | Связанный документ | [Дорожная карта](roadmap.md) |
 
@@ -35,9 +35,9 @@ Codogma Engine должен развиться в самостоятельный
 | Gate | Что должно работать | Как подтверждается |
 |---|---|---|
 | **A — Existing Editor Modernization** | Согласованный UI/UX и темы; Scene/Hierarchy/Inspector/Assets; редактирование, save/reopen, Undo/Redo и текущие Prefab/Component workflows; проверенные существующие инструменты. | Browser acceptance на зафиксированных viewport; regression tests для данных и команд; визуальная проверка light/dark и ключевых UI states. Существующие подсистемы расширяются, а не переписываются автоматически. |
-| **B — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая схема metadata для Inspector/serialization/runtime и версионированное сохранение. | Изолированный fixture проходит создание/изменение/save/reopen; lifecycle и миграции покрыты тестами; Core тестируется без запуска UI редактора. |
-| **C — Browser Preview** | Запуск и остановка игры через Preview Host, связь runtime entity/component с моделью, runtime state и log/error diagnostics. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart. Preview не требует Tauri и не создаёт второй игровой цикл. |
-| **D — Независимая HTML5-сборка** | Headless build, schema/asset-reference validation, детерминированный выходной каталог и запуск собранной игры без editor UI/server. | CI/fixture собирает проект и подтверждает, что editor-only зависимости не попали в game bundle. |
+| **B — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая schema/metadata для Inspector/serialization/runtime, версионированное сохранение и загрузка сцены напрямую из данных без обязательного generated TS-класса на каждый уровень. | Изолированный fixture проходит создание/изменение/save/reopen; запускает сериализованную сцену с явно зарегистрированным TypeScript-компонентом без файла класса сцены; lifecycle, миграции и ошибки ссылок покрыты тестами; Core тестируется без UI редактора. |
+| **C — Browser Preview** | Preview Host запускает сцену из Project Model через целевой loader/runtime adapter, связывает runtime entity/component с моделью, выдаёт runtime state и log/error diagnostics. Legacy generated-code path остаётся совместимым до отдельной приёмки перехода. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart на data-driven fixture без per-scene generated TS class. Preview не требует Tauri и не создаёт второй игровой цикл. |
+| **D — Независимая HTML5-сборка** | Headless build из валидированных сериализованных сцен, зарегистрированных TypeScript-модулей, ресурсов и настроек adapter; per-scene generated TS file не является обязательным входом. | CI/fixture собирает и запускает проект без editor UI/server, проверяет asset/component refs и подтверждает, что editor-only зависимости не попали в game bundle. |
 | **E — Первая платформенная интеграция** | Platform-neutral Services API и mock/local adapter, затем отдельный Yandex Games adapter. | Unit/integration tests и отдельная проверка в официальном тестовом окружении; VK Mini Apps и VK Play принимаются как отдельные targets. |
 
 Каждый gate подтверждается отдельно. Для текущих editor features не требуется ждать реализации нового Core, если изменение безопасно работает с существующими форматами и contracts. Если функция зависит от новой модели или runtime service, зависимую часть нужно выделить, не блокируя независимые UI и bug fixes.
@@ -74,7 +74,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 - [`plugin.json`](../source/editor/plugins/phasereditor2d.phaser/plugin.json) подключает production-файл `scripts/phaser.min.js`, а в режиме разработки — `scripts/phaser.js`. Это текущая схема загрузки runtime внутри editor plugin.
 - В [корневом `package.json`](../package.json) и [`source/editor/package.json`](../source/editor/package.json) Phaser не объявлен как npm dependency. Поэтому текущий Phaser runtime не управляется npm dependency graph пользовательского проекта как обычная установленная Codogma-зависимость.
 - Upstream Phaser 4.2.1 имеет модульно организованные исходники и отдельные варианты поставки/сборки, включая [Arcade Physics build](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js) и [конфигурацию distribution build](https://github.com/phaserjs/phaser/blob/v4.2.1/config/webpack.dist.config.js). Это не означает, что нынешняя интеграция Codogma автоматически выбирает или исключает отдельные подсистемы; доступность кастомной сборки надо подтвердить реальным fixture и совместимостью editor-generated code.
-- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts) — большой сгенерированный слой TypeScript declarations/API, а не реализация runtime. [`phaser-box2d.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser-box2d.ts) отдельно отмечает, что ambient declarations Box2D не поставляют сам Box2D runtime: игре, использующей этот API, нужно включить соответствующий runtime-модуль отдельно.
+- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts) — большой сгенерированный слой TypeScript declarations/API, а не реализация runtime. [`phaser-box2d.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser-box2d.ts) отдельно отмечает, что ambient declarations Box2D не поставляют runtime. Более того, `phaser-box2d.ts` описывает legacy-объектный API `Phaser.Box2D.World/Body`, а codegen PR #21 использует низкоуровневые named exports из `PhaserBox2D.js`; эти контракты нельзя считать эквивалентными. Текущий generated path требует внешний `PhaserBox2D.js`, а debug draw подключается отдельно из `PhaserDebugDraw.js`. Совместимость доказывается по зафиксированным версиям обоих файлов и generated-game fixture, а не наличием ambient types.
 
 Таким образом, корректная характеристика — **«модульные исходники, но монолитный по текущему способу подключения runtime bundle»**, а не утверждение, что Phaser невозможно разделить. Сам факт наличия папок, деклараций или wrapper-пакетов не доказывает, что соответствующий runtime-код исключается из конечной сборки.
 
@@ -83,6 +83,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 Следующие направления описывают целевой продукт, а не подтверждённые функции текущей версии:
 
 - собственное независимое от Phaser публичное игровое API и runtime Core;
+- загрузчик сцен из новой сериализуемой Project Model с разрешением независимо зарегистрированных TypeScript-компонентов (не реализован как завершённый workflow);
 - законченная ECS/component-модель, встроенная в редакторский Inspector и сериализацию;
 - синхронизация Inspector с реальными экземплярами компонентов работающей игры;
 - полноценный Game Preview Host с embedded, standalone и внешним browser preview;
@@ -94,9 +95,9 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 Наличие редактора сцены, Inspector, физических инструментов или MCP-команд само по себе не доказывает, что все вышеуказанные end-to-end сценарии уже реализованы.
 
-#### Отдельный baseline проверки изменений PR #10 (снимок на 27.10.2026)
+#### Исторический baseline PR #10 (снимок на 27.10.2026)
 
-[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. PR был слит в `dev` 27.10.2026; текущая базовая точка `dev` — `754edaa1f7313409e99c3462a802d5fd430a9a01`. Поэтому изменения PR #10 входят в текущий baseline, а перечисленные ниже runtime/security follow-ups остаются открытыми.
+[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. PR был слит в `dev` 27.10.2026. `754edaa1f7313409e99c3462a802d5fd430a9a01` — исторический snapshot; актуальная базовая точка `dev` на дату аудита — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). Статус CI PR #21 должен проверяться по live checks точного head: постоянные документы не фиксируют изменяемый SHA последнего прогона. Успешный CI Fast не заменяет browser/runtime acceptance Box2D.
 
 На PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` CI Fast завершился успешно ([run #40472189614](https://github.com/AiratGaliev/codogma-engine/actions/runs/40472189614)): обе установки зависимостей и `npm audit --audit-level=low`, сборка/typecheck редактора, server smoke и security smoke прошли; audit на этом lockfile сообщил 0 уязвимостей. После слияния в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01` отдельный повторный запуск CI именно на merge commit в этом аудите не подтверждён. Успешный PR CI подтверждает только перечисленные проверки на PR head, но не visual/runtime correctness или отсутствие неизвестных уязвимостей.
 
@@ -213,6 +214,30 @@ Tauri и Electron не выбираются только по размеру д�
 - Валидация одного формата должна использовать общий schema contract в редакторе, build pipeline и тестах. JSON Schema + Ajv — основной кандидат для проверки сериализованных документов; Zod или аналогичный инструмент допустим для внутренних TypeScript API только если он не создаёт дублирующие источники схем.
 - Ссылки, ID и миграции должны быть частью проектного формата, а не набором скрытых эвристик по путям файлов.
 
+### 5.3. Сцена как сериализуемые данные, а не обязательный генерируемый класс
+
+**Нормативное требование к новому Project Model/Core:** версия сериализованного описания `Scene` является каноническим исходным представлением сцены. Editor UI, живые runtime-объекты, Preview state и сгенерированный исходный код не являются независимыми источниками истины и не должны расходиться между собой.
+
+Сериализованное описание сцены должно хранить как минимум стабильный ID сцены, версию схемы, иерархию Node/Entity, стабильные ID узлов и экземпляров компонентов, Transform, идентификаторы типов компонентов, сериализуемые значения свойств, состояние активности, ссылки на Prefab и управляемые ссылки на ресурсы/скрипты. Точная форма схемы определяется реализационными контрактами, но семантика идентичности, ссылок, миграции и детерминированного round-trip обязательна.
+
+Загрузчик сцены нового Core должен выполнять воспроизводимый, отменяемый до активации pipeline:
+
+1. Прочитать envelope документа и проверить формат/версию схемы. Неизвестную или более новую версию отклонить с диагностикой, не переписывая исходный файл.
+2. Применить только зарегистрированную последовательность миграций к поддерживаемой версии в памяти; не менять файл проекта автоматически только из-за открытия.
+3. Проверить итоговую схему, уникальность и целостность ID, иерархию, Prefab overrides, ссылки на ресурсы и узлы, а также наличие всех зарегистрированных типов компонентов.
+4. Разрешить component modules только через явный registry/module manifest и проверяемый build-time dependency graph. Данные сцены могут ссылаться на зарегистрированные type IDs, но не могут сами задавать произвольный import path, имя исполняемого файла или код; не угадывать класс по имени сцены и не использовать `eval`/непроверенный динамический импорт.
+5. Создать таблицу идентичности узлов и сформировать иерархию Node/Transform; затем создать component instances и применить к ним валидированные сериализованные значения. Ссылки на другие узлы разрешать через таблицу ID после построения идентичностей, а не через имена или порядок обхода файлов.
+6. Выполнить lifecycle/activation только после успешного завершения preflight и разрешения обязательных ссылок. Порядок создания узлов, назначения компонентов и lifecycle callbacks должен быть детерминированным и покрытым тестами.
+7. При фатальной ошибке или отмене не оставлять частично активную сцену: откатить созданные runtime-объекты, освобождать ресурсы и listeners, вернуть структурированную диагностику с путём к документу, ID сцены/узла/экземпляра компонента и проблемным свойством/ссылкой. Операции отмены должны быть безопасны даже во время асинхронной загрузки ресурсов.
+
+Пользовательские TypeScript-компоненты — отдельные переиспользуемые модули с явной регистрацией и типизированной схемой свойств. Один модуль компонента должен назначаться разным узлам и использоваться в разных сценах без копирования игровой логики в код каждого уровня. Публичный контракт компонента не требует наследования от Phaser Scene/GameObject; runtime-specific возможности доступны через adapter/extensions.
+
+Загрузка одного component module в разные узлы создаёт отдельные component instances с независимыми сериализованными значениями и состоянием экземпляра. Ссылка на тип компонента (`componentTypeId`) не является ID его экземпляра. Ссылки между узлами/компонентами должны разрешаться по стабильным IDs и проверяться на отсутствующие цели и недопустимые циклы там, где цикл нарушает контракт.
+
+**Создание отдельного генерируемого TypeScript-класса или файла для каждой сцены (`Scene.ts`, `Level01.ts` и аналогов) не является обязательным условием авторинга, Preview или HTML5 build в целевой архитектуре.** Runtime должен уметь построить сцену из сериализованных данных и явно зарегистрированных модулей. Генерация кода может оставаться опциональным экспортом, оптимизацией или способом совместимости, но не является каноническим форматом сцены и не должна требовать ручного редактирования сгенерированного файла.
+
+Это целевое требование не отменяет текущий legacy-путь редактора. Существующая сериализация/code generation сохраняется и проходит регрессионные проверки, пока новый data-driven loader не докажет функциональную паритетность для согласованного среза и не будет определён проверяемый сценарий миграции/совместимости. Нельзя массово удалять legacy codegen или автоматически конвертировать проекты только на основании этого архитектурного решения; переход выполняется отдельными небольшими изменениями с сохранением данных и явной диагностикой несовместимостей.
+
 ## 6. Публичный TypeScript API и component system
 
 ### 6.1. Принцип
@@ -266,9 +291,12 @@ EVA.js следует изучать как архитектурный reference
 ### 6.4. Inspector и пользовательские компоненты
 
 - Пользовательские TypeScript-компоненты должны объявлять или предоставлять метаданные редактируемых свойств.
+- Тип компонента должен иметь стабильный идентификатор и явную регистрацию в runtime/build module graph; выбор класса не должен зависеть от имени сцены или соглашения о пути к файлу. Один компонентный модуль может многократно использоваться в разных сценах и узлах.
+- Метаданные схемы должны однозначно различать сохраняемые свойства компонента, editor-only настройки и временное runtime-состояние. Сериализация сохраняет только явно объявленные persisted fields; editor-only и transient runtime fields не должны случайно попадать в проектный файл.
+- Значения по умолчанию, миграции старых component data и поведение отсутствующих/новых полей определяются контрактом схемы. Несовместимые значения дают адресную диагностику или документированный fallback, а не незаметное приведение типов/потерю данных.
 - Inspector должен отображать типизированные поля, ограничения/валидацию, значения по умолчанию, ссылки на ресурсы и поддерживаемые ссылки на другие объекты.
 - Одни и те же метаданные должны использоваться редактором, сохранением, валидацией и runtime inspector.
-- Изменение значения из Inspector должно проходить через единый механизм команд/операций, позволяющий реализовать Undo/Redo и предсказуемое сохранение.
+- Изменение сериализуемого значения из Inspector должно проходить через единый механизм команд/операций, позволяющий реализовать Undo/Redo и предсказуемое сохранение. Редактирование persisted property, editor-only metadata и изменение transient runtime state должны иметь разные явно определённые пути.
 - Редактор не должен требовать генерировать весь игровой код визуально: произвольные TypeScript-модули и пользовательская архитектура проекта остаются первоклассным сценарием.
 - Должен быть предусмотрен безопасный выход на низкоуровневые возможности выбранного runtime через специализированные API расширения.
 
@@ -283,12 +311,14 @@ EVA.js следует изучать как архитектурный reference
 
 ### 6.6. Scene management и жизненный цикл уровня
 
-- Runtime API должен поддерживать загрузку, активацию, деактивацию и выгрузку сцен с определённым порядком lifecycle callbacks.
+- Runtime API должен поддерживать загрузку, активацию, деактивацию и выгрузку сцен с определённым порядком lifecycle callbacks; в целевом Core сцена строится из Project Model и реестра компонентов, а не требует отдельного генерируемого класса уровня.
 - Асинхронная загрузка сообщает прогресс/ошибки, может быть отменена при смене уровня и не оставляет частично созданные сущности или ресурсы после неудачи.
 - Переходы между сценами определяют, какие данные/объекты уничтожаются, какие могут сохраняться и как обрабатываются ссылки между сценами. Постоянные объекты не должны случайно дублироваться при повторной загрузке.
 - Зависимости ресурсов сцены должны быть известны Asset Pipeline; возможно заранее загрузить следующий уровень и освобождать неиспользуемый набор ресурсов после перехода.
 - Экран загрузки/transition и анимации перехода могут реализовываться встроенным минимальным сценарием или расширением; базовый Scene Manager не должен зависеть от конкретного UI framework редактора.
 - Проверки покрывают повторное открытие уровня, отмену загрузки, отсутствующий ассет, повторный вход в сцену, корректное dispose и отсутствие зависших listeners/timers.
+
+- Проверки Scene Manager покрывают повторное открытие уровня, отмену загрузки, отсутствующий ассет, повторный вход в сцену, корректный dispose и отсутствие зависших listeners/timers. Ошибка или отмена на любом этапе loader не должна оставлять частичную иерархию или активированные компоненты.
 
 ### 6.7. Time, scheduler и Tween service
 
@@ -347,6 +377,10 @@ Codogma предоставляет единый публичный Physics API �
 - Общий контракт покрывает создание/уничтожение тела и форм, синхронизацию Transform, фильтрацию и события коллизий, запросы мира и доступные диагностические данные. Расширенные backend-specific возможности доступны через явные расширения.
 - Время симуляции, fixed timestep, накопитель delta, максимальное число substeps и порядок обновления задаются централизованно и тестируются. Если backend сам управляет timestep, интеграция должна исключать двойное продвижение мира и документировать семантику pause/resume.
 - Визуальная форма коллайдера, сериализованная конфигурация и фактическое runtime-тело должны совпадать. Debug overlay показывает формы, центры, collision filters и состояние столкновений в пределах доступных API.
+- **Контракт текущего Box2D codegen:** named imports разрешаются против выбранного `PhaserBox2D.js`; необязательный debug draw импортируется из отдельного `PhaserDebugDraw.js`. Обе зависимости и версии фиксируются в fixture/build report. Ambient declarations проверяют только описанный API и не доказывают наличие соответствующих exports в JS bundle.
+- Для TypeScript export тестируется полный generated project с теми же `.js` helpers и matching declarations для импортируемых named exports. `editor typecheck` не доказывает корректность TypeScript-сцены, генерируемой пользователю; legacy `Phaser.Box2D.*` ambient API не заменяет declaration contract `PhaserBox2D.js`.
+- World ID и Body ID — разные идентификаторы; shape creation требует корректный body ID. Не добавлять самостоятельные shape nodes, пока Inspector/schema, parent/body-ID propagation, finite/even coordinate validation, минимум три вершины, convex-hull limits и prefab semantics не приняты end-to-end.
+- `SetWorldScale` и accumulator state могут находиться на уровне модуля внешней библиотеки. Не заявлять поддержку одновременно активных миров с разными scale, пока сценарий не протестирован на зафиксированной версии runtime, включая pause/resume и shutdown/restart.
 - Нужны тесты на группы/маски, body types, столкновения, уничтожение сущностей, переходы scene lifecycle, паузу/возобновление, фиксированный шаг и удаление физических ресурсов.
 - Производительность сравнивается на одинаковой воспроизводимой сцене: число динамических тел, контактов, joints, размер сборки, время инициализации, frame time и поддержка браузеров/WASM. Не объявлять backend быстрее без измерений.
 
@@ -366,6 +400,8 @@ Codogma предоставляет единый публичный Physics API �
 
 ### 8.2. Управление и обмен сообщениями
 
+Целевой Preview загружает проверенную сцену из Project Model через тот же Core/Runtime Adapter contract, что используется игровым runtime/build, а не зависит только от результата генерации отдельного scene-класса. При запуске создаётся явный согласованный snapshot текущей рабочей модели проекта; он может включать ещё не сохранённые изменения редактора, если это поведение выбрано и обозначено в UI. После старта runtime state производен от этого snapshot. Runtime mutation не записывается обратно в Project Model/файлы автоматически: перенос runtime-значений в авторские данные выполняется только отдельной явной командой с валидацией и undoable semantics.
+
 Контракт preview должен определить команды и события, включая поддерживаемые режимом Play, Pause, Resume, Restart/Stop, изменение размеров viewport, логи и ошибки runtime, а в соответствующих режимах — выбор объекта, данные компонентов и сообщения Inspector. Поддержку Step/Single Frame и изменения time scale нужно включать после определения корректной семантики управления игровым циклом.
 
 Транспорт (iframe/message channel, window bridge, локальный server или иной механизм) выбирается реализацией. Не считать iframe автоматической изоляцией процессора: embedded preview может разделять renderer-процесс с интерфейсом. При проблемах отзывчивости проверить отдельное окно/контекст и измерить эффект.
@@ -373,10 +409,11 @@ Codogma предоставляет единый публичный Physics API �
 ### 8.3. Live Inspector
 
 - Выбор работающего объекта должен быть связан со стабильным ID объекта/компонента, а не случайной ссылкой на визуальный Sprite.
+- При старте Preview фиксируется Project Model snapshot/ревизия; diagnostics и live selection связаны именно с этой ревизией. Изменения в редакторе после старта не должны незаметно переписывать запущенную сцену, а runtime state не должен считаться изменением project source.
 - При выборе объекта runtime Inspector показывает фактические текущие значения и состояние компонентов, включая поддерживаемые сведения о Transform, физике и AI.
 - Переход из runtime selection к соответствующему объекту в редакторе должен быть доступен там, где связь может быть установлена надёжно.
 - Изменение свойства во время игры допускается только для поддерживаемых полей. Оно должно иметь явную семантику: временное runtime-изменение либо изменение исходных данных; эти действия нельзя смешивать молча.
-- Отсутствие или устаревание связи между моделью проекта и runtime-объектом должно отображаться как диагностическая ситуация.
+- Отсутствие или устаревание связи между моделью проекта и runtime-объектом должно отображаться как диагностическая ситуация. Stop/Restart освобождает все объекты, listeners, timers и runtime resources текущей сессии; повторный старт создаёт новый согласованный snapshot.
 
 ### 8.4. Debugger и Profiler
 
@@ -402,7 +439,8 @@ Codogma предоставляет единый публичный Physics API �
 - пользовательские TypeScript-компоненты, типизированные Inspector-свойства, валидацию и понятные сообщения об ошибках;
 - Prefabs, вложенные Prefabs, переопределения, обновление экземпляров и диагностику конфликтов;
 - управляемые стабильными ID ссылки на ресурсы и объекты;
-- синхронизацию модели проекта и кода без принудительной генерации всей игровой логики из визуального редактора.
+- синхронизацию модели проекта и runtime без принудительной генерации всей игровой логики из визуального редактора;
+- запуск сцены из версионированных сериализованных данных и зарегистрированных TypeScript-компонентов без обязательного генерируемого TypeScript-класса для каждой сцены; существующий codegen остаётся поддерживаемым legacy-путём до отдельной приёмки замены.
 
 ### 9.2. Инструменты создания контента
 
@@ -556,6 +594,7 @@ P0/P1/P2 — приоритеты требований, не обещание д
 - Отчёт о размере production bundle и отдельных ресурсных группах, обнаружение неожиданных крупных ресурсов и ненужных runtime-зависимостей.
 - Воспроизводимая HTML5-сборка с явным выходным каталогом, исходными картами или эквивалентом диагностики для dev build, понятными ошибками и зафиксированными build settings.
 - Сборка должна запускаться без открытого UI редактора. Команда в headless CLI/CI должна уметь валидировать проект, проверять ресурсные зависимости и собирать игру; диагностический результат не должен зависеть от открытой сцены в редакторе.
+- Канонические входы целевого build — валидированная Project Model, сериализованные сцены, граф явно зарегистрированных TypeScript-компонентов, ссылки на ресурсы, настройки проекта и выбранный runtime adapter. Отдельный генерируемый TypeScript-файл на каждую сцену не требуется; если кодогенерация используется как оптимизация или compatibility/export target, это должен быть отдельный шаг build с проверяемым эквивалентным поведением.
 - Итоговая игра работает без editor server, MCP bridge, Tauri и внутренних development fixtures; production bundle содержит только нужные runtime/build outputs.
 - Итоговую сборку можно запускать отдельным browser acceptance smoke test и проверять на целевых платформах.
 - Предусмотреть versioned build profiles как минимум для Development и Release; target-specific settings не должны неявно смешиваться с общими настройками проекта.
@@ -564,6 +603,28 @@ P0/P1/P2 — приоритеты требований, не обещание д
 - Для Web отдельно проверяются стартовый download size, время до первого кадра, прогрессивная/отложенная загрузка ресурсов, кеширование и восстановление после сетевой ошибки. Целевые профили учитывают различия desktop/mobile: размер atlas/texture variants, поддерживаемые форматы компрессии, DPR budget и лимиты памяти браузера. Compression/deployment headers (например, gzip/Brotli) должны быть задокументированы как ответственность build output или хостинга.
 - Для target/browser matrix фиксируются необходимые API и fallback-поведение. Нельзя заявлять поддержку WebGL/WebGPU, звукового формата или compressed texture format без реальной проверки.
 - Изменение build profile должно быть воспроизводимым: настройки сериализуются, попадают в отчёт и не зависят от последнего вручную открытого состояния редактора.
+
+#### Обязательный контракт Web Runtime
+
+Web — основная среда исполнения, а не сборочная цель «после Desktop». Ограничения браузера и хоста отражаются в runtime contracts и критериях приёмки:
+
+- До первого production release определить matrix поддерживаемых браузеров/WebView, минимальные версии, устройства и ограничения целевых площадок. «Современный браузер» не является критерием.
+- Runtime имеет единый lifecycle видимости/фокуса и паузы. `visibilitychange`, потеря фокуса, реклама и ручная пауза — отдельные причины состояния; события идемпотентны. После скрытия вкладки нельзя симулировать огромный delta или выполнять неограниченный catch-up; fixed-step backlog/max substeps должны быть определены.
+- WebGL context loss — ожидаемый отказ GPU-ресурсов. Проверить `WEBGL_lose_context` восстановление или управляемый fallback/reload. Восстанавливать GPU-ресурсы из авторских/CPU-side данных; не хранить состояние игры только в GPU handles.
+- Web Audio учитывает autoplay policy: отклонённый `AudioContext.resume()` / `HTMLMediaElement.play()` не ломает gameplay. Нужен понятный user gesture для включения звука.
+- Default target не требует cross-origin isolation, `SharedArrayBuffer` или многопоточности. Threaded profile допустим только после измерения и проверки COOP/COEP/CORP/CORS, SDK, рекламных iframe и хостинга.
+- WebGPU остаётся опциональным renderer/backend. Его нельзя считать baseline для HTML5: использовать feature detection, проверять создание adapter/device, поддерживаемые форматы/limits и `device.lost`, иметь проверенный WebGL 2 fallback либо понятную диагностику на unsupported target. Core, Scene Model и project data не должны зависеть от GPU handles.
+- Следить за статусом WebGPU, WGSL и WebAssembly через официальные реестры стандартов. На 29.10.2026 WebGPU и WGSL имели статус Candidate Recommendation Draft, WebAssembly Core 3.0 также публиковался как Candidate Recommendation Draft. Не блокировать релиз на незавершённый стандарт и не путать WASI/server runtimes с browser APIs.
+- Взаимодействие с parent page/iframe использует versioned message contract, точный `origin`, schema payload, timeout и защиту от повторных команд. `postMessage` с `*` не является безопасным default.
+- Resource budget включает network bytes, decoded images, audio buffers, GPU allocations, temporary copies, atlas pages и cache. Асинхронная загрузка должна поддерживать отмену, deduplication, ограниченный retry, diagnostics и unload.
+- IndexedDB/cache/local save — best-effort storage, если браузер не подтвердил иное. Обрабатывать quota errors, private mode, очистку данных, interrupted writes и несколько вкладок.
+- Production output имеет hosting contract: WASM MIME, content encoding, cache/version strategy, asset base path, CORS/CSP, source maps и diagnostics. Service worker включается после проверки cache invalidation.
+- ESM-кодогенерация различает исходный файл и выходной модуль: `.scene` и `.ts` могут порождать `.js`; явный import suffix должен указывать на исполняемый JS, а не на исходный файл. Это проверяется отдельно для scene, prefab, superclass и user component, включая TypeScript output.
+- Наличие корневого `package.json` — только legacy template heuristic, не доказательство доступности `phaser` или `@phaserjs/editor-scripts-base`. Package-based build должен диагностировать отсутствующие dependency declarations/resolution; автоматически устанавливать зависимости не предполагается.
+- Initial download, time-to-first-frame, first input, memory high-water mark и long tasks измеряются отдельно на desktop и representative low-end mobile. Budget назначается после baseline; CI сохраняет raw/compressed size и build manifest.
+- Release matrix покрывает заявленные desktop/mobile browsers и официальный embedded host каждой площадки. Непроверенный target нельзя объявлять поддерживаемым.
+
+Платформенные основания: [Page Visibility API](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API), [WebGL context loss](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextlost_event), [audio autoplay](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay), [storage quotas](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) и [Godot Web export constraints](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html). См. [architecture risk register](architecture-risk-register.md).
 
 ### 10.2. CLI и разделение editor/runtime/build
 
@@ -640,6 +701,16 @@ Yandex Games и VK Games являются самостоятельными targe
 - Сохранение данных, покупки и таблицы лидеров должны учитывать ограничения, ошибки, авторизацию и модель безопасности конкретной платформы. Нельзя предполагать, что клиентское состояние или callback сами по себе являются достаточной защитой от подделки покупок/наград.
 - Мок позволяет тестировать успех, отказ, задержку, отсутствие capability и прерывание сценария. Успешный mock-тест не считается доказательством соответствия реальному SDK или прохождения модерации.
 - В документации для каждой платформы приводятся ссылки на первоисточники, список реализованных capabilities, известные ограничения и порядок тестирования в официальном sandbox/test environment.
+
+#### Дополнительный release gate для Yandex Games
+
+- Использовать актуальный официальный [Yandex Games SDK](https://yandex.ru/dev/games/doc/ru/sdk/sdk-about) и loader; сверяться с [game loading/gameplay events](https://yandex.ru/dev/games/doc/ru/sdk/sdk-game-events) и [requirement 1.19](https://yandex.ru/dev/games/doc/ru/requirements/1/19). Подключить SDK до `YaGames.init()`: в архиве, загружаемом на сервер Яндекса, использовать относительный `<script src="/sdk.js"></script>`; при hosting на собственном домене — `https://sdk.games.s3.yandex.net/sdk.js`. Не скачивать/vendoring SDK; абсолютный SDK URL внутри загруженного игрового архива может приводить к `SERVICE_STORAGE_URL_DETECTED`.
+- Вызывать `ysdk.features.LoadingAPI?.ready()` только когда все игровые ресурсы загружены, UI интерактивен и loading/splash screen убран.
+- Согласовывать `ysdk.features.GameplayAPI?.start()` / `.stop()` с фактическим началом/остановкой gameplay: start level, выход из меню, unpause/возврат из рекламы/в активную вкладку; stop level end, pause/menu, fullscreen/rewarded ads и уход во вкладку background. Состояние pause/resume должно быть идемпотентным; `start()` допустим только если gameplay реально немедленно возобновляется.
+- Во время рекламы приостанавливать симуляцию и звук по контракту host adapter; восстанавливать gameplay только после корректного возврата в активный host. Rewarded-награду выдавать только после подтверждённого успешного результата показа; close, interruption, timeout или error не дают награду.
+- Раздельно тестировать mock/local adapter и официальный test/sandbox environment. Успешный mock и локальный browser smoke не доказывают соответствие SDK или прохождение модерации.
+
+Нормативные первоисточники: [Yandex Games SDK setup](https://yandex.ru/dev/games/doc/ru/sdk/sdk-about), [SDK loading/gameplay events](https://yandex.ru/dev/games/doc/ru/sdk/sdk-game-events), [requirements 1.19](https://yandex.ru/dev/games/doc/ru/requirements/1/19).
 
 ### 11.4. Критерии приёмки будущей реализации
 
@@ -826,7 +897,7 @@ Profiler должен сначала собирать воспроизводим
 - Editor TypeScript/compiler: в текущем состоянии проверяются установка зависимостей в корне и `source/editor` и команда сборки редактора; после отдельной миграции пути и workspace-консолидации проверки обновляются на целевые `src/editor`/npm Workspaces. Новые Core/API packages проходят отдельный строгий typecheck. Не указывать будущие команды и пути как уже работающие до их реализации.
 - TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
 - Server/MCP: серверный smoke и релевантный запуск `npm run test:e2e`.
-- Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures.
+- Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures; отдельный fixture должен запустить сцену из данных с зарегистрированным пользовательским TypeScript-компонентом **без генерируемого файла класса сцены** и проверить диагностику отсутствующего компонента/ресурса без частично созданной runtime-сцены. Проверить ссылки между узлами, повторное использование typeId при независимых instance IDs/значениях, отмену загрузки и отделение временного runtime state от сохранённых данных.
 - Engine API/ECS: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты на согласованность Phaser adapter.
 - Physics: contract tests для body lifecycle, collision filters, fixed timestep, contacts, supported joints, debug geometry и корректного освобождения ресурсов для каждого поддерживаемого backend.
 - 2D rendering/performance: измеримые fixtures для frame time, batching/texture/resource counts в пределах доступной instrumentation; тесты изменения/освобождения Graphics/particle resources и отсутствия ненужных повторных allocation loops. Atlas analysis покрывает rendered/culled sprites, page count и usage; Tilemap metrics отделяют render/update/collision processing.
@@ -837,7 +908,7 @@ Profiler должен сначала собирать воспроизводим
 - Input/scene/time services: тесты преобразования координат, UI-vs-world event routing, focus loss, scene transition/cancellation, таймеров/tweens и отсутствия callbacks после disposal.
 - Sprite/Tilemap/UI authoring: fixtures на slicing/pivot/custom collision shapes, deterministc render sorting, 9-slicing, brush/Undo/Redo, tilemap chunk metrics и разные viewport/aspect ratios.
 - Audio/storage/localization: browser autoplay/focus behavior, ресурсное освобождение, миграции save data, missing locale keys и fallback behavior.
-- Web production: target browser smoke, startup-size/report validation, source map diagnostics for development builds and assertion that editor-only code is absent from release output.
+- Web production: target browser smoke, startup-size/report validation, source map diagnostics for development builds and assertion that editor-only code is absent from release output. Acceptance также покрывает visibility/focus, blocked audio before user activation, WebGL context loss/restore, interrupted asset load, mobile memory pressure, resize/orientation/DPR, storage quota failure, hosting headers/MIME и embedded host. Desktop Chromium happy-path недостаточен.
 - Desktop: сборка, установка и smoke/acceptance на каждой заявленной ОС.
 
 CI Fast сейчас не выполняет весь перечисленный набор: E2E MCP запускается на PR в `test` и `main`, а browser UI acceptance пока требует отдельного сценария. Новые проверки добавляются по мере появления соответствующих подсистем, а не описываются в документации как уже существующие.
@@ -847,6 +918,7 @@ CI Fast сейчас не выполняет весь перечисленный
 - Каждая задача и миграция делаются небольшим PR с одним понятным результатом.
 - Существующее поведение фиксируется тестом/fixture до переписывания.
 - Новая реализация проходит критерии до удаления старой.
+- Для scene workflow: legacy codegen не удаляется и не меняется по смыслу до тех пор, пока data-driven loader не проходит согласованный runtime/preview/build acceptance и не описан путь миграции существующих проектов; при необходимости временно поддерживаются оба пути с явной границей.
 - Не держать два источника истины для HP/Transform/состояния компонентов или иных переносимых данных.
 - Не переносить все игровые сущности на новую архитектуру одновременно.
 - Не менять игровой цикл, физические тайминги или семантику без регрессионных тестов.
@@ -855,6 +927,9 @@ CI Fast сейчас не выполняет весь перечисленный
 
 ## 14. Безопасность, лицензии и происхождение кода
 
+- Project file, asset, package manifest и scene data — данные, не доверенный код. Валидация JSON не делает пользовательский TypeScript безопасным: подключённый компонент выполняется с правами контекста загрузки.
+- Editor extensions/npm packages не изолированы только из-за manifest, scope или capability metadata. До реальной sandbox boundary разрешать установку/активацию только из явно выбранного источника; показывать lifecycle scripts, version, provenance, licences и security warnings; не исполнять package ради discovery.
+- Обновление plugin/SDK/runtime не должно молча менять проект. Фиксировать compatibility range, pins/lockfile, миграции данных и rollback path. Несовместимые extension API/schema дают диагностику, а не частичную загрузку.
 - Файловые операции ограничиваются выбранным проектом и явно разрешёнными действиями. Недоверенный проект/плагин не должен автоматически получать доступ ко всему диску.
 - Запуск subprocess, обновление приложения, загрузка ресурсов и работа с секретами должны иметь явную границу доверия и обработку ошибок.
 - Сохранять применимые лицензии и upstream-notices для кода и зависимостей.
@@ -867,7 +942,7 @@ CI Fast сейчас не выполняет весь перечисленный
 Эти проекты предназначены для исследования идей, а не для безусловного копирования кода.
 
 - [Unity 6.6 / 6000.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d) — последовательность действий в Scene Editor, Inspector, Prefabs, Package Manager, отладка и интегрированный рабочий процесс.
-- Cocos Creator 4.0 User Manual ([official manual](https://docs.cocos.com/creator/4.0/manual/en/); manual labels Cocos Creator 4.0 as LTS; it is distinct from the cocos/cocos4 source branch referenced below) — scene and asset workflows, scripting/events, Web publishing, 2D sorting/batching/sprites, UI layout/SafeArea, animation, physics, particles, AssetManager, localization and editor extensions. Focused pages: [asset workflow](https://docs.cocos.com/creator/4.0/manual/en/asset/asset-workflow.html), [TiledMap](https://docs.cocos.com/creator/4.0/manual/en/asset/tiledmap.html), [input events](https://docs.cocos.com/creator/4.0/manual/en/engine/event/event-input.html), [2D sorting](https://docs.cocos.com/creator/4.0/manual/en/engine/rendering/sorting-2d.html), [batching guidelines](https://docs.cocos.com/creator/4.0/manual/en/ui-system/components/engine/ui-batch.html), [UI system](https://docs.cocos.com/creator/4.0/manual/en/2d-object/ui-system/index.html), [scripting](https://docs.cocos.com/creator/4.0/manual/en/scripting/index.html), [web publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-web.html), and [command-line publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-in-command-line.html).
+- Cocos Creator 4.0 User Manual ([official manual](https://docs.cocos.com/creator/4.0/manual/en/)) — version-pinned workflow reference for scenes/assets, scripting, Web publishing, 2D sorting/batching, UI, animation, physics, particles, AssetManager, localization and editor extensions. Its landing page labels 4.0 LTS but also calls Creator 3.x the latest version; validate release availability/API before adopting it. Keep it distinct from the separate `cocos/cocos4` source repository. Use [Creator 3.8 LTS](https://docs.cocos.com/creator/3.8/manual/en/) as a separate established 3.x workflow reference. Focused pages: [asset workflow](https://docs.cocos.com/creator/4.0/manual/en/asset/asset-workflow.html), [TiledMap](https://docs.cocos.com/creator/4.0/manual/en/asset/tiledmap.html), [input events](https://docs.cocos.com/creator/4.0/manual/en/engine/event/event-input.html), [2D sorting](https://docs.cocos.com/creator/4.0/manual/en/engine/rendering/sorting-2d.html), [batching guidelines](https://docs.cocos.com/creator/4.0/manual/en/ui-system/components/engine/ui-batch.html), [UI system](https://docs.cocos.com/creator/4.0/manual/en/2d-object/ui-system/index.html), [scripting](https://docs.cocos.com/creator/4.0/manual/en/scripting/index.html), [web publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-web.html), and [command-line publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-in-command-line.html).
 - Cocos 4 (upstream: [repository](https://github.com/cocos/cocos4), [branch v4.0.0](https://github.com/cocos/cocos4/tree/v4.0.0)) — reference по разделению core/editor/CLI и подсистемам physics backend selector, 2D batching, Animation Graph, Tiled integration, UI layout, particle lifecycle, AssetManager и display/DPR configuration. Во время исследования 26.10.2026 ветка имела prerelease-версию; рассматривать её как источник архитектурных концепций и проверяемого кода, а не как обязательную runtime-зависимость или доказательство стабильности.
 - Cocos 4 reference files: [physics selector](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/physics-2d/framework/physics-selector.ts), [2D batcher](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/renderer/batcher-2d.ts), [UI static batch component](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/components/ui-static-batch.ts), [2D animation graph](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/animation/marionette), [Tiled map](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/tiledmap), [UI](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/ui), [2D particles](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/particle-2d) and [AssetManager](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/asset/asset-manager/asset-manager.ts).
 - Отдельные performance references: [on-demand Graphics GPU buffer allocation](https://github.com/cocos/cocos4/commit/a803406ef1eb0eb0002f98a50fc0758d8ab4045c) и [Web DPR startup configuration](https://github.com/cocos/cocos4/commit/f570c1f02d20431c7583d2a242233df6676a2b70). Эти решения нельзя считать автоматически подходящими Codogma: нужно проверить реальные измерения, браузерные ограничения и доступность требуемых hooks в текущем Phaser runtime.
@@ -893,7 +968,7 @@ CI Fast сейчас не выполняет весь перечисленный
 
 ### 15.1. Каталог технических ссылок по подсистемам
 
-Подробный, сгруппированный по подсистемам каталог официальных руководств, исходников, кандидатов библиотек, toolchain и платформенных SDK вынесен в отдельный документ: **[docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md)**. Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.6), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
+Подробный каталог официальных руководств и кандидатов вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md). Web-first risks и уроки из Unity, Cocos Creator, Godot и Defold собраны в [architecture risk register](architecture-risk-register.md). Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.6), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
 
 Использовать каталог вместе с этим ТЗ и [дорожной картой](roadmap.md). Перед выбором зависимости перепроверять текущую версию и лицензию; ссылки являются техническими reference, не утверждённым dependency manifest.
 
