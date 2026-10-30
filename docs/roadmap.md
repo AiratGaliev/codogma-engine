@@ -102,18 +102,18 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### С чего начинается реализация
 
-**Первое агентное задание должно быть кодовым: модернизировать существующий Editor Host и его основные 2D-workflows на текущей базе.** Документы этого PR служат входным контекстом, а не очередным deliverable для агента. Не поручать исполнителю повторно собирать эти же матрицы/ADR до начала работы, кроме адресного уточнения конкретного спорного поведения.
+**Первое агентное задание по UI migration должно быть кодовым: создать независимый Svelte Editor Host shell в `src/editor/`, а не встраивать Svelte в Colibri.** Сначала обеспечить отдельный запуск на Vite и безопасный backend proxy; legacy Colibri остаётся доступным. Документы этого плана служат входным контекстом, а не поводом повторно собирать те же матрицы/ADR.
 
 Ожидаемый рабочий порядок:
 1. Проверить актуальный `dev`, установить проект согласно README, запустить доступные build/typecheck/smoke checks и зафиксировать фактический baseline.
-2. Выбрать конечную группу связанных UI/functional workflows (например, Scene Editor + Hierarchy/Inspector или Asset Pack) и начать с реального кода. Указанные в матрице runtime gaps PR #10 включать в ближайшие задачи, когда соответствующая подсистема затрагивается.
+2. После минимального shell перейти к первому реальному vertical slice: Scene Editor + Phaser Canvas + Hierarchy/Inspector + save/reopen/Undo/Redo. Runtime gaps PR #10 включать в соответствующие migration slices, а не переносить UI без проверки поведения.
 3. Добавить/настроить tests и lint/format для изменяемого Codogma-owned scope. Не включать новые строгие правила на всё legacy-дерево без исправления/миграционного плана.
-4. Реализовать согласованную UI-систему и иконки как видимые продуктовые deliverables, включая светлую и тёмную тему. Провести browser acceptance на целевых размерах окна, приложить screenshots до/после или эквивалентные воспроизводимые результаты.
-5. Провести сравнительный Svelte PoC отдельным небольшим scope, не блокируя независимые исправления текущего workbench.
+4. Реализовать согласованную UI-систему и иконки непосредственно в новом Svelte Host, включая light/dark/lightBlue themes, keyboard/focus states и density. Провести browser acceptance на целевых размерах окна, приложить screenshots или эквивалентные воспроизводимые результаты.
+5. Не повторять Svelte PoC: он выполнен и сохранён в ADR-0004. Использовать его как входное evidence для независимого Editor Host; не создавать долгосрочный Colibri↔Svelte bridge.
 6. Для каждого крупного набора изменений открыть отдельный PR с регрессионными тестами и перечислением фактически пройденных проверок; обновить соответствующие части матрицы/worklog по результатам.
-7. После первой стабилизации редактора выбрать следующий Core/Preview/HTML5 build slice на основе зависимостей, а не переписывать весь legacy editor заранее.
+7. После прохождения первого Svelte Host vertical slice выбирать следующий Core/Preview/HTML5 build slice на основе реальных зависимостей; не переписывать legacy UI заранее и не удалять его до cutover.
 
-Полная инвентаризация source tree, фактические performance measurements, migration `source/editor` → `src/editor` и npm Workspaces остаются отдельными задачами, необходимыми к соответствующим gates. Они не используются как повод откладывать независимую модернизацию редактора.
+Полная инвентаризация Colibri coupling и фактические performance measurements выполняются поэтапно. `src/editor/` создаётся как новое приложение, не как перенос старого `source/editor/`; legacy дерево удаляется только после cutover. npm Workspaces остаются отдельной инфраструктурной задачей и не являются предусловием для первого Vite/Svelte Host.
 
 ### Подготовленные reference-документы — использовать, не пересоздавать
 
@@ -152,14 +152,14 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ## Этап 1 — аудит исходников, модель данных и архитектурные решения
 
-**Цель:** дать достаточно фактов, чтобы безопасно модернизировать существующий Editor Host, а не превратить подготовительный этап в отдельный документационный проект. Основные матрицы, ADR и baseline-протоколы уже созданы; неизвестные области уточняются непосредственно перед изменением соответствующего кода.
+**Цель:** дать достаточно фактов, чтобы безопасно создать новый Svelte Editor Host и перенести в него реальные workflows, не повторяя legacy UI-механизмы автоматически. Основные матрицы, ADR и baseline-протоколы уже созданы; неизвестные области Colibri coupling уточняются непосредственно перед переносом соответствующей функции.
 
 ### Внутренняя очередь выполнения
 
-1. **Начинать с текущего кода:** изучить выбранную подсистему, реальные UX/behavior gaps, существующие contracts, tests и runtime path. Для подтверждённой проблемы сразу формировать implementation PR, а не ждать полной инвентаризации всего репозитория.
+1. **Начинать с независимого Host:** изучить существующие UI/runtime paths, зафиксировать backend/data contracts и создать минимальное Svelte/Vite приложение. Далее переносить выбранную подсистему с тестами и browser acceptance; не ждать полной инвентаризации всего репозитория.
 2. **Ввести необходимые quality checks в изменяемом scope:** clean install, TypeScript build, targeted tests, ESLint/Prettier для нового/изменяемого Codogma-owned кода; Knip/dependency-cruiser сначала работают в report mode. Не ломать массово legacy Colibri.
 3. **Пополнять матрицы по evidence:** фиксировать, что реализовано, что исправлено, какие тесты прошли и что осталось непроверенным. Документация обновляется вместе с соответствующим кодом и не заменяет его.
-4. **Оформлять архитектурные решения по необходимости:** strict toolchain pilot, Core contracts и migration plans нужны для новых модулей и тесной интеграции; они не являются gate для независимых UI/bug fixes существующего редактора.
+4. **Оформлять архитектурные решения по необходимости:** ADR-0005 и `docs/editor-ui-migration.md` определяют цель и transition constraints. Core contracts, package/Workspace migration и public Extension API развиваются отдельно и не блокируют bootstrap нового Host.
 5. **Отдельный gate перед тесной интеграцией нового Core:** принять ADR-0001/0002, пройти toolchain pilot и contract tests. Создание нового Svelte Editor Host в `src/editor/`, staged replacement Colibri и npm Workspaces выполнять отдельными проверяемыми миграционными PR; не объединять UI migration с массовым Core/refactor изменением.
 
 ### Задачи
@@ -172,7 +172,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Для каждой возможности указать: существующая реализация, публичный/внутренний контракт, покрывающие тесты, ограничения и gap относительно целевого UX.
 - [ ] Зафиксировать текущие форматы сцен/префабов/ассетов и правила серилизации, идентификации ресурсов и обновления ссылок.
 - [ ] Инвентаризировать импортные метаданные, повторный импорт, sprite sheet slicing, atlas build, PSD/Aseprite/Tiled interoperability и явно записать ограничения/потери данных каждого формата.
-- [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, plugin registry и Undo/Redo: найти реальные границы, которые можно развивать без переписывания Colibri.
+- [ ] Проследить вызовы существующего `IFileStorage`, HTTP API, Colibri plugin registry и Undo/Redo: отделить reusable domain/data operations от UI lifecycle/callback dependencies, которые придётся переписать в Svelte Host.
 - [x] Создать первоначальную `docs/dependency-capability-matrix.md` для текущих direct package roots, Phaser bundle и Box2D runtime path.
 - [ ] Завершить транзитивную dependency/SBOM, license и provenance инвентаризацию; проверить ограничения и стоимость обновления значимых зависимостей до публикации пакетов.
 - [ ] Для нового Core toolchain зафиксировать pinned devDependencies, scripts и lockfile; legacy TSLint dependency уже отсутствует, но `lint.sh`/`tslint.json` остаются неактивными артефактами. Удалить или заменить их отдельным cleanup после пилота.
@@ -182,7 +182,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [x] Оформить `docs/decisions/ADR-0002-typescript-toolchain.md`: strict profile и scope нового Core, ESLint/Prettier/Node unit tests, Knip/dependency-cruiser report mode и staged CI ratchet.
   - Прогресс COD-19: подготовлен изолированный pilot в `packages/localization/` — отдельный ESLint scope для strict TS/Node tests, package-local Prettier profile, typecheck/lint/format/unit scripts, report-only Knip/dependency-cruiser и запуск quality checks в CI Fast. Дождаться CI, прежде чем отмечать pilot завершённым.
 - [ ] Поддерживать `docs/decisions/ADR-0003-package-architecture-and-management.md` как нормативное решение: целевые исходники Editor Host в `src/editor`, самостоятельные package roots в `packages/*`, `@codogma/cge` в `packages/cge`, npm Workspaces для локальной разработки, selective installation в пользовательские проекты и Extension API; точная metadata schema и детали migration/workspace tooling проходят PoC.
-- [ ] После фиксации capability/dependency baseline подготовить и выполнить отдельный migration PR `source/editor` → `src/editor`: сохранить внутреннюю структуру и TypeScript project references; обновить root scripts, server `EDITOR_DIR`, CI/cache paths, release archive, `BUILD.md` и README; проверить root/editor clean install, сборку, HTTP smoke и состав ZIP. Не объединять перенос каталога с workspace/lockfile migration.
+- [ ] После фиксации capability/dependency baseline создать самостоятельный Svelte/Vite app в `src/editor/`; не перемещать туда legacy tree. Настроить отдельный dev command/port, strict loopback bind, exact-Origin Vite proxy и отдельные build/typecheck/CI checks. `source/editor/` продолжает обслуживать Colibri до cutover; после acceptance его удаление выполняется отдельным cleanup PR. Не объединять создание нового Host с npm Workspaces/lockfile migration.
 - [x] Создать `docs/performance-baseline.md` с fixtures и протоколом воспроизводимых измерений без выдуманных порогов.
 - [ ] Выполнить и сохранить фактические performance measurements на согласованном окружении; не вводить budgets до получения повторяемых raw samples.
 
