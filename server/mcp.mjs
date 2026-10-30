@@ -21,7 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, writeNewFileSafely } from "./path-security.mjs"
+import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, writeNewFileSafely, statProjectFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -126,7 +126,7 @@ function sceneFiles() {
 
 function readSceneFile(rel) {
     const full = safeJoin(PROJECT_DIR, rel)
-    if (!full || !fs.existsSync(full)) return null
+    if (!full) return null
     try {
         return JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 4 * 1024 * 1024))
     } catch (e) {
@@ -938,7 +938,7 @@ defTool(
         }
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
+        if (!full) throw new Error(`Texture file not found: ${url}`)
         const buf = readFileSafely(PROJECT_DIR, full)
         const mime = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".svg": "image/svg+xml" }[path.extname(full).toLowerCase()] || "application/octet-stream"
         return image(buf.toString("base64"), mime)
@@ -1300,7 +1300,7 @@ function resolveTilesetImage(imageKey) {
 
     const full = safeJoin(PROJECT_DIR, url)
 
-    if (!full || !fs.existsSync(full)) throw new Error(`Tileset image file not found: ${url}`)
+    if (!full) throw new Error(`Tileset image file not found: ${url}`)
 
     const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
 
@@ -2595,7 +2595,7 @@ defTool(
         const url = findTextureUrl(key)
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
+        if (!full) throw new Error(`Texture file not found: ${url}`)
         const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
         if (!size) throw new Error(`Cannot parse image size of ${url}`)
         return text(JSON.stringify({ key, url, ...size }, null, 2))
@@ -2614,7 +2614,7 @@ defTool(
                 const imgUrl = e.textureFilename
                     || e.url.replace(/\.(fnt|xml|json)$/i, ".png")
                 const full = safeJoin(PROJECT_DIR, imgUrl)
-                if (!full || !fs.existsSync(full)) throw new Error(`Bitmap font image not found: ${imgUrl}`)
+                if (!full) throw new Error(`Bitmap font image not found: ${imgUrl}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
                 return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
@@ -2632,7 +2632,7 @@ defTool(
             const e = pack.entries.find(e => e.key === key && e.type === "spritesheet")
             if (e) {
                 const full = safeJoin(PROJECT_DIR, e.url)
-                if (!full || !fs.existsSync(full)) throw new Error(`Spritesheet image not found: ${e.url}`)
+                if (!full) throw new Error(`Spritesheet image not found: ${e.url}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
                 return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
@@ -2692,7 +2692,9 @@ defTool(
         }
         if (!url) throw new Error(`Spine skeleton "${dataKey}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Spine data file not found: ${url}`)
+        if (!full) throw new Error(`Spine data file not found: ${url}`)
+        const fileStat = await statProjectFileSafely(PROJECT_DIR, full)
+        if (!fileStat?.isFile()) throw new Error(`Spine data file not found: ${url}`)
         if (!url.toLowerCase().endsWith(".json")) {
             return text(`Skeleton "${dataKey}" is binary (.skel): parse it in the editor for full info.`)
         }
@@ -2718,7 +2720,7 @@ defTool(
         }
         if (!url) throw new Error(`Tilemap "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Tilemap file not found: ${url}`)
+        if (!full) throw new Error(`Tilemap file not found: ${url}`)
         const raw = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024)
         if (url.toLowerCase().endsWith(".json")) {
             const data = JSON.parse(raw)
@@ -2795,7 +2797,7 @@ defTool(
     async ({ assetPackFileName, key, family, url }) => {
         const rel = normPath(assetPackFileName)
         const full = safeJoin(PROJECT_DIR, rel)
-        if (!full || !fs.existsSync(full)) throw new Error(`Asset pack not found: ${rel}`)
+        if (!full) throw new Error(`Asset pack not found: ${rel}`)
         if (!url) {
             const info = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}`, { headers: { "User-Agent": "" } })
             const css = await info.text()
