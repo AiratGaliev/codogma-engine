@@ -121,7 +121,7 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses the engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
 | <code>mini-services/phaser-editor-mcp/</code> | Legacy HTTP/WebSocket bridge retained for existing editor-side MCP workflows; not used by the new package. |
 | <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and MCP compatibility. |
-| <code>source/editor/</code> | Browser-based editor client, TypeScript sources, plugins, assets, product metadata and client build configuration. |
+| <code>source/editor/</code> | Legacy Colibri-based browser editor client, TypeScript sources, plugins, assets, product metadata and client build configuration; retained only during the staged migration. |
 | <code>src/editor/</code> | **Planned, not present yet:** independent Svelte 5 + TypeScript Editor Host and Tailwind CSS 4 UI. This becomes the primary client after staged migration and cutover. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
