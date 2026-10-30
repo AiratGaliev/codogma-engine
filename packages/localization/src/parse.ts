@@ -25,7 +25,6 @@ interface RawRecord {
 }
 
 function isRecord(value: unknown): value is RawRecord {
-
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -34,7 +33,6 @@ function isRecord(value: unknown): value is RawRecord {
  * message exposes an offset, it is translated into `line:column`.
  */
 function parseErrorDiagnostic(sourceText: string, error: unknown, file: string | undefined): LocalizationDiagnostic {
-
     const rawMessage = error instanceof Error ? error.message : String(error);
 
     let message = `Invalid JSON in localization table: ${rawMessage}`;
@@ -44,11 +42,9 @@ function parseErrorDiagnostic(sourceText: string, error: unknown, file: string |
     const positionMatch = rawMessage.match(/position (\d+)/);
 
     if (positionMatch !== null && positionMatch[1] !== undefined) {
-
         const offset = Number(positionMatch[1]);
 
         if (Number.isInteger(offset) && offset >= 0 && offset < sourceText.length) {
-
             const before = sourceText.slice(0, offset);
             const lines = before.split("\n");
 
@@ -82,11 +78,7 @@ function addDiagnostic(list: LocalizationDiagnostic[], diagnostic: LocalizationD
  * On any error-level diagnostic the result omits `table`, so structurally
  * invalid data can never reach the runtime as if it were valid translations.
  */
-export function parseLocalizationTable(
-    sourceText: string,
-    file?: string
-): LocalizationParseResult {
-
+export function parseLocalizationTable(sourceText: string, file?: string): LocalizationParseResult {
     const diagnostics: LocalizationDiagnostic[] = [];
 
     let data: unknown;
@@ -99,7 +91,6 @@ export function parseLocalizationTable(
     }
 
     if (!isRecord(data)) {
-
         const diagnostic: LocalizationDiagnostic = {
             code: "LOC_INVALID_MESSAGES",
             severity: "error",
@@ -119,11 +110,10 @@ export function parseLocalizationTable(
     const schemaVersion = data["schemaVersion"];
 
     if (schemaVersion === undefined) {
-
         const diagnostic: LocalizationDiagnostic = {
             code: "LOC_MISSING_VERSION",
             severity: "error",
-            message: "Localization table is missing the required \"schemaVersion\" field."
+            message: 'Localization table is missing the required "schemaVersion" field.'
         };
 
         if (file !== undefined) {
@@ -131,14 +121,13 @@ export function parseLocalizationTable(
         }
 
         addDiagnostic(diagnostics, diagnostic);
-
     } else if (schemaVersion !== LOCALIZATION_TABLE_SCHEMA_VERSION) {
-
         const diagnostic: LocalizationDiagnostic = {
             code: "LOC_UNSUPPORTED_VERSION",
             severity: "error",
-            message: `Unsupported localization table schemaVersion: ${JSON.stringify(schemaVersion)}.`
-                + ` Supported version: ${LOCALIZATION_TABLE_SCHEMA_VERSION}.`
+            message:
+                `Unsupported localization table schemaVersion: ${JSON.stringify(schemaVersion)}.` +
+                ` Supported version: ${LOCALIZATION_TABLE_SCHEMA_VERSION}.`
         };
 
         if (file !== undefined) {
@@ -156,15 +145,13 @@ export function parseLocalizationTable(
     const localeValue = data["locale"];
     let locale: string | undefined;
 
-    const canonicalLocale = typeof localeValue === "string"
-        ? canonicalLocaleTag(localeValue)
-        : undefined;
+    const canonicalLocale = typeof localeValue === "string" ? canonicalLocaleTag(localeValue) : undefined;
 
     if (canonicalLocale === undefined) {
-
-        const hint = typeof localeValue === "string" && localeValue.includes("_")
-            ? " Use \"-\" instead of \"_\" in the locale tag."
-            : "";
+        const hint =
+            typeof localeValue === "string" && localeValue.includes("_")
+                ? ' Use "-" instead of "_" in the locale tag.'
+                : "";
 
         const diagnostic: LocalizationDiagnostic = {
             code: "LOC_INVALID_LOCALE",
@@ -177,15 +164,14 @@ export function parseLocalizationTable(
         }
 
         addDiagnostic(diagnostics, diagnostic);
-
     } else if (canonicalLocale !== localeValue) {
-
         const diagnostic: LocalizationDiagnostic = {
             code: "LOC_INVALID_LOCALE",
             severity: "error",
-            message: `Invalid locale tag case: ${JSON.stringify(localeValue)}.`
-                + ` Use the canonical form "${canonicalLocale}"`
-                + " (language lowercase, region uppercase, script Titlecase)."
+            message:
+                `Invalid locale tag case: ${JSON.stringify(localeValue)}.` +
+                ` Use the canonical form "${canonicalLocale}"` +
+                " (language lowercase, region uppercase, script Titlecase)."
         };
 
         if (file !== undefined) {
@@ -193,7 +179,6 @@ export function parseLocalizationTable(
         }
 
         addDiagnostic(diagnostics, diagnostic);
-
     } else {
         locale = localeValue;
     }
@@ -206,11 +191,10 @@ export function parseLocalizationTable(
     const duplicateIds: string[] = [];
 
     if (!Array.isArray(rawMessages)) {
-
         const diagnostic: LocalizationDiagnostic = {
             code: "LOC_INVALID_MESSAGES",
             severity: "error",
-            message: "Localization table field \"messages\" must be an array of { id, text } entries."
+            message: 'Localization table field "messages" must be an array of { id, text } entries.'
         };
 
         if (file !== undefined) {
@@ -218,19 +202,13 @@ export function parseLocalizationTable(
         }
 
         addDiagnostic(diagnostics, diagnostic);
-
     } else {
-
         for (const rawEntry of rawMessages) {
-
-            if (!isRecord(rawEntry)
-                || typeof rawEntry["id"] !== "string"
-                || typeof rawEntry["text"] !== "string") {
-
+            if (!isRecord(rawEntry) || typeof rawEntry["id"] !== "string" || typeof rawEntry["text"] !== "string") {
                 const diagnostic: LocalizationDiagnostic = {
                     code: "LOC_INVALID_ENTRY",
                     severity: "error",
-                    message: "Localization message entry must be an object with string \"id\" and \"text\" fields."
+                    message: 'Localization message entry must be an object with string "id" and "text" fields.'
                 };
 
                 if (file !== undefined) {
@@ -245,13 +223,13 @@ export function parseLocalizationTable(
             const text = rawEntry["text"];
 
             if (id.length === 0 || !MESSAGE_ID_PATTERN.test(id)) {
-
                 const diagnostic: LocalizationDiagnostic = {
                     code: "LOC_INVALID_ID",
                     severity: "error",
                     messageId: id,
-                    message: `Invalid localization message id: ${JSON.stringify(id)}.`
-                        + " Ids must be non-empty and contain no whitespace."
+                    message:
+                        `Invalid localization message id: ${JSON.stringify(id)}.` +
+                        " Ids must be non-empty and contain no whitespace."
                 };
 
                 if (file !== undefined) {
@@ -263,7 +241,6 @@ export function parseLocalizationTable(
             }
 
             if (text.length === 0) {
-
                 const diagnostic: LocalizationDiagnostic = {
                     code: "LOC_INVALID_TEXT",
                     severity: "error",
@@ -284,7 +261,6 @@ export function parseLocalizationTable(
             }
 
             if (seenIds.has(id)) {
-
                 if (!duplicateIds.includes(id)) {
                     duplicateIds.push(id);
                 }
@@ -299,7 +275,6 @@ export function parseLocalizationTable(
         }
 
         for (const id of duplicateIds) {
-
             const diagnostic: LocalizationDiagnostic = {
                 code: "LOC_DUPLICATE_ID",
                 severity: "error",

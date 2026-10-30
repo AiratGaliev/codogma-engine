@@ -17,7 +17,6 @@ export const LOCALIZATION_TABLE_SCHEMA_VERSION = 1;
 
 /** One localizable message: a stable id plus its translated text. */
 export interface LocalizationMessageEntryV1 {
-
     /** Stable, locale-independent message key, e.g. `"menu.play"`. */
     id: string;
 
@@ -27,7 +26,6 @@ export interface LocalizationMessageEntryV1 {
 
 /** A parsed and structurally valid localization table (schema version 1). */
 export interface LocalizationTableV1 {
-
     /** Always `1` in this contract version. */
     schemaVersion: 1;
 
@@ -44,7 +42,6 @@ export interface LocalizationTableV1 {
  * project-diagnostics panel, CI) render or forward this payload as-is.
  */
 export interface LocalizationDiagnostic {
-
     /** Stable machine-readable problem code (see {@link LocalizationDiagnosticCode}). */
     code: LocalizationDiagnosticCode;
 
@@ -112,7 +109,6 @@ export type LocalizationSeverity = LocalizationDiagnostic["severity"];
 
 /** Result of parsing one localization table file. */
 export interface LocalizationParseResult {
-
     /** All diagnostics found for the source text. */
     diagnostics: LocalizationDiagnostic[];
 

@@ -36,7 +36,6 @@ const EXTENSION_SINGLETON_PATTERN = /^[0-9A-WY-Za-wy-z]$/;
  * deprecated aliases to Preferred-Value forms, or reorder extension sequences.
  */
 export function canonicalLocaleTag(tag: string): string | undefined {
-
     if (typeof tag !== "string") {
         return undefined;
     }
@@ -54,11 +53,9 @@ export function canonicalLocaleTag(tag: string): string | undefined {
     // BCP 47 permits up to three three-letter extlang subtags after a
     // two- or three-letter primary language subtag.
     if (language.length <= 3) {
-
         let extlangCount = 0;
 
         while (extlangCount < 3) {
-
             const subtag = subtags[index];
 
             if (subtag === undefined || !EXTENDED_LANGUAGE_SUBTAG_PATTERN.test(subtag)) {
@@ -83,11 +80,9 @@ export function canonicalLocaleTag(tag: string): string | undefined {
     const region = subtags[index];
 
     if (region !== undefined) {
-
         if (ALPHABETIC_REGION_SUBTAG_PATTERN.test(region)) {
             canonicalSubtags.push(region.toUpperCase());
             index += 1;
-
         } else if (NUMERIC_REGION_SUBTAG_PATTERN.test(region)) {
             canonicalSubtags.push(region);
             index += 1;
@@ -99,7 +94,6 @@ export function canonicalLocaleTag(tag: string): string | undefined {
     const seenVariants = new Set<string>();
 
     while (index < subtags.length) {
-
         const variant = subtags[index];
 
         if (variant === undefined || !VARIANT_SUBTAG_PATTERN.test(variant)) {
@@ -120,7 +114,6 @@ export function canonicalLocaleTag(tag: string): string | undefined {
     const seenExtensionSingletons = new Set<string>();
 
     while (index < subtags.length) {
-
         const subtag = subtags[index];
 
         if (subtag === undefined) {
@@ -128,7 +121,6 @@ export function canonicalLocaleTag(tag: string): string | undefined {
         }
 
         if (subtag.toLowerCase() === "x") {
-
             // Private use must contain at least one subtag and consumes the
             // remainder of the tag; private-use subtags may be 1-8 chars.
             index += 1;
@@ -140,7 +132,6 @@ export function canonicalLocaleTag(tag: string): string | undefined {
             canonicalSubtags.push("x");
 
             while (index < subtags.length) {
-
                 const privateUseSubtag = subtags[index];
 
                 if (privateUseSubtag === undefined || !PRIVATE_USE_SUBTAG_PATTERN.test(privateUseSubtag)) {
@@ -171,7 +162,6 @@ export function canonicalLocaleTag(tag: string): string | undefined {
         const extensionStart = index;
 
         while (index < subtags.length) {
-
             const extensionSubtag = subtags[index];
 
             if (extensionSubtag === undefined || !EXTENSION_SUBTAG_PATTERN.test(extensionSubtag)) {

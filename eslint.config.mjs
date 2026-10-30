@@ -23,7 +23,13 @@ const nodeSources = [
     "mini-services/phaser-editor-mcp/index.mjs",
     "tests/security-smoke-test.mjs",
     "tests/mini-services-security-test.mjs",
-    "tests/path-security.test.mjs"
+    "tests/path-security.test.mjs",
+    "packages/localization/tests/*.test.mjs",
+    "packages/localization/bin/validate-localization.mjs"
+]
+
+const localizationTypeScriptSources = [
+    "packages/localization/src/**/*.ts"
 ]
 
 const editorTypeScriptSources = [
@@ -64,6 +70,20 @@ export default tseslint.config(
             // `catch (e) { }`; flagging it would mean churning legacy catch
             // blocks in files this branch only partially touched.
             "no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrors: "none" }]
+        }
+    },
+    {
+        files: localizationTypeScriptSources,
+        extends: [tseslint.configs.recommended],
+        languageOptions: {
+            ecmaVersion: 2024,
+            sourceType: "module"
+        },
+        rules: {
+            "@typescript-eslint/no-unused-vars": [
+                "error",
+                { args: "none", caughtErrors: "none", varsIgnorePattern: "^_" }
+            ]
         }
     },
     {
