@@ -35,6 +35,8 @@
 
 Для оперативной работы используй командные страницы и документы в Linear: [Codogma-engine (COD)](https://linear.app/codogma-engine/team/COD) и [Codogma QA (CODQA)](https://linear.app/codogma-engine/team/CODQA).
 
+Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
+
 ## 1. Перед началом каждой задачи
 
 1. Прочитать актуальный `README.md`, этот документ, `docs/technical-specification.md`, `docs/roadmap.md` и `docs/capability-matrix.md`. Для затрагиваемой подсистемы изучить связанные ADR, tests, capability/dependency matrices и известные residuals.
