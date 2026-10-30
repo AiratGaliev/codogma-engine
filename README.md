@@ -132,7 +132,7 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>BUILD.md</code> | Additional build notes. |
 | <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
 
-**Package source layout:** the first standalone tooling package now follows the TЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root/editor/local package boundaries and lockfiles remain separate. The planned Editor Host move from `source/editor/` to `src/editor/`, npm Workspaces migration, Feature/Capability Registry and versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
+**Package source layout:** the first standalone tooling package now follows the TЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root/editor/local package boundaries and lockfiles remain separate. The Svelte Editor Host is a new application under `src/editor/`, not a mechanical move of the legacy tree. The Colibri client stays under `source/editor/` during migration and is removed only after cutover acceptance. npm Workspaces, Feature/Capability Registry and a public/versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
 
 ## Daily development commands
 
