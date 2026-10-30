@@ -140,8 +140,9 @@ jobs:
         run: npm audit --audit-level=low
         working-directory: packages/localization
 
-      - name: Build and test localization package (COD-62/COD-64)
-        run: npm run test:localization
+      - name: Build, test and quality-pilot localization package (COD-19/COD-62/COD-64)
+        run: npm run quality:check && npm run quality:report
+        working-directory: packages/localization
 
       - name: Localization project diagnostics CLI (COD-64)
         run: npm run test:localization:project

@@ -23,7 +23,9 @@ import path from "node:path"
 import { validateLocalizationSources } from "@codogma/localization"
 
 function usage() {
-    console.error("Usage: node packages/localization/bin/validate-localization.mjs <projectDir> [--fallback <locale>] [--json]")
+    console.error(
+        "Usage: node packages/localization/bin/validate-localization.mjs <projectDir> [--fallback <locale>] [--json]"
+    )
     process.exit(1)
 }
 
@@ -38,9 +40,7 @@ let fallbackLocale
 let asJson = false
 
 for (let i = 1; i < args.length; i++) {
-
     if (args[i] === "--fallback") {
-
         fallbackLocale = args[i + 1]
 
         if (fallbackLocale === undefined) {
@@ -48,10 +48,8 @@ for (let i = 1; i < args.length; i++) {
         }
 
         i += 1
-
     } else if (args[i] === "--json") {
         asJson = true
-
     } else {
         usage()
     }
@@ -95,15 +93,15 @@ try {
     if (asJson) {
         console.log(JSON.stringify({ diagnostics, validLocales: tables.map(table => table.locale) }, null, 4))
     } else {
-
         for (const item of diagnostics) {
-
             const where = [item.file, item.locale, item.messageId].filter(part => part !== undefined).join(", ")
 
             console.log(`[${item.severity}] ${item.code}${where === "" ? "" : ` (${where})`}: ${item.message}`)
         }
 
-        console.log(`\nchecked ${files.length} table file(s), ${tables.length} valid, ${diagnostics.length} diagnostic(s)`)
+        console.log(
+            `\nchecked ${files.length} table file(s), ${tables.length} valid, ${diagnostics.length} diagnostic(s)`
+        )
     }
 
     if (diagnostics.some(item => item.severity === "error")) {
@@ -112,21 +110,27 @@ try {
     } else if (!asJson) {
         console.log("Localization tables are valid (warnings do not block).")
     }
-
 } catch (error) {
-
     const message = error instanceof Error ? error.message : String(error)
 
     if (asJson) {
-        console.log(JSON.stringify({
-            diagnostics: [{
-                code: "LOC_FILE_ERROR",
-                severity: "error",
-                message: `Failed to read or process locale directory: ${message}`,
-                file: localeDir === undefined ? "." : "locale/"
-            }],
-            validLocales: []
-        }, null, 4))
+        console.log(
+            JSON.stringify(
+                {
+                    diagnostics: [
+                        {
+                            code: "LOC_FILE_ERROR",
+                            severity: "error",
+                            message: `Failed to read or process locale directory: ${message}`,
+                            file: localeDir === undefined ? "." : "locale/"
+                        }
+                    ],
+                    validLocales: []
+                },
+                null,
+                4
+            )
+        )
     } else {
         console.error(`[error] LOC_FILE_ERROR: Failed to read or process locale directory: ${message}`)
     }
