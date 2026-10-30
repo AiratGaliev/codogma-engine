@@ -1117,3 +1117,17 @@ export function writeNewFileSafely(base, target, content) {
         try { fs.closeSync(parent.fd) } catch {}
     }
 }
+
+/** Read file metadata from a verified descriptor without exposing pathname stats. */
+export async function statProjectFileSafely(base, target) {
+    const handle = await openSafeProjectFileForRead(base, target)
+    if (!handle) return null
+
+    try {
+        return await handle.stat()
+    } catch {
+        return null
+    } finally {
+        await handle.close().catch(() => {})
+    }
+}
