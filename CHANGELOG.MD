@@ -11,6 +11,21 @@
 * Added negative regression coverage for foreign HTTP/WebSocket Host headers and attempted
   external binds. Remote service access remains unsupported without an authenticated tunnel.
 
+## Unreleased (2026-10-29 — descriptor-verified project file access)
+
+### Security
+
+* Added descriptor-verified project file reads. MCP file/text/asset metadata reads now consume bytes from an opened descriptor validated against the project root; HTTP project/editor static responses stream from a validated file handle instead of reopening a pathname.
+* Routed MCP `project-write-file` through the existing validated write-handle primitive rather than `fsp.writeFile(path)`.
+* Added Linux descriptor-anchored helpers for project directory creation, deletion and rename; wired the HTTP project API and MCP project-file tools to use them. Added deterministic parent-symlink-swap regressions for delete, rename and directory creation.
+* Added descriptor-verified one-level directory enumeration for the HTTP project file tree and MCP project file listing; Linux reads metadata through the verified `/proc/self/fd` directory handle and skips symlink entries.
+* Added deterministic regression tests that swap a parent directory for an outside symlink immediately before open and assert that neither read nor write exposes/modifies the outside file.
+* Replaced HTTP `CopyFile`'s path-based recursive `fsp.cp()` with descriptor-aware recursive copying: source files use verified handles without following final symlinks, destination files are staged in a temporary sibling and committed with an anchored rename on Linux, and symbolic-link entries are rejected. Tests cover file/tree copies and source/destination parent-symlink swaps.
+* Bounded AI-chat attachment ingestion to a 24 KiB prefix read from a verified handle rather than loading the full file before truncation. Static project/editor files and `/archive/<name>` content are streamed from validated descriptors; directory index lookup uses verified directory enumeration rather than path-based `stat`/`existsSync`.
+* HTTP `CreateFolder` reads final directory metadata with descriptor-backed `fstat`. MCP Scene/Prefab create operations use exclusive, descriptor-anchored creation and cannot overwrite a file that appears after an earlier existence check.
+* MCP project reads no longer use a separate pathname-based `existsSync` before the verified read; Spine JSON metadata uses descriptor-backed file metadata lookup. Added symlink/outside-root and non-overwrite regression tests.
+* This is partial hardening, not a claim that TOCTOU is fully resolved. Non-Linux path-based fallback and races where an opened directory is moved outside after verification still lack a proven cross-platform guarantee and acceptance. Trusted installation metadata (`EDITOR_DIR`/`PLUGINS_DIR`) remains outside the user-project threat boundary.
+
 ## Unreleased (branch `agent/editor-priority-implementation`, 2026-10-28)
 
 P0 hardening round: editor reliability, FX/Box2D runtime acceptance, Svelte PoC,
