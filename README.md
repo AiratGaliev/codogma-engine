@@ -329,7 +329,7 @@ CI is designed to check changes quickly and to run MCP integration tests on prom
 
 | Workflow / job | Trigger | Main checks |
 |---|---|---|
-| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Installs and audits locked root/editor/localization and standalone mini-service dependencies, validates PR routing, builds the editor client, runs unit regression and security checks for the main server and mini-services, smoke-tests the server/editor, and tests localization package, project diagnostics and runtime acceptance. |
+| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Markdown-only PRs run changed-document checks (final newline, LF, fenced blocks and newly added relative links) and skip npm installation/build/runtime tests. PRs with non-Markdown changes run the full fast code checks. Dependency audits run only for package scopes whose manifest/lockfile changed (or when <code>.npmrc</code> changes); manual dispatch audits every scope. |
 | **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Installs/builds the standalone MCP package, starts the engine server and tests the stdio adapter through <code>POST /editor/mcp</code>. UI-dependent acceptance remains separate. |
 | **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client and MCP package, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
 
@@ -441,34 +441,33 @@ If a promotion gate fails, stop the promotion. Fix the issue in the appropriate 
 
 ### Local checks before a PR
 
-Run commands from the repository root. Root, editor, localization and standalone MCP package dependencies are installed separately (there are no npm Workspaces yet):
+For implementation changes, run commands from the repository root. Root, editor, localization and standalone MCP package dependencies are installed separately (there are no npm Workspaces yet). A Markdown-only PR does not require dependency installation or a game/editor build: CI runs the changed-document checks directly.
 
 ~~~bash
 npm ci
-npm audit --audit-level=low
 cd source/editor
 npm ci
-npm audit --audit-level=low
 cd ../..
 cd packages/localization
 npm ci
-npm audit --audit-level=low
 cd ../..
 cd packages/editor-mcp-server
 npm ci
-npm audit --audit-level=low
 cd ../..
 npm run build
 npm run test:security
 npm run test:mcp-package
 ~~~
 
+Run `npm audit --audit-level=low` in the affected package scope when its `package.json`, `package-lock.json` or applicable `.npmrc` changes. CI Fast applies the same scope selection; manual workflow dispatch runs every configured audit.
+
 Then run checks relevant to the change:
 
 | Change type | Required local acceptance |
 |---|---|
-| Any change | Run `npm run build` before requesting merge; CI runs it as well |
-| Dependencies | Run `npm audit --audit-level=low` from the root, `source/editor` and each separately installed package; CI blocks any reported vulnerability |
+| Documentation-only (`*.md`, `*.mdx`, `*.rst`) | No npm install/build is required. CI checks changed Markdown line endings, fenced blocks and newly added relative links. Run `git diff --check` locally when reviewing the patch. |
+| Code/build changes | Run `npm run build` before requesting merge; CI runs it as well |
+| Dependencies | Run `npm audit --audit-level=low` in every affected package scope. CI audits scopes whose manifest/lockfile changed, or all scopes when `.npmrc` changes; manual dispatch runs all audits. |
 | Server, bridge or MCP tools | Run `npm run test:security`; start the server with `npm start`; in a second terminal run `npm run test:e2e` |
 | Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
 | Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |
