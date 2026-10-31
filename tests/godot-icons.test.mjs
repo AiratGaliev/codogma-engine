@@ -21,15 +21,101 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const ICONS_DIR = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/icons")
 const DARK_DIR = path.join(ICONS_DIR, "dark/godot")
 const LIGHT_DIR = path.join(ICONS_DIR, "light/godot")
+const DESIGN_TOKENS = JSON.parse(fs.readFileSync(path.join(ROOT, "design-system/tokens.json"), "utf8"))
 const COLIBRI_PLUGIN = path.join(ROOT, "source/editor/plugins/colibri/src/Plugin.ts")
 
 // Mirrors phasereditor2d.resources.GODOT_ICON_NAMES (ResourcesPlugin.ts).
 const GODOT_ICON_NAMES = [
-    "godot/reload", "godot/search", "godot/external-link", "godot/marker",
-    "godot/node-2d", "godot/sprite-2d", "godot/collision-shape-2d", "godot/camera-2d",
-    "godot/timer", "godot/audio-stream-2d", "godot/path-2d", "godot/animation-player",
-    "godot/particles-2d", "godot/particle-material", "godot/bone-2d", "godot/curve-2d",
-    "godot/visibility-notifier-2d"
+    "godot/action-copy",
+    "godot/action-cut",
+    "godot/action-paste",
+    "godot/add",
+    "godot/anchor",
+    "godot/animated-sprite-2d",
+    "godot/animation",
+    "godot/animation-player",
+    "godot/area-2d",
+    "godot/atlas-texture",
+    "godot/audio-listener-2d",
+    "godot/audio-stream-2d",
+    "godot/bone-2d",
+    "godot/box-container",
+    "godot/button",
+    "godot/camera-2d",
+    "godot/character-body-2d",
+    "godot/close-scene",
+    "godot/collision-polygon-2d",
+    "godot/collision-shape-2d",
+    "godot/container",
+    "godot/control",
+    "godot/cpu-particles-2d",
+    "godot/curve-2d",
+    "godot/editor-control-anchor",
+    "godot/editor-file-dialog",
+    "godot/editor-inspector",
+    "godot/editor-resource-picker",
+    "godot/editor-script-picker",
+    "godot/error-warning",
+    "godot/external-link",
+    "godot/file",
+    "godot/file-tree",
+    "godot/folder",
+    "godot/font-file",
+    "godot/grid",
+    "godot/grid-container",
+    "godot/gui-tree-arrow-down",
+    "godot/gui-tree-arrow-right",
+    "godot/gui-visibility-hidden",
+    "godot/gui-visibility-visible",
+    "godot/help-search",
+    "godot/image-texture",
+    "godot/label",
+    "godot/line-2d",
+    "godot/lock",
+    "godot/main-play",
+    "godot/marker",
+    "godot/node-2d",
+    "godot/node-warning",
+    "godot/one-way-tile",
+    "godot/packed-scene",
+    "godot/particle-material",
+    "godot/particles-2d",
+    "godot/path-2d",
+    "godot/pause",
+    "godot/physics-body-2d",
+    "godot/play",
+    "godot/play-scene",
+    "godot/polygon-2d",
+    "godot/reload",
+    "godot/remove",
+    "godot/rigid-body-2d",
+    "godot/save",
+    "godot/script",
+    "godot/search",
+    "godot/skeleton-2d",
+    "godot/snap-grid",
+    "godot/sprite-2d",
+    "godot/sprite-frames",
+    "godot/static-body-2d",
+    "godot/status-error",
+    "godot/status-warning",
+    "godot/stop",
+    "godot/style-box-grid",
+    "godot/terrain-path",
+    "godot/text-file",
+    "godot/texture-2d",
+    "godot/texture-rect",
+    "godot/timer",
+    "godot/tool-add-node",
+    "godot/tool-move",
+    "godot/tool-pan",
+    "godot/tool-rotate",
+    "godot/tool-scale",
+    "godot/tool-select",
+    "godot/undo-redo",
+    "godot/unlock",
+    "godot/viewport-zoom",
+    "godot/visibility-notifier-2d",
 ]
 
 // Extracted from ResourcesPlugin.ts: the icons the editor UI actually wires
@@ -43,12 +129,13 @@ function readSvg(variant, name) {
 }
 
 function luminance(hex) {
-    const body = hex.length === 4
-        ? hex.slice(1).split("").map(c => c + c).join("")
-        : hex.slice(1)
-    const r = parseInt(body.slice(0, 2), 16)
-    const g = parseInt(body.slice(2, 4), 16)
-    const b = parseInt(body.slice(4, 6), 16)
+    const channels = hex.slice(1)
+    const rgb = channels.length === 3 || channels.length === 4
+        ? channels.slice(0, 3).split("").map(c => c + c).join("")
+        : channels.slice(0, 6)
+    const r = parseInt(rgb.slice(0, 2), 16)
+    const g = parseInt(rgb.slice(2, 4), 16)
+    const b = parseInt(rgb.slice(4, 6), 16)
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
 }
 
@@ -77,38 +164,45 @@ test("Godot icons use the 16x16 editor icon size", () => {
     }
 })
 
-test("light variants recolor bright glyphs and keep dim chromatic icons", () => {
+function normalizeIconColor(hex) {
+    const value = hex.toLowerCase()
+    if (value === "gray") return "#808080"
+    const channels = value.slice(1)
+    if (channels.length === 3 || channels.length === 4) {
+        return "#" + [...channels].map((part) => part + part).join("")
+    }
+    return value
+}
+
+test("light variants are generated from the semantic theme palette", () => {
     for (const name of GODOT_ICON_NAMES) {
         const dark = readSvg("dark", name).svg
         const light = readSvg("light", name).svg
 
-        const darkColors = [...dark.matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{6})"/g)].map(m => m[1])
-        const needsRecolor = darkColors.some(hex => {
-            const r = parseInt(hex.slice(1, 3), 16)
-            const g = parseInt(hex.slice(3, 5), 16)
-            const b = parseInt(hex.slice(5, 7), 16)
-            const lumReal = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-            const grayscale = Math.max(r, g, b) - Math.min(r, g, b) <= 8
-            // grayscale glyphs brighter than 0.6 and any color brighter than
-            // 0.8 must be darkened for the light theme
-            return grayscale ? lumReal > 0.6 : lumReal > 0.8
-        })
-
-        if (needsRecolor) {
-            assert.notEqual(light, dark, `light variant must recolor bright glyphs: ${name}`)
-        } else {
-            assert.equal(light, dark, `chromatic icon must pass through unchanged: ${name}`)
+        let expected = dark.replace(
+            /(fill|stroke|stop-color)=(["'])(#[0-9a-fA-F]{3,8}|gray)\2/gi,
+            (match, attribute, quote, rawColor) => {
+                const sourceColor = normalizeIconColor(rawColor)
+                const targetColor = DESIGN_TOKENS.lightIconColorMap[sourceColor] ?? sourceColor
+                return `${attribute}=${quote}${targetColor}${quote}`
+            },
+        )
+        if (name === "godot/gui-tree-arrow-down" || name === "godot/gui-tree-arrow-right") {
+            expected = expected.replace(/stroke-opacity="\.4"/g, 'stroke-opacity="1"')
         }
+        assert.equal(light, expected, `light SVG must match the token-driven palette: ${name}`)
     }
 })
 
-test("generated light colors are dark enough for the light theme", () => {
+test("generated light colours maintain legibility while particle swatches stay vivid", () => {
     for (const name of GODOT_ICON_NAMES) {
         const light = readSvg("light", name).svg
-        for (const m of light.matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{6})"/g)) {
-            const lum = luminance(m[1])
+        if (name === "godot/particle-material") continue
+
+        for (const match of light.matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8})"/g)) {
+            const lum = luminance(match[1])
             assert.ok(lum < 0.75,
-                `color ${m[1]} in light variant of ${name} is too bright (luminance ${lum.toFixed(2)})`)
+                `color ${match[1]} in light variant of ${name} is too bright (luminance ${lum.toFixed(2)})`)
         }
     }
 })
