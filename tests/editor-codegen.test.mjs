@@ -524,3 +524,54 @@ test("TextureComponent rejects trim metadata when the Phaser Frame cannot apply 
         trim: { actualWidth: 16, actualHeight: 16, x: 1, y: 1, width: 14, height: 14 }
     }), /does not support trim metadata/)
 })
+
+
+/* ================= retained 9-slice and tiled draw authoring ================= */
+
+test("NineSlice Inspector properties preserve the other slice edges", () => {
+    const NineSliceComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.NineSliceComponent
+    const calls = []
+    const obj = {
+        width: 120,
+        height: 80,
+        leftWidth: 8,
+        rightWidth: 12,
+        topHeight: 6,
+        bottomHeight: 10,
+        setSlices: (...values) => calls.push(values)
+    }
+
+    NineSliceComponent.leftWidth.setValue(obj, 14)
+    NineSliceComponent.rightWidth.setValue(obj, 16)
+    NineSliceComponent.topHeight.setValue(obj, 9)
+    NineSliceComponent.bottomHeight.setValue(obj, 11)
+
+    assert.deepEqual(calls, [
+        [120, 80, 14, 12, 6, 10],
+        [120, 80, 8, 16, 6, 10],
+        [120, 80, 8, 12, 9, 10],
+        [120, 80, 8, 12, 6, 11]
+    ])
+})
+
+test("TileSprite Inspector stores repeat position and scale independently", () => {
+    const TileSpriteComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TileSpriteComponent
+    const tile = {
+        tilePositionX: 0,
+        tilePositionY: 0,
+        tileScaleX: 1,
+        tileScaleY: 1
+    }
+
+    TileSpriteComponent.tilePositionX.setValue(tile, 24)
+    TileSpriteComponent.tilePositionY.setValue(tile, 12)
+    TileSpriteComponent.tileScaleX.setValue(tile, 0.5)
+    TileSpriteComponent.tileScaleY.setValue(tile, 2)
+
+    assert.deepEqual(tile, {
+        tilePositionX: 24,
+        tilePositionY: 12,
+        tileScaleX: 0.5,
+        tileScaleY: 2
+    })
+})

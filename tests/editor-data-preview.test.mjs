@@ -1209,3 +1209,92 @@ test("Importer.reimportItem restores original project data when the new source c
         packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
     }
 })
+
+
+test("sprite metadata frame map safely preserves special frame names", () => {
+    const itemData = JSON.parse(JSON.stringify({
+        type: "atlas",
+        url: "images/atlas.png",
+        codogma: {
+            schemaVersion: 1,
+            assetId: "asset-with-special-frame",
+            frames: {
+                "__proto__": {
+                    id: "special-frame",
+                    sourceRect: { x: 0, y: 0, width: 8, height: 8 }
+                }
+            }
+        }
+    }))
+
+    const metadata = spriteMetadata.ensure(itemData, sourceFile(), [
+        { key: "__proto__", sourceRect: { x: 0, y: 0, width: 8, height: 8 } },
+        { key: "constructor", sourceRect: { x: 8, y: 0, width: 8, height: 8 } }
+    ])
+
+    assert.equal(Object.getPrototypeOf(metadata.frames), null)
+    assert.equal(metadata.frames["__proto__"].id, "special-frame")
+    assert.ok(metadata.frames.constructor.id)
+    const restored = JSON.parse(JSON.stringify(metadata))
+    assert.equal(restored.frames["__proto__"].id, "special-frame")
+})
+
+test("batch image import rolls back earlier entries when a later file fails", async () => {
+    const originalGetAllPacks = packCore.AssetPackUtils.getAllPacks
+    packCore.AssetPackUtils.getAllPacks = async () => []
+
+    try {
+        const imported = []
+        const pack = {
+            getItems: () => imported,
+            createPackItem(data) {
+                return {
+                    getKey: () => data.key,
+                    async preload() {
+                        if (data.url === "broken.png") {
+                            throw new Error("broken source")
+                        }
+                    },
+                    async build() {},
+                    resetCache() {}
+                }
+            },
+            addItem(item) {
+                imported.push(item)
+            },
+            deleteItem(item) {
+                const index = imported.indexOf(item)
+                if (index >= 0) imported.splice(index, 1)
+            }
+        }
+
+        const importer = new class extends packUi.importers.Importer {
+            constructor() {
+                super("image")
+            }
+
+            acceptFile() {
+                return true
+            }
+
+            createItemData(_pack, file) {
+                return { url: file.getName() }
+            }
+        }()
+
+        const file = name => ({
+            getName: () => name,
+            getNameWithoutExtension: () => name.replace(/\.[^.]+$/, "")
+        })
+
+        await assert.rejects(
+            importer.autoImport(pack, [file("first.png"), file("broken.png")]),
+            /broken source/
+        )
+
+        assert.equal(imported.length, 0,
+            "the failed current entry and all earlier batch entries must be removed")
+    } finally {
+        packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
+    }
+})
