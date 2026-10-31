@@ -22,6 +22,98 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files and dependency audit scope
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
+            for scope in root editor ai_chat mcp_bridge localization mcp_package; do
+              echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
+            done
+            echo "Manual run: full code checks and all dependency audits are enabled."
+            exit 0
+          fi
+
+          if ! changed_file_list="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
+            echo "::warning::Не удалось определить diff PR; безопасный режим — полный набор проверок и все dependency audits."
+            echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
+            for scope in root editor ai_chat mcp_bridge localization mcp_package; do
+              echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
+            done
+            exit 0
+          fi
+
+          changed_files=()
+          if [[ -n "$changed_file_list" ]]; then
+            mapfile -t changed_files <<< "$changed_file_list"
+          fi
+
+          docs_only=false
+          if ((${#changed_files[@]} > 0)); then
+            docs_only=true
+            for file in "${changed_files[@]}"; do
+              case "$file" in
+                *.md|*.mdx|*.rst) ;;
+                *) docs_only=false; break ;;
+              esac
+            done
+          fi
+
+          run_code_checks=true
+          if [[ "$docs_only" == true ]]; then
+            run_code_checks=false
+          fi
+          echo "run_code_checks=${run_code_checks}" >> "$GITHUB_OUTPUT"
+          echo "Changed files: ${#changed_files[@]}; docs-only: ${docs_only}; full code checks: ${run_code_checks}"
+
+          has_file() {
+            local wanted="$1"
+            for file in "${changed_files[@]}"; do
+              [[ "$file" == "$wanted" ]] && return 0
+            done
+            return 1
+          }
+
+          audit_all=false
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              .npmrc|*/.npmrc) audit_all=true ;;
+            esac
+          done
+
+          emit_audit_scope() {
+            local name="$1"
+            shift
+            local enabled=false
+            if [[ "$audit_all" == true ]]; then
+              enabled=true
+            else
+              for manifest in "$@"; do
+                if has_file "$manifest"; then
+                  enabled=true
+                  break
+                fi
+              done
+            fi
+            echo "audit_${name}=${enabled}" >> "$GITHUB_OUTPUT"
+          }
+
+          emit_audit_scope root package.json package-lock.json
+          emit_audit_scope editor source/editor/package.json source/editor/package-lock.json
+          emit_audit_scope ai_chat mini-services/ai-chat/package.json mini-services/ai-chat/package-lock.json
+          emit_audit_scope mcp_bridge mini-services/phaser-editor-mcp/package.json mini-services/phaser-editor-mcp/package-lock.json
+          emit_audit_scope localization packages/localization/package.json packages/localization/package-lock.json
+          emit_audit_scope mcp_package packages/editor-mcp-server/package.json packages/editor-mcp-server/package-lock.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -35,6 +127,13 @@ jobs:
             packages/editor-mcp-server/package-lock.json
             mini-services/ai-chat/package-lock.json
             mini-services/phaser-editor-mcp/package-lock.json
+
+      - name: Validate changed Markdown files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-markdown.mjs "$BASE_SHA" "$HEAD_SHA"
 
       - name: Validate pull request routing
         if: github.event_name == 'pull_request'
@@ -81,26 +180,33 @@ jobs:
           esac
 
       - name: Install locked dependencies (root)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
 
       - name: Audit root dependencies
+        if: steps.scope.outputs.audit_root == 'true'
         run: npm audit --audit-level=low
 
       - name: Install locked dependencies (editor client)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
         working-directory: source/editor
 
       - name: Audit editor dependencies
+        if: steps.scope.outputs.audit_editor == 'true'
         run: npm audit --audit-level=low
         working-directory: source/editor
 
       - name: Build editor client (typecheck)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run build
 
       - name: Unit regression tests (editor, serialization, security and icons)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:unit
 
       - name: Smoke test (server boots, editor responds)
+        if: steps.scope.outputs.run_code_checks == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -112,52 +218,66 @@ jobs:
           kill $SRV
 
       - name: Security smoke tests (local access, symlinks, MCP compatibility)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:security
 
       - name: Install locked AI Chat service dependencies
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
         working-directory: mini-services/ai-chat
 
       - name: Audit AI Chat service dependencies
+        if: steps.scope.outputs.audit_ai_chat == 'true'
         run: npm audit --audit-level=low
         working-directory: mini-services/ai-chat
 
       - name: Install locked MCP bridge service dependencies
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
         working-directory: mini-services/phaser-editor-mcp
 
       - name: Audit MCP bridge service dependencies
+        if: steps.scope.outputs.audit_mcp_bridge == 'true'
         run: npm audit --audit-level=low
         working-directory: mini-services/phaser-editor-mcp
 
       - name: Mini-services security tests (loopback, Host/Origin, limits and WebSocket)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:mini-services
 
       - name: Install locked dependencies (localization package)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
         working-directory: packages/localization
 
       - name: Audit localization dependencies
+        if: steps.scope.outputs.audit_localization == 'true'
         run: npm audit --audit-level=low
         working-directory: packages/localization
 
       - name: Build, test and quality-pilot localization package (COD-19/COD-62/COD-64)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run quality:check && npm run quality:report
         working-directory: packages/localization
 
       - name: Localization project diagnostics CLI (COD-64)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:localization:project
 
       - name: Localization runtime acceptance (server + fixture tables)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:localization:acceptance
       - name: Install locked dependencies (MCP package)
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
         working-directory: packages/editor-mcp-server
 
       - name: Audit MCP package dependencies
+        if: steps.scope.outputs.audit_mcp_package == 'true'
         run: npm audit --audit-level=low
         working-directory: packages/editor-mcp-server
 
       - name: Build and test Codogma MCP stdio package
+        if: steps.scope.outputs.run_code_checks == 'true'
         run: npm test
         working-directory: packages/editor-mcp-server
