@@ -20,6 +20,8 @@
 
 Создать отдельный companion package с предварительным именем **@codogma/game-qa-mcp**. Он отвечает за тестовые browser sessions, пользовательский ввод, runtime observation, scenario execution и evidence reports. Он не копирует Editor MCP registry и не реализует повторно Build/Preview/Phaser.
 
+Первый внешний MCP transport — **stdio**, по образцу существующего `@codogma/editor-mcp-server`; MCP-процесс не открывает TCP listener. Альтернативный сетевой MCP transport отложен до подтверждённого use case и отдельной security review.
+
 ### 2. Engine-owned Game Test Bridge
 
 Игровой runtime предоставляет versioned diagnostic contract только в Development/Test profiles. Он передаёт stable IDs, сериализуемые snapshots, typed events и allowlisted diagnostics. Внутренние Phaser objects и backend-specific handles не раскрываются. Bridge не запускает собственный network listener/порт: Preview Host выдаёт ему session-scoped канал, привязанный к конкретному build/preview/test session, origin и ограниченному по времени capability token. Transport остаётся host-owned (например, MessagePort или другой согласованный channel) и закрывается вместе с Preview session.
@@ -50,7 +52,7 @@ Game QA MCP предоставляет высокоуровневые опера
 
 ### 6. Безопасность
 
-Первоначальная реализация локальная и loopback-only для Game QA MCP, Browser Controller и локальных orchestration endpoints. Game Test Bridge не имеет собственного порта/listener и доступен только через session-scoped channel Preview Host. Для каждой сессии используется ограниченный по времени capability token и разрешённый preview origin. Изолированный browser context — default; пользовательский профиль и cookies не читаются и не экспортируются автоматически. CDP attach считается высокопривилегированным. Test Bridge отсутствует в Release bundle и подтверждается output-level tests.
+Game QA MCP использует stdio и не открывает TCP listener. Loopback-only применяется к отдельным сетевым Browser Controller/orchestration endpoints, если они понадобятся; такие endpoints bind только к `127.0.0.1`. Game Test Bridge не имеет собственного порта/listener и доступен только через session-scoped channel Preview Host. Для каждой сессии используется ограниченный по времени capability token и разрешённый preview origin. Изолированный browser context — default; пользовательский профиль и cookies не читаются и не экспортируются автоматически. CDP attach считается высокопривилегированным. Test Bridge отсутствует в Release bundle и подтверждается output-level tests.
 
 ## Почему это отдельное направление
 
