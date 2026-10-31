@@ -64,8 +64,19 @@ namespace phasereditor2d.pack.ui.editor.properties {
                 const file = typeof url === "string" ? item.getFileFromAssetUrl(url) : null;
 
                 button.disabled = !file || !file.isFile();
+
+                const metadata = item && item.getData()[core.SpriteAssetMetadata.DATA_KEY];
+                const conflicts = metadata && Array.isArray(metadata.conflicts)
+                    ? metadata.conflicts : [];
+                const orphaned = metadata && Array.isArray(metadata.orphanedFrames)
+                    ? metadata.orphanedFrames : [];
+                const conflictSummary = conflicts.length > 0
+                    ? ` Reimport conflicts: ${conflicts.map((conflict: any) =>
+                        `${conflict.frameKey}: ${conflict.message}`).join(" ")} Archived frame settings: ${orphaned.length}.`
+                    : "";
+
                 status.textContent = file
-                    ? `Source: ${file.getName()} · ${file.getSize()} bytes`
+                    ? `Source: ${file.getName()} · ${file.getSize()} bytes.${conflictSummary}`
                     : "Source file is not available in this project.";
             });
         }

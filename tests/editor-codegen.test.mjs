@@ -464,3 +464,63 @@ test("Arcade Body does not approximate polygon or compound asset collision geome
         assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), false)
     }
 })
+
+
+test("TextureComponent applies asset crop and trim to Phaser frame and object", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const calls = { texture: null, origin: null, crop: null, trim: null, updated: false }
+    const frame = {
+        setTrim: (...args) => { calls.trim = args }
+    }
+    const obj = {
+        originX: 0.2,
+        originY: 0.8,
+        frame,
+        setTexture: (key, frameKey) => { calls.texture = [key, frameKey] },
+        setOrigin: (x, y) => { calls.origin = [x, y] },
+        setCrop: (...args) => { calls.crop = args },
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            onUpdateAfterSetTexture: () => { calls.updated = true }
+        })
+    }
+    const component = Object.create(TextureComponent.prototype)
+    component._textureKeys = {}
+    component.getObject = () => obj
+
+    component.setTextureKeys({
+        key: "hero",
+        frame: 2,
+        crop: { x: 1, y: 2, width: 12, height: 10 },
+        trim: { actualWidth: 16, actualHeight: 16, x: 2, y: 3, width: 10, height: 9 }
+    })
+
+    assert.deepEqual(calls.texture, ["hero", 2])
+    assert.deepEqual(calls.origin, [0.2, 0.8])
+    assert.deepEqual(calls.crop, [1, 2, 12, 10])
+    assert.deepEqual(calls.trim, [16, 16, 2, 3, 10, 9])
+    assert.equal(calls.updated, true)
+})
+
+test("TextureComponent rejects trim metadata when the Phaser Frame cannot apply it", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const obj = {
+        originX: 0.5,
+        originY: 0.5,
+        frame: {},
+        setTexture() {},
+        setOrigin() {},
+        getEditorSupport: () => ({
+            hasComponent: () => false,
+            onUpdateAfterSetTexture() {}
+        })
+    }
+    const component = Object.create(TextureComponent.prototype)
+    component._textureKeys = {}
+    component.getObject = () => obj
+
+    assert.throws(() => component.setTextureKeys({
+        key: "hero",
+        trim: { actualWidth: 16, actualHeight: 16, x: 1, y: 1, width: 14, height: 14 }
+    }), /does not support trim metadata/)
+})

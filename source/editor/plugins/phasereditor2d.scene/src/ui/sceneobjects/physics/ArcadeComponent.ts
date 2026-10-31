@@ -290,7 +290,8 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const shape = shapes[0];
             const body = ArcadeComponent.getBody(obj);
 
-            if (!body) {
+            if (!body || !shape || typeof shape !== "object"
+                || pack.core.SpriteAssetMetadata.validateCollisionShapes(shapes) !== null) {
                 return false;
             }
 
