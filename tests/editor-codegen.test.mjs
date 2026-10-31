@@ -469,14 +469,26 @@ test("Arcade Body does not approximate polygon or compound asset collision geome
 test("TextureComponent applies asset crop and trim to Phaser frame and object", () => {
     const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
     const calls = { texture: null, origin: null, crop: null, trim: null, updated: false }
-    const frame = {
-        setTrim: (...args) => { calls.trim = args }
+    const originalFrame = {
+        setTrim: () => { throw new Error("shared Texture Manager frame must not be mutated") },
+        clone() {
+            return {
+                setTrim: (...args) => { calls.trim = args }
+            }
+        }
     }
     const obj = {
         originX: 0.2,
         originY: 0.8,
-        frame,
-        setTexture: (key, frameKey) => { calls.texture = [key, frameKey] },
+        frame: originalFrame,
+        setTexture: (key, frameKey) => {
+            calls.texture = [key, frameKey]
+            obj.frame = originalFrame
+        },
+        setFrame: (frame, updateSize, updateOrigin) => {
+            calls.setFrame = [frame, updateSize, updateOrigin]
+            obj.frame = frame
+        },
         setOrigin: (x, y) => { calls.origin = [x, y] },
         setCrop: (...args) => { calls.crop = args },
         getEditorSupport: () => ({
@@ -499,6 +511,9 @@ test("TextureComponent applies asset crop and trim to Phaser frame and object", 
     assert.deepEqual(calls.origin, [0.2, 0.8])
     assert.deepEqual(calls.crop, [1, 2, 12, 10])
     assert.deepEqual(calls.trim, [16, 16, 2, 3, 10, 9])
+    assert.equal(calls.setFrame[1], true)
+    assert.equal(calls.setFrame[2], false)
+    assert.notEqual(calls.setFrame[0], originalFrame)
     assert.equal(calls.updated, true)
 })
 
@@ -522,7 +537,7 @@ test("TextureComponent rejects trim metadata when the Phaser Frame cannot apply 
     assert.throws(() => component.setTextureKeys({
         key: "hero",
         trim: { actualWidth: 16, actualHeight: 16, x: 1, y: 1, width: 14, height: 14 }
-    }), /does not support trim metadata/)
+    }), /cannot apply isolated trim metadata/)
 })
 
 

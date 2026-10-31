@@ -84,7 +84,7 @@ Single-file и batch import используют существующие Import
 
 При создании Scene object из Asset Pack frame:
 - pivot копируется в объектный `OriginComponent`, поэтому он сохраняется в scene model и участвует в code generation;
-- trim передаётся через `TextureComponent` в Phaser `Frame.setTrim()`;
+- trim передаётся через `TextureComponent` в клон Phaser `Frame` для конкретного GameObject через `Frame.setTrim()` и `setFrame()`; общий Texture Manager frame не мутируется;
 - crop передаётся в `TextureComponent` и Phaser `GameObject.setCrop()`;
 - collision shapes копируются в scene texture reference. При включении Arcade Body одна rectangle или circle автоматически задаёт Body size/offset.
 

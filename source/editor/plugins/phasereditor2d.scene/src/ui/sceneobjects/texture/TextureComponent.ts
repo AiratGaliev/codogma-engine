@@ -83,6 +83,12 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             if (keys.trim) {
 
+                const cloneFrame = new core.code.MethodCallCodeDOM("setFrame", args.objectVarName);
+                cloneFrame.arg(`${args.objectVarName}.frame.clone()`);
+                cloneFrame.argBool(true);
+                cloneFrame.argBool(false);
+                args.statements.push(cloneFrame);
+
                 const trimCall = new core.code.MethodCallCodeDOM("setTrim", `${args.objectVarName}.frame`);
                 trimCall.argFloat(keys.trim.actualWidth);
                 trimCall.argFloat(keys.trim.actualHeight);
@@ -135,13 +141,19 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             }
 
             if (keys.trim) {
+
                 const frame = obj.frame;
 
-                if (!frame || typeof frame.setTrim !== "function") {
-                    throw new Error("The current Phaser frame does not support trim metadata.");
+                if (!frame || typeof frame.clone !== "function"
+                    || typeof frame.setTrim !== "function" || typeof (obj as any).setFrame !== "function") {
+                    throw new Error("The current Phaser GameObject cannot apply isolated trim metadata.");
                 }
 
-                frame.setTrim(
+                // Texture Manager frames are shared by every GameObject using the same key/frame.
+                // Apply trim to a per-object clone to avoid changing unrelated sprites.
+                const trimmedFrame = frame.clone();
+
+                trimmedFrame.setTrim(
                     keys.trim.actualWidth,
                     keys.trim.actualHeight,
                     keys.trim.x,
@@ -149,6 +161,8 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                     keys.trim.width,
                     keys.trim.height
                 );
+
+                (obj as any).setFrame(trimmedFrame, true, false);
             }
 
             if (keys.crop) {
