@@ -177,6 +177,7 @@ namespace phasereditor2d.pack.core {
         resetCache() {
 
             this._frames = null;
+            this._thumbnail = null;
         }
 
         protected abstract createParser(): parsers.ImageFrameParser;

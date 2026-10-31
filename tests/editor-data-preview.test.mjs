@@ -884,7 +884,7 @@ class TestImageFrameItem extends packCore.ImageFrameContainerAssetPackItem {
     }
 
     resetCache() {
-        this._frames = null
+        super.resetCache()
     }
 
     async preload() {
@@ -1297,4 +1297,20 @@ test("batch image import rolls back earlier entries when a later file fails", as
     } finally {
         packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
     }
+})
+
+
+test("ImageFrameContainerAssetPackItem.resetCache clears stale frame thumbnails", () => {
+    const item = new TestImageFrameItem({
+        type: "spritesheet",
+        key: "hero",
+        url: "images/hero.png",
+        frameConfig: { frameWidth: 16, frameHeight: 16 }
+    }, createSourceFile(32, 32))
+
+    item._thumbnail = { id: "old-source-thumbnail" }
+    item.resetCache()
+
+    assert.equal(item.getThumbnail(), null)
+    assert.equal(item._frames, null)
 })
