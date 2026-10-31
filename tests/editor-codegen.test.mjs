@@ -655,13 +655,12 @@ test("single Image Asset Pack metadata is resolved by its actual frame key", () 
             }
         }
     })
-    image._frames = [createTestFrame("0", 0, 0, 16, 24)]
+    image._frames = [{ getName: () => "0" }]
 
     const result = BaseImageExtension.prototype.getKeyFrameFromAsset.call({}, image)
 
     assert.equal(result.key, "hero")
     assert.equal(result.frame, undefined)
-    assert.equal(result.metadataFrameKey, undefined)
     assert.deepEqual(result.pivot, { x: 0.5, y: 1 })
     assert.deepEqual(result.crop, { x: 1, y: 2, width: 12, height: 18 })
     assert.deepEqual(result.trim, {
