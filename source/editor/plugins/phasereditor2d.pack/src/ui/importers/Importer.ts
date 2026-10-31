@@ -1,3 +1,5 @@
+/// <reference path="../../core/SpriteAssetMetadata.ts" />
+
 namespace phasereditor2d.pack.ui.importers {
 
     import io = colibri.core.io;
@@ -33,20 +35,30 @@ namespace phasereditor2d.pack.ui.importers {
 
         async autoImport(pack: core.AssetPack, files: io.FilePath[]) {
 
-            if (this.isMultipleFiles()) {
+            if (!files || files.length === 0) {
+                return [];
+            }
 
-                return [await this.importMultipleFiles(pack, files)];
+            const imported: core.AssetPackItem[] = [];
 
-            } else {
-
-                const items: core.AssetPackItem[] = [];
-
-                for (const file of files) {
-
-                    items.push(await this.importFile(pack, file))
+            try {
+                if (this.isMultipleFiles()) {
+                    imported.push(await this.importMultipleFiles(pack, files));
+                } else {
+                    for (const file of files) {
+                        imported.push(await this.importFile(pack, file));
+                    }
                 }
 
-                return items;
+                return imported;
+            } catch (error) {
+                // Batch import атомарен относительно Asset Pack: частичный результат не остаётся в проекте.
+                for (const item of imported) {
+                    pack.deleteItem(item);
+                    item.resetCache();
+                }
+
+                throw error;
             }
         }
 
@@ -72,19 +84,119 @@ namespace phasereditor2d.pack.ui.importers {
 
             pack.addItem(item);
 
-            await item.preload();
+            try {
+                await item.preload();
 
-            const finder = new core.PackFinder();
-            await finder.preload();
-            
-            await item.build(finder);
+                const finder = new core.PackFinder();
+                await finder.preload();
 
-            return item;
+                await item.build(finder);
+                this.initializeSpriteMetadata(item);
+
+                return item;
+            } catch (error) {
+                pack.deleteItem(item);
+                item.resetCache();
+                throw error;
+            }
         }
 
         protected computeItemFromKey(file: io.FilePath) {
 
             return file.getNameWithoutExtension();
+        }
+
+        private initializeSpriteMetadata(item: core.AssetPackItem) {
+
+            if (!(item instanceof core.ImageFrameContainerAssetPackItem)) {
+                return;
+            }
+
+            const data = item.getData();
+            const url = data.url;
+            const file = typeof url === "string" ? item.getFileFromAssetUrl(url) : null;
+
+            if (!file) {
+                return;
+            }
+
+            data[core.SpriteAssetMetadata.DATA_KEY] = core.SpriteAssetMetadata.ensure(
+                data,
+                file,
+                core.SpriteAssetMetadata.describeFrames(item.getFrames())
+            );
+        }
+
+        /**
+         * Повторно читает текущий source file и обновляет производные данные.
+         * Ключ, import settings и существующая пользовательская metadata сохраняются.
+         */
+        async reimportItem(pack: core.AssetPack, item: core.AssetPackItem): Promise<void> {
+
+            if (item.getType() !== this.getType()) {
+                throw new Error("Importer type does not match the selected Asset Pack item.");
+            }
+
+            const previousData = JSON.parse(JSON.stringify(item.getData()));
+            const sourceUrl = previousData.url;
+
+            if (typeof sourceUrl !== "string" || !sourceUrl) {
+                throw new Error("Reimport requires a single project-relative source URL.");
+            }
+
+            const sourceFile = item.getFileFromAssetUrl(sourceUrl);
+
+            if (!sourceFile || !sourceFile.isFile()) {
+                throw new Error("The original source file is missing from the current project.");
+            }
+
+            const importedData = this.createItemData(pack, sourceFile);
+            const nextData = Object.assign({}, importedData, previousData, {
+                type: previousData.type,
+                key: previousData.key,
+                url: importedData.url
+            });
+
+            try {
+                item.setData(nextData);
+                item.resetCache();
+
+                await item.preload();
+
+                const finder = new core.PackFinder(pack);
+                await finder.preload();
+                await item.build(finder);
+
+                if (item instanceof core.ImageFrameContainerAssetPackItem) {
+                    const frameDescriptors = core.SpriteAssetMetadata.describeFrames(item.getFrames());
+
+                    if (frameDescriptors.length === 0) {
+                        throw new Error("The source image could not produce any valid frames; the previous asset data was restored.");
+                    }
+
+                    nextData[core.SpriteAssetMetadata.DATA_KEY] = core.SpriteAssetMetadata.reconcile(
+                        previousData,
+                        nextData,
+                        frameDescriptors,
+                        sourceFile
+                    );
+                }
+
+                item.setData(nextData);
+                item.resetCache();
+                await item.preload();
+            } catch (error) {
+                item.setData(previousData);
+                item.resetCache();
+
+                try {
+                    await item.preload();
+                } catch {
+                    // Сохраняем исходную ошибку reimport; восстановление кэша не должно её скрывать.
+                }
+
+                throw error;
+            }
         }
 
         async importMultipleFiles(pack: core.AssetPack, files: io.FilePath[]): Promise<core.AssetPackItem> {
@@ -102,15 +214,21 @@ namespace phasereditor2d.pack.ui.importers {
 
             pack.addItem(item);
 
-            await item.preload();
+            try {
+                await item.preload();
 
-            const finder = new core.PackFinder();
-            
-            await finder.preload();
+                const finder = new core.PackFinder();
+                await finder.preload();
 
-            await item.build(finder);
+                await item.build(finder);
+                this.initializeSpriteMetadata(item);
 
-            return item;
+                return item;
+            } catch (error) {
+                pack.deleteItem(item);
+                item.resetCache();
+                throw error;
+            }
         }
     }
 

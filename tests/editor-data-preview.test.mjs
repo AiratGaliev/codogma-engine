@@ -607,3 +607,192 @@ test("AudioPreviewSection resolves string, array, and { type, url } descriptor U
         packCore.AssetPackUtils.getFileFromPackUrl = originalLookup
     }
 })
+
+
+/* =================== sprite asset metadata / reimport =================== */
+
+const spriteMetadata = packCore.SpriteAssetMetadata
+
+function sourceFile(size = 1024, modTime = 1000) {
+    return {
+        getSize: () => size,
+        getModTime: () => modTime,
+        isFile: () => true
+    }
+}
+
+function spriteFrameDescriptors(entries = [
+    { key: "0", sourceRect: { x: 0, y: 0, width: 16, height: 16 } },
+    { key: "1", sourceRect: { x: 16, y: 0, width: 16, height: 16 } }
+]) {
+    return entries
+}
+
+test("sprite metadata is versioned, serializable and keeps stable asset/frame IDs", () => {
+    const itemData = {
+        type: "spritesheet",
+        url: "images/hero.png",
+        frameConfig: { frameWidth: 16, frameHeight: 16 }
+    }
+    const first = spriteMetadata.ensure(itemData, sourceFile(), spriteFrameDescriptors())
+
+    assert.equal(first.schemaVersion, 1)
+    assert.match(first.assetId, /^[0-9a-f-]{36}$/)
+    assert.match(first.frames["0"].id, /^[0-9a-f-]{36}$/)
+    assert.match(first.frames["1"].id, /^[0-9a-f-]{36}$/)
+    assert.equal(first.source.url, itemData.url)
+    assert.equal(first.source.size, 1024)
+    assert.equal(typeof first.source.signature, "string")
+
+    itemData.codogma = first
+    const restored = spriteMetadata.ensure(
+        JSON.parse(JSON.stringify(itemData)),
+        sourceFile(),
+        spriteFrameDescriptors()
+    )
+
+    assert.equal(restored.assetId, first.assetId)
+    assert.equal(restored.frames["0"].id, first.frames["0"].id)
+    assert.equal(restored.frames["1"].id, first.frames["1"].id)
+})
+
+test("sprite metadata migrates unversioned metadata without dropping unknown fields", () => {
+    const legacyData = {
+        type: "image",
+        url: "images/props.png",
+        codogma: {
+            assetId: "legacy-asset-id",
+            customExtensionData: { keep: true }
+        }
+    }
+
+    const migrated = spriteMetadata.ensure(legacyData, sourceFile(), [
+        { key: "props", sourceRect: { x: 0, y: 0, width: 32, height: 24 } }
+    ])
+
+    assert.equal(migrated.schemaVersion, 1)
+    assert.equal(migrated.assetId, "legacy-asset-id")
+    assert.deepEqual(migrated.customExtensionData, { keep: true })
+    assert.ok(migrated.frames.props.id)
+})
+
+test("sprite metadata refuses a future schema instead of overwriting it", () => {
+    assert.throws(
+        () => spriteMetadata.ensure(
+            { codogma: { schemaVersion: 999 } },
+            sourceFile(),
+            spriteFrameDescriptors()
+        ),
+        /новее поддерживаемой/
+    )
+})
+
+test("reimport preserves user settings when frame geometry is unchanged", () => {
+    const previousData = {
+        type: "spritesheet",
+        url: "images/hero.png",
+        frameConfig: { frameWidth: 16, frameHeight: 16 }
+    }
+    const metadata = spriteMetadata.ensure(previousData, sourceFile(), spriteFrameDescriptors())
+    metadata.frames["0"].pivot = { x: 0.25, y: 0.8 }
+    metadata.frames["0"].trim = { x: 1, y: 2, width: 12, height: 10 }
+    metadata.frames["0"].collisionShapes = [
+        { type: "rectangle", x: 1, y: 2, width: 12, height: 10 }
+    ]
+    previousData.codogma = metadata
+
+    const updated = spriteMetadata.reconcile(
+        previousData,
+        { ...previousData, url: "images/hero.png" },
+        spriteFrameDescriptors(),
+        sourceFile(2048, 2000)
+    )
+
+    assert.equal(updated.assetId, metadata.assetId)
+    assert.equal(updated.frames["0"].id, metadata.frames["0"].id)
+    assert.deepEqual(updated.frames["0"].pivot, { x: 0.25, y: 0.8 })
+    assert.deepEqual(updated.frames["0"].trim, { x: 1, y: 2, width: 12, height: 10 })
+    assert.deepEqual(updated.frames["0"].collisionShapes, metadata.frames["0"].collisionShapes)
+    assert.equal(updated.conflicts.length, 0)
+    assert.notEqual(updated.source.signature, metadata.source.signature)
+})
+
+test("reimport archives customized frames and reports source-rectangle conflicts", () => {
+    const previousData = {
+        type: "spritesheet",
+        url: "images/hero.png",
+        frameConfig: { frameWidth: 16, frameHeight: 16 }
+    }
+    const metadata = spriteMetadata.ensure(previousData, sourceFile(), spriteFrameDescriptors())
+    const previousFrameId = metadata.frames["0"].id
+    metadata.frames["0"].pivot = { x: 0.2, y: 0.7 }
+    metadata.frames["0"].collisionShapes = [
+        { type: "circle", x: 8, y: 8, radius: 5 }
+    ]
+    previousData.codogma = metadata
+
+    const updated = spriteMetadata.reconcile(
+        previousData,
+        previousData,
+        [
+            { key: "0", sourceRect: { x: 0, y: 0, width: 32, height: 16 } },
+            { key: "1", sourceRect: { x: 32, y: 0, width: 32, height: 16 } }
+        ],
+        sourceFile(2048, 2000)
+    )
+
+    assert.notEqual(updated.frames["0"].id, previousFrameId)
+    assert.equal(updated.orphanedFrames.length, 1)
+    assert.equal(updated.orphanedFrames[0].id, previousFrameId)
+    assert.equal(updated.conflicts.length, 1)
+    assert.equal(updated.conflicts[0].type, "frame-geometry-changed")
+    assert.deepEqual(updated.frames["0"].sourceRect, { x: 0, y: 0, width: 32, height: 16 })
+})
+
+test("reimport retains custom metadata for frames removed from a spritesheet", () => {
+    const previousData = {
+        type: "spritesheet",
+        url: "images/hero.png",
+        frameConfig: { frameWidth: 16, frameHeight: 16 }
+    }
+    const metadata = spriteMetadata.ensure(previousData, sourceFile(), spriteFrameDescriptors())
+    metadata.frames["1"].trim = { x: 0, y: 0, width: 10, height: 10 }
+    previousData.codogma = metadata
+
+    const updated = spriteMetadata.reconcile(
+        previousData,
+        previousData,
+        [spriteFrameDescriptors()[0]],
+        sourceFile(512, 3000)
+    )
+
+    assert.equal(updated.frames["1"], undefined)
+    assert.equal(updated.orphanedFrames.length, 1)
+    assert.equal(updated.conflicts[0].type, "frame-removed")
+})
+
+test("collision geometry validation rejects malformed and degenerate shapes", () => {
+    assert.equal(spriteMetadata.validateCollisionShapes([]), null)
+    assert.equal(spriteMetadata.validateCollisionShapes([
+        { type: "rectangle", x: 0, y: 0, width: 10, height: 8 },
+        { type: "circle", x: 8, y: 8, radius: 4 },
+        { type: "polygon", points: [[0, 0], [8, 0], [4, 8]] }
+    ]), null)
+
+    assert.match(
+        spriteMetadata.validateCollisionShapes([{ type: "rectangle", x: -1, y: 0, width: 10, height: 8 }]),
+        /x\/y >= 0/
+    )
+    assert.match(
+        spriteMetadata.validateCollisionShapes([{ type: "circle", x: 0, y: 0, radius: 0 }]),
+        /radius > 0/
+    )
+    assert.match(
+        spriteMetadata.validateCollisionShapes([{ type: "polygon", points: [[0, 0], [1, 1]] }]),
+        /минимум три точки/
+    )
+    assert.match(
+        spriteMetadata.validateCollisionShapes([{ type: "unknown" }]),
+        /неподдерживаемый тип/
+    )
+})

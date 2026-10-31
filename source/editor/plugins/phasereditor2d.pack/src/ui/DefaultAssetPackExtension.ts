@@ -1,3 +1,6 @@
+/// <reference path="./editor/properties/AssetReimportSection.ts" />
+/// <reference path="./editor/properties/SpriteFrameMetadataSection.ts" />
+
 namespace phasereditor2d.pack.ui {
 
     import controls = colibri.ui.controls;
@@ -200,6 +203,8 @@ namespace phasereditor2d.pack.ui {
 
                 new editor.properties.ImageSection(page),
 
+                new editor.properties.AssetReimportSection(page),
+
                 new editor.properties.ImageCompressedTexturesSection(page),
 
                 new editor.properties.SVGSection(page),
@@ -215,6 +220,8 @@ namespace phasereditor2d.pack.ui {
                 new editor.properties.SpritesheetURLSection(page),
 
                 new editor.properties.SpritesheetFrameSection(page),
+
+                new editor.properties.SpriteFrameMetadataSection(page),
 
                 new ui.properties.SpritesheetPreviewSection(page),
 

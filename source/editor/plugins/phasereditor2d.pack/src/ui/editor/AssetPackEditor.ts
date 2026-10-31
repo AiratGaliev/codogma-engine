@@ -425,6 +425,32 @@ namespace phasereditor2d.pack.ui.editor {
             this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
         }
 
+        async reimportItem_async(item: core.AssetPackItem) {
+
+            if (!item || !this._pack.getItems().includes(item)) {
+                throw new Error("The selected Asset Pack item is no longer available.");
+            }
+
+            const importer = importers.Importers.getImporter(item.getType());
+
+            if (!importer || !(item instanceof core.ImageFrameContainerAssetPackItem)) {
+                throw new Error("No compatible image importer is available for this asset.");
+            }
+
+            const before = undo.AssetPackEditorOperation.takeSnapshot(this);
+
+            await importer.reimportItem(this._pack, item);
+
+            const after = undo.AssetPackEditorOperation.takeSnapshot(this);
+            this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
+
+            this._viewer.repaint();
+            await this.refreshBlocks();
+            this._viewer.setSelection([item]);
+            this._viewer.reveal(item);
+            this.setDirty(true);
+        }
+
         async refreshBlocks() {
 
             if (!this._pack) {
