@@ -475,6 +475,12 @@ Codogma предоставляет единый публичный Physics API �
 - Ввести явные sorting layers, sorting order/groups и документированный алгоритм depth sorting для 2D-сцен. Для top-down игр должна быть настройка Y-based sorting; равные значения сортируются стабильно, не зависят от случайного порядка создания объектов.
 - Inspector показывает pivot, размеры, texture/sprite source, render layer/order и применённую оптимизацию. Runtime test подтверждает, что sorting, trimming и pivot сохраняются после save/reopen/build.
 
+**Границы ответственности и metadata contract**
+- Asset/frame metadata, slicing, trim/crop/pivot, collision authoring и conflict-aware reimport принадлежат Sprite/Asset Pack workflow (COD-39).
+- Sorting layers/groups, стабильный depth ordering и Y-based sorting принадлежат общему 2D render-order contract (COD-41). Sprite Editor использует этот контракт, но не создаёт параллельную модель sorting.
+- 9-slicing и tiled draw mode остаются authoring-возможностями Scene Editor для соответствующих Phaser GameObjects; они не дублируются как независимый механизм texture metadata.
+- Versioned schema, coordinate spaces, migration и фактические ограничения runtime adapters описаны в [Sprite asset metadata contract](sprite-asset-metadata.md). Наличие сохранённой polygon/compound geometry не означает её автоматическую поддержку каждым physics backend.
+
 **2D-рендеринг и визуальная диагностика**
 - Обеспечить корректный и измеряемый workflow спрайтов, текстурных атласов, текстовых объектов, масок, Graphics/custom geometry, фильтров и 2D-эффектов, если их поддерживает текущий runtime.
 - Сначала использовать возможности Phaser и его renderer; собственный рендерер или низкоуровневую замену вводить только при подтверждённом архитектурном/производительном пробеле.

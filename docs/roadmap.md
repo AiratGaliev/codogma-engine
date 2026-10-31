@@ -382,7 +382,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Проверить поведение панелей при изменении размера окна/панелей, сохранение/восстановление рабочих раскладок и доступность ключевых команд через keyboard shortcuts; переиспользовать существующие механизмы, а новые добавлять только при доказанном gap.
 - [ ] Для каждой выбранной подсистемы фиксировать необходимые gaps, tests и acceptance вместе с реализацией, а не выполнять полную инвентаризацию всех файлов до первого исправления.
 - [ ] Усилить основной Scene Editor workflow: hierarchy, Transform, selection, multi-edit, Undo/Redo, безопасное сохранение.
-- [ ] Проверить Sprite Editor workflow: single/multiple import, sprite sheet slicing, trim/crop, pivot, generated/editable collision geometry, sorting layers/groups, 9-slicing и tiled draw mode.
+- [x] Реализовать engineering scope Sprite Editor и asset authoring (COD-39): single/multiple import, slicing, versioned frame metadata, Inspector для trim/crop/pivot/collision geometry, сериализацию, безопасный reimport и regression tests. Реализация и ограничения описаны в [Sprite asset metadata contract](sprite-asset-metadata.md). Sorting layers/groups вынесены в COD-41; существующие 9-slice и tiled draw остаются Scene Editor tools.
+- [ ] Провести независимую browser/editor/generated-runtime приёмку Sprite Editor и asset authoring (CODQA-10); не считать завершение инженерной реализации evidence фактического поведения в браузере.
 - [ ] Проверить atlas preview/analyzer: rendered vs culled sprite counts, atlas page count and utilization, duplicate/unused atlas assignments and target variants where instrumentation allows.
 - [ ] Зафиксировать правила camera/world/local/screen/UI coordinate conversion, Y-based sorting для top-down сцен, camera bounds/follow и render order между world и UI.
 - [ ] Согласовать component metadata, Inspector, custom TypeScript и runtime model.
