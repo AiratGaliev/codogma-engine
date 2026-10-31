@@ -23,6 +23,10 @@ Development priorities:
 
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
+## AI-assisted development
+
+Start every coding session with [AGENTS.md](AGENTS.md), including a new chat with no previous conversation context. It explains the project bootstrap, architecture guardrails and which installed skill to load for each kind of task. The curated, version-controlled skill snapshots live under `.agents/skills/`; their upstreams, scope, limitations and update process are recorded in [docs/agent-skills.md](docs/agent-skills.md). The source/hash manifest is [skills-lock.json](skills-lock.json). Read only the skills relevant to the current task, then verify their recommendations against the technical specification, pinned dependencies and actual code.
+
 Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL loss/recovery, iframe host contracts, resource/memory budgets, storage failures and mobile/embedded-host acceptance are explicit requirements. See [the architecture risk register](docs/architecture-risk-register.md).
 
 ## Current capabilities
@@ -234,6 +238,8 @@ The <code>/archive/</code> endpoint is a development hand-off mechanism for retr
 **Access boundary:** snapshots may contain the complete source tree, development fixtures and documentation, so treat this as a trusted development endpoint, not a public artifact distribution service. The server binds to loopback and the route goes through the same Host/Origin guard as other HTTP routes. If access is provided through a reverse proxy, allow only the required trusted hosts and browser origins; do not expose this endpoint to an untrusted network or use wildcard proxy allow-lists in shared/public environments. Do not commit generated snapshots to the repository.
 
 ## MCP and AI tooling
+
+Repository-wide instructions for coding agents are in [AGENTS.md](AGENTS.md). The curated third-party skills used during engine development, their upstream sources, limitations and update procedure are documented in [docs/agent-skills.md](docs/agent-skills.md). The source/hash manifest is [skills-lock.json](skills-lock.json); the selected skill snapshots live under `.agents/skills/` and are committed with the project.
 
 Codogma now owns a private TypeScript MCP stdio package at
 <code>packages/editor-mcp-server/</code>. Its npm package name is

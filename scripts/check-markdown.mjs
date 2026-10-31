@@ -8,7 +8,12 @@ if (!baseSha || !headSha) {
   process.exit(2);
 }
 
-const run = (args) => execFileSync("git", args, { encoding: "utf8" });
+// Skill snapshots и другие крупные Markdown-наборы могут давать diff больше стандартного лимита Node.js в 1 MiB.
+const GIT_OUTPUT_MAX_BUFFER = 64 * 1024 * 1024;
+const run = (args) => execFileSync("git", args, {
+  encoding: "utf8",
+  maxBuffer: GIT_OUTPUT_MAX_BUFFER,
+});
 const changedFiles = run(["diff", "--name-only", `${baseSha}...${headSha}`])
   .split(/\r?\n/)
   .filter((file) => /\.(?:md|mdx|rst)$/i.test(file));

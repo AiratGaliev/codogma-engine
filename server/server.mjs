@@ -11,6 +11,7 @@
  *   GET  /editor/               generated index.html (plugin scripts/styles)
  *   GET  /editor/product.json   product metadata
  *   GET  /editor/app/plugins/<id>/<path>   plugin static resources
+ *   GET  /editor/app/editor-icons/<theme>/godot/<name>.svg shared Godot SVG resources
  *   GET  /editor/project/<path> project files (with ?m= cache busting)
  *   GET  /editor/external/*     project files for the "Play" mode
  *
@@ -51,6 +52,7 @@ const MAX_API_BODY_BYTES = 32 * 1024 * 1024
 const MAX_UPLOAD_BODY_BYTES = 128 * 1024 * 1024
 const EDITOR_DIR = path.resolve(process.env.EDITOR_DIR || path.join(ROOT, "source", "editor"))
 const PLUGINS_DIR = path.join(EDITOR_DIR, "plugins")
+const EDITOR_ICONS_DIR = path.resolve(ROOT, "src", "editor", "icons")
 const DEV_MODE = process.env.DEV_MODE === "1"
 
 const MIME = {
@@ -954,6 +956,22 @@ const server = http.createServer(async (req, res) => {
         }
 
         // plugin resources
+        if (rest.startsWith("app/editor-icons/")) {
+            const rel = rest.slice("app/editor-icons/".length).split("?")[0]
+            if (!/^(dark|light)\/godot\/[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/.test(rel)) {
+                res.writeHead(404, { "Content-Type": "text/plain" })
+                res.end("Not Found")
+                return
+            }
+            const full = safeJoin(EDITOR_ICONS_DIR, rel)
+            if (!full) {
+                res.writeHead(403)
+                res.end("Forbidden")
+                return
+            }
+            return serveFile(req, res, full, "no-cache", EDITOR_ICONS_DIR)
+        }
+
         if (rest.startsWith("app/plugins/")) {
             const rel = rest.slice("app/plugins/".length)
             const full = safeJoin(PLUGINS_DIR, rel)
