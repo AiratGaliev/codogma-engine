@@ -379,3 +379,88 @@ test("Particle Emitter codegen omits removed frames and uses an explicit texture
     assert.doesNotMatch(clearedArgs[3], /\bframe\b/,
         "clearing the frame selection must remove the stale frame config from generated code")
 })
+
+
+/* ================= asset-authored Arcade geometry ================= */
+
+test("Arcade Body applies a single rectangle from sprite asset metadata", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    let size
+    let offset
+
+    const body = {
+        setSize: (width, height, center) => { size = { width, height, center } },
+        setOffset: (x, y) => { offset = { x, y } }
+    }
+    const obj = {
+        body,
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            getComponent: () => ({
+                getTextureKeys: () => ({
+                    collisionShapes: [{ type: "rectangle", x: 3, y: 4, width: 12, height: 10 }]
+                })
+            })
+        })
+    }
+
+    assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), true)
+    assert.equal(body.__isCircle, false)
+    assert.deepEqual(size, { width: 12, height: 10, center: false })
+    assert.deepEqual(offset, { x: 3, y: 4 })
+})
+
+test("Arcade Body applies a single circle from sprite asset metadata", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    let radius
+    let offset
+
+    const body = {
+        setCircle: value => { radius = value },
+        setOffset: (x, y) => { offset = { x, y } }
+    }
+    const obj = {
+        body,
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            getComponent: () => ({
+                getTextureKeys: () => ({
+                    collisionShapes: [{ type: "circle", x: 12, y: 10, radius: 5 }]
+                })
+            })
+        })
+    }
+
+    assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), true)
+    assert.equal(body.__isCircle, true)
+    assert.equal(body.__radius, 5)
+    assert.equal(radius, 5)
+    assert.deepEqual(offset, { x: 7, y: 5 })
+})
+
+test("Arcade Body does not approximate polygon or compound asset collision geometry", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    const body = {
+        setSize: () => { throw new Error("polygon must not be converted to a rectangle") },
+        setCircle: () => { throw new Error("polygon must not be converted to a circle") },
+        setOffset: () => { throw new Error("unsupported geometry must not mutate the body") }
+    }
+
+    for (const collisionShapes of [
+        [{ type: "polygon", points: [[0, 0], [16, 0], [8, 16]] }],
+        [
+            { type: "rectangle", x: 0, y: 0, width: 8, height: 8 },
+            { type: "circle", x: 8, y: 8, radius: 4 }
+        ]
+    ]) {
+        const obj = {
+            body,
+            getEditorSupport: () => ({
+                hasComponent: () => true,
+                getComponent: () => ({ getTextureKeys: () => ({ collisionShapes }) })
+            })
+        }
+
+        assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), false)
+    }
+})

@@ -139,6 +139,17 @@ namespace phasereditor2d.pack.ui.editor.properties {
                         .map((conflict: any) => `${conflict.frameKey}: ${conflict.message}`)
                         .join(" ")} Previous custom frame data remains in orphaned metadata (${orphaned.length} frame(s)).`
                     : "Trim/crop and collision coordinates use frame-local pixels. Pivot uses normalized coordinates. Circle x/y represent its center.";
+
+                if (frame.collisionShapes && frame.collisionShapes.length > 0) {
+                    const arcadeCompatible = frame.collisionShapes.length === 1
+                        && (frame.collisionShapes[0].type === "rectangle"
+                            || frame.collisionShapes[0].type === "rect"
+                            || frame.collisionShapes[0].type === "circle");
+
+                    this._status.textContent += arcadeCompatible
+                        ? " One rectangle/circle is applied when an Arcade Body is enabled."
+                        : " Arcade Physics applies only one rectangle or circle; polygon and compound shapes remain metadata until a compatible physics adapter is selected.";
+                }
             });
 
             this.bindNumberInput(pivotX, "pivot", "x");

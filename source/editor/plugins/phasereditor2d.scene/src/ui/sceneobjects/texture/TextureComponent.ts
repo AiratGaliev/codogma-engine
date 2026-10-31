@@ -27,6 +27,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         frame?: string | number;
         crop?: ITextureRect;
         trim?: ITextureTrim;
+        collisionShapes?: any[];
     }
 
     export interface ITextureData
@@ -161,6 +162,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             }
 
             objES.onUpdateAfterSetTexture();
+
+            // Body может уже существовать при смене texture/frame через Inspector.
+            if ((obj as any).body) {
+                ArcadeComponent.applyAssetCollisionGeometry(obj as any);
+            }
         }
 
         removeTexture() {
