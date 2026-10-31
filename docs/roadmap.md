@@ -520,7 +520,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 3. **Game QA MCP.** Отдельный companion package (предварительное имя @codogma/game-qa-mcp), не перегружающий Editor MCP. Он вызывает Build/Preview API, связывает browser и game test sessions, запускает сценарии и выдаёт структурированные результаты.
 4. **Declarative Scenario Runner.** Versioned JSON/schema-first описание preconditions, browser inputs, waits, event/state assertions, checkpoints и teardown. Никаких обязательных одноразовых .mjs/PowerShell/Playwright/CDP driver scripts, создаваемых агентом.
 5. **Evidence/Report.** Привязанные к запуску screenshots, optional video/trace, console/network/runtime diagnostics, expected/actual assertions, browser/runtime/build metadata и отчёт PASS/FAIL/SKIP/UNVERIFIED.
-6. **Security/lifecycle.** Loopback-only для локальных MCP/browser orchestration endpoints, per-session capability token, origin/project/build binding, isolated browser profiles по умолчанию, explicit attach, bounded payload/event buffers, cancellation и гарантированная очистка. Game Test Bridge не открывает собственный listener/порт и доступен только через session-scoped channel Preview Host.
+6. **Security/lifecycle.** Stdio-first transport для Game QA MCP без собственного TCP listener; loopback-only для отдельных сетевых Browser Controller/orchestration endpoints, если они потребуются. Per-session capability token, origin/project/build binding, isolated browser profiles по умолчанию, explicit attach, bounded payload/event buffers, cancellation и гарантированная очистка. Game Test Bridge не открывает собственный listener/порт и доступен только через session-scoped channel Preview Host.
 
 ### Очередность реализации
 
@@ -555,7 +555,7 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 #### QA-3 — Game QA MCP
 
-- [ ] Создать отдельный package с собственными manifest, strict typecheck, tests, документацией и loopback-only transport/security policy для локальных MCP/browser orchestration endpoints; не создавать отдельный сетевой endpoint для Game Test Bridge.
+- [ ] Создать отдельный package с собственными manifest, strict typecheck, tests и документацией; использовать stdio-first MCP transport без TCP listener. Loopback-only и session authorization обязательны для любых отдельных сетевых Browser Controller/orchestration endpoints, если они будут обоснованы spike. Не создавать отдельный сетевой endpoint для Game Test Bridge.
 - [ ] Интегрировать MCP tools с публичными Preview/Build APIs, Browser Controller и Game Test Bridge; не делать отдельную реализацию build/preview/runtime.
 - [ ] Предоставлять task-level tools для session lifecycle, open/attach preview, viewport/input, runtime snapshots/events, diagnostics, scenario execution/cancel и report/artifact retrieval.
 - [ ] Использовать structured errors, explicit idempotency/retry semantics и verified/unverified operation status.
