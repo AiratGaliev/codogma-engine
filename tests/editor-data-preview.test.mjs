@@ -1212,18 +1212,18 @@ test("Importer.reimportItem restores original project data when the new source c
 
 
 test("sprite metadata frame map safely preserves special frame names", () => {
+    const frames = Object.create(null)
+    frames["__proto__"] = {
+        id: "special-frame",
+        sourceRect: { x: 0, y: 0, width: 8, height: 8 }
+    }
     const itemData = JSON.parse(JSON.stringify({
         type: "atlas",
         url: "images/atlas.png",
         codogma: {
             schemaVersion: 1,
             assetId: "asset-with-special-frame",
-            frames: {
-                "__proto__": {
-                    id: "special-frame",
-                    sourceRect: { x: 0, y: 0, width: 8, height: 8 }
-                }
-            }
+            frames
         }
     }))
 
