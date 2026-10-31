@@ -1,6 +1,6 @@
 # Codogma Editor — дизайн-токены
 
-Единый источник цветовых ролей для макета Codogma Editor и Godot SVG icon pack — `tokens.json`.
+Единый источник цветовых ролей для макета Codogma Editor и Godot SVG icon pack — `src/editor/design-system/tokens.json`.
 
 ## Темы и роли
 
@@ -37,9 +37,16 @@
 
 Для корректного переключения темы каждый тематический артборд должен явно задавать `theme.mode`. Текстовые значения, которые показывают HEX-код как данные (например, поле Tint), остаются литералами и не заменяются ссылками на токены.
 
+## Компоновка Workbench
+
+- Основные варианты `Workbench Dark/Light` спроектированы на артбордах 1440 × 900.
+- `Compact Workbench 1280 × 720` фиксирует целевую компактную композицию: Hierarchy — 194 px, Scene View — 836 px, Inspector — 250 px.
+- Project, Animation и Console используют одну нижнюю область Dock высотой 207 px. В каждый момент активна одна из этих областей; это не три одновременно сжатые панели.
+- Эти размеры — дизайн-контракт для реализации Host. Реальное изменение ширины окна, поведение splitter-ов, переполнение длинных имён и минимальная поддерживаемая ширина должны быть проверены в работающем редакторе отдельно.
+
 ## Godot SVG и Pencil
 
-Исходные файлы в `src/editor/icons/{dark,light}/godot` — единственный источник геометрии. Pencil не загружает SVG как обычную image-заливку, поэтому importer преобразует SVG shapes в редактируемые `path` nodes. Каждый icon frame хранит исходный SVG path, upstream revision и MIT license в metadata.
+Исходные файлы в `src/editor/icons/{dark,light}/godot` — единственный источник геометрии. Pencil не загружает SVG как обычную image-заливку, поэтому importer преобразует SVG shapes в редактируемые `path` nodes. Каждый icon frame хранит относительный путь к SVG, upstream revision и MIT license в metadata. Этот же набор используют новый Editor Host и legacy Colibri; legacy-загрузчик получает SVG через ограниченный read-only маршрут сервера, поэтому копии иконок в каталоге плагина не нужны.
 
 Light SVG генерируются из тёмных исходников по `lightIconColorMap` из `tokens.json`. Исключение — многоцветный `particle-material.svg`: палитра swatches остаётся исходной.
 
@@ -53,7 +60,7 @@ node scripts/import-godot-svg-icons-to-pen.mjs
 node scripts/apply-design-tokens-to-pen.mjs
 ```
 
-Первый скрипт обновляет тематические SVG. Второй перестраивает нативную векторную геометрию и применяет токены к path fills/strokes. Третий обновляет ссылки UI-цветов и таблицу переменных Pencil. Скрипты работают поверх существующего `codogma-editor.pen`.
+Первый скрипт обновляет `src/editor/icons/light/godot` из тёмного набора. Второй перестраивает нативную векторную геометрию в `src/editor/codogma-editor.pen`. Третий обновляет ссылки UI-цветов и таблицу переменных Pencil. По умолчанию скрипты используют `src/editor/design-system/tokens.json` и `src/editor/codogma-editor.pen`; передавать пути аргументами требуется только для временной копии документа.
 
 ## Проверки
 

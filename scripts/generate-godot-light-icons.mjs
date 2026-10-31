@@ -13,9 +13,10 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const TOKENS = JSON.parse(fs.readFileSync(path.join(ROOT, "design-system/tokens.json"), "utf8"))
-const DARK_DIR = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/icons/dark/godot")
-const LIGHT_DIR = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/icons/light/godot")
+const EDITOR_ROOT = path.join(ROOT, "src/editor")
+const TOKENS = JSON.parse(fs.readFileSync(path.join(EDITOR_ROOT, "design-system/tokens.json"), "utf8"))
+const DARK_DIR = path.join(EDITOR_ROOT, "icons/dark/godot")
+const LIGHT_DIR = path.join(EDITOR_ROOT, "icons/light/godot")
 
 function normalizeColor(hex) {
     const value = hex.trim().toLowerCase()

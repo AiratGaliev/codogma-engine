@@ -7,6 +7,7 @@ namespace colibri {
         private _loadIconsFromAtlas: boolean;
         private _loadResources: boolean;
         private _svgIcons: Set<string>;
+        private _svgIconBaseUrl: string;
         private _atlasImage: ui.controls.IImage;
         private _atlasData: ui.controls.IAtlasData;
         private _resources: ui.ide.Resources;
@@ -15,7 +16,9 @@ namespace colibri {
             loadIconsFromAtlas?: boolean,
             loadResources?: boolean,
             /** icon names served as `icons/{dark|light}/<name>.svg` files instead of atlas frames */
-            svgIcons?: string[]
+            svgIcons?: string[],
+            /** absolute HTTP base URL for SVG icons stored outside this plugin */
+            svgIconBaseUrl?: string
         }) {
 
             this._id = id;
@@ -25,6 +28,8 @@ namespace colibri {
             this._loadResources = Boolean(config?.loadResources);
 
             this._svgIcons = new Set(config?.svgIcons ?? []);
+
+            this._svgIconBaseUrl = config?.svgIconBaseUrl ?? "";
 
             this._iconCache = new Map();
         }
@@ -169,7 +174,9 @@ namespace colibri {
                 ? `${theme}/${name}.svg`
                 : this.getIconsAtlasFrameName(name, theme);
 
-            const url = this.getPluginURL(`icons/${iconPath}`);
+            const url = this._svgIconBaseUrl && this._svgIcons.has(name)
+                ? `${this._svgIconBaseUrl}/${iconPath}`
+                : this.getPluginURL(`icons/${iconPath}`);
 
             const id = theme + "." + name;
 

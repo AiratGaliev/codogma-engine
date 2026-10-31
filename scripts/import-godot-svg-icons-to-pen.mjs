@@ -3,10 +3,11 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const DEFAULT_INPUT = path.join(ROOT, "codogma-editor.pen")
+const EDITOR_ROOT = path.join(ROOT, "src/editor")
+const DEFAULT_INPUT = path.join(EDITOR_ROOT, "codogma-editor.pen")
 const REVISION = "95c0fa5fe8a019adc29d074c16b64469b04571f7"
-const DESIGN_TOKENS = JSON.parse(fs.readFileSync(path.join(ROOT, "design-system/tokens.json"), "utf8"))
-const SOURCE_PREFIX = "./source/editor/plugins/phasereditor2d.resources/icons/"
+const DESIGN_TOKENS = JSON.parse(fs.readFileSync(path.join(EDITOR_ROOT, "design-system/tokens.json"), "utf8"))
+const SOURCE_PREFIX = "./icons/"
 const PREVIEW_PREFIX = "./design-assets/godot-icons/"
 
 function fail(message) {
@@ -580,6 +581,6 @@ const [inputArgument, outputArgument] = process.argv.slice(2)
 const inputPath = path.resolve(inputArgument ?? DEFAULT_INPUT)
 const outputPath = path.resolve(outputArgument ?? inputPath)
 const source = JSON.parse(fs.readFileSync(inputPath, "utf8"))
-const summary = convertDocument(source, ROOT)
+const summary = convertDocument(source, path.dirname(inputPath))
 fs.writeFileSync(outputPath, JSON.stringify(source, null, 2) + "\n", "utf8")
 console.log(JSON.stringify({ inputPath, outputPath, revision: REVISION, ...summary }, null, 2))

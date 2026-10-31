@@ -210,7 +210,8 @@ namespace phasereditor2d.resources {
             super("phasereditor2d.resources", {
                 loadIconsFromAtlas: true,
                 loadResources: true,
-                svgIcons: GODOT_ICON_NAMES
+                svgIcons: GODOT_ICON_NAMES,
+                svgIconBaseUrl: "/editor/app/editor-icons"
             });
         }
     }

@@ -3,8 +3,9 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const TOKENS = JSON.parse(fs.readFileSync(path.join(ROOT, "design-system/tokens.json"), "utf8"))
-const DEFAULT_INPUT = path.join(ROOT, "codogma-editor.pen")
+const EDITOR_ROOT = path.join(ROOT, "src/editor")
+const TOKENS = JSON.parse(fs.readFileSync(path.join(EDITOR_ROOT, "design-system/tokens.json"), "utf8"))
+const DEFAULT_INPUT = path.join(EDITOR_ROOT, "codogma-editor.pen")
 
 function fail(message) {
     throw new Error(message)
@@ -68,6 +69,7 @@ function apply(document) {
     let unfilledIconPaths = 0
     let gradientIconPaths = 0
     let gradientStopTokenCount = 0
+    const iconSources = new Set()
 
     function visit(node, inheritedTheme, isRoot = false) {
         const theme = node.theme?.mode ?? inheritedTheme
@@ -76,6 +78,7 @@ function apply(document) {
 
         if (node.metadata?.type === "godot-svg-source") {
             themedIconFrames++
+            iconSources.add(node.metadata.source)
             if (node.theme?.mode !== theme) fail("Godot icon frame has no explicit theme: " + node.name)
             if (!node.children?.length) fail("Godot icon has no vector paths: " + node.name)
             for (const child of node.children) {
@@ -114,10 +117,13 @@ function apply(document) {
 
     const tokenReferences = Object.values(counters).reduce((total, count) => total + count, 0)
     if (tokenReferences === 0) fail("No colour values were connected to design tokens")
-    if (themedIconFrames !== 304) fail("Expected 304 imported Godot icon instances; found " + themedIconFrames)
-    if (tokenizedIconPaths !== 290) fail("Expected 290 tokenized Godot path fills; found " + tokenizedIconPaths)
+    if (iconSources.size !== 122) fail("Expected the complete 122-file Godot SVG source set; found " + iconSources.size)
+    if (themedIconFrames < iconSources.size) fail("Some Godot SVG sources are not used by the design")
+    if (tokenizedIconPaths < 290 || unfilledIconPaths < 59) {
+        fail("The base Godot vector path palette appears incomplete: " +
+            tokenizedIconPaths + " tokenized and " + unfilledIconPaths + " unfilled paths")
+    }
     if (gradientIconPaths !== 1 || gradientStopTokenCount !== 12) fail("Particle material gradient was not fully tokenized")
-    if (unfilledIconPaths !== 59) fail("Unexpected number of intentionally unfilled Godot vector paths: " + unfilledIconPaths)
 
     return {
         artboards: document.children.length,

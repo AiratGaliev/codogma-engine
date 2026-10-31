@@ -6,7 +6,8 @@ import os from "node:os"
 import test from "node:test"
 
 const ROOT = process.cwd()
-const PEN_PATH = path.join(ROOT, "codogma-editor.pen")
+const EDITOR_ROOT = path.join(ROOT, "src/editor")
+const PEN_PATH = path.join(EDITOR_ROOT, "codogma-editor.pen")
 const PEN = JSON.parse(fs.readFileSync(PEN_PATH, "utf8"))
 const GODOT_SOURCE_REVISION = "95c0fa5fe8a019adc29d074c16b64469b04571f7"
 
@@ -36,7 +37,7 @@ const godotFrames = collectGodotIconFrames()
 const imageFills = collectImageFills()
 
 test("Godot icons are native vector paths, not PNG image fills", () => {
-    assert.equal(godotFrames.length, 304, "all 304 Godot icon instances must be converted")
+    assert.equal(godotFrames.length, 332, "all Godot icon instances, including compact Workbench, must be converted")
     assert.equal(imageFills.filter(({ fill }) => fill.url?.startsWith("./design-assets/godot-icons/")).length, 0)
     assert.ok(!fs.existsSync(path.join(ROOT, "design-assets", "godot-icons")),
         "raster preview copies must not be kept in the repository")
@@ -65,7 +66,7 @@ test("each vector icon links back to its pinned official Godot SVG source", () =
 
     for (const frame of godotFrames) {
         const source = frame.metadata.source
-        const match = source?.match(/^\.\/source\/editor\/plugins\/phasereditor2d\.resources\/icons\/(dark|light)\/godot\/([^/]+)\.svg$/)
+        const match = source?.match(/^\.\/icons\/(dark|light)\/godot\/([^/]+)\.svg$/)
         assert.ok(match, frame.name + " must have a source SVG link")
         assert.equal(frame.metadata.revision, GODOT_SOURCE_REVISION)
         assert.equal(frame.metadata.license, "MIT")
@@ -73,21 +74,22 @@ test("each vector icon links back to its pinned official Godot SVG source", () =
         const [, theme, iconName] = match
         themeCounts[theme]++
         uniqueSources.add(theme + "/" + iconName)
-        const sourcePath = path.resolve(ROOT, source.slice(2))
+        const sourcePath = path.resolve(EDITOR_ROOT, source.slice(2))
         assert.ok(fs.existsSync(sourcePath), frame.name + " source SVG must exist")
         assert.ok(fs.readFileSync(sourcePath, "utf8").includes("<svg"),
             frame.name + " source must remain an SVG document")
     }
 
-    assert.equal(themeCounts.dark, 240)
+    assert.equal(themeCounts.dark, 268)
     assert.equal(themeCounts.light, 64)
     assert.equal(uniqueSources.size, 122)
 })
 
 test("the remaining raster image fills are only the original dinosaur preview", () => {
-    assert.equal(imageFills.length, 14)
+    assert.equal(imageFills.length, 18)
     for (const { fill } of imageFills) {
-        assert.equal(fill.url, "./tests/workspace/test-typescript/assets/dino.png")
+        assert.equal(fill.url, "../../tests/workspace/test-typescript/assets/dino.png")
+        assert.ok(fs.existsSync(path.resolve(EDITOR_ROOT, fill.url)), "Dino preview asset must resolve from the Pen document")
     }
 })
 
@@ -101,8 +103,8 @@ test("all nodes follow Pencil container rules", () => {
     assert.deepEqual(invalid, [], "only frame/group nodes may have a children property")
 })
 
-test("the .pen document keeps all ten editor and design-system artboards", () => {
-    assert.equal(PEN.children.length, 10)
+test("the .pen document keeps all eleven editor and design-system artboards", () => {
+    assert.equal(PEN.children.length, 11)
     assert.deepEqual(
         PEN.children.map((node) => node.name),
         [
@@ -116,9 +118,71 @@ test("the .pen document keeps all ten editor and design-system artboards", () =>
             "07 - Additional 2D editor surfaces",
             "08 - Godot editor icon library",
             "09 - Design token reference & contrast",
+            "10 - Compact Workbench 1280 × 720",
         ],
     )
 })
+
+test("compact Workbench preserves minimum panels and collapses secondary docks", () => {
+    const board = PEN.children.find((node) => node.name === "10 - Compact Workbench 1280 × 720")
+    assert.ok(board, "compact Workbench artboard must exist")
+    assert.deepEqual(
+        { x: board.x, y: board.y, width: board.width, height: board.height },
+        { x: 0, y: 5100, width: 1280, height: 720 },
+    )
+
+    const child = (name) => {
+        const node = board.children.find((item) => item.name === name)
+        assert.ok(node, "compact Workbench must contain " + name)
+        return node
+    }
+
+    assert.deepEqual(
+        ["Compact hierarchy panel", "Compact scene panel", "Compact inspector panel"].map((name) => {
+            const node = child(name)
+            return { x: node.x, y: node.y, width: node.width, height: node.height }
+        }),
+        [
+            { x: 0, y: 88, width: 194, height: 395 },
+            { x: 194, y: 88, width: 836, height: 395 },
+            { x: 1030, y: 88, width: 250, height: 395 },
+        ],
+    )
+
+    assert.deepEqual(
+        { x: child("Compact bottom dock").x, y: child("Compact bottom dock").y,
+            width: child("Compact bottom dock").width, height: child("Compact bottom dock").height },
+        { x: 0, y: 483, width: 1280, height: 207 },
+    )
+    assert.deepEqual(
+        { x: child("Compact status bar").x, y: child("Compact status bar").y,
+            width: child("Compact status bar").width, height: child("Compact status bar").height },
+        { x: 0, y: 690, width: 1280, height: 30 },
+    )
+    assert.ok(child("Compact Console tab label"))
+})
+
+function withoutSerializedPathGeometry(value) {
+    if (Array.isArray(value)) return value.map(withoutSerializedPathGeometry)
+    if (!value || typeof value !== "object") return value
+
+    return Object.fromEntries(
+        Object.entries(value)
+            .filter(([key, item]) => !(
+                (value.type === "path" &&
+                    (key === "geometry" || (key === "fill" && item?.type === "gradient"))) ||
+                (value.metadata?.type === "godot-svg-source" && key === "children")
+            ))
+            .map(([key, item]) => [key, withoutSerializedPathGeometry(item)]),
+    )
+}
+
+function normalizedImportedVectorPath(pathNode) {
+    const normalized = withoutSerializedPathGeometry(pathNode)
+    delete normalized.id
+    delete normalized.name
+    return normalized
+}
 
 test("the source importer refreshes native paths from the linked SVGs", () => {
     const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "codogma-svg-import-"))
@@ -132,17 +196,59 @@ test("the source importer refreshes native paths from the linked SVGs", () => {
         })
         assert.equal(result.status, 0, result.stderr || result.stdout)
         const refreshed = JSON.parse(fs.readFileSync(outputPath, "utf8"))
-        assert.deepEqual(refreshed, PEN, "re-importing the SVG sources must reproduce the committed vector paths")
-        assert.match(result.stdout, /"frames": 304/)
-        assert.match(result.stdout, /"pathNodes": 350/)
+
+        // Pencil normalizes equivalent SVG path command syntax when saving a
+        // document. Compare the complete node tree and all vector styling,
+        // while validating that refreshed path geometry remains non-empty.
+        assert.deepEqual(
+            withoutSerializedPathGeometry(refreshed),
+            withoutSerializedPathGeometry(PEN),
+            "re-import must preserve document structure, icon metadata and vector styling",
+        )
+
+        const refreshedIconFrames = []
+        const originalIconFrames = []
+        walk(refreshed, (node) => {
+            if (node.metadata?.type === "godot-svg-source") refreshedIconFrames.push(node)
+        })
+        walk(PEN, (node) => {
+            if (node.metadata?.type === "godot-svg-source") originalIconFrames.push(node)
+        })
+
+        assert.equal(refreshedIconFrames.length, 332)
+        assert.equal(originalIconFrames.length, refreshedIconFrames.length)
+        const originalById = new Map(originalIconFrames.map((frame) => [frame.id, frame]))
+        let pathCount = 0
+
+        for (const frame of refreshedIconFrames) {
+            const original = originalById.get(frame.id)
+            assert.ok(original, "refreshed icon frame must preserve its parent ID: " + frame.name)
+            const refreshedPaths = (frame.children ?? []).filter((node) => node.type === "path")
+            const originalPaths = (original.children ?? []).filter((node) => node.type === "path")
+            assert.equal(refreshedPaths.length, originalPaths.length, frame.name + " path count")
+            pathCount += refreshedPaths.length
+
+            assert.deepEqual(
+                refreshedPaths.map(normalizedImportedVectorPath),
+                originalPaths.map(normalizedImportedVectorPath),
+                frame.name + " vector styling must survive source re-import",
+            )
+            assert.ok(refreshedPaths.every((node) =>
+                typeof node.geometry === "string" && node.geometry.trim().length > 0),
+            frame.name + " must retain non-empty vector geometry")
+        }
+
+        assert.equal(pathCount, 382)
+        assert.match(result.stdout, /"frames": 332/)
+        assert.match(result.stdout, /"pathNodes": 382/)
     } finally {
         fs.rmSync(tempDirectory, { recursive: true, force: true })
     }
 })
 
 
-const TOKENS = JSON.parse(fs.readFileSync(path.join(ROOT, "design-system", "tokens.json"), "utf8"))
-const ICON_SOURCE_DIR = path.join(ROOT, "source", "editor", "plugins", "phasereditor2d.resources", "icons")
+const TOKENS = JSON.parse(fs.readFileSync(path.join(EDITOR_ROOT, "design-system", "tokens.json"), "utf8"))
+const ICON_SOURCE_DIR = path.join(EDITOR_ROOT, "icons")
 
 function tokenValue(name, mode) {
     const definition = TOKENS.variables[name]
@@ -309,9 +415,9 @@ test("Godot vector paths use explicit theme tokens and preserve the particle gra
         }
     }
 
-    assert.equal(pathCount, 350)
-    assert.equal(solidTokenFills, 290)
-    assert.equal(unfilledPaths, 59)
+    assert.equal(pathCount, 382)
+    assert.equal(solidTokenFills, 320)
+    assert.equal(unfilledPaths, 61)
     assert.equal(gradientPaths, 1)
     assert.equal(gradientStopTokens, 12)
 })

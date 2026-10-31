@@ -18,11 +18,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ICONS_DIR = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/icons")
+const EDITOR_ROOT = path.join(ROOT, "src/editor")
+const ICONS_DIR = path.join(EDITOR_ROOT, "icons")
 const DARK_DIR = path.join(ICONS_DIR, "dark/godot")
 const LIGHT_DIR = path.join(ICONS_DIR, "light/godot")
-const DESIGN_TOKENS = JSON.parse(fs.readFileSync(path.join(ROOT, "design-system/tokens.json"), "utf8"))
+const DESIGN_TOKENS = JSON.parse(fs.readFileSync(path.join(EDITOR_ROOT, "design-system/tokens.json"), "utf8"))
 const COLIBRI_PLUGIN = path.join(ROOT, "source/editor/plugins/colibri/src/Plugin.ts")
+const RESOURCES_PLUGIN = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/src/ResourcesPlugin.ts")
+const SERVER_SOURCE = path.join(ROOT, "server/server.mjs")
 
 // Mirrors phasereditor2d.resources.GODOT_ICON_NAMES (ResourcesPlugin.ts).
 const GODOT_ICON_NAMES = [
@@ -222,10 +225,23 @@ test("the Godot icons MIT license file is shipped", () => {
 })
 
 
-test("SVG icon loader requests existing theme-specific asset paths", () => {
-    const source = fs.readFileSync(COLIBRI_PLUGIN, "utf8")
-    assert.ok(source.includes('? `${theme}/${name}.svg`'),
-        "SVG icon paths must include dark/ or light/ before the registered icon name")
-    assert.ok(source.includes('darkImage = this.getThemeIcon(name, "dark");'))
-    assert.ok(source.includes('lightImage = this.getThemeIcon(name, "light");'))
+test("legacy icon loader uses the shared editor SVG route without duplicating assets", () => {
+    const loader = fs.readFileSync(COLIBRI_PLUGIN, "utf8")
+    const resources = fs.readFileSync(RESOURCES_PLUGIN, "utf8")
+    const server = fs.readFileSync(SERVER_SOURCE, "utf8")
+
+    assert.ok(loader.includes('svgIconBaseUrl?: string'))
+    assert.ok(loader.includes('this._svgIconBaseUrl && this._svgIcons.has(name)'))
+    assert.ok(resources.includes('svgIconBaseUrl: "/editor/app/editor-icons"'))
+    assert.ok(server.includes('rest.startsWith("app/editor-icons/")'))
+    assert.ok(server.includes("safeJoin(EDITOR_ICONS_DIR, rel)"))
+    assert.ok(server.includes('"no-cache", EDITOR_ICONS_DIR'))
+
+    for (const name of WIRED_ICONS) {
+        const icon = name.replace("godot/", "") + ".svg"
+        for (const theme of ["dark", "light"]) {
+            const file = path.join(ICONS_DIR, theme, "godot", icon)
+            assert.ok(fs.existsSync(file), `${theme}/${icon} must exist in the canonical editor icon library`)
+        }
+    }
 })
