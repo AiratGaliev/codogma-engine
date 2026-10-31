@@ -590,3 +590,43 @@ test("TileSprite Inspector stores repeat position and scale independently", () =
         tileScaleY: 2
     })
 })
+
+
+test("TextureComponent codegen clones a shared frame before applying trim", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const trim = {
+        actualWidth: 32,
+        actualHeight: 24,
+        x: 2,
+        y: 1,
+        width: 28,
+        height: 20
+    }
+    const support = {
+        isNestedPrefabInstance: () => false,
+        getComponent: () => ({ getTextureKeys: () => ({ trim }) })
+    }
+    const obj = {
+        getEditorSupport: () => support
+    }
+    const args = {
+        objectVarName: "sprite",
+        statements: []
+    }
+
+    TextureComponent.prototype.buildSetObjectPropertiesCodeDOM.call(
+        { getObject: () => obj },
+        args
+    )
+
+    assert.deepEqual(
+        args.statements.map(statement => ({
+            method: statement.getMethodName(),
+            args: statement.getArgs()
+        })),
+        [
+            { method: "setFrame", args: ["sprite.frame.clone()", "true", "false"] },
+            { method: "setTrim", args: ["32", "24", "2", "1", "28", "20"] }
+        ]
+    )
+})

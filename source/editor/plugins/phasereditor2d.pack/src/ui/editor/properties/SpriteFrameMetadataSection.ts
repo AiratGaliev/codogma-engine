@@ -139,6 +139,14 @@ namespace phasereditor2d.pack.ui.editor.properties {
                         .join(" ")} Previous custom frame data remains in orphaned metadata (${orphaned.length} frame(s)).`
                     : "Trim/crop and collision coordinates use frame-local pixels. Pivot uses normalized coordinates. Circle x/y represent its center.";
 
+                if (frame.trim) {
+                    this._status.textContent += " Phaser NineSlice does not support trimmed textures; use Image/Sprite for trimmed frames.";
+                }
+
+                if (frame.crop) {
+                    this._status.textContent += " Phaser NineSlice and TileSprite do not expose setCrop(); use Image/Sprite for cropped frames.";
+                }
+
                 if (frame.collisionShapes && frame.collisionShapes.length > 0) {
                     const arcadeCompatible = frame.collisionShapes.length === 1
                         && (frame.collisionShapes[0].type === "rectangle"
