@@ -630,3 +630,45 @@ test("TextureComponent codegen clones a shared frame before applying trim", () =
         ]
     )
 })
+
+
+test("single Image Asset Pack metadata is resolved by its actual frame key", () => {
+    const BaseImageExtension = globalThis.phasereditor2d.scene.ui.sceneobjects.BaseImageExtension
+    const image = new packCore.ImageAssetPackItem(null, {
+        type: "image",
+        key: "hero",
+        url: "images/hero.png",
+        codogma: {
+            schemaVersion: 1,
+            assetId: "single-image-asset",
+            frames: {
+                "0": {
+                    id: "single-image-frame",
+                    sourceRect: { x: 0, y: 0, width: 16, height: 24 },
+                    pivot: { x: 0.5, y: 1 },
+                    crop: { x: 1, y: 2, width: 12, height: 18 },
+                    trim: { x: 2, y: 1, width: 12, height: 20 },
+                    collisionShapes: [
+                        { type: "rectangle", x: 2, y: 1, width: 12, height: 20 }
+                    ]
+                }
+            }
+        }
+    })
+    image._frames = [createTestFrame("0", 0, 0, 16, 24)]
+
+    const result = BaseImageExtension.prototype.getKeyFrameFromAsset.call({}, image)
+
+    assert.equal(result.key, "hero")
+    assert.equal(result.frame, undefined)
+    assert.equal(result.metadataFrameKey, undefined)
+    assert.deepEqual(result.pivot, { x: 0.5, y: 1 })
+    assert.deepEqual(result.crop, { x: 1, y: 2, width: 12, height: 18 })
+    assert.deepEqual(result.trim, {
+        x: 2, y: 1, width: 12, height: 20,
+        actualWidth: 16, actualHeight: 24
+    })
+    assert.deepEqual(result.collisionShapes, [
+        { type: "rectangle", x: 2, y: 1, width: 12, height: 20 }
+    ])
+})

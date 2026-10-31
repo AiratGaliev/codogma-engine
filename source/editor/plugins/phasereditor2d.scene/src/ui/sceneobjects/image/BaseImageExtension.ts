@@ -98,7 +98,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 packItem = data;
                 key = data.getKey();
                 frame = undefined;
-                metadataFrameKey = key;
+
+                // Single-image Asset Pack entries still expose one ImageFrame.
+                // Metadata is indexed by that frame name (normally "0"), not by the asset key.
+                const imageFrame = data.getFrames()[0];
+                metadataFrameKey = imageFrame ? String(imageFrame.getName()) : key;
                 baseLabel = key;
             }
 
