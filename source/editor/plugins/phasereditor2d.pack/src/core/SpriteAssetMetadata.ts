@@ -194,15 +194,15 @@ namespace phasereditor2d.pack.core {
         static describeFrames(frames: AssetPackImageFrame[]): ISpriteAssetFrameDescriptor[] {
 
             return frames.map(frame => {
-                const source = frame.getFrameData().src;
+                const source = frame.getFrameData().src as any;
 
                 return {
                     key: String(frame.getName()),
                     sourceRect: {
                         x: Number(source.x) || 0,
                         y: Number(source.y) || 0,
-                        width: Number(source.width) || frame.getWidth(),
-                        height: Number(source.height) || frame.getHeight()
+                        width: Number(source.w ?? source.width) || frame.getWidth(),
+                        height: Number(source.h ?? source.height) || frame.getHeight()
                     }
                 };
             });
