@@ -211,6 +211,7 @@ function App() {
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
   const [history, setHistory] = createSignal<SceneDocument[]>([]);
   const [historyIndex, setHistoryIndex] = createSignal(-1);
+  const [selectionHistory, setSelectionHistory] = createSignal<Array<{ before: string | null; after: string | null }>>([]);
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   const [loadError, setLoadError] = createSignal("");
@@ -421,6 +422,7 @@ function App() {
       setSavedContent(content);
       setHistory([parsed]);
       setHistoryIndex(0);
+      setSelectionHistory([]);
       const firstObject = getSceneObjects(parsed)[0];
       setSelectedId(firstObject?.id ?? null);
       setSelectedProjectPath(path);
@@ -457,13 +459,23 @@ function App() {
     }
   }
 
-  function applySceneChange(next: SceneDocument) {
-    const currentHistory = history().slice(0, historyIndex() + 1);
+  function applySceneChange(next: SceneDocument, selectionAfter = selectedId()) {
+    const currentIndex = historyIndex();
+    const currentHistory = history().slice(0, currentIndex + 1);
+    const nextHistory = [...selectionHistory().slice(0, currentIndex), {
+      before: selectedId(),
+      after: selectionAfter,
+    }];
     currentHistory.push(next);
-    if (currentHistory.length > 100) currentHistory.shift();
+    if (currentHistory.length > 100) {
+      currentHistory.shift();
+      nextHistory.shift();
+    }
     setHistory(currentHistory);
+    setSelectionHistory(nextHistory);
     setHistoryIndex(currentHistory.length - 1);
     setScene(next);
+    setSelectedId(selectionAfter);
   }
 
   function undo() {
@@ -471,6 +483,7 @@ function App() {
     if (index <= 0) return;
     const nextIndex = index - 1;
     setScene(history()[nextIndex]);
+    setSelectedId(selectionHistory()[index - 1]?.before ?? getSceneObjects(history()[nextIndex])[0]?.id ?? null);
     setHistoryIndex(nextIndex);
     log("info", "Undo");
   }
@@ -480,6 +493,7 @@ function App() {
     if (index < 0 || index >= history().length - 1) return;
     const nextIndex = index + 1;
     setScene(history()[nextIndex]);
+    setSelectedId(selectionHistory()[index]?.after ?? getSceneObjects(history()[nextIndex])[0]?.id ?? null);
     setHistoryIndex(nextIndex);
     log("info", "Redo");
   }
@@ -527,8 +541,7 @@ function App() {
     if (!current) return;
     const next = createSceneObject(current, kind) as SceneDocument;
     const created = getSceneObjects(next).at(-1);
-    applySceneChange(next);
-    if (created) setSelectedId(created.id);
+    applySceneChange(next, created?.id ?? selectedId());
     setShowObjectMenu(false);
     log("info", `Created ${kind}`);
   }
@@ -537,9 +550,9 @@ function App() {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
-    applySceneChange(removeSceneObject(current, selected.id));
-    const remaining = getSceneObjects(scene()!);
-    setSelectedId(remaining[0]?.id ?? null);
+    const next = removeSceneObject(current, selected.id);
+    const remaining = getSceneObjects(next);
+    applySceneChange(next, remaining[0]?.id ?? null);
     log("info", `Removed ${selected.name}`);
   }
 
@@ -782,7 +795,7 @@ function App() {
             )}
           </For>
           <div class="menu-spacer" />
-          <button class="menu-utility" onClick={openPalette} title="Command palette · Ctrl+P">
+          <button class="menu-utility" aria-label="Command palette" onClick={openPalette} title="Command palette · Ctrl+P">
             <Icon theme={theme()} name="search" size={13} />
             <span>Search commands</span>
             <kbd>Ctrl P</kbd>
@@ -1291,10 +1304,10 @@ function App() {
       <section class="bottom-dock" data-testid="bottom-dock">
         <div class="bottom-upper-panel">
           <div class="bottom-tabs" role="tablist" aria-label="Bottom workspace">
-            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Project"} classList={{ active: bottomTab() === "Project" }} onClick={() => setBottomTab("Project")}>
+            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Project"} classList={{ active: bottomTab() === "Project" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Project" }))}>
               <Icon theme={theme()} name="folder" size={13} /> Project
             </button>
-            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Animation"} classList={{ active: bottomTab() === "Animation" }} onClick={() => setBottomTab("Animation")}>
+            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Animation"} classList={{ active: bottomTab() === "Animation" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Animation" }))}>
               <Icon theme={theme()} name="animation" size={13} /> Animation
             </button>
             <div class="dock-tabs-spacer" />

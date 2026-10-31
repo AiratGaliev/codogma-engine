@@ -35,7 +35,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   const frame = page.getByTestId("phaser-game-frame");
   await expect(frame).toBeVisible();
   await expect(frame).toHaveAttribute("src", "/editor/external/index.html");
-  await expect(frame.locator("canvas")).toBeVisible({ timeout: 20_000 });
+  await expect(page.frameLocator('[data-testid="phaser-game-frame"]').locator("canvas")).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole("tab", { name: "Scene" }).click();
   await expect(page.getByTestId("scene-stage")).toBeVisible();

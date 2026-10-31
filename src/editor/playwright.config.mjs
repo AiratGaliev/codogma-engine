@@ -23,14 +23,13 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "node server/server.mjs",
-      cwd: repositoryRoot,
+      command: "node tests/start-backend.mjs",
+      cwd: editorDirectory,
       url: "http://127.0.0.1:3000/editor/product.json",
       timeout: 30_000,
       reuseExistingServer: !process.env.CI,
       env: {
         PORT: "3000",
-        PROJECT_DIR: fixtureProject,
         CODOGMA_ALLOWED_ORIGINS: "http://127.0.0.1:5173",
       },
     },
