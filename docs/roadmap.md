@@ -21,7 +21,8 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 | 7 | Полная staged migration Colibri UI → SolidJS Editor Host | **P1 — отдельная крупная initiative** | Новый независимый Host в src/editor/, SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4; legacy source/editor/ остаётся доступным на переходе. Совместимость backend/project/MCP контрактов, dual-run на разных origins/ports, запрет конкурентной записи одного проекта и session-aware MCP routing входят в acceptance. Colibri удаляется только после cutover gates; подробный план — docs/editor-ui-migration.md. |
 | 8 | Этап 2: Project Model и минимальный Codogma Core | **P1 — после первой стабилизации редактора или отдельным независимым потоком** | Малый проверяемый Project/Scene/Node/Component slice без импорта legacy UI. Core contracts не должны задерживать улучшения, которые можно безопасно сделать на текущей модели. |
 | 9 | Этап 3–4A: Preview Host и headless HTML5 build | **P1 — следующие сквозные возможности** | Browser preview, live Inspector и воспроизводимая game build принимаются отдельно после готовности зависимых contracts; существующий `npm run build` не считать сборкой игры. |
-| 10 | Platform Services, Tauri, Package Manager и расширенная ecosystem | **P2 / по готовности зависимостей** | Yandex Games раньше последующих targets; Tauri, package ecosystem, PixiJS, дополнительные physics backends и advanced features не отвлекают от текущего редактора без конкретного обоснования. |
+| 10 | Сквозное направление: AI-assisted Game QA и Browser QA MCP | **P1 — после появления базовых Preview/Build contracts; подготовку contracts можно вести параллельно** | AI-агент запускает декларативные игровые сценарии через отдельный QA MCP, управляет настоящим браузером, наблюдает за runtime через Game Test Bridge и получает воспроизводимые отчёты/evidence без одноразовых infrastructure scripts. |
+| 11 | Platform Services, Tauri, Package Manager и расширенная ecosystem | **P2 / по готовности зависимостей** | Yandex Games раньше последующих targets; Tauri, package ecosystem, PixiJS, дополнительные physics backends и advanced features не отвлекают от текущего редактора без конкретного обоснования. |
 
 ## Текущее состояние и границы блокеров (30.10.2026)
 
@@ -502,6 +503,97 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Browser acceptance подтверждает полный цикл от редактирования сцены до тестирования собранной игры.
 - [ ] CI статусы и локальные команды описаны без утверждения, что автоматизация проверяет непокрытые сценарии.
 - [ ] Ошибки и известные ограничения релизного кандидата видимы и задокументированы.
+
+
+## Сквозное архитектурное направление — AI-assisted Game QA и Browser QA MCP
+
+**Цель:** сделать тестирование работающей игры таким же штатным workflow, как создание сцены и сборка проекта. AI-агент должен использовать документированные Engine/QA APIs и MCP tools, а не создавать временные вспомогательные скрипты для запуска браузера, отправки input, чтения runtime state, сбора логов и подготовки отчёта.
+
+**Статус:** архитектурное направление зафиксировано; реализация не начата. Требования — ТЗ §13.4 и ADR-0006. Это не утверждение, что текущий Editor MCP уже умеет выполнять gameplay QA.
+
+**Зависимости и порядок:** базовые Build/Preview contracts этапов 3–4 и runtime diagnostics этапа 6. Contract design, browser-provider spike и schema fixtures можно начинать параллельно. Полный gameplay acceptance не объявляется готовым до появления управляемого Preview lifecycle и Game Test Bridge. Направление не зависит от Tauri и не требует завершения SolidJS migration.
+
+### Архитектурные deliverables
+
+1. **Engine Test Bridge.** Engine-owned versioned contract в Development/Test runtime: session handshake, stable Entity/Scene IDs, bounded state snapshots, typed event stream, registered diagnostics, declared capabilities, optional deterministic seed/clock where supported. Phaser-specific objects не выходят за Runtime Adapter boundary. Bridge отсутствует в Release output.
+2. **Browser Controller.** Управление изолированными browser contexts и явный attach mode к уже запущенному Chromium-based браузеру. Playwright — основной кандидат для изолированных сессий; CDP — дополнительный transport для attach/диагностики. Выбор фиксируется после проверки browser matrix, lifecycle, security и качества evidence. Kimi WebBridge изучается как reference, но не является обязательной зависимостью или протоколом.
+3. **Game QA MCP.** Отдельный companion package (предварительное имя @codogma/game-qa-mcp), не перегружающий Editor MCP. Он вызывает Build/Preview API, связывает browser и game test sessions, запускает сценарии и выдаёт структурированные результаты.
+4. **Declarative Scenario Runner.** Versioned JSON/schema-first описание preconditions, browser inputs, waits, event/state assertions, checkpoints и teardown. Никаких обязательных одноразовых .mjs/PowerShell/Playwright/CDP driver scripts, создаваемых агентом.
+5. **Evidence/Report.** Привязанные к запуску screenshots, optional video/trace, console/network/runtime diagnostics, expected/actual assertions, browser/runtime/build metadata и отчёт PASS/FAIL/SKIP/UNVERIFIED.
+6. **Security/lifecycle.** Loopback-only для локальных MCP/browser orchestration endpoints, per-session capability token, origin/project/build binding, isolated browser profiles по умолчанию, explicit attach, bounded payload/event buffers, cancellation и гарантированная очистка. Game Test Bridge не открывает собственный listener/порт и доступен только через session-scoped channel Preview Host.
+
+### Очередность реализации
+
+#### QA-0 — аудит и технический spike
+
+- [ ] Инвентаризировать текущие Editor MCP, server APIs, Project Build API, Preview Host, runtime adapter, diagnostics и существующие browser automation dependencies. Не дублировать существующие команды.
+- [ ] Изучить Kimi WebBridge references: официальный product workflow, Nimm0ny MCP adapter, efrg123 v2 architecture/API plan; отдельно проверить лицензию и реальный статус кода до reuse. Считать их reference, а не зависимость.
+- [ ] Сравнить Playwright isolated browser sessions и CDP attach к существующему Chromium/Yandex Browser: input fidelity, session lifecycle, console/network capture, screenshot/video/trace, stability, security и CI suitability.
+- [ ] Зафиксировать минимальную поддерживаемую browser matrix для первой версии и список explicit unsupported capabilities.
+- [ ] Подготовить protocol/schema fixtures и threat model до добавления browser-control endpoints.
+
+#### QA-1 — Engine Test Bridge
+
+- [ ] Утвердить versioned handshake и capability discovery для engine/runtime version, build/preview/session IDs и project revision.
+- [ ] Реализовать stable-ID snapshots для сцен и игровых сущностей; expose only allowlisted, serializable diagnostics.
+- [ ] Добавить bounded typed event stream с sequence/cursor, correlation IDs, subscription lifecycle, overflow diagnostics и фильтрацией.
+- [ ] Определить безопасную регистрацию semantic gameplay test events и test-only actions без доступа к произвольным внутренним объектам.
+- [ ] Добавить optional deterministic mode (seed/controlled clock/fixed step) только для тех частей runtime, где semantics гарантируются; отделить его от real-time browser tests.
+- [ ] Проверить, что bridge не меняет gameplay, не создаёт второй game loop, не поднимает собственный network listener/порт, использует только авторизованный session-scoped channel Preview Host и полностью исключается из Release build.
+- [ ] Добавить tests на malformed/unknown schema versions, stale IDs, missing provider, event overflow, disconnect, cleanup и unsupported capability.
+
+#### QA-2 — Browser Controller и session manager
+
+- [ ] Реализовать изолированные browser contexts/profiles по умолчанию и отдельный explicit attach mode.
+- [ ] Ввести session ownership, explicit target tab selection, allowlisted preview origins, version/capability discovery и per-session cancellation.
+- [ ] Поддержать browser-level keyboard, mouse, wheel, pointer и touch input; gameplay input не должен заменяться DOM dispatchEvent или прямым вызовом runtime methods.
+- [ ] Реализовать обязательный цикл observe → resolve target → actionability → execute → verify → recover со стабильными session/document-scoped refs, диагностикой stale targets и pre/post state diff.
+- [ ] Реализовать ожидания по observable conditions и actionability; не строить основной workflow на фиксированных sleeps и угадывании пиксельных координат.
+- [ ] Получать screenshot/video/trace и console/network/page diagnostics с ограничением размера и redaction.
+- [ ] Проверить timeout, navigation race, browser crash, stale tab, duplicate target, parallel requests, attach disconnect и cleanup.
+- [ ] Не использовать личный browser profile/cookies пользователя по умолчанию; attach явно обозначается в tool arguments и отчёте.
+
+#### QA-3 — Game QA MCP
+
+- [ ] Создать отдельный package с собственными manifest, strict typecheck, tests, документацией и loopback-only transport/security policy для локальных MCP/browser orchestration endpoints; не создавать отдельный сетевой endpoint для Game Test Bridge.
+- [ ] Интегрировать MCP tools с публичными Preview/Build APIs, Browser Controller и Game Test Bridge; не делать отдельную реализацию build/preview/runtime.
+- [ ] Предоставлять task-level tools для session lifecycle, open/attach preview, viewport/input, runtime snapshots/events, diagnostics, scenario execution/cancel и report/artifact retrieval.
+- [ ] Использовать structured errors, explicit idempotency/retry semantics и verified/unverified operation status.
+- [ ] Ограничить payload/response/event sizes, устанавливать timeouts и не передавать большие binary traces в одном MCP ответе; артефакты выдавать по ID/URI и краткому summary.
+- [ ] Не открывать arbitrary page evaluation, shell execution или произвольный вызов внутренних engine methods в стандартном QA tool surface.
+
+#### QA-4 — Declarative Scenario Runner
+
+- [ ] Утвердить versioned schema сценария: metadata, setup, preconditions, actions, waits, assertions, evidence checkpoints и teardown.
+- [ ] Поддержать browser input actions и ожидание runtime events/state conditions с явными timeouts.
+- [ ] Поддержать assertions на scene/entity/component observable state, event count/sequence, resource state и project-defined gameplay events.
+- [ ] Зафиксировать правила retry: не повторять автоматически non-idempotent action после outcome_unknown.
+- [ ] Добавить fixture-сценарии для движения, прыжка, collision/landing, item pickup, score/progression, win/lose state, scene transition, restart и input/focus recovery.
+- [ ] Хранить сценарии как project-owned declarative test artifacts в согласованной test area; не генерировать временные driver scripts и не смешивать тестовые данные с gameplay source.
+
+#### QA-5 — Reports, artifacts и CI
+
+- [ ] Формировать report с project/commit/schema/build/preview/scenario/browser/OS/viewport/DPR metadata и точными expected/actual результатами.
+- [ ] Привязывать screenshots, video/trace, console/network/runtime logs и event snapshots к конкретному run/step.
+- [ ] Разделять PASS, FAIL, SKIP и UNVERIFIED; отсутствие диагностики или потеря событий не означает PASS.
+- [ ] Обеспечить retention/cleanup, size limits, secret redaction и повторное получение артефактов по ID.
+- [ ] Встроить быстрые contract/unit/security checks в обычный CI; адресные browser smoke запускать по затронутому слою, полный gameplay/cross-browser acceptance — on-demand или на release/test promotion. Не добавлять тяжёлую браузерную матрицу в каждый обычный dev/pre-PR прогон.
+- [ ] Зафиксировать реальные browser/device/host evidence; headless SwiftShader не считать доказательством GPU/performance на физическом устройстве.
+
+### Сквозной acceptance fixture
+
+Минимальная приёмка должна использовать чистый пример 2D-игры и пройти путь:
+
+1. Сборка проекта штатным Build API без открытого Editor UI.
+2. Запуск игры через Preview Host и создание отдельной QA browser session.
+3. Ожидание game-ready condition и получение initial runtime snapshot.
+4. Реальное browser-level управление персонажем с keyboard или pointer/touch.
+5. Проверка перемещения, прыжка/приземления, collision/event, сбора предмета и обновления игрового состояния.
+6. Проверка victory/defeat state, перехода сцены и Restart, включая сброс состояния.
+7. Сбор screenshots, runtime events, console/network errors и assertions в одном session-correlated report.
+8. Завершение preview/browser session с подтверждением отсутствия принадлежащих QA процессов, вкладок и подписок.
+9. Повторный запуск того же scenario без генерации агентом вспомогательных инфраструктурных скриптов и без ручного изменения игрового исходника для подключения тестировщика.
+10. Подтверждение, что Game Test Bridge не создаёт отдельного listener/порта, а его channel и subscriptions закрываются Preview Host вместе с QA session.
 
 ---
 
