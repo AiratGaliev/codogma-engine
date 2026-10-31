@@ -9,10 +9,24 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         setTexture(key: string, frame?: string | number): void;
     }
 
+    export interface ITextureRect {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }
+
+    export interface ITextureTrim extends ITextureRect {
+        actualWidth: number;
+        actualHeight: number;
+    }
+
     export interface ITextureKeys {
 
         key?: string;
         frame?: string | number;
+        crop?: ITextureRect;
+        trim?: ITextureTrim;
     }
 
     export interface ITextureData
@@ -55,15 +69,37 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const obj = this.getObject();
             const support = obj.getEditorSupport();
             const prop = TextureComponent.texture;
+            const keys = prop.getValue(obj) as ITextureKeys;
 
             if (support.isNestedPrefabInstance()
                 && support.isUnlockedProperty(prop)) {
 
-                    const dom = new core.code.MethodCallCodeDOM("setTexture", args.objectVarName);
-                    const keys = prop.getValue(obj) as ITextureKeys;
-                    dom.argLiteral(keys.key);
-                    dom.argStringOrFloat(keys.frame);
-                    args.statements.push(dom);
+                const dom = new core.code.MethodCallCodeDOM("setTexture", args.objectVarName);
+                dom.argLiteral(keys.key);
+                dom.argStringOrFloat(keys.frame);
+                args.statements.push(dom);
+            }
+
+            if (keys.trim) {
+
+                const trimCall = new core.code.MethodCallCodeDOM("setTrim", `${args.objectVarName}.frame`);
+                trimCall.argFloat(keys.trim.actualWidth);
+                trimCall.argFloat(keys.trim.actualHeight);
+                trimCall.argFloat(keys.trim.x);
+                trimCall.argFloat(keys.trim.y);
+                trimCall.argFloat(keys.trim.width);
+                trimCall.argFloat(keys.trim.height);
+                args.statements.push(trimCall);
+            }
+
+            if (keys.crop) {
+
+                const cropCall = new core.code.MethodCallCodeDOM("setCrop", args.objectVarName);
+                cropCall.argFloat(keys.crop.x);
+                cropCall.argFloat(keys.crop.y);
+                cropCall.argFloat(keys.crop.width);
+                cropCall.argFloat(keys.crop.height);
+                args.statements.push(cropCall);
             }
         }
 
@@ -73,14 +109,18 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
         setTextureKeys(keys: ITextureKeys) {
 
+            const previousKeys = this._textureKeys || {};
+            keys = keys || {};
             this._textureKeys = keys;
 
             if (this._textureKeys.frame === null) {
-
                 this._textureKeys.frame = undefined;
             }
 
-            const obj = this.getObject() as ITextureLikeObject & IOriginLikeObject;
+            const obj = this.getObject() as ITextureLikeObject & IOriginLikeObject & {
+                setCrop?: (x?: number, y?: number, width?: number, height?: number) => void;
+                frame?: any;
+            };
 
             const ox = obj.originX;
             const oy = obj.originY;
@@ -90,8 +130,34 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const objES = obj.getEditorSupport();
 
             if (objES.hasComponent(OriginComponent)) {
-                
                 obj.setOrigin(ox, oy);
+            }
+
+            if (keys.trim) {
+                const frame = obj.frame;
+
+                if (!frame || typeof frame.setTrim !== "function") {
+                    throw new Error("The current Phaser frame does not support trim metadata.");
+                }
+
+                frame.setTrim(
+                    keys.trim.actualWidth,
+                    keys.trim.actualHeight,
+                    keys.trim.x,
+                    keys.trim.y,
+                    keys.trim.width,
+                    keys.trim.height
+                );
+            }
+
+            if (keys.crop) {
+                if (typeof obj.setCrop !== "function") {
+                    throw new Error("The current Phaser GameObject does not support crop metadata.");
+                }
+
+                obj.setCrop(keys.crop.x, keys.crop.y, keys.crop.width, keys.crop.height);
+            } else if (previousKeys.crop && typeof obj.setCrop === "function") {
+                obj.setCrop();
             }
 
             objES.onUpdateAfterSetTexture();
