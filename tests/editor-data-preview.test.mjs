@@ -849,3 +849,184 @@ test("collision geometry validation rejects shapes outside the source frame", ()
         /находиться внутри кадра/
     )
 })
+
+
+function createSourceFile(width, height, modifiedAt = 1000) {
+    return {
+        width,
+        height,
+        getSize: () => width * height * 4,
+        getModTime: () => modifiedAt,
+        isFile: () => true
+    }
+}
+
+function createTestFrame(key, x, y, width, height) {
+    return {
+        getName: () => String(key),
+        getWidth: () => width,
+        getHeight: () => height,
+        getFrameData: () => ({
+            src: { x, y, width, height }
+        })
+    }
+}
+
+class TestImageFrameItem extends packCore.ImageFrameContainerAssetPackItem {
+    constructor(data, source) {
+        super(null, data)
+        this.source = source
+        this._frames = null
+    }
+
+    getFileFromAssetUrl() {
+        return this.source
+    }
+
+    resetCache() {
+        this._frames = null
+    }
+
+    async preload() {
+        const config = this.getData().frameConfig
+        const frameWidth = config.frameWidth
+        const frameHeight = config.frameHeight
+        const columns = Math.floor(this.source.width / frameWidth)
+        const rows = Math.floor(this.source.height / frameHeight)
+
+        this._frames = []
+
+        for (let index = 0; index < columns * rows; index++) {
+            const column = index % columns
+            const row = Math.floor(index / columns)
+            this._frames.push(createTestFrame(
+                index,
+                column * frameWidth,
+                row * frameHeight,
+                frameWidth,
+                frameHeight
+            ))
+        }
+
+        return controls.PreloadResult.NOTHING_LOADED
+    }
+
+    getFrames() {
+        return this._frames || []
+    }
+}
+
+test("Importer.reimportItem preserves metadata and surfaces frame geometry conflicts", async () => {
+    const originalGetAllPacks = packCore.AssetPackUtils.getAllPacks
+    packCore.AssetPackUtils.getAllPacks = async () => []
+
+    try {
+        const originalSource = createSourceFile(32, 32, 1000)
+        const item = new TestImageFrameItem({
+            type: "spritesheet",
+            key: "hero",
+            url: "images/hero.png",
+            frameConfig: { frameWidth: 16, frameHeight: 16 }
+        }, originalSource)
+        await item.preload()
+
+        const metadata = spriteMetadata.ensure(
+            item.getData(),
+            originalSource,
+            spriteMetadata.describeFrames(item.getFrames())
+        )
+        metadata.frames["0"].pivot = { x: 0.25, y: 0.75 }
+        metadata.frames["2"].collisionShapes = [
+            { type: "rectangle", x: 1, y: 1, width: 12, height: 12 }
+        ]
+        item.getData().codogma = metadata
+
+        const importer = new class extends packUi.importers.Importer {
+            constructor() {
+                super("spritesheet")
+            }
+
+            acceptFile() {
+                return true
+            }
+
+            createItemData() {
+                return {
+                    url: "images/hero.png",
+                    frameConfig: { frameWidth: 16, frameHeight: 16 }
+                }
+            }
+        }()
+
+        const pack = { getItems: () => [item] }
+        // Expanding the sheet width from two to three columns changes the
+        // source rectangle for frame index 2. The old authored geometry must
+        // be archived rather than silently attached to the new cell.
+        item.source = createSourceFile(48, 32, 2000)
+
+        await importer.reimportItem(pack, item)
+
+        const updated = item.getData().codogma
+        assert.equal(updated.assetId, metadata.assetId)
+        assert.deepEqual(updated.frames["0"].pivot, { x: 0.25, y: 0.75 })
+        assert.equal(updated.conflicts.some(conflict =>
+            conflict.type === "frame-geometry-changed" && conflict.frameKey === "2"), true)
+        assert.equal(updated.orphanedFrames.some(frame =>
+            frame.frameKey === "2" && frame.id === metadata.frames["2"].id), true)
+        assert.equal(updated.frames["2"].sourceRect.x, 32)
+    } finally {
+        packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
+    }
+})
+
+test("Importer.reimportItem restores the original project data when the new source cannot be sliced", async () => {
+    const originalGetAllPacks = packCore.AssetPackUtils.getAllPacks
+    packCore.AssetPackUtils.getAllPacks = async () => []
+
+    try {
+        const source = createSourceFile(32, 32, 1000)
+        const item = new TestImageFrameItem({
+            type: "spritesheet",
+            key: "hero",
+            url: "images/hero.png",
+            frameConfig: { frameWidth: 16, frameHeight: 16 }
+        }, source)
+        await item.preload()
+
+        const metadata = spriteMetadata.ensure(
+            item.getData(),
+            source,
+            spriteMetadata.describeFrames(item.getFrames())
+        )
+        metadata.frames["0"].pivot = { x: 0.2, y: 0.8 }
+        item.getData().codogma = metadata
+
+        const before = JSON.parse(JSON.stringify(item.getData()))
+        const importer = new class extends packUi.importers.Importer {
+            constructor() {
+                super("spritesheet")
+            }
+
+            acceptFile() {
+                return true
+            }
+
+            createItemData() {
+                return {
+                    url: "images/hero.png",
+                    frameConfig: { frameWidth: 16, frameHeight: 16 }
+                }
+            }
+        }()
+
+        item.source = createSourceFile(0, 0, 2000)
+
+        await assert.rejects(
+            importer.reimportItem({ getItems: () => [item] }, item),
+            /could not produce any valid frames/
+        )
+        assert.deepEqual(item.getData(), before)
+    } finally {
+        packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
+    }
+})
