@@ -42,7 +42,7 @@ function codeFenceLines(lines) {
 
     result.add(index + 1);
     const closing = new RegExp(
-      `^ {0,3}${fence.character === "`" ? "\\\`" : "~"}{${fence.length},}[\\t ]*$`,
+      `^ {0,3}${fence.character}{${fence.length},}[\\t ]*$`,
     );
     if (closing.test(line)) fence = null;
   }
@@ -55,14 +55,14 @@ function codeFenceLines(lines) {
 }
 
 function validateAddedLinks(file, sourceLines, fencedLines, addedLines) {
-  const linkPattern = /!?\\[[^\\]]*\\]\\(\\s*(?:<([^>]+)>|((?:\\\\.|[^\\s)])+))/g;
+  const linkPattern = /!?\[[^\]]*\]\(\s*(?:<([^>]+)>|((?:\\.|[^\s)])+))/g;
 
   for (const lineNumber of addedLines) {
     if (fencedLines.has(lineNumber)) continue;
     const line = sourceLines[lineNumber - 1] ?? "";
     for (const match of line.matchAll(linkPattern)) {
       let destination = (match[1] ?? match[2] ?? "").trim();
-      if (!destination || destination.startsWith("#") || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/)/i.test(destination)) continue;
+      if (!destination || destination.startsWith("#") || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(destination)) continue;
 
       destination = destination.split(/[?#]/, 1)[0];
       if (!destination) continue;
@@ -96,7 +96,7 @@ for (const line of diff.split(/\r?\n/)) {
     if (!addedLinesByFile.has(currentFile)) addedLinesByFile.set(currentFile, []);
     continue;
   }
-  const hunk = line.match(/^@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@/);
+  const hunk = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
   if (hunk) {
     newLine = Number(hunk[1]);
     continue;
