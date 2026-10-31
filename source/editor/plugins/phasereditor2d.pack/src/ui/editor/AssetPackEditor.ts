@@ -456,11 +456,13 @@ namespace phasereditor2d.pack.ui.editor {
             const after = undo.AssetPackEditorOperation.takeSnapshot(this);
             this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
 
+            // Reimport уже изменил project model: она должна оставаться dirty
+            // даже если обновление preview/blocks завершится ошибкой.
+            this.setDirty(true);
             this._viewer.repaint();
             await this.refreshBlocks();
             this._viewer.setSelection([item]);
             this._viewer.reveal(item);
-            this.setDirty(true);
         }
 
         async refreshBlocks() {

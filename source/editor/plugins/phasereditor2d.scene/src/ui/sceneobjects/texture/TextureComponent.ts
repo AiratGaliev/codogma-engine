@@ -27,7 +27,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         frame?: string | number;
         crop?: ITextureRect;
         trim?: ITextureTrim;
-        collisionShapes?: any[];
+        collisionShapes?: pack.core.ISpriteAssetCollisionShape[];
     }
 
     export interface ITextureData

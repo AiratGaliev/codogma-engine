@@ -16,8 +16,7 @@ namespace phasereditor2d.pack.ui.editor.properties {
 
         canEdit(obj: any, n: number): boolean {
 
-            return n === 1 && (obj instanceof core.ImageAssetPackItem
-                || obj instanceof core.SpritesheetAssetPackItem);
+            return n === 1 && obj instanceof core.ImageFrameContainerAssetPackItem;
         }
 
         canEditNumber(n: number): boolean {
@@ -268,8 +267,7 @@ namespace phasereditor2d.pack.ui.editor.properties {
 
             const item = this.getSelectionFirstElement();
 
-            return item instanceof core.ImageAssetPackItem || item instanceof core.SpritesheetAssetPackItem
-                ? item : null;
+            return item instanceof core.ImageFrameContainerAssetPackItem ? item : null;
         }
 
         private getFrameState(item: core.ImageFrameContainerAssetPackItem) {

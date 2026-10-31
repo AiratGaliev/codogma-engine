@@ -12,6 +12,31 @@ namespace phasereditor2d.pack.core {
         sourceRect: ISpriteAssetRect;
     }
 
+    export interface ISpriteAssetRectangleCollisionShape {
+        type: "rectangle" | "rect";
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }
+
+    export interface ISpriteAssetCircleCollisionShape {
+        type: "circle";
+        x: number;
+        y: number;
+        radius: number;
+    }
+
+    export interface ISpriteAssetPolygonCollisionShape {
+        type: "polygon";
+        points: Array<[number, number] | { x: number; y: number }>;
+    }
+
+    export type ISpriteAssetCollisionShape =
+        ISpriteAssetRectangleCollisionShape
+        | ISpriteAssetCircleCollisionShape
+        | ISpriteAssetPolygonCollisionShape;
+
     /**
      * Версионированные пользовательские настройки изображения/кадров.
      * Данные хранятся в поле codogma Asset Pack entry и не смешиваются
@@ -36,7 +61,17 @@ namespace phasereditor2d.pack.core {
             }
 
             if (!metadata.frames || typeof metadata.frames !== "object" || Array.isArray(metadata.frames)) {
-                metadata.frames = {};
+                metadata.frames = Object.create(null);
+            } else {
+                // Имена кадров приходят из пользовательских атласов. Null-prototype map
+                // не интерпретирует "__proto__" и другие специальные имена как setters.
+                const safeFrames = Object.create(null);
+
+                for (const key of Object.keys(metadata.frames)) {
+                    safeFrames[key] = metadata.frames[key];
+                }
+
+                metadata.frames = safeFrames;
             }
 
             if (!Array.isArray(metadata.orphanedFrames)) {
@@ -90,7 +125,7 @@ namespace phasereditor2d.pack.core {
 
             const metadata = this.ensure(previousItemData || {}, sourceFile, []);
             const previousFrames = metadata.frames || {};
-            const nextFrames: { [key: string]: any } = {};
+            const nextFrames: { [key: string]: any } = Object.create(null);
             const seen = new Set<string>();
 
             for (const descriptor of frames) {
@@ -286,7 +321,7 @@ namespace phasereditor2d.pack.core {
                 assetId: this.createId(),
                 source: null,
                 importSettingsFingerprint: "",
-                frames: {},
+                frames: Object.create(null),
                 orphanedFrames: [],
                 conflicts: []
             };

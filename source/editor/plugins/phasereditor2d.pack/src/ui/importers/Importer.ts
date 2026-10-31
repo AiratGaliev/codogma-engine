@@ -163,9 +163,9 @@ namespace phasereditor2d.pack.ui.importers {
 
                 await item.preload();
 
-                const finder = new core.PackFinder(pack);
-                await finder.preload();
-                await item.build(finder);
+                // Image/Spritesheet AssetPackItems не строят зависимости от других entries.
+                // Не перечитываем все сохранённые packs: активный pack может содержать unsaved edits.
+                await item.build(new core.PackFinder(pack));
 
                 if (item instanceof core.ImageFrameContainerAssetPackItem) {
                     const frameDescriptors = core.SpriteAssetMetadata.describeFrames(item.getFrames());
