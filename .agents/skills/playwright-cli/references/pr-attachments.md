@@ -30,7 +30,9 @@ Reference a screenshot in the PR body with Markdown image syntax; `gh` rewrites 
 
 ```markdown
 ![alt](./settings-after.png)
-``` Unreferenced attachments are appended at the end in flag order.
+```
+
+Unreferenced attachments are appended at the end in flag order.
 
 ## Limits
 
