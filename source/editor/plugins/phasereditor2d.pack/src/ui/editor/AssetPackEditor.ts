@@ -398,31 +398,43 @@ namespace phasereditor2d.pack.ui.editor {
         async importData_async(importData: IImportData) {
 
             const before = undo.AssetPackEditorOperation.takeSnapshot(this);
+            let items: core.AssetPackItem[] = [];
 
-            const items = await importData.importer.autoImport(this._pack, importData.files);
+            try {
+                items = await importData.importer.autoImport(this._pack, importData.files);
 
-            const finder = new pack.core.PackFinder(this._pack);
+                const finder = new pack.core.PackFinder(this._pack);
 
-            for (const item of items) {
+                for (const item of items) {
+                    await item.preload();
+                    await item.build(finder);
+                }
 
-                await item.preload();
+                this._viewer.repaint();
+                await this.refreshBlocks();
+                this._viewer.setSelection(items);
+                this._viewer.reveal(...items);
+                this.setDirty(true);
 
-                await item.build(finder);
+                const after = undo.AssetPackEditorOperation.takeSnapshot(this);
+                this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
+            } catch (error) {
+                // Не оставляем частично построенные entries, если финальная сборка импорта завершилась ошибкой.
+                for (const item of items) {
+                    this._pack.deleteItem(item);
+                    item.resetCache();
+                }
+
+                this._viewer.repaint();
+
+                try {
+                    await this.refreshBlocks();
+                } catch (refreshError) {
+                    console.error("Не удалось обновить Asset Pack после отката импорта.", refreshError);
+                }
+
+                throw error;
             }
-
-            this._viewer.repaint();
-
-            this.setDirty(true);
-
-            await this.refreshBlocks();
-
-            this._viewer.setSelection(items);
-
-            this._viewer.reveal(...items);
-
-            const after = undo.AssetPackEditorOperation.takeSnapshot(this);
-
-            this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
         }
 
         async reimportItem_async(item: core.AssetPackItem) {

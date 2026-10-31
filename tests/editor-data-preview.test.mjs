@@ -796,3 +796,56 @@ test("collision geometry validation rejects malformed and degenerate shapes", ()
         /неподдерживаемый тип/
     )
 })
+
+
+test("AssetPack.toJSON persists Codogma metadata with legacy entry fields", () => {
+    const pack = new packCore.AssetPack(null, "")
+    const item = new packCore.ImageAssetPackItem(pack, {
+        type: "image",
+        key: "icons",
+        url: "images/icons.png"
+    })
+    const metadata = spriteMetadata.ensure(item.getData(), sourceFile(), [
+        { key: "icons", sourceRect: { x: 0, y: 0, width: 64, height: 64 } }
+    ])
+    metadata.frames.icons.pivot = { x: 0.3, y: 0.75 }
+    item.getData().codogma = metadata
+    pack.addItem(item)
+
+    const serialized = pack.toJSON()
+    const restoredData = JSON.parse(JSON.stringify(serialized.section1.files[0]))
+    const restoredItem = new packCore.ImageAssetPackItem(null, restoredData)
+
+    assert.equal(restoredItem.getData().key, "icons")
+    assert.equal(restoredItem.getData().url, "images/icons.png")
+    assert.equal(restoredItem.getData().codogma.assetId, metadata.assetId)
+    assert.equal(restoredItem.getData().codogma.frames.icons.id, metadata.frames.icons.id)
+    assert.deepEqual(restoredItem.getData().codogma.frames.icons.pivot, { x: 0.3, y: 0.75 })
+})
+
+test("collision geometry validation rejects shapes outside the source frame", () => {
+    assert.match(
+        spriteMetadata.validateCollisionShapes(
+            [{ type: "rectangle", x: 10, y: 0, width: 8, height: 8 }],
+            16,
+            16
+        ),
+        /находиться внутри кадра/
+    )
+    assert.match(
+        spriteMetadata.validateCollisionShapes(
+            [{ type: "circle", x: 14, y: 8, radius: 4 }],
+            16,
+            16
+        ),
+        /полностью находиться внутри кадра/
+    )
+    assert.match(
+        spriteMetadata.validateCollisionShapes(
+            [{ type: "polygon", points: [[0, 0], [16, 0], [18, 8]] }],
+            16,
+            16
+        ),
+        /находиться внутри кадра/
+    )
+})

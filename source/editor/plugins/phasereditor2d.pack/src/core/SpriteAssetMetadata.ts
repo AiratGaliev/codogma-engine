@@ -177,7 +177,7 @@ namespace phasereditor2d.pack.core {
          * Возвращает null для корректной геометрии или диагностическое сообщение.
          * Координаты всех фигур заданы в локальном пространстве кадра, в пикселях.
          */
-        static validateCollisionShapes(value: any): string | null {
+        static validateCollisionShapes(value: any, frameWidth?: number, frameHeight?: number): string | null {
 
             if (!Array.isArray(value)) {
                 return "Collision shapes должны быть JSON-массивом.";
@@ -195,15 +195,19 @@ namespace phasereditor2d.pack.core {
                     case "rect":
                         if (!this.isFiniteNumber(shape.x) || !this.isFiniteNumber(shape.y)
                             || !this.isPositiveNumber(shape.width) || !this.isPositiveNumber(shape.height)
-                            || shape.x < 0 || shape.y < 0) {
-                            return `Фигура ${index + 1}: rectangle требует x/y >= 0 и width/height > 0.`;
+                            || shape.x < 0 || shape.y < 0
+                            || (this.isPositiveNumber(frameWidth) && shape.x + shape.width > frameWidth)
+                            || (this.isPositiveNumber(frameHeight) && shape.y + shape.height > frameHeight)) {
+                            return `Фигура ${index + 1}: rectangle должен иметь положительный размер и находиться внутри кадра.`;
                         }
                         break;
 
                     case "circle":
                         if (!this.isFiniteNumber(shape.x) || !this.isFiniteNumber(shape.y)
-                            || !this.isPositiveNumber(shape.radius) || shape.x < 0 || shape.y < 0) {
-                            return `Фигура ${index + 1}: circle требует x/y >= 0 и radius > 0.`;
+                            || !this.isPositiveNumber(shape.radius) || shape.x < shape.radius || shape.y < shape.radius
+                            || (this.isPositiveNumber(frameWidth) && shape.x + shape.radius > frameWidth)
+                            || (this.isPositiveNumber(frameHeight) && shape.y + shape.radius > frameHeight)) {
+                            return `Фигура ${index + 1}: circle должен иметь положительный радиус и полностью находиться внутри кадра (x/y — центр).`;
                         }
                         break;
 
@@ -216,8 +220,10 @@ namespace phasereditor2d.pack.core {
                             const x = Array.isArray(point) ? point[0] : point && point.x;
                             const y = Array.isArray(point) ? point[1] : point && point.y;
 
-                            if (!this.isFiniteNumber(x) || !this.isFiniteNumber(y) || x < 0 || y < 0) {
-                                return `Фигура ${index + 1}: координаты polygon должны быть конечными и неотрицательными.`;
+                            if (!this.isFiniteNumber(x) || !this.isFiniteNumber(y) || x < 0 || y < 0
+                                || (this.isPositiveNumber(frameWidth) && x > frameWidth)
+                                || (this.isPositiveNumber(frameHeight) && y > frameHeight)) {
+                                return `Фигура ${index + 1}: координаты polygon должны быть конечными и находиться внутри кадра.`;
                             }
                         }
                         break;

@@ -135,8 +135,10 @@ namespace phasereditor2d.pack.ui.editor.properties {
                 const orphaned = state.metadata.orphanedFrames || [];
 
                 this._status.textContent = conflicts.length > 0
-                    ? `Reimport conflicts: ${conflicts.length}. Previous custom frame data is retained in orphaned metadata (${orphaned.length} frame(s)).`
-                    : "Trim/crop rectangles and collision coordinates use frame-local pixels. Pivot uses normalized coordinates.";
+                    ? `Reimport conflicts: ${conflicts.length}. ${conflicts
+                        .map((conflict: any) => `${conflict.frameKey}: ${conflict.message}`)
+                        .join(" ")} Previous custom frame data remains in orphaned metadata (${orphaned.length} frame(s)).`
+                    : "Trim/crop and collision coordinates use frame-local pixels. Pivot uses normalized coordinates. Circle x/y represent its center.";
             });
 
             this.bindNumberInput(pivotX, "pivot", "x");
@@ -235,7 +237,11 @@ namespace phasereditor2d.pack.ui.editor.properties {
                 return;
             }
 
-            const validationError = core.SpriteAssetMetadata.validateCollisionShapes(shapes);
+            const validationError = core.SpriteAssetMetadata.validateCollisionShapes(
+                shapes,
+                state.descriptor.sourceRect.width,
+                state.descriptor.sourceRect.height
+            );
 
             if (validationError) {
                 this._status.textContent = validationError;
