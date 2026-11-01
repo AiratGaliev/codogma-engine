@@ -142,6 +142,7 @@ interface Props {
   onSelect: (id: string) => void;
   onTransform: (id: string, patch: Record<string, number>) => void;
   onStatus: (level: "info" | "success" | "warning" | "error", message: string) => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
 }
 
 interface SceneEntry {
@@ -560,6 +561,7 @@ function PhaserSceneViewport(props: Props) {
             sceneReady = true;
             setRuntimeState("ready");
             setGameReady(true);
+            props.onCanvasReady?.(canvas ?? null);
             syncScene();
             props.onStatus("success", `Phaser Scene View ready · ${rendererName} · ${runtimePath}`);
           }
@@ -598,6 +600,7 @@ function PhaserSceneViewport(props: Props) {
       disposed = true;
       resizeObserver?.disconnect();
       game?.destroy(true);
+      props.onCanvasReady?.(null);
       transformDrag = undefined;
       game = undefined;
       setGameReady(false);
