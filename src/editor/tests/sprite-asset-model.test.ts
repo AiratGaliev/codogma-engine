@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
+import type { SpriteAssetPackEntry, SpriteAssetPackDocument } from "../src/domain/sprite-asset-model.ts";
 import {
   describeSpriteAssetFrames,
   ensureSpriteAssetMetadata,
@@ -12,15 +13,15 @@ import {
   setSpriteAssetEntry,
   updateSpriteFrameMetadata,
   validateSpriteCollisionShapes,
-} from "../src/domain/sprite-asset-model.mjs";
+} from "../src/domain/sprite-asset-model.ts";
 
-const imageEntry = {
+const imageEntry: SpriteAssetPackEntry = {
   type: "image",
   key: "hero",
   url: "assets/hero.png",
   customImporterOption: { keep: true },
 };
-const pack = {
+const pack: SpriteAssetPackDocument = {
   section: { files: [imageEntry] },
   meta: { contentType: "phasereditor2d.pack.core.AssetContentType", app: "Phaser Editor" },
   vendorRootField: 42,
@@ -87,9 +88,9 @@ test("ensures stable IDs/source fingerprints and preserves vendor fields", () =>
   const second = ensureSpriteAssetMetadata({ ...imageEntry, codogma: first }, { size: 1024, modifiedAt: 100 }, descriptors);
   assert.equal(second.assetId, first.assetId);
   assert.equal(second.frames.hero.id, first.frames.hero.id);
-  assert.equal(second.source.signature, first.source.signature);
-  assert.equal(imageEntry.customImporterOption.keep, true);
-  assert.throws(() => ensureSpriteAssetMetadata({ ...imageEntry, codogma: { schemaVersion: 99 } }), /newer than supported/);
+  assert.equal(second.source?.signature, first.source?.signature);
+  assert.equal((imageEntry.customImporterOption as { keep: boolean }).keep, true);
+  assert.throws(() => ensureSpriteAssetMetadata({ ...imageEntry, codogma: { schemaVersion: 99 } as never }), /newer than supported/);
 });
 
 test("edits pivot, trim, crop and collision shapes while preserving unknown frame properties", () => {
@@ -105,8 +106,8 @@ test("edits pivot, trim, crop and collision shapes while preserving unknown fram
     crop: { x: 4, y: 2, width: 32, height: 16 },
     collisionShapes: [{ type: "rectangle", x: 1, y: 2, width: 20, height: 10 }],
   });
-  assert.equal(edited.codogma.frames.hero.vendorFrameField, "retained");
-  assert.deepEqual(edited.codogma.frames.hero.pivot, { x: 0.5, y: 1 });
+  assert.equal(edited.codogma?.frames.hero.vendorFrameField, "retained");
+  assert.deepEqual(edited.codogma?.frames.hero.pivot, { x: 0.5, y: 1 });
   assert.throws(() => updateSpriteFrameMetadata(edited, "hero", { pivot: { x: 2, y: 0.5 } }), /between 0 and 1/);
   assert.throws(() => updateSpriteFrameMetadata(edited, "hero", { crop: { x: 60, y: 0, width: 10, height: 10 } }), /inside its frame bounds/);
 });
@@ -126,25 +127,25 @@ test("reimport preserves compatible frames and archives changed/removed authored
       { key: "1", sourceRect: { x: 32, y: 0, width: 32, height: 32 }, sourceSize: { width: 32, height: 32 }, trimRect: { x: 0, y: 0, width: 32, height: 32 } },
     ]),
   };
-  previous.codogma.frames["0"].pivot = { x: 0.5, y: 1 };
-  previous.codogma.frames["1"].collisionShapes = [{ type: "rectangle", x: 0, y: 0, width: 12, height: 12 }];
+  previous.codogma!.frames["0"].pivot = { x: 0.5, y: 1 };
+  previous.codogma!.frames["1"].collisionShapes = [{ type: "rectangle", x: 0, y: 0, width: 12, height: 12 }];
 
   const next = reconcileSpriteAssetMetadata(previous, { ...previous, url: "assets/hero.png" }, { size: 2048, modifiedAt: 200 }, [
     { key: "0", sourceRect: { x: 0, y: 0, width: 32, height: 32 }, sourceSize: { width: 32, height: 32 }, trimRect: { x: 0, y: 0, width: 32, height: 32 } },
     { key: "1", sourceRect: { x: 32, y: 0, width: 16, height: 32 }, sourceSize: { width: 16, height: 32 }, trimRect: { x: 0, y: 0, width: 16, height: 32 } },
   ]);
-  assert.deepEqual(next.codogma.frames["0"].pivot, { x: 0.5, y: 1 });
-  assert.equal(next.codogma.frames["1"].collisionShapes, undefined);
-  assert.equal(next.codogma.orphanedFrames.length, 1);
-  assert.equal(next.codogma.conflicts.length, 1);
-  assert.equal(next.codogma.conflicts[0].type, "frame-geometry-changed");
+  assert.deepEqual(next.codogma!.frames["0"].pivot, { x: 0.5, y: 1 });
+  assert.equal(next.codogma!.frames["1"].collisionShapes, undefined);
+  assert.equal(next.codogma!.orphanedFrames.length, 1);
+  assert.equal(next.codogma!.conflicts.length, 1);
+  assert.equal(next.codogma!.conflicts[0].type, "frame-geometry-changed");
 });
 
 test("sets a single Asset Pack item immutably and preserves unrelated sections", () => {
   const nextEntry = { ...imageEntry, codogma: ensureSpriteAssetMetadata(imageEntry, { size: 10, modifiedAt: 1 }, describeSpriteAssetFrames(imageEntry, 2, 2)) };
   const next = setSpriteAssetEntry(pack, "hero", nextEntry);
   assert.notEqual(next, pack);
-  assert.equal(next.section.files[0].codogma.assetId, nextEntry.codogma.assetId);
+  assert.equal((next.section as { files: SpriteAssetPackEntry[] }).files[0].codogma?.assetId, nextEntry.codogma?.assetId);
   assert.equal(next.vendorRootField, 42);
-  assert.equal(pack.section.files[0].codogma, undefined);
+  assert.equal((pack.section as { files: SpriteAssetPackEntry[] }).files[0].codogma, undefined);
 });

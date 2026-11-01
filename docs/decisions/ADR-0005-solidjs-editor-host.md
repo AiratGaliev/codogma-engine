@@ -34,6 +34,13 @@
 - Для TypeScript/JSX использовать `jsx: "preserve"` и `jsxImportSource: "solid-js"`.
 - В Vite используется `vite-plugin-solid`; для Tailwind CSS 4 — `@tailwindcss/vite`. Новый Host — client-side SPA; SolidStart не вводится без отдельного требования к SSR.
 
+## Языковая граница и тестовая инфраструктура
+
+- Весь собственный source нового Host в `src/editor/src/` — TypeScript (`.ts`) и SolidJS TSX (`.tsx`). Не добавлять JavaScript-реализации доменных моделей с параллельными `.d.mts` декларациями: интерфейсы и реализация должны проверяться одним TypeScript compiler.
+- Unit/integration tests в `src/editor/tests/` — TypeScript (`.test.ts`) и выполняются Vitest. Browser acceptance в `src/editor/browser-tests/` — TypeScript Playwright specs; `playwright.config.ts` и TypeScript fixture launcher также входят в Host typecheck.
+- Host `tsconfig.json` не включает `allowJs`; JavaScript/МJS в Host source/test scope не допускаются. Существующий Node backend (`server/*.mjs`), Playwright/Node tooling вне Host и legacy `source/editor/` остаются за этой границей.
+- Vitest и Playwright имеют раздельные test discovery patterns, чтобы браузерные сценарии не запускались в Node runner и наоборот. Production build не включает тестовые файлы.
+
 ## Архитектурные правила
 
 1. **Один новый UI Host:** `src/editor/` содержит приложение и feature modules. Не создавать отдельный npm package для каждой панели.

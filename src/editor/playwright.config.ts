@@ -23,7 +23,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "node tests/start-backend.mjs",
+      command: "node --experimental-strip-types tests/start-backend.ts",
       cwd: editorDirectory,
       url: "http://127.0.0.1:3000/editor/product.json",
       timeout: 30_000,

@@ -8,7 +8,7 @@
 
 ## Текущий результат COD-80 — первый Host и Scene slice
 
-В `src/editor/` появился самостоятельный SolidJS 1.9 Editor Host на Vite 8 и Tailwind CSS 4. Он запускается отдельно от legacy клиента, использует только loopback интерфейс и проксирует существующие `/editor/*` endpoints. Node backend и `source/editor/` не переписываются.
+В `src/editor/` появился самостоятельный SolidJS 1.9 Editor Host на Vite 8 и Tailwind CSS 4. Внутри Host принят единый языковой стандарт: UI — TSX, services/domain/models — TypeScript, unit/integration tests — Vitest на TypeScript, browser acceptance и её конфигурация — Playwright на TypeScript. JavaScript domain implementations и `.d.mts` sidecar declarations исключены; это не распространяется на Node backend, legacy Colibri и внешние repository scripts. Он запускается отдельно от legacy клиента, использует только loopback интерфейс и проксирует существующие `/editor/*` endpoints. Node backend и `source/editor/` не переписываются.
 
 Реализованные операции первой вертикали:
 
@@ -26,7 +26,7 @@
 
 **Границы COD-80, которые не следует смешивать с полной миграцией:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Docking в COD-80 ограничен перемещением Hierarchy/Inspector в Bottom Dock с возвратом в домашние слоты и перестановкой вкладок внутри Bottom Dock; произвольные floating windows, свободные split-зоны и произвольная перекомпоновка всех панелей не заявляются. Animation поддерживает базовую работу с Phaser JSON: открыть/создать файл, добавить/изменить/удалить clip и frame references; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом. User Components и Prefab поддерживают существующие базовые модели/операции, но полноценные script lifecycle, code generation и nested Prefab overrides требуют следующих slices; полный feature parity со старым Colibri не является целью migration. Специализированные Sprite/Spine/Tilemap/Physics/FX/importer workflows, session-aware MCP SSE routing, production cutover, rollback window и Colibri removal не входят в COD-80.
 
-Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck и production build, 36 domain tests и Chromium acceptance (9 tests на CI Fast #453). `fast-checks` проверяет `npm audit --audit-level=low` и остальные общие проверки репозитория.
+Browser acceptance конфигурируется через `src/editor/playwright.config.ts`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает общий TypeScript typecheck для TS/TSX source, domain/integration tests и Playwright TS files, production build, Vitest unit/integration suite и отдельный Chromium Playwright acceptance. `fast-checks` проверяет `npm audit --audit-level=low` и остальные общие проверки репозитория.
 
 ## 0. Правила переноса и реестр пользовательских workflows
 

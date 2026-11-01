@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
+import type { AnimationDocument } from "../src/domain/animation-model.ts";
 import {
   appendAnimationFrame, createAnimation, createAnimationDocument, formatAnimationContent,
   getAnimations, isAnimationContent, moveAnimationFrame, parseAnimationContent,
   removeAnimation, removeAnimationFrame, updateAnimation, updateAnimationSettings,
   getAnimationFrameDurationMs, getAnimationDurationMs, getAnimationTimelinePosition,
-} from "../src/domain/animation-model.mjs";
+} from "../src/domain/animation-model.ts";
 
-const fixture = {
+const fixture: AnimationDocument = {
   anims: [{ key: "walk", frameRate: 12, repeat: -1, frames: [{ key: "dino", frame: "walk_0" }, { key: "dino", frame: "walk_1", duration: 80 }], customMetadata: { source: "fixture" } }],
   globalTimeScale: 1,
   settings: { sourceLang: "TYPE_SCRIPT", generateCode: true, esModule: true, outputFolder: "src/animations" },
@@ -17,7 +18,7 @@ const fixture = {
 
 test("parses Phaser JSONAnimations and preserves unknown metadata", () => {
   const parsed = parseAnimationContent(JSON.stringify(fixture));
-  assert.equal(parsed.anims[0].customMetadata.source, "fixture");
+  assert.equal((parsed.anims[0].customMetadata as { source: string }).source, "fixture");
   assert.equal(parsed.vendorRootField, 42);
   assert.equal(parsed.meta.vendorField, "preserve");
   assert.equal(getAnimations(parsed)[0].frameCount, 2);
@@ -46,7 +47,7 @@ test("appends, reorders and removes animation frame references", () => {
 test("deletes animations and updates settings without losing unknown fields", () => {
   assert.deepEqual(removeAnimation(fixture, "walk").anims, []);
   const next = updateAnimationSettings(fixture, { esModule: false, customOption: "kept" });
-  assert.equal(next.settings.customOption, "kept");
+  assert.equal(next.settings?.customOption, "kept");
 });
 
 test("creates and formats a valid Phaser v3 animation file", () => {

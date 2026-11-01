@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("Workbench opens the real project, edits a scene and persists the layout", async ({ page }) => {
-  const pageErrors = [];
+  const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   await page.goto("/");
@@ -58,6 +58,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await expect(sceneCanvas).toBeVisible({ timeout: 20_000 });
   const canvasHandle = await sceneCanvas.elementHandle();
   expect(canvasHandle).not.toBeNull();
+  if (!canvasHandle) throw new Error("Scene canvas element is unavailable.");
 
   await page.getByRole("tab", { name: "Game" }).click();
   const frame = page.getByTestId("phaser-game-frame");
@@ -73,6 +74,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
 
   const canvasBounds = await sceneCanvas.boundingBox();
   expect(canvasBounds).not.toBeNull();
+  if (!canvasBounds) throw new Error("Scene canvas bounds are unavailable.");
   await page.mouse.click(
     canvasBounds.x + canvasBounds.width * 0.5,
     canvasBounds.y + canvasBounds.height * (432 / 600),
@@ -138,6 +140,7 @@ test("Scene Transform tools manipulate Phaser objects and commit one undoable ch
   await expect(canvas).toBeVisible({ timeout: 20_000 });
   const bounds = await canvas.boundingBox();
   expect(bounds).not.toBeNull();
+  if (!bounds) throw new Error("Scene canvas bounds are unavailable.");
 
   const startX = bounds.x + bounds.width * 0.5;
   const startY = bounds.y + bounds.height * (245 / 600);

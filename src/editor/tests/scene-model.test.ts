@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
+import type { SceneDocument } from "../src/domain/scene-model.ts";
 import {
   createSceneObject,
   findScenePaths,
@@ -8,9 +9,9 @@ import {
   parseSceneContent,
   removeSceneObject,
   updateSceneObject,
-} from "../src/domain/scene-model.mjs";
+} from "../src/domain/scene-model.ts";
 
-const fixtureScene = {
+const fixtureScene: SceneDocument = {
   id: "scene-1",
   sceneType: "SCENE",
   settings: { sceneKey: "Level" },
@@ -25,8 +26,8 @@ const fixtureScene = {
 test("parses and validates a real scene-shaped document without discarding fields", () => {
   const parsed = parseSceneContent(JSON.stringify(fixtureScene));
   assert.equal(parsed.id, "scene-1");
-  assert.equal(parsed.settings.sceneKey, "Level");
-  assert.equal(parsed.displayList[0].texture.key, "dino");
+  assert.equal(parsed.settings?.sceneKey, "Level");
+  assert.equal(parsed.displayList[0].texture?.key, "dino");
   assert.deepEqual(parsed.displayList[0].components, ["PushOnClick"]);
 });
 
@@ -69,7 +70,7 @@ test("fallback hierarchy ids can update and remove legacy objects without serial
 test("rejects NaN, Infinity and non-numeric transform values", () => {
   assert.throws(() => updateSceneObject(fixtureScene, "image-1", { x: Number.NaN }), /finite number/);
   assert.throws(() => updateSceneObject(fixtureScene, "image-1", { scaleY: Number.POSITIVE_INFINITY }), /finite number/);
-  assert.throws(() => updateSceneObject(fixtureScene, "image-1", { rotation: "left" }), /finite number/);
+  assert.throws(() => updateSceneObject(fixtureScene, "image-1", { rotation: "left" } as never), /finite number/);
 });
 
 test("creates supported Image, Text and Container nodes without changing the legacy schema", () => {
@@ -78,7 +79,7 @@ test("creates supported Image, Text and Container nodes without changing the leg
   const containerScene = createSceneObject(textScene, "Container");
   const objects = getSceneObjects(containerScene);
   assert.equal(objects.length, 6);
-  assert.equal(objects[3].source.texture.key, "dino");
+  assert.equal(objects[3].source.texture?.key, "dino");
   assert.equal(objects[4].source.text, "New text");
   assert.deepEqual(objects[5].source.list, []);
   assert.equal(fixtureScene.displayList.length, 3);

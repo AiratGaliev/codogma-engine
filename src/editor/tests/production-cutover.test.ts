@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import test from "node:test"
+import { test } from "vitest";
 import { spawn } from "node:child_process"
 import { createServer as createNetServer } from "node:net"
 import { dirname, resolve, join } from "node:path"
@@ -9,21 +9,21 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(testDirectory, "../../..")
 const projectDirectory = join(repositoryRoot, "tests", "workspace", "test-typescript")
 
-async function reserveLoopbackPort() {
+async function reserveLoopbackPort(): Promise<number> {
     const server = createNetServer()
-    await new Promise((resolvePromise, reject) => {
+    await new Promise<void>((resolvePromise, reject) => {
         server.once("error", reject)
         server.listen(0, "127.0.0.1", resolvePromise)
     })
     const address = server.address()
     assert.ok(address && typeof address === "object")
-    await new Promise((resolvePromise, reject) => server.close(error => error ? reject(error) : resolvePromise()))
+    await new Promise<void>((resolvePromise, reject) => server.close(error => error ? reject(error) : resolvePromise()))
     return address.port
 }
 
-async function startEditorServer(editorUi) {
+async function startEditorServer(editorUi: "solidjs" | "legacy"): Promise<{ origin: string; stop: () => Promise<void> }> {
     const port = await reserveLoopbackPort()
-    const child = spawn(process.execPath, [join(repositoryRoot, "server", "server.mjs")], {
+    const child = spawn(process.execPath, [join(repositoryRoot, "server", "server.ts")], {
         cwd: repositoryRoot,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
@@ -71,11 +71,11 @@ async function startEditorServer(editorUi) {
         origin,
         stop: async () => {
             if (child.exitCode !== null || child.signalCode !== null) return
-            const exited = new Promise(resolvePromise => child.once("exit", resolvePromise))
+            const exited = new Promise<void>((resolvePromise) => child.once("exit", () => resolvePromise()))
             child.kill("SIGTERM")
             await Promise.race([
                 exited,
-                new Promise(resolvePromise => setTimeout(resolvePromise, 3000))
+                new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 3000))
             ])
             if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
         }

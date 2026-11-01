@@ -1,5 +1,18 @@
 # Change Log
 
+## Unreleased (2026-11-01 — TypeScript-only Editor Host and Vitest)
+
+### Editor Host
+
+* Converted all five new Host domain models from JavaScript modules plus `.d.mts` sidecars to typed TypeScript implementations.
+* Migrated the Host's unit/integration tests to TypeScript and Vitest; converted Playwright acceptance specs, config and isolated backend fixture launcher to TypeScript.
+* Removed JavaScript support from the Host TypeScript scope, included unit and browser test sources in typecheck, and separated Vitest and Playwright test discovery.
+* Kept the Node backend, legacy Colibri client and repository-level JavaScript smoke/security tooling outside the Host migration boundary.
+
+### Verification
+
+* The PR CI run is the acceptance gate for the migrated TypeScript package, deterministic lockfile installation and browser tests; record its exact run and commit SHA after the new head completes CI.
+
 ## Unreleased (2026-11-01 — Sprite asset authoring and reimport)
 
 ### Editor

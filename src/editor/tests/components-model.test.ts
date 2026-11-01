@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
+import type { UserComponentsDocument } from "../src/domain/components-model.ts";
 import {
   addUserComponentDefinition, attachUserComponent, createUserComponentDefinition, detachUserComponent,
   formatUserComponentsContent, isUserComponentsContent, parseUserComponentsContent,
   removeUserComponentDefinition, updateUserComponentDefinition,
-} from "../src/domain/components-model.mjs";
+} from "../src/domain/components-model.ts";
 
-const fixture = {
+const fixture: UserComponentsDocument = {
   components: [{ name: "PushOnClick", baseClass: "UserComponent", gameObjectType: "Phaser.GameObjects.Image",
     properties: [{ name: "pushScale", label: "Push Scale", defValue: 0.5, type: { id: "number" } }], generateAwakeEvent: true }],
   meta: { app: "Phaser Editor 2D - Object Script Editor", contentType: "phasereditor2d.core.scene.SceneContentType" },
@@ -16,7 +17,7 @@ const fixture = {
 test("parses .components documents and keeps metadata", () => {
   const parsed = parseUserComponentsContent(JSON.stringify(fixture));
   assert.equal(isUserComponentsContent(parsed), true);
-  assert.equal(parsed.meta.app, fixture.meta.app);
+  assert.equal(parsed.meta?.app, fixture.meta?.app);
   assert.equal(parsed.outputLang, "TYPE_SCRIPT");
 });
 
@@ -26,7 +27,7 @@ test("attaches components and initializes declared property defaults", () => {
   assert.deepEqual(attached.components, ["PushOnClick"]);
   assert.equal(attached["PushOnClick.pushScale"], 0.5);
   assert.equal(object.components.length, 0);
-  assert.equal(attachUserComponent(attached, fixture.components[0]).components.length, 1);
+  assert.equal(attachUserComponent(attached, fixture.components[0]).components?.length, 1);
 });
 
 test("detaches a component and removes only its namespaced properties", () => {

@@ -18,7 +18,7 @@ import {
   updateSceneObject,
   type SceneDocument,
   type SceneObjectEntry,
-} from "./domain/scene-model.mjs";
+} from "./domain/scene-model.ts";
 import {
   appendAnimationFrame,
   createAnimation,
@@ -34,7 +34,7 @@ import {
   moveAnimationFrame,
   updateAnimation,
   type AnimationDocument,
-} from "./domain/animation-model.mjs";
+} from "./domain/animation-model.ts";
 import {
   createPrefabDocument,
   createPrefabInstance,
@@ -43,7 +43,7 @@ import {
   removePrefabProperty,
   type PrefabDocument,
   type PrefabProperty,
-} from "./domain/prefab-model.mjs";
+} from "./domain/prefab-model.ts";
 import {
   addUserComponentDefinition,
   attachUserComponent,
@@ -54,7 +54,7 @@ import {
   removeUserComponentDefinition,
   updateUserComponentDefinition,
   type UserComponentsDocument,
-} from "./domain/components-model.mjs";
+} from "./domain/components-model.ts";
 import {
   getProjectFiles,
   readProjectFile,
