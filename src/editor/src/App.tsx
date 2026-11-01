@@ -193,10 +193,10 @@ function PanelHeader(props: {
 }
 
 function App() {
-  const [theme, setTheme] = createSignal<Theme>(() => {
+  const [theme, setTheme] = createSignal<Theme>((() => {
     const stored = window.localStorage.getItem("codogma.editor.theme");
     return stored === "light" ? "light" : "dark";
-  });
+  })());
   const [projectName, setProjectName] = createSignal("Project");
   const [projectTree, setProjectTree] = createSignal<ProjectEntry | null>(null);
   const [scene, setScene] = createSignal<SceneDocument | null>(null);
@@ -211,7 +211,7 @@ function App() {
   const [loadError, setLoadError] = createSignal("");
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
   const bottomTab = () => layout().bottomTab;
-  const [layout, setLayout] = createSignal<LayoutState>(() => {
+  const [layout, setLayout] = createSignal<LayoutState>((() => {
     const stored = window.localStorage.getItem("codogma.editor.layout");
     if (stored) {
       try {
@@ -231,7 +231,7 @@ function App() {
     return window.innerWidth <= 1360
       ? { ...DEFAULT_LAYOUT, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }
       : { ...DEFAULT_LAYOUT };
-  });
+  })());
   const [hierarchySearch, setHierarchySearch] = createSignal("");
   const [projectSearch, setProjectSearch] = createSignal("");
   const [selectedProjectPath, setSelectedProjectPath] = createSignal("");
