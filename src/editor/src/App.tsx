@@ -36,6 +36,7 @@ import {
   createPrefabDocument,
   createPrefabInstance,
   addPrefabProperty,
+  updatePrefabProperty,
   removePrefabProperty,
   type PrefabDocument,
   type PrefabProperty,
@@ -423,12 +424,18 @@ function App() {
 
   const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty());
 
-  const componentRegistry = createMemo(() =>
-    componentSources().flatMap((source) => source.document.components.map((definition) => ({
+  const componentRegistry = createMemo(() => {
+    const sources = componentSources();
+    const active = componentDocument();
+    const activePath = componentDocumentPath();
+    const effective = active && activePath
+      ? [...sources.filter((source) => source.path !== activePath), { path: activePath, document: active }]
+      : sources;
+    return effective.flatMap((source) => source.document.components.map((definition) => ({
       path: source.path,
       definition,
-    }))),
-  );
+    })));
+  });
 
   const sceneObjects = createMemo(() => {
     const current = scene();
@@ -795,7 +802,48 @@ function App() {
     const current = animationDocument();
     const key = selectedAnimationKey();
     if (!current || !key) return;
-    try { setAnimationDocument(updateAnimation(current, key, patch)); }
+    try {
+      const next = updateAnimation(current, key, patch);
+      setAnimationDocument(next);
+      if (typeof patch.key === "string") setSelectedAnimationKey(patch.key);
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function deleteAnimationClip(key: string) {
+    const current = animationDocument();
+    if (!current) return;
+    try {
+      const next = removeAnimation(current, key);
+      setAnimationDocument(next);
+      setSelectedAnimationKey(next.anims[0]?.key ?? "");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function deleteAnimationFrame(index: number) {
+    const current = animationDocument();
+    const key = selectedAnimationKey();
+    if (!current || !key) return;
+    try { setAnimationDocument(removeAnimationFrame(current, key, index)); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function moveAnimationFrameBy(index: number, offset: -1 | 1) {
+    const current = animationDocument();
+    const key = selectedAnimationKey();
+    const frames = activeAnimation()?.frames ?? [];
+    const target = index + offset;
+    if (!current || !key || target < 0 || target >= frames.length) return;
+    try { setAnimationDocument(moveAnimationFrame(current, key, index, target)); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function updateAnimationFrame(index: number, patch: Record<string, unknown>) {
+    const current = animationDocument();
+    const key = selectedAnimationKey();
+    const frames = activeAnimation()?.frames;
+    if (!current || !key || !frames || index < 0 || index >= frames.length) return;
+    const nextFrames = frames.map((frame, frameIndex) => frameIndex === index ? { ...frame, ...patch } : frame);
+    try { setAnimationDocument(updateAnimation(current, key, { frames: nextFrames })); }
     catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -926,13 +974,39 @@ function App() {
 
   function addUserComponent() {
     const current = componentDocument();
-    const path = componentDocumentPath();
     const name = newComponentName().trim();
-    if (!current || !path || !name) return;
+    if (!current || !name) return;
     try {
       const next = addUserComponentDefinition(current, createUserComponentDefinition(name));
       setComponentDocument(next);
       setNewComponentName("");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function removeUserComponent(name: string) {
+    const current = componentDocument();
+    if (!current) return;
+    try { setComponentDocument(removeUserComponentDefinition(current, name)); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function removeUserComponentProperty(componentName: string, propertyName: string) {
+    const current = componentDocument();
+    const definition = current?.components.find((item) => item.name === componentName);
+    if (!current || !definition) return;
+    try {
+      setComponentDocument(updateUserComponentDefinition(current, componentName, {
+        properties: (definition.properties ?? []).filter((property) => property.name !== propertyName),
+      }));
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function updateAttachedComponentProperty(componentName: string, propertyName: string, value: unknown) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(updateSceneObject(current, selected.id, { [`${componentName}.${propertyName}`]: value }), selected.id);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -1036,6 +1110,60 @@ function App() {
     const next = updateSceneObject(current, selected.id, { [property.name]: value, unlock: nextUnlock });
     applySceneChange(next, selected.id);
   }
+
+  function addPrefabPropertyFromFields() {
+    const current = scene();
+    const name = prefabPropertyName().trim();
+    if (!current || current.sceneType !== "PREFAB" || !name) return;
+    const type = prefabPropertyType();
+    let defaultValue: unknown = prefabPropertyDefault();
+    let options: string[] | undefined;
+    if (type === "number") {
+      defaultValue = Number(prefabPropertyDefault() || "0");
+      if (!Number.isFinite(defaultValue)) {
+        log("error", "Prefab numeric default must be finite.");
+        return;
+      }
+    } else if (type === "boolean") {
+      defaultValue = prefabPropertyDefault().toLowerCase() === "true";
+    } else if (type === "option") {
+      options = prefabPropertyDefault().split(",").map((item) => item.trim()).filter(Boolean);
+      if (options.length === 0) {
+        log("error", "Enter at least one comma-separated option.");
+        return;
+      }
+      defaultValue = options[0];
+    }
+    try {
+      const next = addPrefabProperty(current as PrefabDocument, {
+        name,
+        label: name,
+        tooltip: name,
+        defValue: defaultValue,
+        customDefinition: false,
+        type: { id: type, ...(options ? { options } : {}) },
+      });
+      applySceneChange(next as SceneDocument, selectedId());
+      setPrefabPropertyName("");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function removePrefabPropertyFromDocument(name: string) {
+    const current = scene();
+    if (!current || current.sceneType !== "PREFAB") return;
+    try {
+      applySceneChange(removePrefabProperty(current as PrefabDocument, name) as SceneDocument, selectedId());
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function updatePrefabPropertyDefault(name: string, patch: Partial<PrefabProperty>) {
+    const current = scene();
+    if (!current || current.sceneType !== "PREFAB") return;
+    try {
+      applySceneChange(updatePrefabProperty(current as PrefabDocument, name, patch) as SceneDocument, selectedId());
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
 
   async function saveActiveDocument() {
     if (layout().bottomTab === "Animation" && animationDocument()) return saveAnimationFile();
