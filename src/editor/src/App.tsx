@@ -468,7 +468,8 @@ function App() {
   let sceneLoadSequence = 0;
 
   async function loadScene(path: string, reloadCurrent = false) {
-    if (dirty() && (path !== scenePath() || reloadCurrent)) {
+    if (path === scenePath() && !reloadCurrent) return;
+    if (dirty()) {
       const discardChanges = window.confirm(
         "This scene has unsaved changes. Discard them and open the requested scene?",
       );
