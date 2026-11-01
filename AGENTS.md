@@ -50,7 +50,7 @@ Follow the normative standard in [ADR-0002](docs/decisions/ADR-0002-typescript-t
 - Every new TS/TSX scope gets its own `tsconfig` with the full strict profile: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, and `forceConsistentCasingInFileNames`. Keep `allowJs` disabled; include production source, tests and supported TypeScript tool configs in the typecheck.
 - Do not create paired JavaScript implementations and `.d.mts`/`.d.ts` declarations for first-party modules. Generated package declarations and required ambient/external declarations are allowed.
 - Existing legacy JavaScript/MJS, vendored code and generated output are not subject to automatic mass migration. Do not add new feature logic to existing JS/MJS files: put new logic in TS and keep any unavoidable legacy entry point as the smallest possible interop/bootstrap wrapper. Record any unavoidable new exception with its reason, owner and exit condition.
-- Test source must be TypeScript even when a package retains an existing Node built-in runner for legacy `.mjs` smoke scripts. Select a TS-capable runner/build path for new TS tests; do not add Vitest repository-wide without a scoped decision. The new Editor Host specifically uses Vitest for `.test.ts` and Playwright for `.spec.ts.
+- Test source must be TypeScript even when a package retains an existing Node built-in runner for legacy `.mjs` smoke scripts. Select a TS-capable runner/build path for new TS tests; do not add Vitest repository-wide without a scoped decision. The new Editor Host specifically uses Vitest for `.test.ts` and Playwright for `.spec.ts`.
 
 ## How to use the installed skills
 
