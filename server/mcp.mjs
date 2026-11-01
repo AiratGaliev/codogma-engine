@@ -3233,7 +3233,6 @@ const bridgeClients = new Map()
 const pendingCommands = new Map()
 let activeBridgeClientId = null
 
-const BRIDGE_CLIENT_ID_PATTERN = /^[a-zA-Z0-9._:-]{8,128}$/
 const BRIDGE_COMMAND_TIMEOUT_MS = 20000
 
 function selectActiveBridgeClient() {
