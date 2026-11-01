@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Index, Show, createSignal } from "solid-js";
 import type { FxEntry, FxObject, FxType } from "../domain/fx-model.ts";
 
 interface NumericField {
@@ -107,8 +107,9 @@ function colorPreview(value: unknown): string {
   return "transparent";
 }
 
-function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; onError: Props["onError"] }) {
-  const fields = () => fieldsFor(props.effect);
+function EffectFields(props: { effect: () => FxObject; onUpdate: Props["onUpdate"]; onError: Props["onError"] }) {
+  // The FX type is immutable; keep field descriptors stable while values update reactively.
+  const fields = fieldsFor(props.effect().type);
 
   return (
     <div class="fx-field-list">
@@ -124,20 +125,20 @@ function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; on
                     when={isTextField(field) && field.color}
                     fallback={<span class="fx-color-spacer" aria-hidden="true" />}
                   >
-                    <span class="fx-color-swatch" aria-hidden="true" style={{ background: colorPreview(fieldValue(props.effect, field)) }} />
+                    <span class="fx-color-swatch" aria-hidden="true" style={{ background: colorPreview(fieldValue(props.effect(), field)) }} />
                   </Show>
                   <input
-                  aria-label={`${props.effect.type} ${field.label}`}
+                  aria-label={`${props.effect().type} ${field.label}`}
                   type={isTextField(field) ? "text" : "number"}
                   min={isBooleanField(field) || isTextField(field) ? undefined : field.min}
                   max={isBooleanField(field) || isTextField(field) ? undefined : field.max}
                   step={isBooleanField(field) || isTextField(field) ? undefined : field.step}
-                  value={String(fieldValue(props.effect, field))}
+                  value={String(fieldValue(props.effect(), field))}
                   onChange={(event) => {
                     const value = isTextField(field) ? event.currentTarget.value : Number(event.currentTarget.value);
                     if (typeof value === "number" && !Number.isFinite(value)) return;
                     try {
-                      props.onUpdate(props.effect.id, { [field.key]: value } as Partial<FxObject>);
+                      props.onUpdate(props.effect().id, { [field.key]: value } as Partial<FxObject>);
                     } catch (error) {
                       props.onError(error instanceof Error ? error.message : String(error));
                     }
@@ -150,10 +151,10 @@ function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; on
             <label class="inspector-field fx-inspector-toggle" title={field.description}>
               <span>{field.label}</span>
               <input
-                aria-label={`${props.effect.type} ${field.label}`}
+                aria-label={`${props.effect().type} ${field.label}`}
                 type="checkbox"
-                checked={Boolean(fieldValue(props.effect, field))}
-                onChange={(event) => props.onUpdate(props.effect.id, { [field.key]: event.currentTarget.checked } as Partial<FxObject>)}
+                checked={Boolean(fieldValue(props.effect(), field))}
+                onChange={(event) => props.onUpdate(props.effect().id, { [field.key]: event.currentTarget.checked } as Partial<FxObject>)}
               />
             </label>
           </Show>
@@ -191,44 +192,44 @@ function FxInspector(props: Props) {
         </div>
       </Show>
       <Show when={props.effects.length > 0} fallback={<div class="component-empty">No supported effects. Add Circle, Bloom, Gradient or Shine to this object.</div>}>
-        <For each={props.effects}>
+        <Index each={props.effects}>
           {(entry) => (
-            <article class="fx-effect-card" data-testid={`fx-card-${entry.id}`}>
+            <article class="fx-effect-card" data-testid={`fx-card-${entry().id}`}>
               <div class="fx-effect-header">
                 <div class="fx-effect-title">
-                  <strong>{entry.source.type}</strong>
-                  <span>{entry.source.label ?? entry.source.type}</span>
+                  <strong>{entry().source.type}</strong>
+                  <span>{entry().source.label ?? entry().source.type}</span>
                 </div>
                 <button
                   class="toolbar-icon-button tiny"
                   type="button"
-                  aria-label={`Remove ${entry.source.type} effect`}
+                  aria-label={`Remove ${entry().source.type} effect`}
                   title="Remove effect"
-                  onClick={() => props.onRemove(entry.id)}
+                  onClick={() => props.onRemove(entry().id)}
                 >×</button>
               </div>
-              <Show when={entry.source.type === "Bloom" || entry.source.type === "Shine"}>
+              <Show when={entry().source.type === "Bloom" || entry().source.type === "Shine"}>
                 <label class="inspector-field fx-stage-field">
                   <span>Filter stage</span>
                   <select
-                    aria-label={`${entry.source.type} filter stage`}
-                    value={isInternalFx(entry.source) ? "internal" : "external"}
-                    onChange={(event) => props.onUpdate(entry.id, { preFX: event.currentTarget.value === "internal" } as Partial<FxObject>)}
+                    aria-label={`${entry().source.type} filter stage`}
+                    value={isInternalFx(entry().source) ? "internal" : "external"}
+                    onChange={(event) => props.onUpdate(entry().id, { preFX: event.currentTarget.value === "internal" } as Partial<FxObject>)}
                   >
                     <option value="internal">Internal · object space</option>
                     <option value="external">External · screen space</option>
                   </select>
                 </label>
               </Show>
-              <Show when={entry.source.type === "Circle" || entry.source.type === "Gradient"}>
+              <Show when={entry().source.type === "Circle" || entry().source.type === "Gradient"}>
                 <div class="fx-stage-note">
-                  {entry.source.type === "Circle" ? "Internal mask · object space" : "Gradient Game Object · sibling render layer"}
+                  {entry().source.type === "Circle" ? "Internal mask · object space" : "Gradient Game Object · sibling render layer"}
                 </div>
               </Show>
-              <EffectFields effect={entry.source} onUpdate={props.onUpdate} onError={props.onError} />
+              <EffectFields effect={() => entry().source} onUpdate={props.onUpdate} onError={props.onError} />
             </article>
           )}
-        </For>
+        </Index>
       </Show>
     </section>
   );

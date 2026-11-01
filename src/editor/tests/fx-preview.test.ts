@@ -12,6 +12,7 @@ type Listener = (...args: unknown[]) => void;
 
 function emitter() {
   const callbacks = new Map<string, Set<Listener>>();
+  const onceListeners = new Set<Listener>();
   return {
     on(event: string, listener: Listener) {
       const listeners = callbacks.get(event) ?? new Set<Listener>();
@@ -20,19 +21,33 @@ function emitter() {
       return this;
     },
     once(event: string, listener: Listener) {
-      this.on(event, listener);
+      const listeners = callbacks.get(event) ?? new Set<Listener>();
+      listeners.add(listener);
+      callbacks.set(event, listeners);
+      onceListeners.add(listener);
       return this;
     },
     off(event: string, listener?: Listener) {
-      if (!listener) callbacks.delete(event);
-      else callbacks.get(event)?.delete(listener);
+      if (!listener) {
+        for (const existing of callbacks.get(event) ?? []) onceListeners.delete(existing);
+        callbacks.delete(event);
+      } else {
+        callbacks.get(event)?.delete(listener);
+        onceListeners.delete(listener);
+      }
       return this;
     },
     listeners(event: string) {
       return [...(callbacks.get(event) ?? [])];
     },
     emit(event: string, ...args: unknown[]) {
-      for (const listener of [...(callbacks.get(event) ?? [])]) listener(...args);
+      for (const listener of [...(callbacks.get(event) ?? [])]) {
+        if (onceListeners.has(listener)) {
+          callbacks.get(event)?.delete(listener);
+          onceListeners.delete(listener);
+        }
+        listener(...args);
+      }
     },
     count(event: string) {
       return callbacks.get(event)?.size ?? 0;
@@ -57,7 +72,7 @@ function displayObject() {
     visible: true,
     depth: 2,
     destroyCalls: 0,
-    filters: undefined as { internal: { remove(filter: unknown): void } } | undefined,
+    filters: undefined as FxDisplayObject["filters"],
     setPosition(x: number, y: number) { this.x = x; this.y = y; return this; },
     setSize(width: number, height: number) { this.width = width; this.height = height; return this; },
     setOrigin(x: number, y: number) { this.originX = x; this.originY = y; return this; },
@@ -75,15 +90,55 @@ function displayObject() {
   return object;
 }
 
+class FakeFilterController {
+  destroyCalls = 0;
+  destroy(): void {
+    this.destroyCalls++;
+  }
+}
+
+class FakeFilterList {
+  readonly list: FakeFilterController[] = [];
+
+  add<T extends FakeFilterController>(filter: T): T {
+    this.list.push(filter);
+    return filter;
+  }
+
+  remove(filter: unknown): void {
+    const index = this.list.indexOf(filter as FakeFilterController);
+    if (index < 0) return;
+    this.list.splice(index, 1);
+    (filter as FakeFilterController).destroy();
+  }
+
+  clear(): void {
+    for (const filter of [...this.list]) this.remove(filter);
+  }
+}
+
+class FakeParallelFilters extends FakeFilterController {
+  readonly top = new FakeFilterList();
+  readonly bottom = new FakeFilterList();
+  readonly blend = new FakeFilterController();
+}
+
 function previewEnvironment() {
   const sceneEvents = emitter();
   const created: Array<ReturnType<typeof displayObject>> = [];
   const removedMasks: unknown[] = [];
   const maskConfigs: Record<string, unknown>[] = [];
+  const filterLists = { internal: new FakeFilterList(), external: new FakeFilterList() };
   let maskConfig: Record<string, unknown> | undefined;
   let gradientConfig: Record<string, unknown> | undefined;
   let bloomConfig: Record<string, unknown> | undefined;
   let shineConfig: Record<string, unknown> | undefined;
+  let bloomParallel: FakeParallelFilters | undefined;
+  let shineParallel: FakeParallelFilters | undefined;
+  let shineBlend: FakeFilterController | undefined;
+  let shineTween: FakeFilterController | undefined;
+  let shineTexture: FakeFilterController | undefined;
+
   const scene = {
     events: sceneEvents,
     add: {
@@ -107,32 +162,53 @@ function previewEnvironment() {
       },
       AddEffectBloom: (_parent: ReturnType<typeof displayObject>, config: Record<string, unknown>) => {
         bloomConfig = config;
-        return [{ parallelFilters: { destroy: () => { removedMasks.push("bloom"); } } }];
+        const filterList = filterLists[config.useInternal === true ? "internal" : "external"];
+        bloomParallel = filterList.add(new FakeParallelFilters());
+        bloomParallel.top.add(new FakeFilterController());
+        bloomParallel.top.add(new FakeFilterController());
+        return [{ parallelFilters: bloomParallel }];
       },
       AddEffectShine: (parent: ReturnType<typeof displayObject>, config: Record<string, unknown>) => {
         shineConfig = config;
-        const actionListener = () => undefined;
+        const actionListener = () => {
+          shineTween?.destroy();
+          shineTexture?.destroy();
+        };
         parent.once("destroy", actionListener);
+        const filterList = filterLists[config.useExternal === true ? "external" : "internal"];
+        shineTween = new FakeFilterController();
+        shineTexture = new FakeFilterController();
+        if (config.reveal === true) {
+          shineBlend = filterList.add(new FakeFilterController());
+          return [{ blendFilter: shineBlend, tween: shineTween, dynamicTexture: shineTexture }];
+        }
+        shineParallel = filterList.add(new FakeParallelFilters());
+        shineBlend = shineParallel.top.add(new FakeFilterController());
         return [{
-          blendFilter: { destroy: () => { removedMasks.push("shine-filter"); } },
-          tween: { destroy: () => { removedMasks.push("shine-tween"); } },
-          dynamicTexture: { destroy: () => { removedMasks.push("shine-texture"); } },
+          parallelFilters: shineParallel,
+          blendFilter: shineBlend,
+          tween: shineTween,
+          dynamicTexture: shineTexture,
         }];
       },
     },
   };
   const parent = displayObject();
-  parent.filters = { internal: { remove: (mask: unknown) => removedMasks.push(mask) } };
+  parent.filters = filterLists;
   return {
-    scene, phaser, parent, created, removedMasks, sceneEvents,
+    scene, phaser, parent, created, removedMasks, sceneEvents, filterLists,
     get maskConfig() { return maskConfig; },
     maskConfigs,
     get gradientConfig() { return gradientConfig; },
     get bloomConfig() { return bloomConfig; },
     get shineConfig() { return shineConfig; },
+    get bloomParallel() { return bloomParallel; },
+    get shineParallel() { return shineParallel; },
+    get shineBlend() { return shineBlend; },
+    get shineTween() { return shineTween; },
+    get shineTexture() { return shineTexture; },
   };
 }
-
 test("Circle creates a Phaser mask and keeps helper objects in sync, then disposes them", () => {
   const env = previewEnvironment();
   const result = createFxPreview(
@@ -169,7 +245,7 @@ test("Circle creates a Phaser mask and keeps helper objects in sync, then dispos
   expect(env.created.every((item) => item.destroyCalls === 1)).toBe(true);
 });
 
-test("Bloom passes legacy filter settings and releases its ParallelFilters", () => {
+test("Bloom removes its outer ParallelFilters and releases nested filters and blend controller", () => {
   const env = previewEnvironment();
   const effect = createFxObject("Bloom", "bloom");
   effect.preFX = false;
@@ -183,8 +259,39 @@ test("Bloom passes legacy filter settings and releases its ParallelFilters", () 
   );
 
   expect(env.bloomConfig).toMatchObject({ threshold: 0.35, blurSteps: 8, useInternal: false });
+  const parallel = env.bloomParallel;
+  expect(parallel).toBeDefined();
+  expect(env.filterLists.external.list).toEqual([parallel]);
+  expect(parallel?.top.list).toHaveLength(2);
+
   result.dispose();
-  expect(env.removedMasks).toContain("bloom");
+  result.dispose();
+
+  expect(env.filterLists.external.list).toHaveLength(0);
+  expect(parallel?.top.list).toHaveLength(0);
+  expect(parallel?.bottom.list).toHaveLength(0);
+  expect(parallel?.blend.destroyCalls).toBe(1);
+  expect(parallel?.destroyCalls).toBe(1);
+  expect(env.filterLists.internal.list).toHaveLength(0);
+});
+
+test("Bloom uses the internal FilterList for preFX and repeated preview replacement does not accumulate filters", () => {
+  const env = previewEnvironment();
+  const effect = createFxObject("Bloom", "bloom");
+  effect.preFX = true;
+
+  for (let iteration = 0; iteration < 5; iteration++) {
+    const result = createFxPreview(
+      env.scene as unknown as FxSceneAdapter,
+      env.phaser as unknown as FxPhaserAdapter,
+      env.parent as unknown as FxDisplayObject,
+      effect,
+    );
+    expect(env.filterLists.internal.list).toHaveLength(1);
+    result.dispose();
+    expect(env.filterLists.internal.list).toHaveLength(0);
+  }
+  expect(env.filterLists.external.list).toHaveLength(0);
 });
 
 test("Gradient creates a sibling Game Object, follows transforms and reports parent alpha limitation", () => {
@@ -210,7 +317,7 @@ test("Gradient creates a sibling Game Object, follows transforms and reports par
   expect(env.created[0]?.destroyCalls).toBe(1);
 });
 
-test("Shine releases action listeners, filters, tween and DynamicTexture on disposal", () => {
+test("Shine removes ParallelFilters and nested Blend, action listeners, tween and DynamicTexture", () => {
   const env = previewEnvironment();
   const result = createFxPreview(
     env.scene as unknown as FxSceneAdapter,
@@ -220,10 +327,64 @@ test("Shine releases action listeners, filters, tween and DynamicTexture on disp
   );
   expect(env.shineConfig?.useExternal).toBe(false);
   expect(env.parent.listeners("destroy")).toHaveLength(2);
+  const parallel = env.shineParallel;
+  const blend = env.shineBlend;
 
   result.dispose();
+  result.dispose();
+
   expect(env.parent.listeners("destroy")).toHaveLength(0);
-  expect(env.removedMasks).toEqual(["shine-filter", "shine-tween", "shine-texture"]);
+  expect(env.filterLists.internal.list).toHaveLength(0);
+  expect(parallel?.top.list).toHaveLength(0);
+  expect(parallel?.bottom.list).toHaveLength(0);
+  expect(blend?.destroyCalls).toBe(1);
+  expect(parallel?.blend.destroyCalls).toBe(1);
+  expect(parallel?.destroyCalls).toBe(1);
+  expect(env.shineTween?.destroyCalls).toBe(1);
+  expect(env.shineTexture?.destroyCalls).toBe(1);
+});
+
+test("Shine reveal removes the direct Blend filter from the selected external FilterList", () => {
+  const env = previewEnvironment();
+  const effect = createFxObject("Shine", "shine");
+  effect.reveal = true;
+  effect.preFX = false;
+  const result = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    effect,
+  );
+  const blend = env.shineBlend;
+
+  expect(env.filterLists.external.list).toEqual([blend]);
+  result.dispose();
+
+  expect(env.filterLists.external.list).toHaveLength(0);
+  expect(blend?.destroyCalls).toBe(1);
+  expect(env.shineTween?.destroyCalls).toBe(1);
+  expect(env.shineTexture?.destroyCalls).toBe(1);
+});
+
+test("Shine parent destruction keeps Phaser action cleanup single-shot and releases nested filters", () => {
+  const env = previewEnvironment();
+  createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    createFxObject("Shine", "shine"),
+  );
+  const parallel = env.shineParallel;
+
+  // GameObject.preDestroy clears the filter camera before it emits DESTROY.
+  env.filterLists.internal.clear();
+  env.parent.emit("destroy");
+
+  expect(env.filterLists.internal.list).toHaveLength(0);
+  expect(parallel?.top.list).toHaveLength(0);
+  expect(parallel?.bottom.list).toHaveLength(0);
+  expect(env.shineTween?.destroyCalls).toBe(1);
+  expect(env.shineTexture?.destroyCalls).toBe(1);
 });
 
 test("Circle and Gradient helpers keep their order adjacent to a nested Container sibling", () => {

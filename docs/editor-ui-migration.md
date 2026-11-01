@@ -44,7 +44,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 | Animation | COD-80 basic clip/frame operations | **Partial**; COD-84, QA CODQA-4 |
 | Tilemap | Existing data/Tiled/runtime contracts требуют targeted gap analysis | **Not migrated**; COD-40, QA CODQA-14 |
 | Physics/Box2D | Existing physics/codegen/runtime contracts and CODQA-1 | **Not migrated as Host UI**; COD-42, CODQA-1 runtime acceptance |
-| FX authoring | Legacy FX/codegen and CODQA-3 evidence; no new Host workflow | **Not migrated**; COD-89, QA CODQA-19 |
+| FX authoring | COD-89 implements Circle/Bloom/Gradient/Shine authoring and Phaser-backed preview in SolidJS Host; the existing `.scene` contract and legacy codegen are preserved | **Implemented in PR #32; independent browser/runtime parity acceptance pending**; CODQA-19 (CODQA-3 remains legacy-only evidence) |
 | Spine authoring/preview | Legacy Spine serialization/MCP tool; no new Host UI or session routing | **Not migrated**; COD-90, COD-85, QA CODQA-20 + CODQA-8 |
 | Audio groups/Particle Preview | Existing runtime contracts; new Host UI absent | **Not migrated**; COD-61, QA CODQA-13 |
 | Preview/diagnostics | COD-80 Game View loads existing generated index.html in iframe; no complete Preview Host/live identity/common EditorLogger | **Partial/missing**; COD-30/31/32/47/58 |

@@ -510,6 +510,16 @@ function App() {
     return id ? sceneObjects().find((item) => item.id === id) : undefined;
   });
 
+  const selectedFxEffects = createMemo(() => {
+    const selected = selectedObject();
+    return selected ? getSceneObjectEffects(selected.source) : [];
+  });
+
+  const selectedUnsupportedFxTypes = createMemo(() => {
+    const selected = selectedObject();
+    return selected ? getUnsupportedSceneObjectEffects(selected.source) : [];
+  });
+
   const visibleSceneObjects = createMemo(() => {
     const query = hierarchySearch().trim().toLowerCase();
     if (!query) return sceneObjects();
@@ -2709,8 +2719,8 @@ function App() {
 
                 <Show when={selectedObject() && selectedObject()?.type !== "Prefab"}>
                   <FxInspector
-                    effects={getSceneObjectEffects(selectedObject()!.source)}
-                    unsupportedTypes={getUnsupportedSceneObjectEffects(selectedObject()!.source)}
+                    effects={selectedFxEffects()}
+                    unsupportedTypes={selectedUnsupportedFxTypes()}
                     onAdd={addFxToSelected}
                     onUpdate={updateSelectedFx}
                     onRemove={removeSelectedFx}

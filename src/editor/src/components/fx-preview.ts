@@ -22,7 +22,7 @@ export interface FxDisplayObject {
   scrollFactorX?: number;
   scrollFactorY?: number;
   parentContainer?: FxContainerAdapter | null;
-  filters?: { internal: { remove(filter: unknown): void } };
+  filters?: { internal: FxFilterList; external: FxFilterList };
   setPosition(x: number, y: number): FxDisplayObject;
   setSize?(width: number, height: number): FxDisplayObject;
   setOrigin?(x: number, y: number): FxDisplayObject;
@@ -59,11 +59,24 @@ export interface FxSceneAdapter {
   };
 }
 
+interface FxFilterController { destroy(): void; }
+
+interface FxFilterList {
+  remove(filter: unknown): void;
+  clear(): void;
+}
+
+interface FxParallelFilters extends FxFilterController {
+  top: FxFilterList;
+  bottom: FxFilterList;
+  blend: FxFilterController;
+}
+
 interface FxController {
-  parallelFilters?: { destroy(): void };
-  blendFilter?: { destroy(): void };
-  tween?: { destroy(): void };
-  dynamicTexture?: { destroy(): void };
+  parallelFilters?: FxParallelFilters;
+  blendFilter?: FxFilterController;
+  tween?: FxFilterController;
+  dynamicTexture?: FxFilterController;
 }
 
 export interface FxPhaserAdapter {
@@ -328,6 +341,27 @@ function createGradientPreview(
   return { dispose, diagnostics };
 }
 
+function filterListFor(parent: FxDisplayObject, internal: boolean): FxFilterList {
+  const filterList = internal ? parent.filters?.internal : parent.filters?.external;
+  if (!filterList) {
+    throw new Error("Phaser did not expose the Game Object filter list required to dispose this FX preview.");
+  }
+  return filterList;
+}
+
+/**
+ * Phaser 4.2.1 ParallelFilters.destroy() only deactivates the outer controller.
+ * Its child lists and blend controller own independent filter resources.
+ */
+function disposeParallelFilters(filterList: FxFilterList, parallel: FxParallelFilters): void {
+  try { parallel.top.clear(); } catch { /* Ignore a list already being released. */ }
+  try { parallel.bottom.clear(); } catch { /* Ignore a list already being released. */ }
+  try { parallel.blend.destroy(); } catch { /* Ignore an already released blend controller. */ }
+  try { filterList.remove(parallel); } catch {
+    try { parallel.destroy(); } catch { /* Ignore an already released controller. */ }
+  }
+}
+
 function createBloomPreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx: BloomFx): FxPreviewResult {
   const effect = phaser.Actions.AddEffectBloom(parent, {
     threshold: number(fx.threshold, 0.5),
@@ -337,21 +371,34 @@ function createBloomPreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
     blendAmount: Math.max(0, number(fx.blendAmount, 1)),
     useInternal: fx.preFX === true,
   })[0];
-  if (!effect?.parallelFilters) {
+  const parallel = effect?.parallelFilters;
+  if (!parallel) {
     throw new Error("Phaser did not create the Bloom filter. Confirm the object supports WebGL filters.");
   }
+
+  let filterList: FxFilterList;
+  try {
+    filterList = filterListFor(parent, fx.preFX === true);
+  } catch (error) {
+    try { parallel.top.clear(); } catch { /* Ignore partial Phaser setup. */ }
+    try { parallel.bottom.clear(); } catch { /* Ignore partial Phaser setup. */ }
+    try { parallel.blend.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { parallel.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    throw error;
+  }
+
   let disposed = false;
-  const dispose = () => {
+  function dispose(): void {
     if (disposed) return;
     disposed = true;
-    try { effect.parallelFilters?.destroy(); } catch { /* Ignore a filter already released by Phaser. */ }
+    disposeParallelFilters(filterList, parallel);
     parent.off?.("destroy", parentDestroyed);
-  };
+  }
+
   const parentDestroyed: DestroyListener = () => dispose();
   parent.once?.("destroy", parentDestroyed);
   return { dispose, diagnostics: [] };
 }
-
 function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx: ShineFx): FxPreviewResult {
   const before = parent.listeners?.("destroy") ?? [];
   const effect = phaser.Actions.AddEffectShine(parent, {
@@ -368,30 +415,55 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
   if (!effect) {
     throw new Error("Phaser did not create the Shine effect. Confirm the object supports WebGL filters.");
   }
-  const createdEffect = effect;
-  if (!createdEffect.parallelFilters && !createdEffect.blendFilter && !createdEffect.tween && !createdEffect.dynamicTexture) {
-    throw new Error("Phaser did not create the Shine effect. Confirm the object supports WebGL filters.");
-  }
-  let disposed = false;
-  const parentDestroyed: DestroyListener = () => dispose();
-  parent.once?.("destroy", parentDestroyed);
 
-  function dispose(): void {
+  const parallel = effect.parallelFilters;
+  const directBlend = effect.blendFilter;
+  if (!parallel && !directBlend) {
+    throw new Error("Phaser did not create the Shine filter. Confirm the object supports WebGL filters.");
+  }
+
+  let filterList: FxFilterList;
+  try {
+    filterList = filterListFor(parent, fx.preFX === true);
+  } catch (error) {
+    actionListeners.forEach((listener) => parent.off?.("destroy", listener));
+    try { parallel?.top.clear(); } catch { /* Ignore partial Phaser setup. */ }
+    try { parallel?.bottom.clear(); } catch { /* Ignore partial Phaser setup. */ }
+    try { parallel?.blend.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { parallel?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { directBlend?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { effect.tween?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { effect.dynamicTexture?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    throw error;
+  }
+
+  let disposed = false;
+  function dispose(fromParentDestroy = false): void {
     if (disposed) return;
     disposed = true;
+
     actionListeners.forEach((listener) => parent.off?.("destroy", listener));
     parent.off?.("destroy", parentDestroyed);
-    try {
-      if (createdEffect.parallelFilters) createdEffect.parallelFilters.destroy();
-      else createdEffect.blendFilter?.destroy();
-    } catch { /* Filter may already have been released by the parent. */ }
-    try { createdEffect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
-    try { createdEffect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
+
+    if (parallel) disposeParallelFilters(filterList, parallel);
+    else if (directBlend) {
+      try { filterList.remove(directBlend); } catch {
+        try { directBlend.destroy(); } catch { /* Ignore an already released filter. */ }
+      }
+    }
+
+    // AddEffectShine registers its own DESTROY handler before this preview.
+    // That handler releases the tween and DynamicTexture during GameObject.destroy().
+    if (!fromParentDestroy) {
+      try { effect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
+      try { effect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
+    }
   }
 
-  return { dispose, diagnostics: [] };
+  const parentDestroyed: DestroyListener = () => dispose(true);
+  parent.once?.("destroy", parentDestroyed);
+  return { dispose: () => dispose(), diagnostics: [] };
 }
-
 export function createFxPreview(
   scene: FxSceneAdapter,
   phaser: FxPhaserAdapter,
