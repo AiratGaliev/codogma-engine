@@ -1985,38 +1985,153 @@ function App() {
                   </section>
                 </Show>
 
-                <section class="inspector-section">
+                <section class="inspector-section" data-testid="attached-components">
                   <div class="inspector-section-heading">
-                    <span>Components</span>
+                    <span>User Components</span>
                     <span class="component-count">{components().length}</span>
                   </div>
-                  <Show when={components().length > 0} fallback={<div class="component-empty">No components attached.</div>}>
-                    <For each={components()}>
-                      {(component) => (
-                        <div class="component-row">
-                          <Icon theme={theme()} name="script" size={13} />
-                          <span>{component}</span>
-                          <span class="component-state">Enabled</span>
+                  <Show when={selectedComponentDefinitions().length > 0} fallback={<div class="component-empty">No registered components are attached.</div>}>
+                    <For each={selectedComponentDefinitions()}>
+                      {(entry) => (
+                        <div class="attached-component-card">
+                          <div class="component-row">
+                            <Icon theme={theme()} name="script" size={13} />
+                            <span>{entry.definition.displayName ?? entry.definition.name}</span>
+                            <span class="component-state">Enabled</span>
+                            <button class="toolbar-icon-button tiny" aria-label={`Detach ${entry.definition.name}`} title="Detach component" onClick={() => detachComponentFromSelected(entry.definition.name)}>
+                              <Icon theme={theme()} name="remove" size={11} />
+                            </button>
+                          </div>
+                          <For each={entry.definition.properties ?? []}>
+                            {(property) => {
+                              const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? property.defValue;
+                              return (
+                                <label class="inspector-field component-property-field">
+                                  <span>{property.label ?? property.name}</span>
+                                  <Show when={property.type?.id === "boolean"}>
+                                    <input type="checkbox" aria-label={`${entry.definition.name} ${property.name}`} checked={Boolean(propertyValue())} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.checked)} />
+                                  </Show>
+                                  <Show when={property.type?.id === "option"}>
+                                    <select aria-label={`${entry.definition.name} ${property.name}`} value={String(propertyValue() ?? "")} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.value)}>
+                                      <For each={property.type?.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
+                                    </select>
+                                  </Show>
+                                  <Show when={property.type?.id !== "boolean" && property.type?.id !== "option"}>
+                                    <input aria-label={`${entry.definition.name} ${property.name}`} type={property.type?.id === "number" ? "number" : "text"} value={String(propertyValue() ?? "")} onChange={(event) => {
+                                      const value = property.type?.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
+                                      if (property.type?.id !== "number" || Number.isFinite(value)) updateAttachedComponentProperty(entry.definition.name, property.name, value);
+                                    }} />
+                                  </Show>
+                                </label>
+                              );
+                            }}
+                          </For>
                         </div>
                       )}
                     </For>
                   </Show>
-                  <Show when={currentObject() && Object.keys(currentObject()!).some((key) => key.includes("."))}>
-                    <div class="serialized-properties">
-                      <span>Serialized component values</span>
-                      <For each={Object.entries(currentObject()!).filter(([key]) => key.includes("."))}>
-                        {([key, value]) => <div><span>{key}</span><code>{String(value)}</code></div>}
-                      </For>
+                  <Show when={components().some((name) => !componentRegistry().some((item) => item.definition.name === name))}>
+                    <div class="inspector-note">Some attached components have no matching .components definition file. Their serialized references are preserved.</div>
+                  </Show>
+                  <Show when={hasUnattachedComponents().length > 0}>
+                    <div class="component-attach-row">
+                      <select aria-label="User Component to attach" value={componentToAttach()} onChange={(event) => setComponentToAttach(event.currentTarget.value)}>
+                        <option value="">Attach component…</option>
+                        <For each={hasUnattachedComponents()}>
+                          {(entry) => <option value={entry.definition.name}>{entry.definition.displayName ?? entry.definition.name} · {entry.path}</option>}
+                        </For>
+                      </select>
+                      <button class="subtle-button" disabled={!componentToAttach()} onClick={() => attachComponentToSelected(componentToAttach())}>Attach</button>
                     </div>
                   </Show>
                 </section>
 
                 <Show when={Boolean(currentObject()?.prefabId)}>
-                  <div class="inspector-note">
-                    Prefab instance data is preserved. Prefab overrides and refresh actions belong to a later migration slice.
-                  </div>
+                  <section class="inspector-section" data-testid="prefab-overrides">
+                    <div class="inspector-section-heading"><span>Prefab overrides</span></div>
+                    <Show when={selectedPrefabDefinition()} fallback={<div class="inspector-note">Prefab asset not found. The prefabId reference remains serialized.</div>}>
+                      <strong class="prefab-name">{selectedPrefabDefinition()?.name ?? selectedPrefab()?.path}</strong>
+                      <For each={selectedPrefabDefinition()?.prefabProperties ?? []}>
+                        {(property) => {
+                          const value = () => currentObject()?.[property.name] ?? property.defValue;
+                          return (
+                            <label class="inspector-field prefab-property-field">
+                              <span>{property.label ?? property.name}</span>
+                              <Show when={property.type.id === "boolean"}>
+                                <input type="checkbox" aria-label={`Prefab override ${property.name}`} checked={Boolean(value())} onChange={(event) => updatePrefabOverride(property, event.currentTarget.checked)} />
+                              </Show>
+                              <Show when={property.type.id === "option"}>
+                                <select aria-label={`Prefab override ${property.name}`} value={String(value() ?? "")} onChange={(event) => updatePrefabOverride(property, event.currentTarget.value)}>
+                                  <For each={property.type.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
+                                </select>
+                              </Show>
+                              <Show when={property.type.id === "string" || property.type.id === "number"}>
+                                <input aria-label={`Prefab override ${property.name}`} type={property.type.id === "number" ? "number" : "text"} value={String(value() ?? "")} onChange={(event) => {
+                                  const nextValue = property.type.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
+                                  if (property.type.id !== "number" || Number.isFinite(nextValue)) updatePrefabOverride(property, nextValue);
+                                }} />
+                              </Show>
+                            </label>
+                          );
+                        }}
+                      </For>
+                      <button class="subtle-button" onClick={() => selectedPrefab() && void openProjectFile(selectedPrefab()!.path)}>Open Prefab asset</button>
+                    </Show>
+                  </section>
                 </Show>
               </div>
+            </Show>
+            <Show when={scene()?.sceneType === "PREFAB"}>
+              <section class="inspector-section prefab-properties-editor" data-testid="prefab-properties-editor">
+                <div class="inspector-section-heading"><span>Prefab properties</span><span class="component-count">{(scene() as PrefabDocument | null)?.prefabProperties?.length ?? 0}</span></div>
+                <div class="prefab-property-create">
+                  <label class="inspector-field">
+                    <span>Property name</span>
+                    <input aria-label="New Prefab property name" value={prefabPropertyName()} onInput={(event) => setPrefabPropertyName(event.currentTarget.value)} />
+                  </label>
+                  <label class="inspector-field">
+                    <span>Type</span>
+                    <select aria-label="New Prefab property type" value={prefabPropertyType()} onChange={(event) => setPrefabPropertyType(event.currentTarget.value as "string" | "number" | "boolean" | "option")}>
+                      <option value="boolean">Boolean</option>
+                      <option value="number">Number</option>
+                      <option value="string">String</option>
+                      <option value="option">Option</option>
+                    </select>
+                  </label>
+                  <label class="inspector-field">
+                    <span>{prefabPropertyType() === "option" ? "Options (comma separated)" : "Default value"}</span>
+                    <input aria-label="New Prefab property default" value={prefabPropertyDefault()} onInput={(event) => setPrefabPropertyDefault(event.currentTarget.value)} placeholder={prefabPropertyType() === "option" ? "small,medium,large" : "Value"} />
+                  </label>
+                  <button class="subtle-button" disabled={!prefabPropertyName().trim()} onClick={addPrefabPropertyFromFields}>Add property</button>
+                </div>
+                <For each={(scene() as PrefabDocument | null)?.prefabProperties ?? []}>
+                  {(property) => (
+                    <div class="prefab-property-definition-row">
+                      <span>{property.label ?? property.name}</span>
+                      <code>{property.name}</code>
+                      <span>{property.type.id}</span>
+                      <button class="toolbar-icon-button tiny" aria-label={`Remove Prefab property ${property.name}`} onClick={() => removePrefabPropertyFromDocument(property.name)}>
+                        <Icon theme={theme()} name="remove" size={11} />
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </section>
+            </Show>
+            <Show when={scene() && scene()?.sceneType !== "PREFAB" && prefabCatalog().length > 0}>
+              <div class="inspector-panel-action">
+                <label class="inspector-field">
+                  <span>Instantiate Prefab</span>
+                  <select aria-label="Prefab asset to instantiate" value={selectedPrefabPath()} onChange={(event) => setSelectedPrefabPath(event.currentTarget.value)}>
+                    <option value="">Select Prefab…</option>
+                    <For each={prefabCatalog()}>{(item) => <option value={item.path}>{item.path}</option>}</For>
+                  </select>
+                </label>
+                <button class="subtle-button" disabled={!selectedPrefabPath()} onClick={addPrefabInstance}>Add instance</button>
+              </div>
+            </Show>
+            <Show when={selectedObject() && scene()?.sceneType !== "PREFAB"}>
+              <button class="subtle-button create-prefab-button" onClick={() => void createPrefabFromSelected()}>Create Prefab from selected object</button>
             </Show>
             <div class="inspector-footer">
               <span>{selectedObject() ? "Scene object" : "Inspector"}</span>
