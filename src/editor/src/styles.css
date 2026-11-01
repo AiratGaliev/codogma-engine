@@ -1880,3 +1880,64 @@ textarea::placeholder {
     transition-duration: 0.01ms !important;
   }
 }
+
+.phaser-scene-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #202a37;
+}
+
+.phaser-scene-stage canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+
+.phaser-runtime-state {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: color-mix(in srgb, var(--surface-workspace) 88%, transparent);
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.phaser-runtime-state strong {
+  color: var(--semantic-danger);
+  font-size: 11px;
+}
+
+.phaser-runtime-state span {
+  max-width: 420px;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.runtime-loading-indicator {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-control);
+  border-top-color: var(--accent-selection);
+  border-radius: 50%;
+  animation: codogma-runtime-spin 0.9s linear infinite;
+}
+
+@keyframes codogma-runtime-spin {
+  to { transform: rotate(360deg); }
+}
+
+:root[data-theme="light"] .phaser-scene-stage {
+  background: #f2f5f9;
+}
+

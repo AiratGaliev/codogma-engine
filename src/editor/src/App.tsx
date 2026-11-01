@@ -25,6 +25,7 @@ import {
   writeProjectFile,
   type ProjectEntry,
 } from "./services/editor-api";
+import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
 type ViewportTab = "Scene" | "Game";
@@ -670,16 +671,7 @@ function App() {
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   };
 
-  const selectedObjectStyle = (entry: SceneObjectEntry) => {
-    const x = Number(entry.source.x ?? 400);
-    const y = Number(entry.source.y ?? 300);
-    return {
-      left: `${(x / 800) * 100}%`,
-      top: `${(y / 600) * 100}%`,
-      transform: `translate(-50%, -50%) rotate(${Number(entry.source.rotation ?? 0)}deg) scale(${Number(entry.source.scaleX ?? 1)}, ${Number(entry.source.scaleY ?? 1)})`,
-      opacity: String(entry.source.alpha ?? 1),
-    };
-  };
+
 
   const menuItems: Record<string, Array<{ label: string; shortcut?: string; action: () => void; disabled?: boolean }>> = {
     File: [
@@ -1065,57 +1057,27 @@ function App() {
                   <span class="scene-control-value">{scenePath().split("/").pop() ?? "No scene"}</span>
                 </div>
                 <div class="scene-control-group">
-                  <button class="view-control" title="Grid enabled">Grid <span class="control-check">✓</span></button>
-                  <button class="view-control" title="Snap is a UI state only">Snap <span class="control-check">Off</span></button>
+                  <span class="scene-control-muted">Phaser Canvas</span>
                   <span class="scene-control-divider" />
-                  <span class="scene-control-muted">100%</span>
+                  <span class="scene-control-muted">800 × 600</span>
                 </div>
               </div>
-              <div class="scene-viewport" data-testid="scene-viewport">
-                <Show when={scene()} fallback={<div class="viewport-empty">Open a scene from the Project panel.</div>}>
-                  <div class="scene-stage" data-testid="scene-stage">
-                    <div class="stage-origin" />
-                    <For each={sceneObjects()}>
-                      {(entry) => (
-                        <button
-                          class="scene-object"
-                          classList={{
-                            selected: selectedId() === entry.id,
-                            hidden: hiddenObjects().has(entry.id),
-                            locked: lockedObjects().has(entry.id),
-                          }}
-                          data-testid={`scene-object-${entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
-                          style={selectedObjectStyle(entry)}
-                          onClick={() => setSelectedId(entry.id)}
-                          aria-label={`Select ${entry.name}`}
-                        >
-                          <Show
-                            when={entry.type === "Image" && entry.source.texture?.key === "dino"}
-                            fallback={
-                              <Show
-                                when={entry.type === "Text"}
-                                fallback={<span class="scene-generic-object">{entry.type}</span>}
-                              >
-                                <span class="scene-text-object">{String(entry.source.text ?? entry.name)}</span>
-                              </Show>
-                            }
-                          >
-                            <img src="/editor/project/assets/dino.png" alt="" draggable={false} />
-                          </Show>
-                          <Show when={selectedId() === entry.id}>
-                            <span class="scene-object-caption">{entry.name}</span>
-                          </Show>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-                <div class="viewport-coordinate">World space · Origin 0, 0</div>
-              </div>
+              <Show when={scene()} fallback={<div class="viewport-empty">Open a scene from the Project panel.</div>}>
+                {(currentScene) => (
+                  <PhaserSceneViewport
+                    scene={currentScene()}
+                    selectedId={selectedId()}
+                    projectTree={projectTree()}
+                    theme={theme()}
+                    onSelect={setSelectedId}
+                    onStatus={log}
+                  />
+                )}
+              </Show>
               <div class="viewport-statusbar">
                 <span><Icon theme={theme()} name="tool-select" size={12} /> {tool()[0].toUpperCase() + tool().slice(1)} tool</span>
                 <span>Selected: {selectedObject()?.name ?? "None"}</span>
-                <span>Project data · editable</span>
+                <span>Phaser runtime · live selection</span>
               </div>
             </Show>
 
