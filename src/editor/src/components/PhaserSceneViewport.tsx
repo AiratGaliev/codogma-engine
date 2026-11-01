@@ -14,7 +14,14 @@ import {
   type ProjectEntry,
 } from "../services/editor-api";
 import { getSceneObjectEffects, type FxObject } from "../domain/fx-model.ts";
-import { createFxPreview, type FxPreviewResult } from "./fx-preview.ts";
+import type { SceneObject } from "../domain/scene-model.ts";
+import {
+  createFxPreview,
+  type FxDisplayObject,
+  type FxPhaserAdapter,
+  type FxPreviewResult,
+  type FxSceneAdapter,
+} from "./fx-preview.ts";
 
 interface PhaserGameObject {
   x: number;
@@ -61,6 +68,7 @@ interface PhaserSceneApi {
   };
   events: {
     on(event: "update", listener: () => void): void;
+    once(event: "shutdown", listener: () => void): void;
     off(event: "update", listener: () => void): void;
   };
   cameras?: {
@@ -412,17 +420,22 @@ function PhaserSceneViewport(props: Props) {
 
   function syncFxPreviews(entries: SceneEntry[]): void {
     if (!sceneRuntime || !phaserApi) return;
-    const desired = new Map<string, { parentId: string; effect: FxObject; fingerprint: string }>();
+    const desired = new Map<string, { parentId: string; effect: FxObject; fingerprint: string; renderOrderOffset: number }>();
 
     for (const entry of entries) {
       if (!gameObjects.has(entry.id)) continue;
-      for (const effect of getSceneObjectEffects(entry.source as never)) {
+      let renderOrderOffset = 0;
+      for (const effect of getSceneObjectEffects(entry.source as SceneObject)) {
         const key = `${entry.id}:${effect.id}`;
         desired.set(key, {
           parentId: entry.id,
           effect: effect.source,
           fingerprint: JSON.stringify(effect.source),
+          renderOrderOffset,
         });
+        if (effect.source.type === "Circle" || effect.source.type === "Gradient") {
+          renderOrderOffset += 1;
+        }
       }
     }
 
@@ -456,10 +469,11 @@ function PhaserSceneViewport(props: Props) {
       if (!parent) continue;
       try {
         const result = createFxPreview(
-          sceneRuntime as never,
-          phaserApi as never,
-          parent as never,
+          sceneRuntime as unknown as FxSceneAdapter,
+          phaserApi as unknown as FxPhaserAdapter,
+          parent as unknown as FxDisplayObject,
           item.effect,
+          item.renderOrderOffset,
         );
         fxPreviewResources.set(key, { fingerprint: item.fingerprint, result });
         for (const diagnostic of result.diagnostics) props.onStatus("warning", diagnostic);
@@ -623,6 +637,14 @@ function PhaserSceneViewport(props: Props) {
 
           create() {
             sceneRuntime = this;
+            this.events.once("shutdown", () => {
+              clearFxPreviews();
+              gameObjects.clear();
+              failedFxPreviews.clear();
+              selectionFrame = undefined;
+              sceneRuntime = undefined;
+              sceneReady = false;
+            });
             this.cameras?.main?.setBackgroundColor(props.theme === "dark" ? "#202a37" : "#f2f5f9");
             this.input.on("pointermove", (pointer) => {
               const drag = transformDrag;
