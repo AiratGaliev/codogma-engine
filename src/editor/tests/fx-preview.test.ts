@@ -98,18 +98,21 @@ class FakeFilterController {
 }
 
 class FakeFilterList {
-  readonly list: FakeFilterController[] = [];
+  readonly list: unknown[] = [];
 
-  add<T extends FakeFilterController>(filter: T): T {
+  constructor(private readonly onRemove: (filter: unknown) => void = () => undefined) {}
+
+  add<T>(filter: T): T {
     this.list.push(filter);
     return filter;
   }
 
   remove(filter: unknown): void {
-    const index = this.list.indexOf(filter as FakeFilterController);
+    const index = this.list.indexOf(filter);
     if (index < 0) return;
-    this.list.splice(index, 1);
-    (filter as FakeFilterController).destroy();
+    const [removed] = this.list.splice(index, 1);
+    if (removed instanceof FakeFilterController) removed.destroy();
+    this.onRemove(removed);
   }
 
   clear(): void {
@@ -128,7 +131,10 @@ function previewEnvironment() {
   const created: Array<ReturnType<typeof displayObject>> = [];
   const removedMasks: unknown[] = [];
   const maskConfigs: Record<string, unknown>[] = [];
-  const filterLists = { internal: new FakeFilterList(), external: new FakeFilterList() };
+  const filterLists = {
+    internal: new FakeFilterList((filter) => removedMasks.push(filter)),
+    external: new FakeFilterList(),
+  };
   let maskConfig: Record<string, unknown> | undefined;
   let gradientConfig: Record<string, unknown> | undefined;
   let bloomConfig: Record<string, unknown> | undefined;
@@ -158,7 +164,9 @@ function previewEnvironment() {
       AddMaskShape: (_parent: ReturnType<typeof displayObject>, config: Record<string, unknown>) => {
         maskConfig = config;
         maskConfigs.push(config);
-        return [{ id: `mask-${maskConfigs.length}` }];
+        const mask = { id: `mask-${maskConfigs.length}` };
+        filterLists.internal.add(mask);
+        return [mask];
       },
       AddEffectBloom: (_parent: ReturnType<typeof displayObject>, config: Record<string, unknown>) => {
         bloomConfig = config;
