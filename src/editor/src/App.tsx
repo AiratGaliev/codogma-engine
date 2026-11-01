@@ -405,6 +405,7 @@ function App() {
   const [consoleLevel, setConsoleLevel] = createSignal("all");
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
   const [dockTargetActive, setDockTargetActive] = createSignal(false);
+  const [draggedDockPanel, setDraggedDockPanel] = createSignal<BottomTab | null>(null);
   const [hiddenObjects, setHiddenObjects] = createSignal(new Set<string>());
   const [lockedObjects, setLockedObjects] = createSignal(new Set<string>());
   const [showObjectMenu, setShowObjectMenu] = createSignal(false);
@@ -1370,8 +1371,15 @@ function App() {
   }
 
   function handlePanelDragStart(event: DragEvent, panel: string) {
+    const dockPanel = panel as BottomTab;
+    setDraggedDockPanel(dockPanel);
     event.dataTransfer?.setData("text/plain", panel);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handlePanelDragEnd() {
+    setDraggedDockPanel(null);
+    setDockTargetActive(false);
   }
 
   function handleConsoleDragStart(event: DragEvent) {
@@ -1444,7 +1452,7 @@ function App() {
   }
 
   function handleDockDragOver(event: DragEvent) {
-    if (!event.dataTransfer?.types.includes("text/plain")) return;
+    if (!draggedDockPanel() && !event.dataTransfer?.types.includes("text/plain")) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     setDockTargetActive(true);
@@ -1456,16 +1464,18 @@ function App() {
     setDockTargetActive(false);
   }
 
-  function handleDockDrop(event: DragEvent) {
-    const panel = event.dataTransfer?.getData("text/plain");
+  function handleDockDrop(event: DragEvent, explicitTarget?: BottomTab) {
+    const transferredPanel = event.dataTransfer?.getData("text/plain");
+    const panel = (transferredPanel || draggedDockPanel()) as BottomTab | null;
     const targetElement = event.target instanceof Element
       ? event.target.closest<HTMLElement>("[data-dock-tab]")
       : null;
-    const targetTab = targetElement?.dataset.dockTab as BottomTab | undefined;
+    const targetTab = explicitTarget ?? targetElement?.dataset.dockTab as BottomTab | undefined;
     const bottomTabs: BottomTab[] = ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"];
-    if (!panel || !bottomTabs.includes(panel as BottomTab)) return;
+    if (!panel || !bottomTabs.includes(panel)) return;
     event.preventDefault();
     setDockTargetActive(false);
+    setDraggedDockPanel(null);
     if ((panel === "Hierarchy" || panel === "Inspector") && !layout().dockedPanels.includes(panel)) {
       dockSidePanel(panel);
       return;
@@ -1475,7 +1485,7 @@ function App() {
       log("success", "Console docked into Bottom workspace");
       return;
     }
-    if (targetTab) reorderBottomTab(panel as BottomTab, targetTab);
+    if (targetTab) reorderBottomTab(panel, targetTab);
   }
 
   function undockConsole() {
@@ -2418,6 +2428,9 @@ function App() {
                   aria-selected={bottomTab() === tab}
                   classList={{ active: bottomTab() === tab }}
                   onDragStart={(event) => handleBottomTabDragStart(event, tab)}
+                  onDragEnd={handlePanelDragEnd}
+                  onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "move"; }}
+                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); handleDockDrop(event, tab); }}
                   onClick={() => setLayout((current) => ({ ...current, bottomTab: tab }))}
                   title={`Drag to reorder ${tab}`}
                 >
