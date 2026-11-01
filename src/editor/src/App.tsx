@@ -465,9 +465,9 @@ function App() {
   const commands = createMemo<Command[]>(() => [
     {
       id: "save",
-      title: "Save scene",
+      title: "Save active document",
       shortcut: "Ctrl+S",
-      run: () => void saveScene(),
+      run: () => void saveActiveDocument(),
     },
     {
       id: "undo",
@@ -711,14 +711,14 @@ function App() {
     await refreshProjectTree();
   }
 
-  async function loadAnimationFile(path: string) {
+  async function loadAnimationFile(path: string, sourceContent?: string) {
     if (path === animationPath()) return;
     if ((dirty() || componentDirty()) &&
         !window.confirm("The active scene or User Components file has unsaved changes. Discard them?")) return;
     if (animationDirty() && !window.confirm("The active animation file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
-      const content = await readProjectFile(path);
+      const content = sourceContent ?? await readProjectFile(path);
       if (request !== documentLoadSequence) return;
       const parsed = parseAnimationContent(content);
       setAnimationDocument(parsed);
@@ -761,6 +761,7 @@ function App() {
     }
     const directory = path.split("/").slice(0, -1).join("/");
     try {
+      assertNewProjectFilePath(path);
       if (directory) await ensureProjectFolder(directory);
       const document = createAnimationDocument();
       const content = formatAnimationContent(document);
@@ -810,6 +811,43 @@ function App() {
   }
 
   async function openUserComponentsFile(path: string) {
+
+  async function openProjectFile(path: string) {
+    const normalized = path.toLowerCase();
+    if (normalized.endsWith(".scene")) {
+      await loadScene(path);
+      return;
+    }
+    if (normalized.endsWith(".components")) {
+      await openUserComponentsFile(path);
+      return;
+    }
+    if (normalized.endsWith(".json")) {
+      try {
+        const content = await readProjectFile(path);
+        let parsed: unknown;
+        try { parsed = JSON.parse(content); }
+        catch { log("info", `Selected JSON file: ${path}`); return; }
+        if (isAnimationContent(parsed)) {
+          await loadAnimationFile(path, content);
+          return;
+        }
+      } catch (error) {
+        log("warning", `Could not inspect ${path}: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+    }
+    setSelectedProjectPath(path);
+    log("info", `Selected project file: ${path}`);
+  }
+
+  function assertNewProjectFilePath(path: string) {
+    const root = projectTree();
+    if (!root) throw new Error("The project tree is not loaded.");
+    const existing = flattenProjectFiles(root).find((item) => item.path.toLowerCase() === path.toLowerCase());
+    if (existing) throw new Error(`A project item already exists at "${path}".`);
+  }
+
     if (path === componentDocumentPath()) return;
     if ((dirty() || animationDirty()) &&
         !window.confirm("The active scene or animation file has unsaved changes. Discard them?")) return;
@@ -862,6 +900,7 @@ function App() {
     }
     const directory = path.split("/").slice(0, -1).join("/");
     try {
+      assertNewProjectFilePath(path);
       if (directory) await ensureProjectFolder(directory);
       const document: UserComponentsDocument = {
         components: [],
@@ -958,6 +997,7 @@ function App() {
     }
     const directory = path.split("/").slice(0, -1).join("/");
     try {
+      assertNewProjectFilePath(path);
       if (directory) await ensureProjectFolder(directory);
       const prefab = createPrefabDocument(current, selected.source, baseName);
       await writeProjectFile(path, formatSceneContent(prefab as SceneDocument));
@@ -998,8 +1038,8 @@ function App() {
   }
 
   async function saveActiveDocument() {
-    if (animationDocument() && layout().bottomTab === "Animation") return saveAnimationFile();
-    if (componentDocument() && layout().bottomTab === "Components") return saveUserComponentsFile();
+    if (layout().bottomTab === "Animation" && animationDocument()) return saveAnimationFile();
+    if (layout().bottomTab === "Components" && componentDocument()) return saveUserComponentsFile();
     return saveScene();
   }
 
@@ -1344,7 +1384,7 @@ function App() {
           <span class="document-title">{scenePath().split("/").pop() ?? "No scene"}</span>
           <span class="saved-indicator" classList={{ dirty: dirty() }}>
             <span class="saved-dot" />
-            {saving() ? "Saving" : dirty() ? "Unsaved changes" : "Saved"}
+            {saving() || animationSaving() || componentSaving() ? "Saving" : documentDirty() ? "Unsaved changes" : "Saved"}
           </span>
           <span class="editor-version">EDITOR HOST</span>
         </div>
@@ -1852,7 +1892,7 @@ function App() {
             </Show>
             <div class="inspector-footer">
               <span>{selectedObject() ? "Scene object" : "Inspector"}</span>
-              <span>{dirty() ? "Modified" : "In sync"}</span>
+              <span>{documentDirty() ? "Modified" : "In sync"}</span>
             </div>
           </aside>
         </Show>
@@ -1924,7 +1964,7 @@ function App() {
                               classList={{ selected: selectedProjectPath() === file.path }}
                               onClick={() => {
                                 setSelectedProjectPath(file.path);
-                                if (file.path.toLowerCase().endsWith(".scene")) void loadScene(file.path);
+                                void openProjectFile(file.path);
                               }}
                             >
                               <Icon theme={theme()} name={file.entry.isFile ? "file" : "folder"} size={13} />
@@ -1941,8 +1981,8 @@ function App() {
                         selectedPath={selectedProjectPath()}
                         onSelect={(path, isFile) => {
                           setSelectedProjectPath(path);
-                          if (isFile && path.toLowerCase().endsWith(".scene")) void loadScene(path);
-                          else log("info", `Selected project file: ${path}`);
+                          if (isFile) void openProjectFile(path);
+                          else log("info", `Selected project folder: ${path}`);
                         }}
                       />
                     </Show>
@@ -1956,8 +1996,11 @@ function App() {
                     <Icon theme={theme()} name={selectedProjectPath().endsWith(".scene") ? "packed-scene" : "file"} size={26} />
                     <strong>{selectedProjectPath().split("/").pop()}</strong>
                     <span>{selectedProjectPath()}</span>
-                    <Show when={selectedProjectPath().endsWith(".scene")}>
-                      <button class="subtle-button" onClick={() => void loadScene(selectedProjectPath())}>Open Scene</button>
+                    <Show when={selectedProjectPath().toLowerCase().endsWith(".scene")}>
+                      <button class="subtle-button" onClick={() => void loadScene(selectedProjectPath())}>Open Scene / Prefab</button>
+                    </Show>
+                    <Show when={selectedProjectPath().toLowerCase().endsWith(".components")}>
+                      <button class="subtle-button" onClick={() => void openUserComponentsFile(selectedProjectPath())}>Open Components</button>
                     </Show>
                   </Show>
                 </div>
