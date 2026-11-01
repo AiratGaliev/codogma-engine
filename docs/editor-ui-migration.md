@@ -12,16 +12,16 @@
 Реализованные операции первой вертикали:
 
 - загрузка текущего `PROJECT_DIR` через `GetProjectFiles`, рекурсивное обнаружение и открытие `.scene`;
-- Hierarchy и выбор display-list/plain-object элементов по стабильным IDs;
+- Phaser-backed Scene Canvas с выбором объектов, Move/Rotate/Scale gestures и синхронизацией состояния с Inspector/Undo-Redo; Hierarchy для display-list/plain-object элементов;
 - Inspector с Transform-полями, label, Text content и отображением уже сериализованных компонентов;
 - добавление Image/Text/Container узлов, удаление, Undo/Redo с восстановлением selection;
 - сохранение исходного JSON scene-format через `SetFileString`, повторное открытие после reload;
-- Workbench с menu/toolbar, Scene/Game tabs, resizable splitters, show/hide Hierarchy/Inspector, Project/Animation dock tabs, Console, command palette, keyboard shortcuts, dark/light themes и persisted layout;
+- Workbench с menu/toolbar, Scene/Game tabs, resizable splitters, show/hide Hierarchy/Inspector, Project/Animation/Console tabs в Compact Dock и отдельной Console-панелью на wide layout, command palette, keyboard shortcuts, dark/light themes и responsive persisted layout;
 - Game View загружает существующий проектный `index.html` в iframe; закрытие Game View уничтожает iframe/runtime, повторный запуск создаёт новый экземпляр.
 
 Новые модели не заменяют Project Model или backend serializers: scene helper сохраняет неизвестные поля и обновляет только явно разрешённые свойства. Legacy client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`.
 
-**Границы первого slice, которые не следует считать готовыми возможностями:** Scene viewport пока показывает model-based authoring preview, а не использует canvas существующего Phaser.Game; drag-and-drop docking и перестановка панелей не реализованы (панели разделены фиксированными областями и resize splitters); Animation tab — базовая timeline workspace shell без clip/track serialization; компоненты только отображаются, их редакторы/добавление не перенесены; Game View запускает текущий generated `index.html` и не перегенерирует его после изменения `.scene`; MCP SSE routing остаётся за legacy UI. Это следующие slices, а не скрытые или имитируемые готовые контракты.
+**Границы первого slice, которые не следует считать готовыми возможностями:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Workbench сохраняет responsive layout: wide-компоновка имеет отдельные Project/Animation и Console области, Compact Workbench — единый Dock с вкладками Project/Animation/Console. Drag-and-drop docking, перестановка и свободное undocking панелей пока не реализованы; Animation остаётся timeline shell без clip/track serialization; component authoring и MCP SSE routing остаются будущими slices.
 
 Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck/build, domain tests и Chromium acceptance для Host/backend-sensitive changes.
 
