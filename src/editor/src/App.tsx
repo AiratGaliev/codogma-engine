@@ -24,6 +24,9 @@ import {
   createAnimation,
   createAnimationDocument,
   formatAnimationContent,
+  getAnimationDurationMs,
+  getAnimationFrameDurationMs,
+  getAnimationTimelinePosition,
   isAnimationContent,
   parseAnimationContent,
   removeAnimation,
@@ -333,6 +336,11 @@ function App() {
   const [selectedAnimationKey, setSelectedAnimationKey] = createSignal("");
   const [animationFrameKey, setAnimationFrameKey] = createSignal("");
   const [animationSaving, setAnimationSaving] = createSignal(false);
+  const [animationAssetSources, setAnimationAssetSources] = createSignal<Array<{ key: string; url: string; type: string }>>([]);
+  const [animationPlaying, setAnimationPlaying] = createSignal(false);
+  const [animationPlayheadMs, setAnimationPlayheadMs] = createSignal(0);
+  const [animationPreviewFrameIndex, setAnimationPreviewFrameIndex] = createSignal(0);
+  const [selectedAnimationFrameIndex, setSelectedAnimationFrameIndex] = createSignal(0);
   const [componentSources, setComponentSources] = createSignal<Array<{ path: string; document: UserComponentsDocument }>>([]);
   const [componentDocument, setComponentDocument] = createSignal<UserComponentsDocument | null>(null);
   const [componentDocumentPath, setComponentDocumentPath] = createSignal("");
@@ -724,6 +732,37 @@ function App() {
         throw new Error("No .scene files were found in the selected project.");
       }
       const files = flattenProjectFiles(result.rootFile);
+      const availableProjectPaths = new Set(files.filter(({ entry }) => entry.isFile).map(({ path }) => path));
+      const animationAssets: Array<{ key: string; url: string; type: string }> = [];
+      const assetPackFiles = files.filter(({ path, entry }) => entry.isFile && path.toLowerCase().endsWith("asset-pack.json"));
+      for (const packFile of assetPackFiles) {
+        try {
+          const pack = JSON.parse(await readProjectFile(packFile.path)) as Record<string, unknown>;
+          const packDirectory = packFile.path.split("/").slice(0, -1).join("/");
+          for (const section of Object.values(pack)) {
+            if (!section || typeof section !== "object" || !Array.isArray((section as { files?: unknown }).files)) continue;
+            for (const asset of (section as { files: unknown[] }).files) {
+              if (!asset || typeof asset !== "object") continue;
+              const entry = asset as { key?: unknown; url?: unknown; type?: unknown };
+              if (typeof entry.key !== "string" || typeof entry.url !== "string") continue;
+              if (/^(?:https?:|data:|blob:)/i.test(entry.url)) continue;
+              const candidate = entry.url.replace(/\\/g, "/").replace(/^(?:\.\/|\/)+/, "");
+              const resolvedPath = availableProjectPaths.has(candidate)
+                ? candidate
+                : [packDirectory, candidate].filter(Boolean).join("/");
+              if (!availableProjectPaths.has(resolvedPath)) continue;
+              animationAssets.push({
+                key: entry.key,
+                url: resolvedPath,
+                type: typeof entry.type === "string" ? entry.type : "image",
+              });
+            }
+          }
+        } catch (error) {
+          log("warning", `Could not read Asset Pack ${packFile.path}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      setAnimationAssetSources(animationAssets);
       const [prefabs, components] = await Promise.all([
         Promise.all(scenes.map(async (path) => {
           try {
@@ -818,6 +857,8 @@ function App() {
       setAnimationPath(path);
       setSavedAnimationContent(formatAnimationContent(parsed));
       setSelectedAnimationKey(parsed.anims[0]?.key ?? "");
+      setSelectedAnimationFrameIndex(0);
+      stopAnimationPreview(true);
       setAnimationFrameKey("");
       setSelectedProjectPath(path);
       setLayout((current) => ({ ...current, bottomTab: "Animation" }));
