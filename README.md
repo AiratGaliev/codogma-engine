@@ -36,12 +36,12 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Browser-based IDE | The Node.js server currently serves the legacy Colibri client at <code>/editor/</code>. The independent SolidJS Host runs in parallel from <code>src/editor/</code> on Vite during migration; production cutover is not complete. |
 | Scene authoring | The legacy client retains broader existing workflows. The new SolidJS Host has a tested first Scene slice: open/edit/save/reopen, Phaser-backed viewport, Hierarchy/selection, Transform, Inspector and Undo/Redo. Editing a <code>.scene</code> file does not automatically regenerate <code>game.js</code>; Game View currently loads the project's existing generated <code>index.html</code>. |
 | Project assets | Existing Asset Pack/import/Sprite Metadata and conflict-aware reimport contracts are implemented in the legacy workflow; full Asset Browser, Asset Pack and Sprite Authoring UI migration to SolidJS remains open in [COD-86](https://linear.app/codogma-engine/issue/COD-86/perenesti-asset-browser-asset-pack-i-sprite-authoring-v-solidjs-editor). See [Sprite asset metadata](docs/sprite-asset-metadata.md) for the UI-independent contract and runtime boundaries. |
-| Animation and components | The new Host has basic Phaser JSON animation clip/frame operations and initial Components/Prefab models. Full Timeline/tracks/keyframes/curves/events, script lifecycle and complete nested Prefab overrides remain separate migration work; see COD-84 and COD-8. |
+| Animation and components | The new Host has basic Phaser JSON animation clip/frame operations and initial Components/Prefab models. Full Timeline/tracks/keyframes/curves/events belong to COD-84; full User Components and TypeScript script authoring to COD-91 (using Core contracts COD-26/COD-27); complete nested Prefab overrides remain in COD-8. |
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
-| Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
-| Editable tilemaps | Tilemap authoring tools, layers, tilesets, painting operations and MCP tools for modifying tilemap data. |
-| Physics authoring | Arcade Physics tooling; component-based Box2D body/world settings and code generation on existing Phaser GameObjects. External Box2D runtime setup may be required. Standalone B2Body/B2Shape object nodes are not currently supported. |
-| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> in <code>packages/editor-mcp-server/</code> exposes the engine-owned tool registry over stdio and forwards requests to the local <code>POST /editor/mcp</code> endpoint. npm publication is deferred; the older WebSocket bridge remains for legacy editor workflows. |
+| Scene effects and objects | Legacy Colibri contains Phaser filters, supported game-object types and compiler integration. FX authoring/preview is **not yet migrated** to SolidJS; see COD-89 and independent acceptance CODQA-19. |
+| Editable tilemaps | Existing legacy Colibri workflows include Tilemap tools, layers, tilesets, painting and MCP data operations. Tilemap authoring UI is **not yet migrated** to SolidJS; see COD-40 and CODQA-14. |
+| Physics authoring | Existing legacy editor has Arcade Physics tooling and component-based Box2D body/world settings/codegen on Phaser GameObjects. New Host Physics UI is **not yet migrated** (COD-42); Box2D runtime acceptance remains in CODQA-1. External Box2D runtime setup may be required. Standalone B2Body/B2Shape nodes are not currently supported. |
+| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes the engine-owned registry over stdio and forwards requests to <code>POST /editor/mcp</code>. The live Editor SSE bridge is still legacy-owned and broadcasts to connected clients; the new Host must not attach until session-aware routing COD-85 is implemented and accepted. |
 | AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
 This table is a practical overview, not a guarantee that every feature has identical behaviour in every runtime. Tools that open a scene in the live editor or capture a screenshot require the editor UI to be running and connected. Some generated game code can also require runtime modules that are not included in the core Phaser bundle. Verify the relevant feature and runtime dependencies before shipping a game.
@@ -72,6 +72,30 @@ cd ../..
 
 npm start
 ~~~
+
+This default command serves the **legacy Colibri** client at `http://127.0.0.1:3000/editor/`. It does not start the new SolidJS Host. To preview the new Host during migration, start the backend with an exact Origin allow-list and run Vite separately:
+
+**Terminal 1 — backend**
+
+~~~bash
+CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173 npm start
+~~~
+
+PowerShell equivalent:
+
+~~~powershell
+$env:CODOGMA_ALLOWED_ORIGINS="http://127.0.0.1:5173"
+npm start
+~~~
+
+**Terminal 2 — SolidJS Host**
+
+~~~bash
+npm --prefix src/editor ci
+npm run dev:editor-host
+~~~
+
+Open `http://127.0.0.1:5173/`. Vite proxies `/editor/*` to the local backend. During dual-run, do not edit the same `PROJECT_DIR` in both clients: only one editor may write a project until a concurrency/locking contract exists. Production `/editor/` remains on Colibri until COD-87 cutover.
 
 Open **http://localhost:3000/editor/**.
 
@@ -197,14 +221,17 @@ Run these commands from the repository root unless noted otherwise.
 | <code>npm run mcp:builtin</code> | Start the dependency-free stdio MCP fallback. |
 | <code>npm run build:mcp</code> | Build the standalone MCP package TypeScript sources. |
 | <code>npm run test:mcp-package</code> | Run isolated stdio/HTTP bridge contract tests for the package. |
+| <code>npm run build:editor-host</code> | Typecheck and production-build the independent SolidJS Host in <code>src/editor/</code>. |
+| <code>npm run test:editor-host</code> | Run SolidJS Host domain tests. |
+| <code>npm run test:editor-host:browser</code> | Run Chromium browser acceptance for the implemented Host slice. |
 | <code>npm run test:e2e</code> | Run the engine MCP integration test driver. Start the editor server first. |
 | <code>npm run test:all</code> | Run unit, security, mini-service, localization, package, project-diagnostics, localization-runtime acceptance and MCP E2E checks. Install dependencies in each package first and start the editor server for MCP E2E. |
 
 For a typical local code change:
 
-1. Start the server and open the editor.
-2. Make the change in the relevant client or server subsystem.
-3. Run <code>npm run build</code> from the repository root when changing editor TypeScript or compiler code.
+1. Start the relevant client: legacy Colibri only for compatibility investigations, or the SolidJS Host at port 5173 for all new UI/authoring work.
+2. Make the change in the target Host or shared server/domain subsystem; do not add new user-facing features to Colibri.
+3. For legacy TypeScript/compiler changes, run the root <code>npm run build</code>; for SolidJS Host changes, run <code>npm run build:editor-host</code> and the relevant Host domain/browser tests.
 4. For MCP work, start the server in one terminal and run <code>npm run test:e2e</code> in a second terminal.
 5. Verify the relevant functionality in the browser if the change affects the UI, generated code or runtime behaviour. Server-side MCP tests are not a replacement for visual acceptance testing.
 

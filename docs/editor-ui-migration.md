@@ -23,7 +23,7 @@
 
 Новые модели не заменяют Project Model или backend serializers: scene helper сохраняет неизвестные поля и обновляет только явно разрешённые свойства. Legacy client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`.
 
-**Границы COD-80, которые не следует смешивать с полной миграцией:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Docking в COD-80 ограничен перемещением Hierarchy/Inspector в Bottom Dock с возвратом в домашние слоты и перестановкой вкладок внутри Bottom Dock; произвольные floating windows, свободные split-зоны и произвольная перекомпоновка всех панелей не заявляются. Animation поддерживает базовую работу с Phaser JSON: открыть/создать файл, добавить/изменить/удалить clip и frame references; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом. User Components и Prefab поддерживают существующие базовые модели/операции, но полноценные script lifecycle, code generation, nested Prefab overrides и feature parity со старым редактором требуют следующих slices. Специализированные Sprite/Spine/Tilemap/Physics/FX/importer workflows, session-aware MCP SSE routing, production cutover, rollback window и Colibri removal не входят в COD-80.
+**Границы COD-80, которые не следует смешивать с полной миграцией:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Docking в COD-80 ограничен перемещением Hierarchy/Inspector в Bottom Dock с возвратом в домашние слоты и перестановкой вкладок внутри Bottom Dock; произвольные floating windows, свободные split-зоны и произвольная перекомпоновка всех панелей не заявляются. Animation поддерживает базовую работу с Phaser JSON: открыть/создать файл, добавить/изменить/удалить clip и frame references; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом. User Components и Prefab поддерживают существующие базовые модели/операции, но полноценные script lifecycle, code generation и nested Prefab overrides требуют следующих slices; полный feature parity со старым Colibri не является целью migration. Специализированные Sprite/Spine/Tilemap/Physics/FX/importer workflows, session-aware MCP SSE routing, production cutover, rollback window и Colibri removal не входят в COD-80.
 
 Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck и production build, 25 domain tests и Chromium acceptance (7 tests на CI Fast #425). `fast-checks` проверяет `npm audit --audit-level=low` и остальные общие проверки репозитория.
 
@@ -35,14 +35,17 @@ Browser acceptance конфигурируется через `src/editor/playwri
 |---|---|---|
 | Workbench + basic Scene | COD-80: Phaser Scene Canvas, Hierarchy/Inspector/Transform, save/reopen, Undo/Redo, базовый Game View iframe и docking slice | **Implemented (first slice)**; COD-80, CODQA-18 independent acceptance |
 | Docking/workspace | Console dock/undock, Hierarchy/Inspector ↔ Bottom Dock/home slots, tab reorder/persistence | **Partial**; COD-83 |
-| Prefab/Components | Базовые модели/операции COD-80; full nested Prefab overrides/script lifecycle не закрыт | **Partial**; COD-8 / COD-27; QA CODQA-11 |
+| Prefab | Базовые модели/операции COD-80; full nested Prefab overrides не закрыты | **Partial**; COD-8; QA CODQA-11 |
+| User Components/TypeScript authoring | Базовая Components surface COD-80; Core/schema contracts in COD-26/COD-27 | **Partial surface; full authoring missing**; COD-91, QA CODQA-21 |
 | Asset Browser/Pack/Sprite | COD-39 реализует domain metadata/slicing/reimport contract; UI пока legacy | **Not migrated**; COD-86, QA CODQA-10 |
 | Camera/coordinates/sorting | Контракт описан в ТЗ; Host authoring/gizmos не закрыты | **Not migrated**; COD-41 |
 | 2D UI authoring | Game UI runtime requirements в ТЗ; legacy authoring controls не перенесены | **Not migrated**; COD-43, QA CODQA-12 |
 | Animation | COD-80 basic clip/frame operations | **Partial**; COD-84, QA CODQA-4 |
 | Tilemap | Existing data/Tiled/runtime contracts требуют targeted gap analysis | **Not migrated**; COD-40, QA CODQA-14 |
 | Physics/Box2D | Existing physics/codegen/runtime contracts and CODQA-1 | **Not migrated as Host UI**; COD-42, CODQA-1 runtime acceptance |
-| FX/Particles/Spine | Existing FX/runtime/codegen evidence; verify supported API/capability | **Not migrated**; particles/audio COD-61; other slices after inventory |
+| FX authoring | Legacy FX/codegen and CODQA-3 evidence; no new Host workflow | **Not migrated**; COD-89, QA CODQA-19 |
+| Spine authoring/preview | Legacy Spine serialization/MCP tool; no new Host UI or session routing | **Not migrated**; COD-90, COD-85, QA CODQA-20 + CODQA-8 |
+| Audio groups/Particle Preview | Existing runtime contracts; new Host UI absent | **Not migrated**; COD-61, QA CODQA-13 |
 | Preview/diagnostics | COD-80 Game View loads existing generated index.html in iframe; no complete Preview Host/live identity/common EditorLogger | **Partial/missing**; COD-30/31/32/47/58 |
 | MCP live bridge | HTTP registry + stdio package exist; current SSE bridge broadcasts to connected clients | **Blocked for new Host until session-aware routing**; COD-85, QA CODQA-8 |
 | Production route / Colibri | Server still defaults to legacy /editor/ during transition | **Not cut over**; COD-87 then COD-88 |
@@ -51,7 +54,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 
 ## 1. Цель
 
-Создать полноценный самостоятельный browser Editor Host на SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4, ориентированный на Unity Editor для 2D-authoring workflows. Новый UI сразу строится как рабочая IDE-оболочка, а не как framework PoC, showcase-панель или прототип внутри Colibri.
+Довести самостоятельный browser Editor Host на SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4 до полноценной production-ready 2D authoring среды, ориентированной на основные Unity Editor workflows. COD-80 уже создал первую работающую IDE-оболочку и Scene vertical slice; следующие capabilities реализуются отдельными slices, а не новым bootstrap или framework PoC.
 
 Сохраняются Node.js server, project/file HTTP API, project/scene/prefab formats, serializers, importer metadata, code-generation semantics, Phaser runtime/Canvas, MCP tool registry и независимая domain logic. Перерабатываются Colibri Workbench, панели, controls, menus, dialogs, commands, shortcuts, focus, notifications, темы и plugin UI registration. Project data semantics не меняются без отдельной schema migration.
 
@@ -108,9 +111,9 @@ codogma-engine/
 
 | Этап | Работа | Результат |
 |---|---|---|
-| 1. SolidJS foundation | Создать `src/editor/`, Vite + Solid plugin, TSX config, Tailwind 4, scripts, loopback/strict port, backend proxy | Новый Host запускается отдельно от Colibri |
-| 2. Unity-like Workbench | Menu/toolbar, docking, tabs/splitters, Hierarchy, Inspector, Project/Assets, Console, Scene/Game viewport, theme tokens, shortcuts, command/focus model, workspace persistence | Полноценная интерактивная оболочка, а не демонстрационный экран |
-| 3. Scene workflow | Project/scene open, Phaser Canvas, Hierarchy/selection, Inspector/Transform, save/reopen, Undo/Redo | Сквозной workflow на реальном fixture |
+| 1. SolidJS foundation | `src/editor/` создан в COD-80: Vite + Solid plugin, TSX config, Tailwind 4, scripts, loopback/strict port и backend proxy | **Выполнено в COD-80 / PR #30; CI Fast #425 подтверждён** |
+| 2. Unity-like Workbench | COD-80: Menu/toolbar, базовые панели, tabs/splitters, Hierarchy/Inspector, Project/Assets, Console, Scene/Game viewport, tokens/themes, shortcuts, command/focus model и persisted layout; универсальный docking продолжает COD-83 | **Первый рабочий slice реализован; общий docking/layout ещё частичный** |
+| 3. Scene workflow | COD-80: project/scene open, Phaser Canvas, Hierarchy/selection, Inspector/Transform, save/reopen и Undo/Redo | **Первый vertical slice реализован; независимая acceptance CODQA-18 ожидает candidate** |
 | 4. Feature migration | Prefabs, components, assets/importers, Sprite, Animation/Spine, Tilemap, Physics, FX/Particles, code editor integration | Перенос авторских workflows по vertical slices |
 | 5. Services and MCP | Settings, localization, project operations, runtime preview, diagnostics, MCP HTTP/SSE routing | Обязательные операции не зависят от legacy UI |
 | 6. Cutover | SolidJS build по `/editor/`, legacy route в rollback window | Новый UI становится основным |
