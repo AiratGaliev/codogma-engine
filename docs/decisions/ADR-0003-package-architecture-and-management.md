@@ -12,14 +12,14 @@ Codogma Engine развивается из существующего редак
 
 Аудит текущей ветки `dev` дополнительно установил, что Codogma подключает Phaser 4.2.1 через вендорный runtime bundle из `source/editor/plugins/phasereditor2d.phaser/plugin.json` (`scripts/phaser.min.js` для production и `scripts/phaser.js` для development), а не через прямую npm dependency. При этом исходники upstream Phaser модульно организованы и у тега `v4.2.1` есть отдельные варианты сборки. Поэтому текущее ограничение относится к **пути поставки и интеграции Codogma**, а не к абсолютной невозможности модульной сборки самого Phaser. См. [аудит в ТЗ](../technical-specification.md#уточнение-фактическая-интеграция-phaser-421) и [каталог исходников](../REFERENCE-SOURCES.md).
 
-**Текущее состояние переходное:** в репозитории существуют root npm project и редактор в `source/editor` со своим manifest/lockfile; `src/editor`, `packages/*` в целевой роли и согласованные npm Workspaces ещё не внедрены. Этот ADR определяет целевую архитектуру, а не утверждает, что миграция уже выполнена.
+**Текущее состояние на 01.11.2026:** в репозитории существуют root npm project, legacy Colibri app в source/editor/ и самостоятельный SolidJS Editor Host в src/editor/, каждый со своим manifest/lockfile. Новый Host уже создан COD-80; PR #30 ещё не смержен. packages/* развиваются отдельными package roots. npm Workspaces и единый workspace lockfile пока не внедрены. Этот ADR определяет дальнейшую package architecture, а не утверждает, что workspace consolidation уже выполнена.
 
 ## Принятые архитектурные принципы
 
 ### 1. Editor Host и корень исходников редактора
 
 - Целевой путь приложения редактора — `src/editor/`. Это Editor Host: он отвечает за рабочую среду, регистрацию расширений, UI shell и взаимодействие с типизированными extension contracts.
-- Фактический путь текущего редактора остаётся `source/editor/` до отдельного migration PR. Перенос должен сохранить внутреннюю структуру и TypeScript project references, а также обновить server paths, root scripts, CI/cache settings, release archive, `BUILD.md` и README. До завершения миграции рабочие инструкции описывают реальный текущий путь.
+- `src/editor/` уже содержит самостоятельное SolidJS приложение с собственным manifest/lockfile, Vite Host, UI source, design system и tests. `source/editor/` остаётся legacy Colibri client на переходный период. **Не переносить его исходники или TypeScript project references в `src/editor/`** и не копировать Colibri UI abstractions. Оба приложения сосуществуют до COD-87 cutover; обновление production server path, release/archive/CI и README выполняется как часть cutover, Colibri removal — отдельно в COD-88.
 - Перенос редактора, переход на npm Workspaces и реализация нового Core не объединяются в один большой PR. Сначала проводится audit/path migration; включение в Workspaces и консолидация lockfiles — отдельное проверяемое изменение.
 
 ### 2. Source monorepo и самостоятельные пакеты
@@ -91,7 +91,7 @@ Codogma Engine развивается из существующего редак
 ## Последовательность реализации
 
 1. Провести инвентаризацию root/editor manifests, lockfiles, scripts, CI и release packaging; подтвердить dependency/capability baseline.
-2. Отдельным PR перенести редактор `source/editor` → `src/editor`, обновить связанные пути, сохранить внутренние TS references и проверить build/server/release. Не добавлять при этом новую Core implementation.
+2. Новый SolidJS Host уже создан в `src/editor/` (COD-80 / PR #30). Следующая migration работа — вертикально переносить workflows на новые Host contracts, не перемещая legacy source tree. Обновление server default route, release/archive/CI paths проводится только на cutover COD-87; удаление Colibri — отдельная cleanup COD-88.
 3. Отдельным PoC подключить npm Workspaces для `packages/*` и `src/editor`, проверить clean install, TypeScript build, server smoke, MCP integration/release archive и согласованность единого root lockfile.
 4. Создать минимальный `packages/cge` и только необходимые для первого vertical slice package roots; проверить strict typecheck, tests и dependency boundaries. В согласованном с Roadmap build-пилоте проверить базовый registry на built-in features и test provider без зависимости от готового Package Manager UI.
 5. Утвердить package metadata и package-provided Feature/Capability descriptors на fixture package: проверить feature dependencies/conflicts, project/target selection и передачу выбранных capabilities в build report.

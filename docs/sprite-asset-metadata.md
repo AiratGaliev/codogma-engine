@@ -2,7 +2,7 @@
 
 ## Назначение
 
-Документ описывает versioned metadata для изображений и кадров spritesheet в legacy Asset Pack Editor. Контракт хранит авторские настройки рядом с Asset Pack entry, поэтому они сериализуются вместе с проектом и доступны импортёру, Inspector, Scene Editor и будущему Editor Host.
+Документ описывает UI-independent, versioned metadata для изображений и кадров spritesheet. Контракт первоначально был реализован и использован через legacy Asset Pack Editor (COD-39), но его owner — project Asset Pack data, а не Colibri UI. Метаданные хранят авторские настройки рядом с Asset Pack entry, сериализуются вместе с проектом и доступны importer services, Inspector/Scene authoring и новому SolidJS Host (интеграция Host workflow — COD-86).
 
 Источник истины для engineering-реализации — поле `codogma` внутри JSON каждого поддерживаемого Asset Pack item. Временный `AssetPackItem.getEditorData()` для этого не используется: он не входит в `AssetPack.toJSON()`.
 

@@ -35,7 +35,7 @@ Legacy editor не переводится на строгие правила м�
 
 ### 3. Структура и изоляция
 
-- Строгий Core scope находится в `packages/cge/` и необходимых локальных Core contracts; он не зависит от приватных модулей `source/editor/plugins/colibri`. Для editor modernization отдельные новые/изменяемые участки получают применимые checks без требования сначала переносить весь Editor Host в новый package layout.
+- Строгий Core scope находится в `packages/cge/` и необходимых локальных Core contracts; он не зависит от приватных модулей `source/editor/plugins/colibri`. Новый SolidJS Host уже имеет отдельный package root в `src/editor/`, TypeScript 5.9.3, собственные typecheck/build/domain/browser tests и CI `editor-host` job. Новые/изменяемые Host-owned участки получают применимые checks в этом scope; не требуется переносить legacy tree или включать весь Colibri в strict/lint gate.
 - В начальном pilot допустим отдельный package manifest/lockfile до утверждения npm Workspaces. Это временная граница разработки; дальнейшая консолидация lockfiles допустима только после Workspace PoC.
 - Не менять общий legacy `tsconfig-base.json` и не активировать новые blocking lint rules на весь editor в первом PR.
 - До CI gate на legacy packages сначала снять отчёт, проверить динамически загружаемые plugins, generated files, script entry points и false positives.

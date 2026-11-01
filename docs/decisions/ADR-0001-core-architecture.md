@@ -80,7 +80,7 @@ Persisted component properties и transient runtime state — разные об�
 
 ## Последствия и открытые решения
 
-**Положительные:** первый Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; legacy editor можно развивать параллельно; runtime adapter можно менять через явные границы.
+**Положительные:** первый Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; legacy Colibri может поддерживаться только для compatibility/security fixes на переходе, а пользовательские workflows развиваются в самостоятельном SolidJS Host; runtime adapter можно менять через явные границы.
 
 **Компромиссы:** потребуется явно определить schema/version/migration, component metadata и lifecycle contracts. Эти элементы нельзя оставлять implicit в generated source или UI state.
 

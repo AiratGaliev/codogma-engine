@@ -1,6 +1,6 @@
 # План миграции Editor UI: Colibri → SolidJS
 
-**Статус:** COD-80 — первый самостоятельный SolidJS Host, Workbench shell и Scene vertical slice — реализован и подтверждён CI Fast #425. На проверенном HEAD `09a81e95e51c3402f72443d44cfa90c865c03b56`: typecheck + production build, 25 domain tests и 7 Chromium acceptance tests прошли; `fast-checks` также завершился успешно. Полная migration/production cutover остаются следующими этапами.  
+**Статус на 01.11.2026:** COD-80 — первый самостоятельный SolidJS Host, Workbench shell и Scene vertical slice — реализован; CI Fast #425 на кодовом commit `09a81e95e51c3402f72443d44cfa90c865c03b56` подтвердил typecheck + production build, 25 domain tests, 7 Chromium acceptance tests и `fast-checks`. PR #30 остаётся открытым и ещё не смержен в `dev`; production /editor cutover не выполнен. Полная migration, specialized workflows, session-aware MCP routing, cutover/rollback и Colibri removal остаются открытыми; общий owner — COD-82.  
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.  
 **Решение:** [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).  
 **Нормативные требования:** [Техническое задание](technical-specification.md).
@@ -26,6 +26,28 @@
 **Границы COD-80, которые не следует смешивать с полной миграцией:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Docking в COD-80 ограничен перемещением Hierarchy/Inspector в Bottom Dock с возвратом в домашние слоты и перестановкой вкладок внутри Bottom Dock; произвольные floating windows, свободные split-зоны и произвольная перекомпоновка всех панелей не заявляются. Animation поддерживает базовую работу с Phaser JSON: открыть/создать файл, добавить/изменить/удалить clip и frame references; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом. User Components и Prefab поддерживают существующие базовые модели/операции, но полноценные script lifecycle, code generation, nested Prefab overrides и feature parity со старым редактором требуют следующих slices. Специализированные Sprite/Spine/Tilemap/Physics/FX/importer workflows, session-aware MCP SSE routing, production cutover, rollback window и Colibri removal не входят в COD-80.
 
 Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck и production build, 25 domain tests и Chromium acceptance (7 tests на CI Fast #425). `fast-checks` проверяет `npm audit --audit-level=low` и остальные общие проверки репозитория.
+
+## 0. Правила переноса и реестр пользовательских workflows
+
+Главный принцип: **переносим поведение и полезные contracts, а не наследуем архитектуру старого UI**. Colibri может подсказать, какие операции ожидает пользователь, какие edge cases встречались, какие форматы/поля/команды уже поддерживаются и где лежат регрессионные fixtures. Каждый SolidJS workflow проектируется заново с собственными state owners, typed services, lifecycle, focus/accessibility и tests. Не переносить Colibri Workbench/Parts/controls/registry/globals/private imports или скрытые UI coupling.
+
+| Capability | Что уже подтверждено | SolidJS Host status / owner |
+|---|---|---|
+| Workbench + basic Scene | COD-80: Phaser Scene Canvas, Hierarchy/Inspector/Transform, save/reopen, Undo/Redo, базовый Game View iframe и docking slice | **Implemented (first slice)**; COD-80, CODQA-18 independent acceptance |
+| Docking/workspace | Console dock/undock, Hierarchy/Inspector ↔ Bottom Dock/home slots, tab reorder/persistence | **Partial**; COD-83 |
+| Prefab/Components | Базовые модели/операции COD-80; full nested Prefab overrides/script lifecycle не закрыт | **Partial**; COD-8 / COD-27; QA CODQA-11 |
+| Asset Browser/Pack/Sprite | COD-39 реализует domain metadata/slicing/reimport contract; UI пока legacy | **Not migrated**; COD-86, QA CODQA-10 |
+| Camera/coordinates/sorting | Контракт описан в ТЗ; Host authoring/gizmos не закрыты | **Not migrated**; COD-41 |
+| 2D UI authoring | Game UI runtime requirements в ТЗ; legacy authoring controls не перенесены | **Not migrated**; COD-43, QA CODQA-12 |
+| Animation | COD-80 basic clip/frame operations | **Partial**; COD-84, QA CODQA-4 |
+| Tilemap | Existing data/Tiled/runtime contracts требуют targeted gap analysis | **Not migrated**; COD-40, QA CODQA-14 |
+| Physics/Box2D | Existing physics/codegen/runtime contracts and CODQA-1 | **Not migrated as Host UI**; COD-42, CODQA-1 runtime acceptance |
+| FX/Particles/Spine | Existing FX/runtime/codegen evidence; verify supported API/capability | **Not migrated**; particles/audio COD-61; other slices after inventory |
+| Preview/diagnostics | COD-80 Game View loads existing generated index.html in iframe; no complete Preview Host/live identity/common EditorLogger | **Partial/missing**; COD-30/31/32/47/58 |
+| MCP live bridge | HTTP registry + stdio package exist; current SSE bridge broadcasts to connected clients | **Blocked for new Host until session-aware routing**; COD-85, QA CODQA-8 |
+| Production route / Colibri | Server still defaults to legacy /editor/ during transition | **Not cut over**; COD-87 then COD-88 |
+
+Статусы migrated / in progress / not started / deferred / retired выставляются только по фактическому Host workflow и нужному evidence. Наличие старой панели, backend endpoint, завершённой legacy issue или успешной сборки не означает, что функция перенесена. COD-16 — migration inventory; COD-82 — coordination owner.
 
 ## 1. Цель
 
@@ -94,7 +116,7 @@ codogma-engine/
 | 6. Cutover | SolidJS build по `/editor/`, legacy route в rollback window | Новый UI становится основным |
 | 7. Colibri removal | Удалить legacy UI, Colibri-only plugins/controls/styles/assets/build config/dependencies; обновить server/scripts/CI/archive/docs | Удаление legacy после cutover |
 
-Инвентаризация Colibri coupling и workflows выполняется по мере переноса конкретных функций и не блокирует старт приложения/Workbench. Не объединять всю миграцию в один giant PR.
+Инвентаризация Colibri coupling и workflows выполняется по мере переноса конкретных функций и не блокирует развитие уже работающего Host. Она должна выявлять полезные workflows и contract dependencies, а не создавать задачу переписать или механически перенести старую архитектуру. Не объединять всю миграцию в один giant PR.
 
 ## 6. Ownership и интеграция
 
@@ -117,7 +139,15 @@ Framework choice не требует отдельного PoC или framework c
 
 Не нужно повторно доказывать выбор SolidJS искусственным benchmark или PoC-компонентом; проверки продукта и затрагиваемого кода сохраняются.
 
-## 8. Не входит в миграцию
+## 8. Политика legacy compatibility
+
+- Не начинать новые пользовательские features, panels, controls и крупный UX-рефакторинг в source/editor.
+- Допускаются критические bug/security fixes, release blockers и ограниченные compatibility fixes, без которых нельзя безопасно продолжить migration. В каждом случае указывать, почему исправление нельзя сделать в SolidJS Host или общем domain/backend слое.
+- Legacy UI используется как reference сценариев/ожидаемого поведения и как временный rollback/compatibility client; не копировать его код как архитектуру нового Host.
+- Один PROJECT_DIR имеет только одного writer. Пока MCP SSE не session-aware, новый Host не подключается к общему legacy bridge.
+- Colibri удаляется только после COD-87 cutover, завершённого rollback window, inventory sign-off и consumer/license audit в COD-88.
+
+## 9. Не входит в миграцию
 
 - Переписывание Phaser runtime, Node server, formats, serializers, importer metadata, codegen или MCP registry без отдельной причины.
 - Постоянный SolidJS↔Colibri adapter или встраивание SolidJS панелей в legacy Workbench как целевой путь.
@@ -125,7 +155,7 @@ Framework choice не требует отдельного PoC или framework c
 - Удаление Colibri до cutover/rollback window.
 - Обязательное внедрение Dockview, CodeMirror, Monaco, SolidStart, npm Workspaces или public Extension API без подтверждённого workflow.
 
-## 9. Ссылки
+## 10. Ссылки
 
 - [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md)
 - [SolidJS documentation](https://docs.solidjs.com/)

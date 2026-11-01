@@ -452,7 +452,16 @@ Codogma предоставляет единый публичный Physics API �
 
 ## 9. Требования к 2D-редактору
 
-Не нужно заново писать базовые редакторы, если текущие можно расширить. Для каждой существующей подсистемы сначала составляется матрица: «уже работает / частично работает / отсутствует / требует изменения архитектуры». Наличие панели в редакторе не считается достаточным: функция должна работать в runtime, сохраняться в формате проекта и проходить воспроизводимую проверку собранной игры.
+Для каждой существующей подсистемы составляется матрица: «есть в legacy / reusable data-domain-runtime contract / реализовано в SolidJS Host / частично / отсутствует / требует изменения архитектуры». Текущий Colibri UI не является целевой базой для новых функций: его можно использовать как reference пользовательских сценариев, входных данных и подтверждённого поведения, но не переносить Workbench, Parts, controls, plugin registry, globals, private imports или UI lifecycle. Новый Host реализуется самостоятельно на SolidJS. Существующие serializers, project formats, Asset Metadata/importer contracts, codegen и Phaser runtime сохраняются, если отдельное evidence не доказывает дефект или необходимость migration. Наличие панели в любом UI не считается достаточным: функция должна работать в runtime, сохраняться в формате проекта и проходить воспроизводимую проверку собранной игры.
+
+### 9.0. Editor Host и правила staged migration
+
+- Целевой UI — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Первый Workbench + Scene slice COD-80 реализован; PR #30 открыт и пока не смержен в `dev` на дату 01.11.2026.
+- `source/editor/` содержит legacy Colibri client и остаётся доступен только на переходный период. Новые user-facing features, панели, controls и крупный UX-рефакторинг в legacy UI не начинать. Допускаются критические bug/security fixes, release blockers и временные исправления, без которых нельзя безопасно продолжить migration; каждый legacy-only fix должен иметь обоснование.
+- Переносить следует пользовательские workflows, требования и подтверждённые data/domain/runtime contracts. Не переносить старую реализацию UI и не использовать Colibri registry/Parts/private API как фундамент SolidJS Host.
+- Backend, project/file APIs, serialized project/scene/Prefab formats, Asset Metadata/reimport, codegen semantics и Phaser runtime не переписываются только из-за смены UI. Изменения этих слоёв должны иметь отдельный технический gap и regression/migration fixtures.
+- Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
+- Cutover и rollback window выполняются в COD-87; Colibri removal — отдельная COD-88 после cutover, consumer audit, inventory sign-off и license review. Механический перенос source/editor → src/editor отменён (COD-22).
 
 ### 9.1. Сцены, компоненты и Prefabs
 
@@ -561,7 +570,7 @@ Codogma предоставляет единый публичный Physics API �
 
 ### 9.3. Приоритеты возможностей 2D
 
-Приоритет задаёт порядок работ по реальному gap в существующей кодовой базе. Для текущего редактора P0-функции сначала улучшаются и принимаются на действующих contracts; реализация нового Project Model/Core не является универсальным предусловием для всех editor fixes. Если конкретная функция зависит от нового контракта, зависимость указывается для этой функции отдельно. Уровни P0/P1/P2 не следует превращать в один большой спринт.
+Приоритет задаёт порядок работ по подтверждённым gaps в engine contracts и SolidJS Host. Общие domain/data/runtime/security fixes выполняются в соответствующем слое независимо от UI. Все новые пользовательские UI/authoring workflows разрабатываются в src/editor; Colibri не является целевым UI и получает только необходимые compatibility/security fixes. Новый Project Model/Core не является универсальным предусловием для функций, которые могут безопасно использовать существующие контракты. Уровни P0/P1/P2 не следует превращать в один большой спринт.
 
 **P0 — необходимый производственный фундамент**
 - единая физическая абстракция с capability map и как минимум одним полноценно поддерживаемым backend;
@@ -815,7 +824,7 @@ codogma-engine/
 #### Репозиторные команды и зависимости
 
 - Инструменты статического анализа и форматирования регистрируются в devDependencies того workspace/package, чей код они проверяют, а не в production dependencies игры.
-- До завершения миграций сохраняются фактические npm boundaries root и `source/editor`. Целевая модель — npm Workspaces для `packages/*` и после переноса `src/editor`; путь редактора, консолидация lockfile и включение Workspaces выполняются контролируемыми проверяемыми этапами, а не ради одного лишь запуска линтеров.
+- Фактически существуют отдельные npm roots/lockfiles для root, legacy source/editor, нового src/editor и отдельных mini-services/packages. Новый Host уже создан как самостоятельное приложение; не переносить туда legacy tree. npm Workspaces и объединение lockfiles не включены и остаются отдельным PoC/migration, который должен проверить все package scripts, TypeScript references, server routes, CI/cache и release archive.
 - Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
 - Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
 - Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
@@ -893,7 +902,7 @@ Tool schemas и протоколы должны быть versioned, иметь �
 #### Исходники пакетов, Workspaces и пользовательские проекты
 
 - Целевая структура исходников: `packages/*` для самостоятельных пакетов и `src/editor` для Editor Host. Корневой `package.json` в целевой модели использует npm Workspaces для локальной разработки и связывания этих пакетов; точная конфигурация внедряется после аудита manifests, scripts, lockfiles и успешного PoC.
-- Текущее состояние переходное: в репозитории есть root npm project и отдельный npm project редактора в `source/editor`, со своими scripts/lockfile. Нельзя утверждать, что Workspaces, `src/editor` или единый workspace lockfile уже существуют. Миграцию пути редактора и консолидацию package/lockfile boundaries следует выполнять отдельными, проверяемыми изменениями.
+- Текущее состояние переходное: в репозитории есть root npm project, legacy npm project в source/editor и самостоятельный новый Host npm project в src/editor, каждый со своим manifest/lockfile. npm Workspaces и единый workspace lockfile ещё не существуют. Не выполнять механический перенос legacy editor; возможную workspace/lockfile консолидацию проверять отдельно, без смешивания с Host UI migration.
 - В пользовательский игровой проект устанавливаются **только прямо выбранные пакеты и их транзитивные зависимости**, а не весь monorepo Codogma. Его manifest и `package-lock.json` принадлежат пользовательскому проекту; `node_modules` — результат установки, а не место разработки и хранения исходников пакетов.
 - Пакеты по назначению могут быть Core/shared, editor-extension, runtime, build/CLI, platform adapter или tooling. Названия не обязаны содержать `plugin-`; смысл пакета задаётся его ответственностью, public exports и проверяемыми engine-specific metadata.
 - Пакет может содержать несколько внутренних модулей и exports; независимое версионирование и подключение не требуют отдельного пакета на каждый компонент или файл.
@@ -945,7 +954,7 @@ Profiler должен сначала собирать воспроизводим
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
-- Editor TypeScript/compiler: в текущем состоянии проверяются установка зависимостей в корне и `source/editor` и команда сборки редактора; после отдельной миграции пути и workspace-консолидации проверки обновляются на целевые `src/editor`/npm Workspaces. Новые Core/API packages проходят отдельный строгий typecheck. Не указывать будущие команды и пути как уже работающие до их реализации.
+- Editor TypeScript/compiler: root и legacy source/editor сохраняют собственные install/build checks; новый src/editor уже имеет отдельные npm run typecheck, npm run build, npm run test и npm run test:browser, запускаемые через root shortcuts build:editor-host, test:editor-host и test:editor-host:browser. CI job editor-host проверяет новый Host отдельно. npm Workspaces не включены. Core/API packages проходят собственные strict typechecks. Указывать только команды, реально присутствующие в соответствующем manifest.
 - TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
 - Server/MCP: серверный smoke и релевантный запуск `npm run test:e2e`.
 - Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures; отдельный fixture должен запустить сцену из данных с зарегистрированным пользовательским TypeScript-компонентом **без генерируемого файла класса сцены** и проверить диагностику отсутствующего компонента/ресурса без частично созданной runtime-сцены. Проверить ссылки между узлами, повторное использование typeId при независимых instance IDs/значениях, отмену загрузки и отделение временного runtime state от сохранённых данных.
@@ -1157,7 +1166,7 @@ MCP surface группируется по операциям: browser/session li
 
 Текущие Browser Console, Node.js server logger, `dev.log` и legacy MCP Message Log — отдельные механизмы. Логи browser Editor автоматически не попадают в Node terminal; MCP Message Log охватывает только MCP bridge. Они не считаются общей системой диагностики.
 
-Целевой контракт обязателен для legacy Editor и будущего SolidJS Host:
+UI-independent logging contract используется legacy Editor в переходный период и текущим SolidJS Host; после cutover целевым consumer остаётся SolidJS:
 
 - Engine-owned типизированный logger с уровнями `debug/info/warn/error`, timestamp, channel, subsystem, message, normalized error/stack и ограниченным operation context.
 - Раздельные каналы Editor, Runtime, Build, Server, MCP и extensions; runtime diagnostics привязываются к конкретной Preview/game session.

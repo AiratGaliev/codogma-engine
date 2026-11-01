@@ -65,7 +65,7 @@ Preview workflow позволяет выбирать уровни сообщен
 
 ### 2. Независимые каналы и sinks
 
-Одни и те же контракты должны использоваться legacy Editor и будущим SolidJS Editor Host. Источники и выходы логов должны быть разделены:
+Один UI-independent logging contract используется legacy Colibri на переходе и текущим SolidJS Host; после cutover целевым consumer остаётся SolidJS. Источники и sinks должны быть разделены:
 
 - **Editor** — жизненный цикл UI, команды, панели, Inspector, imports, plugin lifecycle и ошибки редактора.
 - **Runtime** — сообщения конкретной Preview/game session; session ID обязателен, чтобы не смешивать две запущенные игры.
