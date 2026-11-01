@@ -796,9 +796,9 @@ codogma-engine/
 - Логические области Core, Project Model, Runtime, Runtime Adapters, Editor, Build/CLI, DevTools и Platform Services не обязаны соответствовать один к одному отдельным npm-пакетам. Физическая граница определяется ответственностью, зависимостями и потребностью в независимом подключении.
 - Существующий Colibri/plugin registry — только legacy implementation и источник inventory существующих возможностей. Новый SolidJS Editor Host не должен зависеть от Colibri registry или private Colibri APIs. Новый Extension API проектируется отдельно; до его готовности внутренние editor features могут регистрироваться внутри одного приложения и не обязаны упаковываться каждая в npm package.
 
-### 12.1. TypeScript-first engineering toolchain
+### 12.1. TypeScript-only source policy and engineering toolchain
 
-**Цель:** новые Codogma subsystems пишутся на TypeScript с сильной статической типизацией и единым автоматическим контролем качества. Статус «код компилируется» недостаточен: архитектурные ошибки, неиспользуемые зависимости и нарушение слоёв должны выявляться до runtime acceptance.
+**Цель:** весь новый first-party Codogma-owned source — production code, tooling и тесты — пишется на TypeScript с сильной статической типизацией и единым автоматическим контролем качества. Статус «код компилируется» недостаточен: архитектурные ошибки, неиспользуемые зависимости и нарушение слоёв должны выявляться до runtime acceptance.
 
 #### Язык и типизация
 

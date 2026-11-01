@@ -20,10 +20,11 @@
 
 ### Verification
 
-* [CI Fast #470](https://github.com/AiratGaliev/codogma-engine/actions/runs/41332498006) — **success** on HEAD `79ab4d3f589f9489b020163cf7d420cebd6cefc5`; both `editor-host` and `fast-checks` jobs passed.
-* SolidJS Host typecheck + Vite production build — **success**.
+* [CI Fast #474](https://github.com/AiratGaliev/codogma-engine/actions/runs/41335387791) — **success** on HEAD `7978ac24ead4d108339bbae2ef781e8d32f9508a`; both `editor-host` and `fast-checks` jobs passed.
+* SolidJS Host full ADR-0002 strict typecheck + Vite production build — **success**.
 * Vitest — **6 test files, 36 tests passed, 0 failed**.
 * Chromium Playwright acceptance — **9 passed**.
+* `fast-checks` — **success**, including root/editor build, regression suite, server/security smoke, mini-service security, localization and MCP package checks.
 * The CI package install currently uses `npm install --no-audit --no-fund`; the generated Host lockfile is uploaded as a workflow artifact. Do not claim a committed/reproducible Host `npm ci` install until its lockfile is synchronized in the repository.
 
 ## Unreleased (2026-11-01 — Sprite asset authoring and reimport)
