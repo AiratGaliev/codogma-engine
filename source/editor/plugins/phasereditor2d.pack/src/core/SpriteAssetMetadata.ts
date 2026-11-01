@@ -303,6 +303,8 @@ namespace phasereditor2d.pack.core {
                             return `Фигура ${index + 1}: polygon должен содержать минимум три точки.`;
                         }
 
+                        const polygonPoints: Array<{ x: number; y: number }> = [];
+
                         for (const point of shape.points) {
                             const x = Array.isArray(point) ? point[0] : point && point.x;
                             const y = Array.isArray(point) ? point[1] : point && point.y;
@@ -310,9 +312,30 @@ namespace phasereditor2d.pack.core {
                             if (!this.isFiniteNumber(x) || !this.isFiniteNumber(y) || x < 0 || y < 0
                                 || (this.isPositiveNumber(frameWidth) && x > frameWidth)
                                 || (this.isPositiveNumber(frameHeight) && y > frameHeight)) {
-                                return `Фигура ${index + 1}: координаты polygon должны быть конечными и находиться внутри кадра.`;
+                                return `Фигура ${index + 1}: координаты polygon должны быть конечными и находиться внутри source canvas.`;
                             }
+
+                            polygonPoints.push({ x, y });
                         }
+
+                        const uniquePoints = new Set(polygonPoints.map(point => `${point.x},${point.y}`));
+
+                        if (uniquePoints.size < 3) {
+                            return `Фигура ${index + 1}: polygon должен содержать минимум три различные точки.`;
+                        }
+
+                        let twiceArea = 0;
+
+                        for (let pointIndex = 0; pointIndex < polygonPoints.length; pointIndex++) {
+                            const current = polygonPoints[pointIndex];
+                            const nextPoint = polygonPoints[(pointIndex + 1) % polygonPoints.length];
+                            twiceArea += current.x * nextPoint.y - nextPoint.x * current.y;
+                        }
+
+                        if (Math.abs(twiceArea) < 1e-8) {
+                            return `Фигура ${index + 1}: polygon имеет нулевую площадь.`;
+                        }
+
                         break;
 
                     default:

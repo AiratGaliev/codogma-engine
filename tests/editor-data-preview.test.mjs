@@ -1244,3 +1244,114 @@ test("reimport reports atlas trim geometry changes even when packed rect is unch
     assert.deepEqual(updated.conflicts[0].previousSourceSize, { width: 40, height: 48 })
     assert.deepEqual(updated.conflicts[0].currentTrimRect, { x: 8, y: 7, width: 20, height: 30 })
 })
+
+
+test("collision polygon validation rejects duplicate and collinear points", () => {
+    assert.match(
+        spriteMetadata.validateCollisionShapes([{
+            type: "polygon",
+            points: [[0, 0], [8, 0], [8, 0], [0, 8]]
+        }]),
+        /минимум три различные точки/
+    )
+
+    assert.match(
+        spriteMetadata.validateCollisionShapes([{
+            type: "polygon",
+            points: [[0, 0], [8, 8], [16, 16]]
+        }]),
+        /нулевую площадь/
+    )
+})
+
+test("single-file importer imports a selected batch as separate Asset Pack entries", async () => {
+    const originalGetAllPacks = packCore.AssetPackUtils.getAllPacks
+    packCore.AssetPackUtils.getAllPacks = async () => []
+
+    try {
+        const items = []
+        const pack = {
+            getItems: () => items,
+            createPackItem(data) {
+                return {
+                    data,
+                    getKey: () => data.key,
+                    async preload() {},
+                    async build() {},
+                    resetCache() {}
+                }
+            },
+            addItem(item) { items.push(item) },
+            deleteItem(item) {
+                const index = items.indexOf(item)
+                if (index >= 0) items.splice(index, 1)
+            }
+        }
+        const importer = new class extends packUi.importers.Importer {
+            constructor() { super("image") }
+            acceptFile() { return true }
+            createItemData(_pack, file) { return { url: file.getName() } }
+        }()
+        const files = ["hero.png", "enemy.png"].map(name => ({
+            getName: () => name,
+            getNameWithoutExtension: () => name.replace(/\.[^.]+$/, "")
+        }))
+
+        const imported = await importer.autoImport(pack, files)
+
+        assert.equal(imported.length, 2)
+        assert.deepEqual(imported.map(item => item.getKey()), ["hero", "enemy"])
+        assert.equal(items.length, 2)
+    } finally {
+        packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
+    }
+})
+
+test("multi-file importer keeps a selected batch in one Asset Pack entry", async () => {
+    const originalGetAllPacks = packCore.AssetPackUtils.getAllPacks
+    packCore.AssetPackUtils.getAllPacks = async () => []
+
+    try {
+        const items = []
+        const pack = {
+            getItems: () => items,
+            createPackItem(data) {
+                return {
+                    data,
+                    getKey: () => data.key,
+                    async preload() {},
+                    async build() {},
+                    resetCache() {}
+                }
+            },
+            addItem(item) { items.push(item) },
+            deleteItem(item) {
+                const index = items.indexOf(item)
+                if (index >= 0) items.splice(index, 1)
+            }
+        }
+        const importer = new class extends packUi.importers.Importer {
+            constructor() {
+                super("atlas")
+                this.setMultipleFiles(true)
+            }
+            acceptFile() { return true }
+            createItemData(_pack, files) {
+                return { url: files.map(file => file.getName()) }
+            }
+        }()
+        const files = ["atlas.json", "atlas.png"].map(name => ({
+            getName: () => name,
+            getNameWithoutExtension: () => name.replace(/\.[^.]+$/, "")
+        }))
+
+        const imported = await importer.autoImport(pack, files)
+
+        assert.equal(imported.length, 1)
+        assert.equal(imported[0].getKey(), "atlas")
+        assert.deepEqual(imported[0].data.url, ["atlas.json", "atlas.png"])
+        assert.equal(items.length, 1)
+    } finally {
+        packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
+    }
+})
