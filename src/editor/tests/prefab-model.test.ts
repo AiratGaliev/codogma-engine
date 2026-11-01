@@ -30,7 +30,8 @@ test("creates a legacy-compatible PREFAB scene document from a selected object",
 test("creates a prefab instance using the stable Prefab document id", () => {
   const prefab = createPrefabDocument(scene, scene.displayList[0], "Dino");
   const next = createPrefabInstance(scene, prefab, { label: "dinoPrefab", x: 120, y: 90 });
-  const instance = next.displayList.at(-1);\n  assert.ok(instance);\n  assert.ok(instance);
+  const instance = next.displayList.at(-1);
+  assert.ok(instance);
   assert.equal(instance.prefabId, prefab.id);
   assert.equal(instance.label, "dinoPrefab");
   assert.equal(instance.x, 120);
@@ -44,7 +45,8 @@ test("supports typed Prefab properties and per-instance overrides", () => {
   prefab = addPrefabProperty(prefab, { name: "rotating", label: "Rotating", defValue: false, customDefinition: false, type: { id: "boolean" } });
   prefab = addPrefabProperty(prefab, { name: "origin", label: "Origin", defValue: "top", customDefinition: true, type: { id: "option", options: ["top", "center", "bottom"] } });
   assert.equal(getPrefabPropertyDefault(prefab.prefabProperties![0]), false);
-  const instance = createPrefabInstance(scene, prefab).displayList.at(-1);\n  assert.ok(instance);\n  assert.ok(instance);
+  const instance = createPrefabInstance(scene, prefab).displayList.at(-1);
+  assert.ok(instance);
   assert.deepEqual(resolvePrefabInstanceValues(prefab, instance), { rotating: false, origin: "top" });
   assert.deepEqual(resolvePrefabInstanceValues(prefab, { ...instance, rotating: true }), { rotating: true, origin: "top" });
   prefab = updatePrefabProperty(prefab, "rotating", { defValue: true });
