@@ -846,7 +846,7 @@ test("collision geometry validation rejects shapes outside the source frame", ()
             16,
             16
         ),
-        /находиться внутри кадра/
+        /находиться внутри source canvas/
     )
 })
 
