@@ -100,3 +100,17 @@ export async function writeProjectFile(
     content,
   });
 }
+
+
+export async function createProjectFolder(relativePath: string): Promise<void> {
+  await callEditorApi("CreateFolder", { path: relativePath });
+}
+
+export async function renameProjectFile(relativePath: string, newName: string): Promise<void> {
+  await callEditorApi("RenameFile", { path: relativePath, newName });
+}
+
+export async function deleteProjectFiles(relativePaths: string[]): Promise<void> {
+  if (relativePaths.length === 0) return;
+  await callEditorApi("DeleteFiles", { paths: relativePaths });
+}
