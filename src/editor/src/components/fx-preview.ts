@@ -124,8 +124,8 @@ function setHelperTransform(helper: FxDisplayObject, parent: FxDisplayObject, de
 }
 
 function createCirclePreview(
-  scene: FxScene,
-  phaser: FxPhaser,
+  scene: FxSceneAdapter,
+  phaser: FxPhaserAdapter,
   parent: FxDisplayObject,
   fx: CircleFx,
   renderOrderOffset: number,
@@ -260,7 +260,7 @@ function toRgba(value: string | number | undefined, alpha: number, fallback: num
 }
 
 function createGradientPreview(
-  scene: FxScene,
+  scene: FxSceneAdapter,
   parent: FxDisplayObject,
   fx: GradientFx,
   renderOrderOffset: number,
@@ -319,7 +319,7 @@ function createGradientPreview(
   return { dispose, diagnostics };
 }
 
-function createBloomPreview(phaser: FxPhaser, parent: FxDisplayObject, fx: BloomFx): FxPreviewResult {
+function createBloomPreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx: BloomFx): FxPreviewResult {
   const effect = phaser.Actions.AddEffectBloom(parent, {
     threshold: number(fx.threshold, 0.5),
     blurRadius: Math.max(0, number(fx.blurRadius, 2)),
@@ -343,7 +343,7 @@ function createBloomPreview(phaser: FxPhaser, parent: FxDisplayObject, fx: Bloom
   return { dispose, diagnostics: [] };
 }
 
-function createShinePreview(phaser: FxPhaser, parent: FxDisplayObject, fx: ShineFx): FxPreviewResult {
+function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx: ShineFx): FxPreviewResult {
   const before = parent.listeners?.("destroy") ?? [];
   const effect = phaser.Actions.AddEffectShine(parent, {
     radius: Math.max(0.01, number(fx.radius, 0.5)),
