@@ -58,7 +58,10 @@ test("discovers nested scene nodes without exposing FX helper nodes as scene obj
 test("reads supported and unsupported legacy effects without dropping either", () => {
   const nestedImage = getSceneObjects(sceneFixture).find((entry) => entry.id === "nested-image");
   assert.ok(nestedImage);
-  assert.deepEqual(getSceneObjectEffects(nestedImage.source).map(({ id, source }) => [id, source.type]), [["circle-1", "Circle"]]);
+  const supported = getSceneObjectEffects(nestedImage.source);
+  assert.deepEqual(supported.map(({ id, source }) => [id, source.type]), [["circle-1", "Circle"]]);
+  assert.equal(supported[0]?.source.color, 0xffcc33);
+  assert.equal(typeof supported[0]?.source.color, "number");
   assert.deepEqual(getUnsupportedSceneObjectEffects(nestedImage.source), ["Glow"]);
 });
 
@@ -115,6 +118,7 @@ test("validates alpha, normalized Gradient coordinates, Shine timing and color r
   const updatedParent = getSceneObjects(numericColour)[0];
   assert.ok(updatedParent);
   assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.preFX, false);
+  assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.color, "#ff0000");
 });
 
 test("scene JSON round-trips FX settings and unrelated metadata without schema migration", () => {
@@ -122,4 +126,34 @@ test("scene JSON round-trips FX settings and unrelated metadata without schema m
   const parsed = parseSceneContent(content);
   assert.deepEqual(JSON.parse(JSON.stringify(parsed)), sceneFixture);
   assert.equal((parsed.displayList[0]?.list?.[0] as {list: unknown[]}).list.length, 2);
+});
+test("edits and removes legacy FX without an id without inserting synthetic identity into serialized data", () => {
+  const legacyScene: SceneDocument = {
+    id: "legacy-fx",
+    displayList: [{
+      id: "parent",
+      type: "Image",
+      list: [{ type: "Circle", thickness: 5, color: 0x123456, customLegacyFlag: "keep" }],
+    }],
+  };
+  const parent = getSceneObjects(legacyScene)[0];
+  assert.ok(parent);
+  const effect = getSceneObjectEffects(parent.source)[0];
+  assert.ok(effect);
+  assert.equal(effect.id, "fx-0");
+
+  const updated = updateSceneObjectFx(legacyScene, "parent", effect.id, { thickness: 9 });
+  const updatedParent = getSceneObjects(updated)[0];
+  assert.ok(updatedParent);
+  const raw = updatedParent.source.list?.[0] as Record<string, unknown>;
+  assert.equal(raw.id, undefined);
+  assert.equal(raw.thickness, 9);
+  assert.equal(raw.color, 0x123456);
+  assert.equal(raw.customLegacyFlag, "keep");
+
+  const removed = removeSceneObjectFx(updated, "parent", effect.id);
+  const removedParent = getSceneObjects(removed)[0];
+  assert.ok(removedParent);
+  assert.deepEqual(removedParent.source.list, []);
+  assert.equal(legacyScene.displayList[0]?.list?.length, 1);
 });
