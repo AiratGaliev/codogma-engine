@@ -36,8 +36,10 @@ import {
     handleBridgeRequest,
     handleOfficialBridgeRequest,
     handleBridgeEvents,
+    handleBridgeActivate,
     handleBridgeResult,
     bridgeClientCount,
+    getBridgeStatus,
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
@@ -891,8 +893,13 @@ const server = http.createServer(async (req, res) => {
         }
 
         // MCP editor bridge (SSE channel to the running editor client)
-        if (urlPath === "/editor/mcp-bridge/events") {
+        if (urlPath === "/editor/mcp-bridge/events" && req.method === "GET") {
             return await handleBridgeEvents(req, res)
+        }
+
+        // MCP editor bridge (the focused editor tab claims command ownership)
+        if (urlPath === "/editor/mcp-bridge/activate" && req.method === "POST") {
+            return await handleBridgeActivate(req, res)
         }
 
         // MCP editor bridge (editor client posts command results)
@@ -902,7 +909,7 @@ const server = http.createServer(async (req, res) => {
 
         // MCP editor bridge status (for the MCP Server Configuration dialog)
         if (urlPath === "/editor/mcp-bridge-status") {
-            return sendJSON(res, { connected: bridgeClientCount() > 0, clients: bridgeClientCount() })
+            return sendJSON(res, getBridgeStatus())
         }
 
         // AI Chat (v5-style feature): LLM agent with MCP tool access
