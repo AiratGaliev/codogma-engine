@@ -420,6 +420,8 @@ function App() {
   let hierarchyHomeSlot: HTMLDivElement | undefined;
   let inspectorHomeSlot: HTMLDivElement | undefined;
   let bottomDockedContent: HTMLDivElement | undefined;
+  let bottomTabPointerDrag: { panel: BottomTab; pointerId: number; startX: number; startY: number; active: boolean } | undefined;
+  let suppressDockTabClick = false;
   let resizeState:
     | {
         kind: "left" | "right" | "bottom" | "console";
@@ -1434,8 +1436,40 @@ function App() {
     setLayout(defaultLayout(compactWorkbench()));
   }
 
-  function handleBottomTabDragStart(event: DragEvent, tab: BottomTab) {
-    handlePanelDragStart(event, tab);
+  function startBottomTabPointerDrag(event: PointerEvent & { currentTarget: HTMLButtonElement }, tab: BottomTab) {
+    if (event.button !== 0) return;
+    bottomTabPointerDrag = { panel: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveBottomTabPointerDrag(event: PointerEvent) {
+    const drag = bottomTabPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 6) {
+      drag.active = true;
+      setDraggedDockPanel(drag.panel);
+      setDockTargetActive(true);
+    }
+  }
+
+  function endBottomTabPointerDrag(event: PointerEvent) {
+    const drag = bottomTabPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    bottomTabPointerDrag = undefined;
+    if (drag.active) {
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-dock-tab]");
+      const targetTab = target?.dataset.dockTab as BottomTab | undefined;
+      if (targetTab) reorderBottomTab(drag.panel, targetTab);
+      suppressDockTabClick = true;
+      event.preventDefault();
+    }
+    handlePanelDragEnd();
+  }
+
+  function cancelBottomTabPointerDrag(event: PointerEvent) {
+    if (!bottomTabPointerDrag || bottomTabPointerDrag.pointerId !== event.pointerId) return;
+    bottomTabPointerDrag = undefined;
+    handlePanelDragEnd();
   }
 
   function reorderBottomTab(source: BottomTab, target: BottomTab) {
@@ -2417,6 +2451,9 @@ function App() {
             onDragOver={handleDockDragOver}
             onDragLeave={handleDockDragLeave}
             onDrop={handleDockDrop}
+            onPointerMove={moveBottomTabPointerDrag}
+            onPointerUp={endBottomTabPointerDrag}
+            onPointerCancel={cancelBottomTabPointerDrag}
           >
             <For each={visibleBottomTabs()}>
               {(tab) => (
@@ -2424,14 +2461,13 @@ function App() {
                   class="dock-tab"
                   role="tab"
                   data-dock-tab={tab}
-                  draggable
                   aria-selected={bottomTab() === tab}
                   classList={{ active: bottomTab() === tab }}
-                  onDragStart={(event) => handleBottomTabDragStart(event, tab)}
-                  onDragEnd={handlePanelDragEnd}
-                  onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "move"; }}
-                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); handleDockDrop(event, tab); }}
-                  onClick={() => setLayout((current) => ({ ...current, bottomTab: tab }))}
+                  onPointerDown={(event) => startBottomTabPointerDrag(event, tab)}
+                  onClick={() => {
+                    if (suppressDockTabClick) { suppressDockTabClick = false; return; }
+                    setLayout((current) => ({ ...current, bottomTab: tab }));
+                  }}
                   title={`Drag to reorder ${tab}`}
                 >
                   <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
