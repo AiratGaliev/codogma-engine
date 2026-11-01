@@ -22,6 +22,8 @@
  *   OpenBrowser, OpenFileManager, OpenVSCode
  */
 
+import 'dotenv/config'
+
 import http from "http"
 import fs from "fs"
 import fsp from "fs/promises"

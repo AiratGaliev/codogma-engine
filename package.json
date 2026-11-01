@@ -34,6 +34,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^16.5.0",
     "@codogma/localization": "file:packages/localization",
     "@phaserjs/editor-mcp-server": "^1.0.6"
   },

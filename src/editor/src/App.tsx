@@ -108,6 +108,7 @@ function ProjectTreeNode(props: {
   theme: Theme;
   selectedPath: string;
   onSelect: (path: string, isFile: boolean) => void;
+  search?: string;
 }) {
   const [expanded, setExpanded] = createSignal(
     props.path.length === 0 || props.path === "scenes" || props.path === "assets",
