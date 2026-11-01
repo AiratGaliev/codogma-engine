@@ -781,7 +781,7 @@ test("collision geometry validation rejects malformed and degenerate shapes", ()
 
     assert.match(
         spriteMetadata.validateCollisionShapes([{ type: "rectangle", x: -1, y: 0, width: 10, height: 8 }]),
-        /x\/y >= 0/
+        /находиться внутри кадра/
     )
     assert.match(
         spriteMetadata.validateCollisionShapes([{ type: "circle", x: 0, y: 0, radius: 0 }]),
