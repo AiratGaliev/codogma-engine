@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const editorDirectory = dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = resolve(editorDirectory, "../..");
+const repositoryRoot = resolve(editorDirectory, "../../..");
 const sourceFixture = join(repositoryRoot, "tests", "workspace", "test-typescript");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "codogma-editor-host-"));
 const projectDirectory = join(temporaryRoot, "project");
