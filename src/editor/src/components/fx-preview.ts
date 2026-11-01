@@ -400,6 +400,7 @@ function createBloomPreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
   parent.once?.("destroy", parentDestroyed);
   return { dispose, diagnostics: [] };
 }
+
 function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx: ShineFx): FxPreviewResult {
   const before = parent.listeners?.("destroy") ?? [];
   const effect = phaser.Actions.AddEffectShine(parent, {
@@ -466,6 +467,7 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
   parent.once?.("destroy", parentDestroyed);
   return { dispose: () => dispose(), diagnostics: [] };
 }
+
 export function createFxPreview(
   scene: FxSceneAdapter,
   phaser: FxPhaserAdapter,

@@ -226,7 +226,9 @@ function FxInspector(props: Props) {
                   {entry().source.type === "Circle" ? "Internal mask · object space" : "Gradient Game Object · sibling render layer"}
                 </div>
               </Show>
-              <EffectFields effect={() => entry().source} onUpdate={props.onUpdate} onError={props.onError} />
+              <Show when={entry().source.type} keyed>
+                <EffectFields effect={() => entry().source} onUpdate={props.onUpdate} onError={props.onError} />
+              </Show>
             </article>
           )}
         </Index>
