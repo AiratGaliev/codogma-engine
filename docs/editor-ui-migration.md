@@ -1,6 +1,6 @@
 # План миграции Editor UI: Colibri → SolidJS
 
-**Статус:** первый SolidJS Host и scene-authoring vertical slice реализованы в рабочей ветке; browser acceptance и CI ещё должны подтвердить результат.  
+**Статус:** первый SolidJS Host/Scene slice реализован; CI Fast #392 подтвердил typecheck/build, 10 domain tests и 5 Chromium acceptance tests. Полная migration/production cutover остаются следующими этапами.  
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.  
 **Решение:** [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).  
 **Нормативные требования:** [Техническое задание](technical-specification.md).
