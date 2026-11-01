@@ -332,7 +332,7 @@ export function getAnimationTimelinePosition(
     return {
       frameIndex: 0,
       elapsedInFrameMs: 0,
-      frameDurationMs: getRequiredFrameDuration(frameDurations, 0)
+      frameDurationMs: getRequiredFrameDuration(frameDurations, 0),
       progress: 0,
       cycleIndex: 0,
       completed: false,
