@@ -16,6 +16,7 @@ interface TextField {
   label: string;
   initial: string;
   description: string;
+  color?: boolean;
 }
 
 interface BooleanField {
@@ -42,14 +43,16 @@ function fieldsFor(effect: FxObject): FxField[] {
   switch (effect.type) {
     case "Circle":
       return [
+        { key: "label", label: "Effect Name", initial: "Circle", description: "Name shown in the effect stack." },
         { key: "thickness", label: "Thickness", min: 0, step: 0.01, initial: 8, description: "Ring width in local pixels." },
-        { key: "color", label: "Ring Color", step: 1, initial: "#ff33b2", description: "Color of the circular outline." },
-        { key: "backgroundColor", label: "Background Color", step: 1, initial: "#ff0000", description: "Color behind the masked texture." },
+        { key: "color", label: "Ring Color", step: 1, initial: "#ff33b2", description: "Color of the circular outline.", color: true },
+        { key: "backgroundColor", label: "Background Color", step: 1, initial: "#ff0000", description: "Color behind the masked texture.", color: true },
         { key: "scale", label: "Scale", min: 0.01, step: 0.01, initial: 1, description: "Circle size relative to the parent bounds." },
         { key: "feather", label: "Feather", min: 0, step: 0.001, initial: 0.005, description: "Softness of the circular mask edge." },
       ];
     case "Bloom":
       return [
+        { key: "label", label: "Effect Name", initial: "Bloom", description: "Name shown in the effect stack." },
         { key: "threshold", label: "Threshold", min: 0, max: 1, step: 0.01, initial: 0.5, description: "Minimum luminance that contributes to bloom." },
         { key: "blurRadius", label: "Blur Radius", min: 0, step: 0.1, initial: 2, description: "Blur radius applied to bright pixels." },
         { key: "blurSteps", label: "Blur Steps", min: 1, step: 1, initial: 4, description: "Number of blur sampling steps." },
@@ -58,8 +61,9 @@ function fieldsFor(effect: FxObject): FxField[] {
       ];
     case "Gradient":
       return [
-        { key: "color1", label: "Start Color", step: 1, initial: "#ff0000", description: "Start color of the gradient band." },
-        { key: "color2", label: "End Color", step: 1, initial: "#00ff00", description: "End color of the gradient band." },
+        { key: "label", label: "Effect Name", initial: "Gradient", description: "Name shown in the effect stack." },
+        { key: "color1", label: "Start Color", step: 1, initial: "#ff0000", description: "Start color of the gradient band.", color: true },
+        { key: "color2", label: "End Color", step: 1, initial: "#00ff00", description: "End color of the gradient band.", color: true },
         { key: "alpha", label: "Alpha", min: 0, max: 1, step: 0.01, initial: 0.2, description: "Opacity of the gradient colors." },
         { key: "fromX", label: "Start X", min: 0, max: 1, step: 0.01, initial: 0, description: "Normalized horizontal gradient origin." },
         { key: "fromY", label: "Start Y", min: 0, max: 1, step: 0.01, initial: 0, description: "Normalized vertical gradient origin." },
@@ -69,6 +73,7 @@ function fieldsFor(effect: FxObject): FxField[] {
       ];
     case "Shine":
       return [
+        { key: "label", label: "Effect Name", initial: "Shine", description: "Name shown in the effect stack." },
         { key: "radius", label: "Radius", min: 0.01, step: 0.01, initial: 0.5, description: "Width of the shine band." },
         { key: "direction", label: "Direction", step: 0.01, initial: 0.5, description: "Direction in radians." },
         { key: "scale", label: "Travel Scale", min: 0.1, step: 0.1, initial: 2, description: "Travel distance relative to the parent bounds." },
@@ -92,7 +97,13 @@ function isTextField(field: FxField): field is TextField {
 }
 
 function isInternalFx(effect: FxObject): boolean {
-  return effect.preFX !== false;
+  return effect.preFX === true;
+}
+
+function colorPreview(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return `#${Math.max(0, Math.floor(value)).toString(16).slice(-6).padStart(6, "0")}`;
+  if (typeof value === "string" && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value)) return value;
+  return "transparent";
 }
 
 function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; onError: Props["onError"] }) {
@@ -107,7 +118,11 @@ function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; on
             fallback={
               <label class="inspector-field fx-inspector-field" title={field.description}>
                 <span>{field.label}</span>
-                <input
+                <div class="fx-field-control">
+                  <Show when={isTextField(field) && field.color}>
+                    <span class="fx-color-swatch" aria-hidden="true" style={{ background: colorPreview(fieldValue(props.effect, field)) }} />
+                  </Show>
+                  <input
                   aria-label={`${props.effect.type} ${field.label}`}
                   type={isTextField(field) ? "text" : "number"}
                   min={isBooleanField(field) || isTextField(field) ? undefined : field.min}
@@ -124,6 +139,7 @@ function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; on
                     }
                   }}
                 />
+                </div>
               </label>
             }
           >
