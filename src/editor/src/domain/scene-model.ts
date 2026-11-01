@@ -82,7 +82,7 @@ function isFxHelperNode(source: unknown): boolean {
     "GradientMap", "ImageLight", "Key", "NormalTools", "ObjectMask",
     "PanoramaBlur", "ParallelFilters", "Pixelate", "Quantize", "Sampler",
     "Shadow", "Threshold", "TextureMask", "Vignette", "Wipe",
-  ].includes(source.type);
+  ].includes(source.type) || source.type.startsWith("FX");
 }
 
 /**
