@@ -398,13 +398,22 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await page.getByLabel("Bloom Blur Quality").fill("2");
   await page.getByLabel("Bloom Blur Quality").press("Tab");
   await expect(page.getByLabel("Bloom Blur Quality")).toHaveValue("2");
-  await page.getByTestId("save-scene").click();
+  const firstSaveResponse = page.waitForResponse((response) => {
+    if (response.url() !== "http://127.0.0.1:5173/editor/api" || response.request().method() !== "POST") return false;
+    try {
+      return response.request().postDataJSON()?.method === "SetFileString";
+    } catch {
+      return false;
+    }
+  });
+  await page.keyboard.press("Control+s");
+  const firstSave = await firstSaveResponse;
+  expect(firstSave.ok()).toBeTruthy();
   await expect(page.getByTestId("save-scene")).toBeDisabled();
 
-  let saved = await page.evaluate(async () => {
-    const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
-    return response.json();
-  });
+  const firstSceneResponse = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene");
+  expect(firstSceneResponse.ok()).toBeTruthy();
+  let saved = await firstSceneResponse.json();
   let circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
   expect(circleTarget.list[0].thickness).toBe(10);
   expect(circleTarget.list[1].threshold).toBe(0.45);
@@ -430,8 +439,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await page.getByLabel("Gradient Alpha").fill("0.6");
   await page.getByTestId("save-scene").click();
 
-  saved = await page.evaluate(async () => {
-    const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
+  saved = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene").then(async (response) => {
+    expect(response.ok()).toBeTruthy();
     return response.json();
   });
   const panel = saved.displayList.find((item: { id?: string }) => item.id === "317de9d0-d961-417f-bb05-b182fa41c107");
@@ -443,8 +452,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await page.getByTestId("hierarchy-item-circletarget").click();
   await page.getByRole("button", { name: "Remove Bloom effect" }).click();
   await page.getByTestId("save-scene").click();
-  saved = await page.evaluate(async () => {
-    const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
+  saved = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene").then(async (response) => {
+    expect(response.ok()).toBeTruthy();
     return response.json();
   });
   circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
