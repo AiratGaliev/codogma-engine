@@ -9,6 +9,7 @@
 * Added source reimport for Image and Spritesheet entries. Compatible frame metadata is preserved; changed/removed frame geometry is archived and reported as conflicts; failures restore original Asset Pack data. Batch image import now rolls back partial entries on failure.
 * Connected authored pivot/crop/trim to placed Scene objects and generated Phaser code. A single rectangle or circle can initialize a Phaser Arcade Body; polygon and compound metadata remain persisted but are not misrepresented as supported Arcade fixtures.
 * Retained existing Scene Editor NineSlice and TileSprite tools; sorting layers/groups continue under the shared render-order contract in COD-41.
+* Added contextual `console.error` reporting when Asset Pack recovery after a failed reimport also fails; the original reimport error remains the primary propagated error.
 
 ### Tests
 
@@ -18,6 +19,7 @@
 ### Documentation
 
 * Documented the sprite metadata schema, coordinate spaces, reimport reconciliation, runtime adapter boundaries and separate browser acceptance in `docs/sprite-asset-metadata.md`.
+* Added [Editor Logging & Diagnostics](docs/editor-logging-and-diagnostics.md) as a planned architecture direction, with requirements based on Unity 6, Godot 4 and Cocos Creator references; updated the technical specification, roadmap and capability matrix. The general logger and Console panel are not implemented by this PR.
 
 
 ## Unreleased (2026-10-30 — filesystem security documentation reconciliation)

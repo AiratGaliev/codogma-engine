@@ -191,8 +191,16 @@ namespace phasereditor2d.pack.ui.importers {
 
                 try {
                     await item.preload();
-                } catch {
-                    // Сохраняем исходную ошибку reimport; восстановление кэша не должно её скрывать.
+                } catch (restoreError) {
+                    console.error(
+                        "[AssetPack] Failed to restore item after reimport failure.",
+                        {
+                            assetKey: item.getKey(),
+                            sourceUrl,
+                            reimportError: error,
+                            restoreError
+                        }
+                    );
                 }
 
                 throw error;

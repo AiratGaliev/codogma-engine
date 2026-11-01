@@ -484,7 +484,9 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 
 ### Задачи
 
-- [ ] Добавить runtime log/error console и группировку ошибок по сессии/объекту.
+- [ ] **Editor Logging & Diagnostics:** спроектировать и реализовать общий EditorLogger, структурированные записи, сбор browser errors/rejections, dockable Console panel, фильтры/search/repeat collapse и persistent logs. Требования и reference patterns — [Editor Logging & Diagnostics](editor-logging-and-diagnostics.md) и ТЗ §13.5.
+- [ ] **Browser → Node diagnostics:** безопасно передавать browser/editor errors в terminal/file sink через same-origin/loopback transport; проверить Origin/Host, body/rate limits, redaction, rotation/retention и fallback при недоступности транспорта.
+- [ ] **Runtime log/error console:** группировать runtime сообщения по Preview/game session и объекту; обеспечить раздельный просмотр Editor/Runtime/Build/Server/MCP каналов и связь runtime entries с live hierarchy/Inspector.
 - [ ] Реализовать live runtime hierarchy/component inspector и переходы между runtime selection и editor selection.
 - [ ] Добавить физические overlays, состояния объектов и поддерживаемую диагностику animation/resources.
 - [ ] Измерять frame time и количество runtime объектов; добавить доступные renderer/texture/resource metrics с точным описанием их источника.
@@ -504,6 +506,9 @@ Unity 6 и Cocos Creator 4.0 используются как ориентиры 
 - [ ] Browser acceptance подтверждает полный цикл от редактирования сцены до тестирования собранной игры.
 - [ ] CI статусы и локальные команды описаны без утверждения, что автоматизация проверяет непокрытые сценарии.
 - [ ] Ошибки и известные ограничения релизного кандидата видимы и задокументированы.
+- [ ] Editor Logging & Diagnostics собирает необработанные browser errors/rejections, сохраняет stack/context, поддерживает поиск/фильтры/repeat collapse и экспорт.
+- [ ] Ошибка основной операции и ошибка rollback/recovery не теряются; primary cause остаётся исходной ошибкой, secondary failure виден в журнале.
+- [ ] Browser-originated errors доступны в локальном terminal/file sink без небезопасного публичного endpoint; file retention и redaction проверены.
 
 
 ## Сквозное архитектурное направление — AI-assisted Game QA и Browser QA MCP

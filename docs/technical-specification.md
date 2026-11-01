@@ -3,8 +3,8 @@
 | Поле | Значение |
 |---|---|
 | Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
-| Версия документа | 1.13 |
-| Дата | 31.10.2026 |
+| Версия документа | 1.14 |
+| Дата | 01.11.2026 |
 | Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
 | Связанный документ | [Дорожная карта](roadmap.md) |
 
@@ -1149,6 +1149,35 @@ MCP surface группируется по операциям: browser/session li
 - [ ] CI разделяет быстрые проверки контракта и unit/security coverage, адресные browser smoke и полный on-demand/release gameplay acceptance.
 - [ ] Browser/device evidence фиксирует фактический browser, version, OS/host, viewport/DPR и renderer context; headless/software-rendered результаты не выдаются за проверку реального устройства.
 - [ ] Документация capability matrix и roadmap обновляется вместе с реализацией; функция не получает статус «реализовано» до выполнения соответствующего runtime/browser acceptance.
+
+
+### 13.5. Editor Logging & Diagnostics
+
+**Статус:** архитектурное требование зафиксировано; единая система логирования ещё не реализована. Детальный contract, reference patterns, текущие ограничения и критерии — в [Editor Logging & Diagnostics](editor-logging-and-diagnostics.md).
+
+Текущие Browser Console, Node.js server logger, `dev.log` и legacy MCP Message Log — отдельные механизмы. Логи browser Editor автоматически не попадают в Node terminal; MCP Message Log охватывает только MCP bridge. Они не считаются общей системой диагностики.
+
+Целевой контракт обязателен для legacy Editor и будущего SolidJS Host:
+
+- Engine-owned типизированный logger с уровнями `debug/info/warn/error`, timestamp, channel, subsystem, message, normalized error/stack и ограниченным operation context.
+- Раздельные каналы Editor, Runtime, Build, Server, MCP и extensions; runtime diagnostics привязываются к конкретной Preview/game session.
+- Dockable Console/Output panel: поиск, фильтры по уровню/каналу, повторная группировка, счётчики, timestamp, полный stack/context, навигация к исходнику/связанному объекту, Copy/Export и Open log file.
+- Bounded in-memory store, Browser Console adapter и persistent file/server sink. Browser-to-Node transport должен быть отдельным, same-origin/loopback-only, с проверками Origin/Host, payload/rate limits и redaction; browser console не считается stdout Node.js.
+- Централизованный сбор `window.error` и `unhandledrejection` без подавления стандартного reporting и без дублирования.
+- Ошибки не скрываются пустыми `catch`: ожидаемый fallback документируется; при сбое rollback/recovery обе ошибки логируются, а первичная ошибка остаётся primary cause.
+- Production policy ограничивает debug-вывод, stack traces, retention и потенциально чувствительные данные; повторяющиеся сообщения группируются/ограничиваются.
+
+Логирование не должно зависеть от Colibri или SolidJS и не должно вводить собственный runtime/game loop. Схема должна позволять сохранять diagnostics независимо от закрытия Preview, не смешивая их с проектными asset/scene данными. Файловый путь/каталог, ротация и retention требуют отдельного implementation decision и не должны по умолчанию засорять проект.
+
+### Критерии приёмки Editor Logging & Diagnostics
+
+- Все editor subsystems могут писать структурированные записи через общий API; запись видна в Console panel и доступна соответствующим sinks.
+- Необработанные browser errors и rejected Promises попадают в журнал с context/stack и без duplicate flood.
+- Editor, Runtime, Build, Server и MCP можно независимо фильтровать; runtime entries коррелируют с session ID.
+- Recovery failure регистрируется вместе с исходной ошибкой, не подменяя её.
+- Поиск, уровни, repeat collapse, clear, export и открытие log file работают в реальном browser workflow.
+- Browser-to-Node transport безопасно отклоняет foreign-origin/non-loopback requests и превышение лимитов; его отказ не ломает Editor.
+- File retention, redaction, production level policy и отсутствие debug-only logger/transport в неподходящих release targets проверяются тестами.
 
 ## 14. Безопасность, лицензии и происхождение кода
 
