@@ -269,7 +269,7 @@ function ConsolePanel(props: {
 }) {
 
   return (
-    <section class="console-panel" classList={{ [props.className]: true }} data-testid="console-panel">
+    <section class="console-panel" classList={{ [props.className]: true }} data-testid="console-panel" data-focus-context="console">
       <div
         class="console-header"
         draggable={Boolean(props.onDragStart)}
@@ -2049,7 +2049,7 @@ function App() {
               <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
             </div>
 
-            <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"} tabIndex={0} data-focus-context="scene" onPointerDown={(event) => { if (event.target === event.currentTarget) event.currentTarget.focus({ preventScroll: true }); }}>
+            <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"} tabIndex={0} data-focus-context="scene" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("button, input, textarea, select, [role=button]")) event.currentTarget.focus({ preventScroll: true }); }}>
               <div class="scene-controls">
                 <div class="scene-control-group">
                   <span class="scene-control-muted">Scene</span>
@@ -2427,7 +2427,7 @@ function App() {
           </div>
 
           <Show when={bottomTab() === "Project"}>
-            <div class="project-browser">
+            <div class="project-browser" data-focus-context="project">
               <div class="project-tree-panel">
                 <div class="project-tree-header">
                   <span>ASSETS</span>
@@ -2496,7 +2496,7 @@ function App() {
           </Show>
 
           <Show when={bottomTab() === "Animation"}>
-            <div class="animation-workspace" data-testid="animation-workspace">
+            <div class="animation-workspace" data-testid="animation-workspace" data-focus-context="animation">
               <aside class="animation-track-list">
                 <div class="track-header animation-file-header">
                   <span>ANIMATIONS</span>
@@ -2611,7 +2611,7 @@ function App() {
           </Show>
 
           <Show when={bottomTab() === "Components"}>
-            <div class="components-workspace" data-testid="components-workspace">
+            <div class="components-workspace" data-testid="components-workspace" data-focus-context="components">
               <div class="components-toolbar">
                 <div class="components-file-heading">
                   <strong>User Components</strong>
