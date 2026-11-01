@@ -70,7 +70,7 @@ export function isFxType(value: unknown): value is FxType {
 }
 
 export function isFxObject(value: unknown): value is FxObject {
-  return isRecord(value) && isFxType(value.type) && typeof value.id === "string" && value.id.length > 0;
+  return isRecord(value) && isFxType(value.type);
 }
 
 export function getSceneObjectEffects(parent: SceneObject): FxEntry[] {
@@ -78,10 +78,11 @@ export function getSceneObjectEffects(parent: SceneObject): FxEntry[] {
   const result: FxEntry[] = [];
   parent.list.forEach((item, index) => {
     if (!isFxObject(item)) return;
+    const id = typeof item.id === "string" && item.id.length > 0 ? item.id : `fx-${index}`;
     result.push({
-      id: item.id,
+      id,
       index,
-      source: item,
+      source: { ...item, id } as FxObject,
     });
   });
   return result;
@@ -90,9 +91,15 @@ export function getSceneObjectEffects(parent: SceneObject): FxEntry[] {
 export function getUnsupportedSceneObjectEffects(parent: SceneObject): string[] {
   if (!Array.isArray(parent.list)) return [];
   const unsupported = new Set<string>();
+  const legacyFxTypes = new Set([
+    "Barrel", "Blend", "Blocky", "Blur", "Bokeh", "ColorMatrix", "CombineColorMatrix",
+    "Displacement", "Glow", "GradientMap", "ImageLight", "Key", "NormalTools",
+    "ObjectMask", "PanoramaBlur", "ParallelFilters", "Pixelate", "Quantize",
+    "Sampler", "Shadow", "Threshold", "TextureMask", "Vignette", "Wipe",
+  ]);
   for (const item of parent.list) {
     if (!isRecord(item) || typeof item.type !== "string" || isFxType(item.type)) continue;
-    if (/^(Circle|Bloom|Gradient|Shine|FX)/i.test(item.type)) unsupported.add(item.type);
+    if (legacyFxTypes.has(item.type) || item.type.startsWith("FX")) unsupported.add(item.type);
   }
   return [...unsupported].sort();
 }
@@ -116,36 +123,6 @@ export function createFxObject(type: FxType, id = createId()): FxObject {
   }
 }
 
-function findSceneNode(
-  scene: SceneDocument,
-  id: string,
-): { parent: SceneObject | null; node: SceneObject | null } {
-  const visit = (
-    items: unknown[],
-    parent: SceneObject | null,
-    prefix: string,
-  ): { parent: SceneObject | null; node: SceneObject | null } => {
-    for (let index = 0; index < items.length; index++) {
-      const item = items[index];
-      if (!isRecord(item)) continue;
-      const nodeId = typeof item.id === "string" && item.id.length > 0
-        ? item.id
-        : `${prefix}${index}`;
-      if (nodeId === id) return { parent, node: item as SceneObject };
-      if (Array.isArray(item.list)) {
-        const found = visit(item.list, item as SceneObject, `${nodeId}-list-`);
-        if (found.node) return found;
-      }
-    }
-    return { parent: null, node: null };
-  };
-
-  for (const collection of ["displayList", "plainObjects"] as const) {
-    const found = visit(scene[collection] ?? [], null, `${collection}-`);
-    if (found.node) return found;
-  }
-  return { parent: null, node: null };
-}
 function updateSceneNode(
   items: unknown[],
   id: string,
@@ -259,11 +236,15 @@ export function updateSceneObjectFx(
       isRecord(item) && `fx-${itemIndex}` === fxId && isFxType(item.type),
     );
     if (index < 0) throw new Error(`FX object "${fxId}" was not found on "${parentId}".`);
-    const source = parent.list[index];
-    if (!isFxObject(source)) throw new Error(`FX object "${fxId}" is not supported by this Host.`);
+    const rawSource = parent.list[index];
+    if (!isFxObject(rawSource)) throw new Error(`FX object "${fxId}" is not supported by this Host.`);
+    const source = {
+      ...rawSource,
+      id: typeof rawSource.id === "string" && rawSource.id.length > 0 ? rawSource.id : fxId,
+    } as FxObject;
     validatePatch(source, patch);
     const nextList = parent.list.slice();
-    nextList[index] = { ...source, ...patch };
+    nextList[index] = { ...rawSource, ...patch };
     return { ...parent, list: nextList };
   });
 }
@@ -280,8 +261,4 @@ export function removeSceneObjectFx(scene: SceneDocument, parentId: string, fxId
     list.splice(index, 1);
     return { ...parent, list };
   });
-}
-
-export function findSceneObjectById(scene: SceneDocument, id: string): SceneObject | undefined {
-  return findSceneNode(scene, id).node ?? undefined;
 }
