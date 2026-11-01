@@ -1129,11 +1129,17 @@ test("ImageFrameContainerAssetPackItem.resetCache clears stale frame thumbnails"
         frameConfig: { frameWidth: 16, frameHeight: 16 }
     }, createSourceFile(32, 32))
 
-    item._thumbnail = { id: "old-source-thumbnail" }
+    const cache = packCore.ImageFrameContainerAssetPackItem._cache
+    const oldThumbnail = { id: "old-source-thumbnail" }
+    item._thumbnail = oldThumbnail
+    item._thumbnailCacheKey = "image.png@1024@1000"
+    cache.set(item._thumbnailCacheKey, oldThumbnail)
+
     item.resetCache()
 
     assert.equal(item.getThumbnail(), null)
     assert.equal(item._frames, null)
+    assert.equal(cache.has("image.png@1024@1000"), false)
 })
 
 
