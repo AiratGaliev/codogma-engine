@@ -275,3 +275,83 @@ test("SolidJS Host owns an MCP bridge session and serves scene commands", async 
   expect(screenshot.content[0].mimeType).toBe("image/png");
   expect(screenshot.content[0].data.length).toBeGreaterThan(100);
 });
+
+
+test("Animation workspace previews and persists a Phaser JSONAnimations timeline", async ({ page }) => {
+  const animationDocument = {
+    anims: [{
+      key: "walk_preview",
+      frameRate: 12,
+      repeat: -1,
+      yoyo: false,
+      frames: [
+        { key: "dino", frame: "walk_0", duration: 120 },
+        { key: "dino", frame: "walk_1", duration: 100 },
+      ],
+    }],
+    globalTimeScale: 1,
+    settings: { sourceLang: "JAVA_SCRIPT", generateCode: false, esModule: false },
+    meta: {
+      app: "Codogma Engine - Animations Editor",
+      contentType: "Phaser v3 Animations",
+    },
+  };
+
+  const writeResponse = await page.request.post("http://127.0.0.1:3000/editor/api", {
+    data: {
+      method: "SetFileString",
+      body: { path: "animations/walk.json", content: JSON.stringify(animationDocument, null, 2) },
+    },
+  });
+  expect(writeResponse.ok()).toBeTruthy();
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Project" }).click();
+  await page.getByLabel("Search project files").fill("walk.json");
+  await page.getByRole("button", { name: /animations\/walk\.json/ }).click();
+
+  await expect(page.getByTestId("animation-workspace")).toBeVisible();
+  await expect(page.getByLabel("Animation key")).toHaveValue("walk_preview");
+  await expect(page.getByTestId("animation-frame-strip").getByTestId("animation-timeline-frame-0")).toBeVisible();
+  await expect(page.getByTestId("animation-frame-strip").getByTestId("animation-timeline-frame-1")).toBeVisible();
+  await expect(page.getByTestId("animation-preview-image")).toBeVisible();
+
+  await page.getByRole("button", { name: "Play animation" }).click();
+  await expect.poll(async () => {
+    const value = await page.getByTestId("animation-playhead-time").textContent();
+    return Number.parseFloat(value ?? "0");
+  }).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Pause animation" }).click();
+  const pausedTime = await page.getByTestId("animation-playhead-time").textContent();
+  await expect(page.getByRole("button", { name: "Play animation" })).toBeEnabled();
+  await page.getByRole("button", { name: "Stop animation" }).click();
+  await expect(page.getByTestId("animation-playhead-time")).toHaveText("0.00 s");
+  expect(pausedTime).not.toBe("0.00 s");
+
+  await page.getByTestId("animation-timeline-frame-0").click();
+  await page.getByLabel("Selected frame duration").fill("160");
+  await page.getByLabel("Animation yoyo").check();
+  await page.getByLabel("Animation repeat delay").fill("40");
+  await page.getByRole("button", { name: "Move selected frame down" }).click();
+  await page.getByTestId("save-animation").click();
+  await expect(page.getByTestId("save-animation")).toBeDisabled();
+
+  const saved = await page.evaluate(async () => {
+    const response = await fetch("/editor/project/animations/walk.json", { cache: "no-store" });
+    return response.json();
+  });
+  expect(saved.anims[0].yoyo).toBe(true);
+  expect(saved.anims[0].repeatDelay).toBe(40);
+  expect(saved.anims[0].frames[1].duration).toBe(160);
+  expect(saved.anims[0].frames[0].frame).toBe("walk_1");
+
+  await page.reload();
+  await page.getByRole("tab", { name: "Project" }).click();
+  await page.getByLabel("Search project files").fill("walk.json");
+  await page.getByRole("button", { name: /animations\/walk\.json/ }).click();
+  await expect(page.getByLabel("Animation key")).toHaveValue("walk_preview");
+  await expect(page.getByLabel("Animation yoyo")).toBeChecked();
+  await expect(page.getByLabel("Animation repeat delay")).toHaveValue("40");
+  await expect(page.getByLabel("Selected frame duration")).toHaveValue("160");
+});
