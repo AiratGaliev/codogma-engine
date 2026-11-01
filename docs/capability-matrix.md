@@ -55,7 +55,7 @@
 1. **P0 — интеграция и независимая приёмка первого SolidJS Host slice:** COD-80 / PR #30 и CODQA-18. Не считать PR/CI success подтверждением production cutover.
 2. **P0 — runtime/security acceptance:** закрывать Box2D/FX/codegen/Asset Pack residuals и cross-platform filesystem security отдельными проверяемыми задачами. Сохранять loopback/local-only security boundaries.
 3. **P1 — staged Host migration:** COD-82 координирует workflow inventory и перенос в SolidJS. Новые Colibri UI features не создавать.
-4. **P1 — специализированные authoring workflows:** Docking (COD-83), Asset/Sprite (COD-86), Prefab (COD-8), User Components/TypeScript (COD-91), camera/coordinates/sorting (COD-41), 2D UI authoring (COD-43), Tilemap (COD-40), Physics (COD-42), Animation (COD-84), FX (COD-89), Spine (COD-90), Audio/Particles (COD-61), Atlas analyzer (COD-55), importer extensions (COD-59).
+4. **P1 — специализированные authoring workflows:** Docking (COD-83), Asset/Sprite (COD-86), Prefab (COD-8), User Components/TypeScript (COD-91), camera/coordinates/sorting (COD-41), 2D UI authoring (COD-43), Tilemap (COD-40), Physics (COD-42), Animation (COD-84), Spine (COD-90), Audio/Particles (COD-61), Atlas analyzer (COD-55), importer extensions (COD-59). FX authoring is implemented in PR #32; generated-game parity remains a CODQA-19 acceptance gate.
 5. **P1 — Preview/Diagnostics/MCP:** Preview Host, live Inspector, EngineLogger и session-aware MCP SSE (COD-85); COD-80 Game View iframe не является полноценным Preview Host.
 6. **P1 — независимая functional acceptance:** CODQA-18 принимает первый Host slice; CODQA-10/11/12/13/14/16 и CODQA-4 подтверждают только соответствующие перенесённые workflows. Done QA issues старого UI остаются историческим evidence.
 7. **P1 — cutover/removal:** COD-87 переводит default `/editor/` на SolidJS с rollback window; COD-88 удаляет Colibri после inventory sign-off, consumer audit и license review.
@@ -77,7 +77,7 @@
 | Animation | Phaser JSON clip/frame basics in Host | **Partial** — no full timeline/tracks/curves/events | COD-84; CODQA-4 |
 | Tilemap | Existing data/Tiled/runtime contracts to audit | **Not migrated** | COD-40; CODQA-14 |
 | Physics/Box2D | Existing physics/codegen/runtime contracts and CODQA-1 | **Not migrated as Host UI** | COD-42; CODQA-1 runtime acceptance |
-| FX authoring | Existing Phaser FX/codegen paths and CODQA-3 historical legacy evidence | **Not migrated** | COD-89; CODQA-19 (CODQA-3 is legacy evidence only) |
+| FX authoring | SolidJS Host Inspector, typed FX model and Phaser-backed preview for Circle/Bloom/Gradient/Shine; `.scene` round-trip and legacy codegen preserved | **Implemented in PR #32; generated-game parity acceptance pending** | COD-89 implementation; CODQA-19 verifies generated-game parity, parent/container transforms, alpha limitations, sibling ordering and lifecycle |
 | Spine authoring/preview | Legacy Spine plugin serialization and MCP skin-image tool exist; new Host UI is absent | **Not migrated** | COD-90; COD-85 session routing; CODQA-20 + CODQA-8 live MCP |
 | Audio groups / Particle Preview | Existing runtime contracts; new Host UI absent | **Not migrated** | COD-61; CODQA-13 |
 | Preview/live Inspector | COD-80 Game View is generated index.html iframe | **Partial only; no shared Preview Host contract** | COD-30/31/32/47/58; CODQA-16 |
