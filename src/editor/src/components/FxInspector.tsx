@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 import type { FxEntry, FxObject, FxType } from "../domain/fx-model.ts";
 
 interface NumericField {
@@ -144,10 +144,7 @@ function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; on
 }
 
 function FxInspector(props: Props) {
-  const [newType, setNewType] = ((): [() => FxType, (value: FxType) => void] => {
-    let value: FxType = "Bloom";
-    return [() => value, (next) => { value = next; }];
-  })();
+  const [newType, setNewType] = createSignal<FxType>("Bloom");
 
   return (
     <section class="inspector-section fx-inspector" data-testid="fx-inspector">
