@@ -65,14 +65,6 @@ const DEFAULT_LAYOUT: LayoutState = {
   bottomTab: "Project",
 };
 
-const EMPTY_TREE: ProjectEntry = {
-  name: "Project",
-  isFile: false,
-  size: 0,
-  modTime: 0,
-  children: [],
-};
-
 function iconPath(theme: Theme, name: string): string {
   return `/editor/app/editor-icons/${theme}/godot/${name}.svg`;
 }
@@ -100,7 +92,6 @@ function ProjectTreeNode(props: {
   node: ProjectEntry;
   path: string;
   theme: Theme;
-  search: string;
   selectedPath: string;
   onSelect: (path: string, isFile: boolean) => void;
 }) {
@@ -216,7 +207,7 @@ function App() {
   const [saving, setSaving] = createSignal(false);
   const [loadError, setLoadError] = createSignal("");
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
-  const [bottomTab, setBottomTab] = createSignal<BottomTab>("Project");
+  const bottomTab = () => layout().bottomTab;
   const [layout, setLayout] = createSignal<LayoutState>({ ...DEFAULT_LAYOUT });
   const [hierarchySearch, setHierarchySearch] = createSignal("");
   const [projectSearch, setProjectSearch] = createSignal("");
@@ -335,12 +326,12 @@ function App() {
     {
       id: "project",
       title: "Show Project panel",
-      run: () => setBottomTab("Project"),
+      run: () => setLayout((current) => ({ ...current, bottomTab: "Project" })),
     },
     {
       id: "animation",
       title: "Show Animation workspace",
-      run: () => setBottomTab("Animation"),
+      run: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })),
     },
   ]);
 
@@ -409,7 +400,6 @@ function App() {
   createEffect(() => {
     const current = layout();
     window.localStorage.setItem("codogma.editor.layout", JSON.stringify(current));
-    setBottomTab(current.bottomTab);
   });
 
   async function loadScene(path: string) {
@@ -1145,10 +1135,9 @@ function App() {
                   </button>
                 </div>
                 <iframe
-                  key={gameInstance()}
                   data-testid="phaser-game-frame"
                   title="Existing Phaser game runtime"
-                  src="/editor/external/index.html"
+                  src={`/editor/external/index.html?restart=${gameInstance()}`}
                   onLoad={() => {
                     setGameLoaded(true);
                     log("success", "Phaser game iframe loaded");
@@ -1355,7 +1344,6 @@ function App() {
                         node={projectTree()!}
                         path=""
                         theme={theme()}
-                        search={projectSearch()}
                         selectedPath={selectedProjectPath()}
                         onSelect={(path, isFile) => {
                           setSelectedProjectPath(path);
@@ -1412,7 +1400,7 @@ function App() {
         />
         <section class="console-panel">
           <div class="console-header">
-            <div class="console-title"><Icon theme={theme()} name="terminal" size={13} /> Console</div>
+            <div class="console-title"><Icon theme={theme()} name="script" size={13} /> Console</div>
             <select aria-label="Console message filter" value={consoleLevel()} onChange={(event) => setConsoleLevel(event.currentTarget.value)}>
               <option value="all">All</option>
               <option value="info">Info</option>

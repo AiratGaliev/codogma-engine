@@ -27,7 +27,7 @@ export default defineConfig({
       cwd: editorDirectory,
       url: "http://127.0.0.1:3000/editor/product.json",
       timeout: 30_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       env: {
         PORT: "3000",
         CODOGMA_ALLOWED_ORIGINS: "http://127.0.0.1:5173",

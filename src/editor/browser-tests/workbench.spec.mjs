@@ -34,7 +34,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await page.getByRole("tab", { name: "Game" }).click();
   const frame = page.getByTestId("phaser-game-frame");
   await expect(frame).toBeVisible();
-  await expect(frame).toHaveAttribute("src", "/editor/external/index.html");
+  await expect(frame).toHaveAttribute("src", /\/editor\/external\/index\.html\?restart=\d+/);
   await expect(page.frameLocator('[data-testid="phaser-game-frame"]').locator("canvas")).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole("tab", { name: "Scene" }).click();
@@ -46,8 +46,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
-  await page.getByRole("button", { name: "Command palette" }).click().catch(() => {});
-  await page.keyboard.press("Control+p");
+  await page.getByRole("button", { name: "Command palette" }).click();
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
   await page.getByLabel("Search commands").fill("Animation");
   await expect(page.getByRole("button", { name: "Show Animation workspace" })).toBeVisible();
