@@ -365,7 +365,11 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
   })[0];
   const after = parent.listeners?.("destroy") ?? [];
   const actionListeners = after.filter((listener) => !before.includes(listener));
-  if (!effect || (!effect.parallelFilters && !effect.blendFilter && !effect.tween && !effect.dynamicTexture)) {
+  if (!effect) {
+    throw new Error("Phaser did not create the Shine effect. Confirm the object supports WebGL filters.");
+  }
+  const createdEffect = effect;
+  if (!createdEffect.parallelFilters && !createdEffect.blendFilter && !createdEffect.tween && !createdEffect.dynamicTexture) {
     throw new Error("Phaser did not create the Shine effect. Confirm the object supports WebGL filters.");
   }
   let disposed = false;
@@ -378,11 +382,11 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
     actionListeners.forEach((listener) => parent.off?.("destroy", listener));
     parent.off?.("destroy", parentDestroyed);
     try {
-      if (effect.parallelFilters) effect.parallelFilters.destroy();
-      else effect.blendFilter?.destroy();
+      if (createdEffect.parallelFilters) createdEffect.parallelFilters.destroy();
+      else createdEffect.blendFilter?.destroy();
     } catch { /* Filter may already have been released by the parent. */ }
-    try { effect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
-    try { effect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
+    try { createdEffect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
+    try { createdEffect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
   }
 
   return { dispose, diagnostics: [] };
