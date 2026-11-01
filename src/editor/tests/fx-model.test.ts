@@ -118,7 +118,7 @@ test("validates alpha, normalized Gradient coordinates, Shine timing and color r
   const updatedParent = getSceneObjects(numericColour)[0];
   assert.ok(updatedParent);
   assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.preFX, false);
-  assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.color, "#ff0000");
+  assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.direction, -2);
 });
 
 test("scene JSON round-trips FX settings and unrelated metadata without schema migration", () => {
