@@ -48,6 +48,24 @@ test("updates transforms immutably and preserves unedited object metadata", () =
   assert.equal(fixtureScene.displayList[0].x, 400);
 });
 
+test("fallback hierarchy ids can update and remove legacy objects without serialized ids", () => {
+  const legacyScene = {
+    ...fixtureScene,
+    displayList: [{ type: "Text", label: "Legacy", x: 12, y: 24 }],
+    plainObjects: [],
+  };
+  const [entry] = getSceneObjects(legacyScene);
+  assert.equal(entry.id, "displayList-0");
+
+  const updated = updateSceneObject(legacyScene, entry.id, { x: 64 });
+  assert.equal(updated.displayList[0].x, 64);
+  assert.equal(legacyScene.displayList[0].x, 12);
+
+  const removed = removeSceneObject(updated, entry.id);
+  assert.equal(removed.displayList.length, 0);
+  assert.equal(legacyScene.displayList.length, 1);
+});
+
 test("rejects NaN, Infinity and non-numeric transform values", () => {
   assert.throws(() => updateSceneObject(fixtureScene, "image-1", { x: Number.NaN }), /finite number/);
   assert.throws(() => updateSceneObject(fixtureScene, "image-1", { scaleY: Number.POSITIVE_INFINITY }), /finite number/);
