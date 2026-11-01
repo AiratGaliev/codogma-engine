@@ -320,7 +320,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            src/editor/package.json
+            src/editor/package-lock.json
 
       - name: Install root dependencies for the existing backend
         if: steps.scope.outputs.run == 'true'
@@ -328,17 +328,8 @@ jobs:
 
       - name: Install Editor Host dependencies
         if: steps.scope.outputs.run == 'true'
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
         working-directory: src/editor
-
-      - name: Upload generated Editor Host lockfile
-        if: steps.scope.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: editor-host-package-lock
-          path: src/editor/package-lock.json
-          if-no-files-found: error
-          retention-days: 3
 
       - name: Build and typecheck SolidJS Host
         if: steps.scope.outputs.run == 'true'

@@ -25,7 +25,7 @@
 * Vitest — **6 test files, 36 tests passed, 0 failed**.
 * Chromium Playwright acceptance — **9 passed**.
 * `fast-checks` — **success**, including root/editor build, regression suite, server/security smoke, mini-service security, localization and MCP package checks.
-* The CI package install currently uses `npm install --no-audit --no-fund`; the generated Host lockfile is uploaded as a workflow artifact. Do not claim a committed/reproducible Host `npm ci` install until its lockfile is synchronized in the repository.
+* Committed `src/editor/package-lock.json` and switched the Editor Host CI install to `npm ci --no-audit --no-fund`; setup-node caching now keys off the lockfile and the generated-lockfile artifact upload was removed.
 
 ## Unreleased (2026-11-01 — Sprite asset authoring and reimport)
 
