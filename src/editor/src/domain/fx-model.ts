@@ -69,7 +69,9 @@ export function isFxType(value: unknown): value is FxType {
   return typeof value === "string" && FX_TYPES.has(value as FxType);
 }
 
-export function isFxObject(value: unknown): value is FxObject {
+type FxObjectRecord = Record<string, unknown> & { type: FxType };
+
+export function isFxObject(value: unknown): value is FxObjectRecord {
   return isRecord(value) && isFxType(value.type);
 }
 
