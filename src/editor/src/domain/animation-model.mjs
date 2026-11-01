@@ -132,6 +132,150 @@ export function updateAnimationSettings(document, patch) {
   return { ...document, settings: { ...(document.settings ?? {}), ...clone(patch) } };
 }
 
+
+/**
+ * Resolve the effective display duration of one Phaser JSONAnimations frame.
+ * Per-frame duration overrides frameRate; globalTimeScale is a speed multiplier.
+ */
+export function getAnimationFrameDurationMs(animation, frame, globalTimeScale = 1) {
+  const frameRate = Number.isFinite(animation?.frameRate) && animation.frameRate > 0
+    ? animation.frameRate
+    : 24;
+  const timeScale = Number.isFinite(globalTimeScale) && globalTimeScale > 0
+    ? globalTimeScale
+    : 1;
+  const explicitDuration = Number(frame?.duration);
+  const duration = Number.isFinite(explicitDuration) && explicitDuration > 0
+    ? explicitDuration
+    : 1000 / frameRate;
+  return duration / timeScale;
+}
+
+/** Total duration of one forward (non-yoyo) pass through a Phaser animation. */
+export function getAnimationDurationMs(animation, globalTimeScale = 1) {
+  if (!animation || !Array.isArray(animation.frames)) {
+    throw new TypeError("Animation duration requires a Phaser animation with a frames array.");
+  }
+  return animation.frames.reduce(
+    (total, frame) => total + getAnimationFrameDurationMs(animation, frame, globalTimeScale),
+    0,
+  );
+}
+
+/**
+ * Resolve the active frame for an elapsed preview time without mutating the
+ * Phaser JSONAnimations document. Repeat/yoyo/delay semantics stay in the
+ * editor preview layer; only the original clip and frame references are saved.
+ */
+export function getAnimationTimelinePosition(animation, elapsedMs, globalTimeScale = 1) {
+  if (!animation || !Array.isArray(animation.frames)) {
+    throw new TypeError("Animation timeline requires a Phaser animation with a frames array.");
+  }
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    throw new RangeError("Animation elapsed time must be a non-negative finite number.");
+  }
+
+  const frames = animation.frames;
+  if (frames.length === 0) {
+    return {
+      frameIndex: -1,
+      elapsedInFrameMs: 0,
+      frameDurationMs: 0,
+      progress: 0,
+      cycleIndex: 0,
+      completed: true,
+      waiting: false,
+      totalDurationMs: 0,
+    };
+  }
+
+  const timeScale = Number.isFinite(globalTimeScale) && globalTimeScale > 0
+    ? globalTimeScale
+    : 1;
+  const frameDurations = frames.map((frame) =>
+    getAnimationFrameDurationMs(animation, frame, timeScale)
+  );
+  const cycleDurationMs = frameDurations.reduce((sum, value) => sum + value, 0);
+  const delayMs = Math.max(0, Number(animation.delay) || 0) / timeScale;
+  const repeatDelayMs = Math.max(0, Number(animation.repeatDelay) || 0) / timeScale;
+  const repeat = Number.isFinite(animation.repeat) ? Math.trunc(animation.repeat) : 0;
+  const cycleCount = repeat < 0 ? Infinity : Math.max(1, repeat + 1);
+  const totalDurationMs = Number.isFinite(cycleCount)
+    ? delayMs + cycleDurationMs * cycleCount + repeatDelayMs * Math.max(0, cycleCount - 1)
+    : Infinity;
+
+  if (elapsedMs < delayMs) {
+    return {
+      frameIndex: 0,
+      elapsedInFrameMs: 0,
+      frameDurationMs: frameDurations[0],
+      progress: 0,
+      cycleIndex: 0,
+      completed: false,
+      waiting: true,
+      totalDurationMs,
+    };
+  }
+
+  let elapsed = elapsedMs - delayMs;
+  if (Number.isFinite(cycleCount) && elapsed >= totalDurationMs - delayMs) {
+    const lastCycleIndex = Math.max(0, cycleCount - 1);
+    const lastFrameIndex = animation.yoyo && lastCycleIndex % 2 === 1 ? 0 : frames.length - 1;
+    return {
+      frameIndex: lastFrameIndex,
+      elapsedInFrameMs: frameDurations[lastFrameIndex],
+      frameDurationMs: frameDurations[lastFrameIndex],
+      progress: 1,
+      cycleIndex: lastCycleIndex,
+      completed: true,
+      waiting: false,
+      totalDurationMs,
+    };
+  }
+
+  const cycleSpanMs = cycleDurationMs + repeatDelayMs;
+  const cycleIndex = cycleSpanMs > 0 ? Math.floor(elapsed / cycleSpanMs) : 0;
+  let cyclePositionMs = cycleSpanMs > 0 ? elapsed - cycleIndex * cycleSpanMs : 0;
+  if (cyclePositionMs >= cycleDurationMs) {
+    return {
+      frameIndex: animation.yoyo && cycleIndex % 2 === 1 ? 0 : frames.length - 1,
+      elapsedInFrameMs: frameDurations[animation.yoyo && cycleIndex % 2 === 1 ? 0 : frames.length - 1],
+      frameDurationMs: frameDurations[animation.yoyo && cycleIndex % 2 === 1 ? 0 : frames.length - 1],
+      progress: 1,
+      cycleIndex,
+      completed: false,
+      waiting: true,
+      totalDurationMs,
+    };
+  }
+
+  const reversed = Boolean(animation.yoyo && cycleIndex % 2 === 1);
+  let frameIndex = 0;
+  let elapsedInFrameMs = 0;
+  for (let index = 0; index < frames.length; index++) {
+    const duration = frameDurations[index];
+    if (cyclePositionMs < duration) {
+      frameIndex = reversed ? frames.length - 1 - index : index;
+      elapsedInFrameMs = cyclePositionMs;
+      break;
+    }
+    cyclePositionMs -= duration;
+  }
+
+  if (reversed) elapsedInFrameMs = frameDurations[frameIndex] - elapsedInFrameMs;
+  const frameDurationMs = frameDurations[frameIndex];
+  return {
+    frameIndex,
+    elapsedInFrameMs,
+    frameDurationMs,
+    progress: Math.min(1, Math.max(0, elapsedInFrameMs / frameDurationMs)),
+    cycleIndex,
+    completed: false,
+    waiting: false,
+    totalDurationMs,
+  };
+}
+
 export function formatAnimationContent(document) {
   assertDocument(document);
   const normalized = clone(document);
