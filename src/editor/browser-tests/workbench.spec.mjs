@@ -29,6 +29,10 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
   await expect(page.getByTestId("inspector-panel")).toBeVisible();
   await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
+  await expect(page.getByTestId("workbench")).toHaveAttribute("data-layout", "compact");
+  await expect(page.getByTestId("bottom-dock")).toHaveJSProperty("offsetHeight", 207);
+  await expect(page.getByTestId("hierarchy-panel")).toHaveJSProperty("offsetWidth", 194);
+  await expect(page.getByTestId("inspector-panel")).toHaveJSProperty("offsetWidth", 250);
   await expect(page.getByLabel("Position X")).toHaveValue("400");
 
   await page.getByLabel("Position X").fill("465");
@@ -86,6 +90,12 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await expect(page.getByRole("button", { name: "Show Animation workspace" })).toBeVisible();
   await page.keyboard.press("Escape");
 
+  await page.getByRole("tab", { name: "Console" }).click();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Project" }).click();
+  await expect(page.getByTestId("console-panel")).toHaveCount(0);
+
   const boundsBefore = await page.getByTestId("hierarchy-panel").boundingBox();
   const splitter = page.getByTestId("splitter-hierarchy");
   const splitterBounds = await splitter.boundingBox();
@@ -115,4 +125,42 @@ test("Hierarchy selection and object creation are reflected in the Inspector", a
   await expect(page.getByLabel("Text content")).toHaveValue("New text");
   await page.getByTestId("undo").click();
   await expect(page.getByLabel("Object name")).toHaveValue("text_1");
+});
+
+
+test("Scene Transform tools manipulate Phaser objects and commit one undoable change", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
+  await page.getByTestId("hierarchy-item-dino").click();
+  await page.getByRole("button", { name: "Move tool" }).click();
+
+  const canvas = page.getByTestId("scene-stage").locator("canvas");
+  await expect(canvas).toBeVisible({ timeout: 20_000 });
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+
+  const startX = bounds.x + bounds.width * 0.5;
+  const startY = bounds.y + bounds.height * (245 / 600);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 48, startY + 12, { steps: 6 });
+  await page.mouse.up();
+
+  const positionX = page.getByLabel("Position X");
+  await expect.poll(async () => Number(await positionX.inputValue())).toBeGreaterThan(400);
+  await page.getByTestId("undo").click();
+  await expect(positionX).toHaveValue("400");
+});
+
+test("Workbench switches between the wide and compact dock compositions", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("workbench")).toHaveAttribute("data-layout", "wide");
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Console" })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.getByTestId("workbench")).toHaveAttribute("data-layout", "compact");
+  await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toHaveCount(0);
 });
