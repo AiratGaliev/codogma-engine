@@ -2823,3 +2823,151 @@ textarea::placeholder {
     flex-direction: column;
   }
 }
+
+
+/* Inspector authoring for Phaser 4.2.1 FX objects. */
+.fx-inspector {
+  padding-bottom: 9px;
+}
+
+.fx-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+  padding: 7px 9px;
+}
+
+.fx-add-select-label,
+.fx-add-select-label select {
+  width: 100%;
+  min-width: 0;
+}
+
+.fx-add-select-label select,
+.fx-stage-field select {
+  min-height: 25px;
+  padding: 0 6px;
+  border: 1px solid var(--border-control);
+  border-radius: 2px;
+  background: var(--surface-control);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.fx-add-row .subtle-button {
+  min-height: 25px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.fx-effect-card {
+  display: grid;
+  gap: 4px;
+  margin: 0 8px 7px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: var(--surface-panel);
+}
+
+.fx-effect-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.fx-effect-title {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.fx-effect-title strong {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.fx-effect-title span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fx-stage-field {
+  margin: 2px 0 4px;
+}
+
+.fx-stage-note {
+  padding: 2px 0 4px;
+  color: var(--text-tertiary);
+  font-size: 8px;
+}
+
+.fx-field-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 7px;
+}
+
+.fx-inspector-field {
+  min-width: 0;
+}
+
+.fx-field-control {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+
+.fx-field-control input {
+  min-width: 0;
+}
+
+.fx-color-swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: transparent;
+}
+
+.fx-inspector-toggle {
+  min-height: 25px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fx-inspector-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0 4px 0 0;
+  accent-color: var(--accent-selection);
+}
+
+.fx-inspector .inspector-note {
+  margin: 4px 8px 8px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
