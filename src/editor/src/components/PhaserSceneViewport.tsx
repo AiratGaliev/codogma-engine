@@ -69,6 +69,8 @@ interface PhaserGameApi {
     once(event: string, listener: () => void): void;
   };
   destroy(removeCanvas?: boolean): void;
+  pause(): void;
+  resume(): void;
   scale: {
     resize?(width: number, height: number): void;
     refresh?(): void;
@@ -114,6 +116,7 @@ interface Props {
   selectedId: string | null;
   projectTree: ProjectEntry | null;
   theme: "dark" | "light";
+  active: boolean;
   onSelect: (id: string) => void;
   onStatus: (level: "info" | "success" | "warning" | "error", message: string) => void;
 }
@@ -127,10 +130,6 @@ interface SceneEntry {
 const RUNTIME_WIDTH = 800;
 const RUNTIME_HEIGHT = 600;
 const phaserLoads = new Map<string, Promise<PhaserNamespace>>();
-
-// Phaser 4 destroys a Game asynchronously. A replacement instance must wait
-// for the previous DESTROY event so its renderer cannot race the old teardown.
-let phaserDestroyBarrier: Promise<void> = Promise.resolve();
 
 function encodeProjectPath(path: string): string {
   return path
@@ -280,6 +279,7 @@ function PhaserSceneViewport(props: Props) {
   const gameObjects = new Map<string, PhaserGameObject>();
   const [runtimeState, setRuntimeState] = createSignal<"loading" | "ready" | "error">("loading");
   const [runtimeError, setRuntimeError] = createSignal("");
+  const [gameReady, setGameReady] = createSignal(false);
 
   function createEntry(entry: SceneEntry, runtime: PhaserSceneApi, imageKeys: Set<string>): PhaserGameObject {
     const x = numeric(entry.source.x, RUNTIME_WIDTH / 2);
@@ -386,6 +386,20 @@ function PhaserSceneViewport(props: Props) {
     if (sceneReady) syncScene();
   });
 
+  createEffect(() => {
+    const ready = gameReady();
+    const active = props.active;
+    const instance = game;
+    if (!ready || !instance) return;
+
+    if (active) {
+      instance.resume();
+      instance.scale.refresh?.();
+    } else {
+      instance.pause();
+    }
+  });
+
   onMount(() => {
     let disposed = false;
 
@@ -396,7 +410,6 @@ function PhaserSceneViewport(props: Props) {
           loadPhaserRuntime(runtimePath),
           discoverImageAssets(props.projectTree),
         ]);
-        await phaserDestroyBarrier;
         if (disposed || !mount) return;
 
         const ImageScene = class extends phaser.Scene {
@@ -424,6 +437,7 @@ function PhaserSceneViewport(props: Props) {
             }
             sceneReady = true;
             setRuntimeState("ready");
+            setGameReady(true);
             syncScene();
             props.onStatus("success", `Phaser Scene View ready · ${runtimePath}`);
           }
@@ -462,14 +476,9 @@ function PhaserSceneViewport(props: Props) {
     onCleanup(() => {
       disposed = true;
       resizeObserver?.disconnect();
-      if (game) {
-        const previousGame = game;
-        phaserDestroyBarrier = new Promise<void>((resolve) => {
-          previousGame.events.once("destroy", resolve);
-        });
-        previousGame.destroy(true);
-        game = undefined;
-      }
+      game?.destroy(true);
+      game = undefined;
+      setGameReady(false);
       sceneRuntime = undefined;
       sceneReady = false;
       selectionFrame = undefined;

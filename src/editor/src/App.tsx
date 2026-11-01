@@ -1048,7 +1048,7 @@ function App() {
               <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
             </div>
 
-            <Show when={activeViewport() === "Scene"}>
+            <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"}>
               <div class="scene-controls">
                 <div class="scene-control-group">
                   <span class="scene-control-muted">Scene</span>
@@ -1068,11 +1068,12 @@ function App() {
                     selectedId={selectedId()}
                     projectTree={projectTree()}
                     theme={theme()}
+                    active={activeViewport() === "Scene"}
                     onSelect={setSelectedId}
                     onStatus={log}
                   />
                 )}
-              </Show>
+              </div>
               <div class="viewport-statusbar">
                 <span><Icon theme={theme()} name="tool-select" size={12} /> {tool()[0].toUpperCase() + tool().slice(1)} tool</span>
                 <span>Selected: {selectedObject()?.name ?? "None"}</span>

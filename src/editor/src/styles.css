@@ -1941,3 +1941,16 @@ textarea::placeholder {
   background: #f2f5f9;
 }
 
+
+.scene-view-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scene-view-pane.inactive {
+  display: none;
+}

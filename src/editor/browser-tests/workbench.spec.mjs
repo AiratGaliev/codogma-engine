@@ -50,6 +50,10 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
 
   await page.reload();
   await expect(page.getByLabel("Position X")).toHaveValue("465");
+  const sceneCanvas = page.getByTestId("scene-stage").locator("canvas");
+  await expect(sceneCanvas).toBeVisible({ timeout: 20_000 });
+  const canvasHandle = await sceneCanvas.elementHandle();
+  expect(canvasHandle).not.toBeNull();
 
   await page.getByRole("tab", { name: "Game" }).click();
   const frame = page.getByTestId("phaser-game-frame");
@@ -59,8 +63,8 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
 
   await page.getByRole("tab", { name: "Scene" }).click();
   await expect(page.getByTestId("scene-stage")).toBeVisible();
-  const sceneCanvas = page.getByTestId("scene-stage").locator("canvas");
   await expect(sceneCanvas).toBeVisible({ timeout: 20_000 });
+  expect(await canvasHandle.evaluate((canvas) => canvas.isConnected)).toBe(true);
   await expect(page.getByTestId("phaser-game-frame")).toHaveCount(0);
 
   const canvasBounds = await sceneCanvas.boundingBox();
