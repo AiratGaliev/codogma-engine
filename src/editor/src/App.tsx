@@ -150,7 +150,6 @@ function ProjectTreeNode(props: {
                   node={child}
                   path={childPath}
                   theme={props.theme}
-                  search={props.search}
                   selectedPath={props.selectedPath}
                   onSelect={props.onSelect}
                 />

@@ -108,7 +108,7 @@ jobs:
             echo "audit_${name}=${enabled}" >> "$GITHUB_OUTPUT"
           }
 
-          emit_audit_scope root package.json package-lock.json
+          emit_audit_scope root package-lock.json
           emit_audit_scope editor source/editor/package.json source/editor/package-lock.json
           emit_audit_scope ai_chat mini-services/ai-chat/package.json mini-services/ai-chat/package-lock.json
           emit_audit_scope mcp_bridge mini-services/phaser-editor-mcp/package.json mini-services/phaser-editor-mcp/package-lock.json
