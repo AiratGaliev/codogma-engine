@@ -1250,9 +1250,9 @@ test("collision polygon validation rejects duplicate and collinear points", () =
     assert.match(
         spriteMetadata.validateCollisionShapes([{
             type: "polygon",
-            points: [[0, 0], [8, 0], [8, 0], [0, 8]]
+            points: [[0, 0], [8, 0], [0, 0]]
         }]),
-        /минимум три различные точки/
+        /повторяющиеся точки/
     )
 
     assert.match(

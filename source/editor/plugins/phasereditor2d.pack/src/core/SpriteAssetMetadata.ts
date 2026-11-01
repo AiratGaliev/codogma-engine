@@ -320,6 +320,10 @@ namespace phasereditor2d.pack.core {
 
                         const uniquePoints = new Set(polygonPoints.map(point => `${point.x},${point.y}`));
 
+                        if (uniquePoints.size !== polygonPoints.length) {
+                            return `Фигура ${index + 1}: polygon не должен содержать повторяющиеся точки.`;
+                        }
+
                         if (uniquePoints.size < 3) {
                             return `Фигура ${index + 1}: polygon должен содержать минимум три различные точки.`;
                         }
