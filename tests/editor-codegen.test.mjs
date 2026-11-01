@@ -684,6 +684,11 @@ test("existing Phaser Layer groups preserve depth-first display-list ordering", 
         [before, layer, childA, childB, after].map(object => order.get(object)),
         [0, 1, 2, 3, 4]
     )
+
+    const selected = [after, childB, layer, before]
+    scene.sortObjectsByRenderingOrder(selected)
+
+    assert.deepEqual(selected, [before, layer, childB, after])
 })
 
 

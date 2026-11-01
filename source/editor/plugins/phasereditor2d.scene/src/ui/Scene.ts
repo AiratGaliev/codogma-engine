@@ -462,23 +462,30 @@ namespace phasereditor2d.scene.ui {
             });
         }
 
-        private buildObjectSortingMap2(map: Map<sceneobjects.ISceneGameObject, number>, list: sceneobjects.ISceneGameObject[]) {
+        private buildObjectSortingMap2(
+            map: Map<sceneobjects.ISceneGameObject, number>,
+            list: sceneobjects.ISceneGameObject[],
+            startIndex = 0): number {
 
-            let i = 0;
+            let index = startIndex;
 
             for (const obj of list) {
 
-                map.set(obj, i);
+                // Один сквозной preorder индекс для всего дерева: рекурсия не должна
+                // сбрасывать индекс и создавать пересечения между Layer и root display list.
+                map.set(obj, index);
+                index++;
 
                 if (obj instanceof sceneobjects.Container || obj instanceof sceneobjects.Layer) {
-
-                    i += this.buildObjectSortingMap2(map, obj.getEditorSupport().getObjectChildren());
+                    index = this.buildObjectSortingMap2(
+                        map,
+                        obj.getEditorSupport().getObjectChildren(),
+                        index
+                    );
                 }
-
-                i++;
             }
 
-            return i;
+            return index;
         }
 
         buildObjectIdMap() {
