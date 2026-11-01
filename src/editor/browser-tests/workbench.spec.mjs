@@ -238,3 +238,40 @@ test("Bottom Dock tabs can be reordered and scene shortcuts respect the focused 
   await page.keyboard.press("Escape");
   await expect(positionX).toBeFocused();
 });
+
+
+test("SolidJS Host owns an MCP bridge session and serves scene commands", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
+  await expect(page.getByTestId("scene-stage").locator("canvas")).toBeVisible({ timeout: 20_000 });
+
+  await expect.poll(async () => {
+    const response = await page.request.get("/editor/mcp-bridge-status");
+    if (!response.ok()) return null;
+    const status = await response.json();
+    return { connected: status.connected, activeClientType: status.activeClientType };
+  }).toEqual({ connected: true, activeClientType: "solidjs" });
+
+  const activeSceneResponse = await page.request.post("/editor/mcp-bridge", {
+    data: { tool: "ide-get-active-scene", args: {} },
+  });
+  expect(activeSceneResponse.ok()).toBeTruthy();
+  const activeScene = await activeSceneResponse.json();
+  expect(activeScene.content?.[0]?.type).toBe("text");
+  const activeSceneData = JSON.parse(activeScene.content[0].text);
+  expect(activeSceneData.scenePath).toBe("scenes/Level.scene");
+  expect(activeSceneData.sceneKey).toBeTruthy();
+
+  const screenshotResponse = await page.request.post("/editor/mcp-bridge", {
+    data: {
+      tool: "scene-get-screenshot",
+      args: { scenePath: "scenes/Level.scene", x: 0, y: 0, width: 160, height: 120 },
+    },
+  });
+  expect(screenshotResponse.ok()).toBeTruthy();
+  const screenshot = await screenshotResponse.json();
+  expect(screenshot.content?.[0]?.type).toBe("image");
+  expect(screenshot.content[0].mimeType).toBe("image/png");
+  expect(screenshot.content[0].data.length).toBeGreaterThan(100);
+});
