@@ -83,6 +83,48 @@ The server should respond at that address, and product metadata should be availa
 
 **Gateways that rewrite the `Host` header:** some platforms serve the page from one domain while the local gateway forwards an internal `Host` name the browser never sees, so the browser `Origin` can never equal `Host` and every API call would get a 403. Set <code>CODOGMA_ALLOWED_ORIGINS</code> to the narrowest trusted browser-origin allow-list that works (exact origins first; scheme-locked subdomain wildcards only when required). Setting it to `*` disables the effective Origin allow-list and accepts requests from any browser origin; this is **not** protected by a claim that same-origin checks still block cross-site requests. Never use a wildcard Origin on a public or multi-user proxy. Prefer, for example, <code>CODOGMA_ALLOWED_ORIGINS='https://editor.example.com' CODOGMA_ALLOWED_HOSTS='editor.example.com' npm start</code> in a trusted private environment, and keep the server bound to loopback.
 
+### Run the new SolidJS Editor Host (parallel migration mode)
+
+The new Host runs independently from the retained Colibri editor. Keep the Node backend and Vite UI in separate terminals:
+
+**Terminal 1 — existing backend:**
+
+Bash:
+
+```bash
+CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173 npm start
+```
+
+PowerShell:
+
+```powershell
+$env:CODOGMA_ALLOWED_ORIGINS = "http://127.0.0.1:5173"
+npm start
+```
+
+**Terminal 2 — SolidJS Host:**
+
+```bash
+cd src/editor
+npm install
+npm run dev
+```
+
+Open **http://127.0.0.1:5173/**. The Vite server binds to IPv4 loopback, uses strict port 5173 and proxies only the existing `/editor/*` backend routes to port 3000. The exact Origin allow-list is required because the proxy rewrites the backend Host header; do not replace it with a wildcard.
+
+The initial Host workflow opens a project already selected by `PROJECT_DIR`, discovers `.scene` files, edits object selection and Transform properties, and saves the same scene JSON through `SetFileString`. Game View loads the project's existing `index.html` output in a disposable iframe; saving a `.scene` does not run code generation or rebuild that game output. The Scene viewport is an authoring preview, not yet the final Phaser-backed rendering/selection surface. The legacy Colibri editor remains available at **http://127.0.0.1:3000/editor/**.
+
+Root shortcuts:
+
+```bash
+npm run dev:editor-host
+npm run build:editor-host
+npm run test:editor-host
+npm run test:editor-host:browser
+```
+
+Browser acceptance uses a temporary copy of `tests/workspace/test-typescript`; it never points the test backend at a developer's project. Until the new Host gains session-aware MCP routing and a cross-client write/version contract, use only one UI to write to a given project directory at a time.
+
 ### Select a game project
 
 By default, the server opens the test project in <code>tests/workspace/test-typescript</code>. This is useful for local development and CI, but it is not intended to be your own game project. Point <code>PROJECT_DIR</code> at the directory you want to edit.

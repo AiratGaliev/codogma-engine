@@ -55,7 +55,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Область | Фактическая база |
 |---|---|
 | Клиент редактора | TypeScript-клиент в `source/editor/`, основанный на открытом клиенте Phaser Editor 2D v3 |
-| Рабочая среда | Текущий legacy-клиент использует Colibri workbench, registry расширений, UI-контролы, редакторы, операции Undo/Redo и Inspector; новый SolidJS Editor Host в src/editor/ пока не реализован |
+| Рабочая среда | Legacy-клиент продолжает использовать Colibri workbench, registry расширений, controls и editors; новый SolidJS Host в `src/editor/` реализует отдельную Workbench shell и первый Scene/Hierarchy/Inspector/Transform/save/reopen/Undo/Redo slice. Остальные legacy workflows мигрируют отдельно |
 | Работа с файлами | Существует контракт `IFileStorage` и HTTP-реализация файлового доступа; конкретные методы и текущие ограничения нужно сохранять в capability inventory |
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |

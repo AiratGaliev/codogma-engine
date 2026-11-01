@@ -1,9 +1,29 @@
 # План миграции Editor UI: Colibri → SolidJS
 
-**Статус:** целевое направление принято; реализация нового Host не начата.  
+**Статус:** первый SolidJS Host/Scene slice реализован; CI Fast #392 подтвердил typecheck/build, 10 domain tests и 5 Chromium acceptance tests. Полная migration/production cutover остаются следующими этапами.  
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.  
 **Решение:** [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).  
 **Нормативные требования:** [Техническое задание](technical-specification.md).
+
+## Текущий результат COD-80 — первый Host и Scene slice
+
+В `src/editor/` появился самостоятельный SolidJS 1.9 Editor Host на Vite 8 и Tailwind CSS 4. Он запускается отдельно от legacy клиента, использует только loopback интерфейс и проксирует существующие `/editor/*` endpoints. Node backend и `source/editor/` не переписываются.
+
+Реализованные операции первой вертикали:
+
+- загрузка текущего `PROJECT_DIR` через `GetProjectFiles`, рекурсивное обнаружение и открытие `.scene`;
+- Phaser-backed Scene Canvas с выбором объектов, Move/Rotate/Scale gestures и синхронизацией состояния с Inspector/Undo-Redo; Hierarchy для display-list/plain-object элементов;
+- Inspector с Transform-полями, label, Text content и отображением уже сериализованных компонентов;
+- добавление Image/Text/Container узлов, удаление, Undo/Redo с восстановлением selection;
+- сохранение исходного JSON scene-format через `SetFileString`, повторное открытие после reload;
+- Workbench с menu/toolbar, Scene/Game tabs, resizable splitters, show/hide Hierarchy/Inspector, Project/Animation/Console tabs в Compact Dock и отдельной Console-панелью на wide layout, command palette, keyboard shortcuts, dark/light themes и responsive persisted layout;
+- Game View загружает существующий проектный `index.html` в iframe; закрытие Game View уничтожает iframe/runtime, повторный запуск создаёт новый экземпляр.
+
+Новые модели не заменяют Project Model или backend serializers: scene helper сохраняет неизвестные поля и обновляет только явно разрешённые свойства. Legacy client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`.
+
+**Границы первого slice, которые не следует считать готовыми возможностями:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Workbench сохраняет responsive layout: wide-компоновка по умолчанию имеет отдельные Project/Animation и Console области, Compact Workbench — единый Dock с вкладками Project/Animation/Console. Console можно перетащить в общий Dock и вернуть в отдельную область; состояние docking сохраняется вместе с layout. Универсальное перетаскивание всех панелей между произвольными зонами, tab reorder и свободное undocking Hierarchy/Inspector пока не реализованы; Animation остаётся timeline shell без clip/track serialization; component authoring и MCP SSE routing остаются будущими slices.
+
+Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck/build, domain tests и Chromium acceptance для Host/backend-sensitive changes.
 
 ## 1. Цель
 
