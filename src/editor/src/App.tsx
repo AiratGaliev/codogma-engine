@@ -66,6 +66,16 @@ import {
   connectEditorMcpBridge,
   type EditorMcpHandler,
 } from "./services/editor-mcp-bridge";
+import {
+  addSceneObjectFx,
+  getSceneObjectEffects,
+  getUnsupportedSceneObjectEffects,
+  removeSceneObjectFx,
+  updateSceneObjectFx,
+  type FxObject,
+  type FxType,
+} from "./domain/fx-model.ts";
+import FxInspector from "./components/FxInspector";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
@@ -1386,6 +1396,41 @@ function App() {
     }
   }
 
+  function addFxToSelected(type: FxType) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(addSceneObjectFx(current, selected.id, type), selected.id);
+      log("info", `Added ${type} effect to ${selected.name}`);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function updateSelectedFx(id: string, patch: Partial<FxObject>) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(updateSceneObjectFx(current, selected.id, id, patch), selected.id);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function removeSelectedFx(id: string) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(removeSceneObjectFx(current, selected.id, id), selected.id);
+      log("info", `Removed FX ${id}`);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function updateSelectedNumber(key: string, event: Event & { currentTarget: HTMLInputElement }) {
     const value = Number(event.currentTarget.value);
     if (!Number.isFinite(value)) return;
@@ -2658,6 +2703,17 @@ function App() {
                       />
                     </label>
                   </section>
+                </Show>
+
+                <Show when={selectedObject()?.type !== "Prefab"}>
+                  <FxInspector
+                    effects={getSceneObjectEffects(selectedObject()!.source)}
+                    unsupportedTypes={getUnsupportedSceneObjectEffects(selectedObject()!.source)}
+                    onAdd={addFxToSelected}
+                    onUpdate={updateSelectedFx}
+                    onRemove={removeSelectedFx}
+                    onError={(message) => log("warning", message)}
+                  />
                 </Show>
 
                 <section class="inspector-section" data-testid="attached-components">
