@@ -138,9 +138,12 @@ export function updatePrefabProperty(
   const index = properties.findIndex((item) => item.name === propertyName);
   if (index < 0) throw new Error(`Prefab property "${propertyName}" was not found.`);
   const next = properties.slice();
-  next[index] = { ...next[index], ...clone(patch) };
-  if (next.some((item, itemIndex) => itemIndex !== index && item.name === next[index].name)) {
-    throw new Error(`Prefab property "${next[index].name}" already exists.`);
+  const current = next[index];
+  if (!current) throw new Error(`Prefab property "${propertyName}" was not found.`);
+  const updated = { ...current, ...clone(patch) };
+  next[index] = updated;
+  if (next.some((item, itemIndex) => itemIndex !== index && item.name === updated.name)) {
+    throw new Error(`Prefab property "${updated.name}" already exists.`);
   }
   return { ...prefab, prefabProperties: next };
 }

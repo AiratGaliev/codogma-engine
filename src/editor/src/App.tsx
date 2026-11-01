@@ -782,6 +782,7 @@ function App() {
       setPrefabCatalog(prefabs.filter((item): item is { path: string; document: PrefabDocument } => item !== null));
       setComponentSources(components.filter((item): item is { path: string; document: UserComponentsDocument } => item !== null));
       const preferred = scenes.find((path) => path.toLowerCase() === "scenes/level.scene") ?? scenes.find((path) => !prefabs.some((item) => item?.path === path)) ?? scenes[0];
+      if (!preferred) throw new Error("The selected project does not contain an openable scene file.");
       await loadScene(preferred);
       log("info", `Project loaded · ${result.projectNumberOfFiles} files and folders`);
     } catch (error) {
@@ -816,8 +817,10 @@ function App() {
     const index = historyIndex();
     if (index <= 0) return;
     const nextIndex = index - 1;
-    setScene(history()[nextIndex]);
-    setSelectedId(selectionHistory()[index - 1]?.before ?? getSceneObjects(history()[nextIndex])[0]?.id ?? null);
+    const nextScene = history()[nextIndex];
+    if (!nextScene) return;
+    setScene(nextScene);
+    setSelectedId(selectionHistory()[index - 1]?.before ?? getSceneObjects(nextScene)[0]?.id ?? null);
     setHistoryIndex(nextIndex);
     log("info", "Undo");
   }
@@ -826,8 +829,10 @@ function App() {
     const index = historyIndex();
     if (index < 0 || index >= history().length - 1) return;
     const nextIndex = index + 1;
-    setScene(history()[nextIndex]);
-    setSelectedId(selectionHistory()[index]?.after ?? getSceneObjects(history()[nextIndex])[0]?.id ?? null);
+    const nextScene = history()[nextIndex];
+    if (!nextScene) return;
+    setScene(nextScene);
+    setSelectedId(selectionHistory()[index]?.after ?? getSceneObjects(nextScene)[0]?.id ?? null);
     setHistoryIndex(nextIndex);
     log("info", "Redo");
   }
@@ -1731,8 +1736,9 @@ function App() {
       'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     if (!focusable?.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+    const first = focusable.item(0);
+    const last = focusable.item(focusable.length - 1);
+    if (!first || !last) return;
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
@@ -2529,7 +2535,7 @@ function App() {
                 )}
               </Show>
               <div class="viewport-statusbar">
-                <span><Icon theme={theme()} name="tool-select" size={12} /> {tool()[0].toUpperCase() + tool().slice(1)} tool</span>
+                <span><Icon theme={theme()} name="tool-select" size={12} /> {tool().charAt(0).toUpperCase() + tool().slice(1)} tool</span>
                 <span>Selected: {selectedObject()?.name ?? "None"}</span>
                 <span>Phaser runtime · live selection</span>
               </div>
@@ -3254,7 +3260,7 @@ function App() {
               onLevelChange={setConsoleLevel}
               messages={visibleConsoleMessages()}
               onClear={() => setConsoleMessages([])}
-              onUndock={!compactWorkbench() && layout().consoleDocked ? undockConsole : undefined}
+              {...(!compactWorkbench() && layout().consoleDocked ? { onUndock: undockConsole } : {})}
             />
           </Show>
           <div

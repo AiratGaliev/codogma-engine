@@ -123,11 +123,12 @@ export function updateUserComponentDefinition(
   const index = document.components.findIndex((item) => item.name === name);
   if (index < 0) throw new Error(`User Component "${name}" was not found.`);
   const components = document.components.slice();
-  components[index] = { ...components[index], ...clone(patch) };
-  if (components.some((item, itemIndex) =>
-    itemIndex !== index && item.name === components[index].name,
-  )) {
-    throw new Error(`User Component "${components[index].name}" already exists.`);
+  const current = components[index];
+  if (!current) throw new Error(`User Component "${name}" was not found.`);
+  const updated = { ...current, ...clone(patch) };
+  components[index] = updated;
+  if (components.some((item, itemIndex) => itemIndex !== index && item.name === updated.name)) {
+    throw new Error(`User Component "${updated.name}" already exists.`);
   }
   assertDocument({ ...document, components });
   return { ...document, components };

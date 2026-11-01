@@ -169,7 +169,9 @@ export function updateAnimation(
   const index = document.anims.findIndex((item) => item.key === key);
   if (index < 0) throw new Error(`Animation "${key}" was not found.`);
   const anims = document.anims.slice();
-  anims[index] = { ...anims[index], ...clone(patch) };
+  const current = anims[index];
+  if (!current) throw new Error(`Animation "${key}" was not found.`);
+  anims[index] = { ...current, ...clone(patch) };
   const next = { ...document, anims };
   assertDocument(next);
   return next;
@@ -228,6 +230,7 @@ export function moveAnimationFrame(
   }
   const frames = animation.frames.slice();
   const [frame] = frames.splice(fromIndex, 1);
+  if (!frame) throw new RangeError("Animation frame index is out of range.");
   frames.splice(toIndex, 0, frame);
   return updateAnimation(document, animationKey, { frames });
 }
@@ -284,6 +287,12 @@ export function getAnimationDurationMs(
  * Phaser JSONAnimations document. Repeat/yoyo/delay semantics stay in the
  * editor preview layer; only the original clip and frame references are saved.
  */
+function getRequiredFrameDuration(durations: readonly number[], index: number): number {
+  const duration = durations[index];
+  if (duration === undefined) throw new Error(`Animation frame duration ${index} is missing.`);
+  return duration;
+}
+
 export function getAnimationTimelinePosition(
   animation: PhaserAnimationConfig,
   elapsedMs: number,
@@ -323,7 +332,7 @@ export function getAnimationTimelinePosition(
     return {
       frameIndex: 0,
       elapsedInFrameMs: 0,
-      frameDurationMs: frameDurations[0],
+      frameDurationMs: getRequiredFrameDuration(frameDurations, 0)
       progress: 0,
       cycleIndex: 0,
       completed: false,
@@ -338,8 +347,8 @@ export function getAnimationTimelinePosition(
     const lastFrameIndex = animation.yoyo && lastCycleIndex % 2 === 1 ? 0 : frames.length - 1;
     return {
       frameIndex: lastFrameIndex,
-      elapsedInFrameMs: frameDurations[lastFrameIndex],
-      frameDurationMs: frameDurations[lastFrameIndex],
+      elapsedInFrameMs: getRequiredFrameDuration(frameDurations, lastFrameIndex),
+      frameDurationMs: getRequiredFrameDuration(frameDurations, lastFrameIndex),
       progress: 1,
       cycleIndex: lastCycleIndex,
       completed: true,
@@ -355,8 +364,8 @@ export function getAnimationTimelinePosition(
     const lastFrameIndex = animation.yoyo && cycleIndex % 2 === 1 ? 0 : frames.length - 1;
     return {
       frameIndex: lastFrameIndex,
-      elapsedInFrameMs: frameDurations[lastFrameIndex],
-      frameDurationMs: frameDurations[lastFrameIndex],
+      elapsedInFrameMs: getRequiredFrameDuration(frameDurations, lastFrameIndex),
+      frameDurationMs: getRequiredFrameDuration(frameDurations, lastFrameIndex),
       progress: 1,
       cycleIndex,
       completed: false,
@@ -369,7 +378,7 @@ export function getAnimationTimelinePosition(
   let frameIndex = 0;
   let elapsedInFrameMs = 0;
   for (let index = 0; index < frames.length; index++) {
-    const duration = frameDurations[index];
+    const duration = getRequiredFrameDuration(frameDurations, index);
     if (cyclePositionMs < duration) {
       frameIndex = reversed ? frames.length - 1 - index : index;
       elapsedInFrameMs = cyclePositionMs;
@@ -378,7 +387,7 @@ export function getAnimationTimelinePosition(
     cyclePositionMs -= duration;
   }
 
-  const frameDurationMs = frameDurations[frameIndex];
+  const frameDurationMs = getRequiredFrameDuration(frameDurations, frameIndex);
   return {
     frameIndex,
     elapsedInFrameMs,

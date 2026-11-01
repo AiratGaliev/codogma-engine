@@ -163,7 +163,7 @@ function encodeProjectPath(path: string): string {
 }
 
 function normalizeProjectPath(value: string): string | null {
-  const path = value.split(/[?#]/, 1)[0].replace(/\\/g, "/").trim();
+  const path = (value.split(/[?#]/, 1)[0] ?? "").replace(/\\/g, "/").trim();
   if (
     !path ||
     path.startsWith("//") ||

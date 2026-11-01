@@ -7,6 +7,13 @@ import {
   removePrefabProperty, resolvePrefabInstanceValues, updatePrefabProperty,
 } from "../src/domain/prefab-model.ts";
 
+
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`Expected item at index ${index}.`);
+  return item;
+}
+
 const scene: SceneDocument = {
   id: "scene-id",
   sceneType: "SCENE",
@@ -17,10 +24,10 @@ const scene: SceneDocument = {
 };
 
 test("creates a legacy-compatible PREFAB scene document from a selected object", () => {
-  const prefab = createPrefabDocument(scene, scene.displayList[0], "Dino");
+  const prefab = createPrefabDocument(scene, at(scene.displayList, 0), "Dino");
   assert.equal(prefab.sceneType, "PREFAB");
-  assert.equal(prefab.displayList[0].texture?.key, "dino");
-  assert.equal(prefab.displayList[0].components?.[0], "Tint");
+  assert.equal(at(prefab.displayList, 0).texture?.key, "dino");
+  assert.equal(at(prefab.displayList, 0).components?.[0], "Tint");
   assert.equal(prefab.settings.createMethodName, "");
   assert.equal(prefab.settings.sceneKey, "Level");
   assert.deepEqual(prefab.prefabProperties, []);
@@ -28,7 +35,7 @@ test("creates a legacy-compatible PREFAB scene document from a selected object",
 });
 
 test("creates a prefab instance using the stable Prefab document id", () => {
-  const prefab = createPrefabDocument(scene, scene.displayList[0], "Dino");
+  const prefab = createPrefabDocument(scene, at(scene.displayList, 0), "Dino");
   const next = createPrefabInstance(scene, prefab, { label: "dinoPrefab", x: 120, y: 90 });
   const instance = next.displayList.at(-1);
   assert.ok(instance);
@@ -41,24 +48,24 @@ test("creates a prefab instance using the stable Prefab document id", () => {
 });
 
 test("supports typed Prefab properties and per-instance overrides", () => {
-  let prefab = createPrefabDocument(scene, scene.displayList[0]);
+  let prefab = createPrefabDocument(scene, at(scene.displayList, 0));
   prefab = addPrefabProperty(prefab, { name: "rotating", label: "Rotating", defValue: false, customDefinition: false, type: { id: "boolean" } });
   prefab = addPrefabProperty(prefab, { name: "origin", label: "Origin", defValue: "top", customDefinition: true, type: { id: "option", options: ["top", "center", "bottom"] } });
-  assert.equal(getPrefabPropertyDefault(prefab.prefabProperties![0]), false);
+  assert.equal(getPrefabPropertyDefault(at(prefab.prefabProperties ?? [], 0)), false);
   const instance = createPrefabInstance(scene, prefab).displayList.at(-1);
   assert.ok(instance);
   assert.deepEqual(resolvePrefabInstanceValues(prefab, instance), { rotating: false, origin: "top" });
   assert.deepEqual(resolvePrefabInstanceValues(prefab, { ...instance, rotating: true }), { rotating: true, origin: "top" });
   prefab = updatePrefabProperty(prefab, "rotating", { defValue: true });
-  assert.equal(prefab.prefabProperties![0].defValue, true);
+  assert.equal(at(prefab.prefabProperties ?? [], 0).defValue, true);
   prefab = removePrefabProperty(prefab, "origin");
-  assert.deepEqual(prefab.prefabProperties!.map((item) => item.name), ["rotating"]);
+  assert.deepEqual((prefab.prefabProperties ?? []).map((item) => item.name), ["rotating"]);
 });
 
 test("rejects invalid Prefabs and duplicate property definitions", () => {
   assert.throws(() => createPrefabDocument(scene, null as unknown as SceneDocument["displayList"][number]), /scene object/);
   assert.throws(() => createPrefabInstance(scene, { id: "missing", sceneType: "SCENE", displayList: [] } as unknown as PrefabDocument), /sceneType PREFAB/);
-  const prefab = createPrefabDocument(scene, scene.displayList[0]);
+  const prefab = createPrefabDocument(scene, at(scene.displayList, 0));
   const withProperty = addPrefabProperty(prefab, { name: "count", type: { id: "number" }, defValue: 1 });
   assert.throws(() => addPrefabProperty(withProperty, { name: "count", type: { id: "number" } }), /already exists/);
   assert.throws(() => addPrefabProperty(withProperty, { name: "bad key", type: { id: "number" } }), /valid identifier/);

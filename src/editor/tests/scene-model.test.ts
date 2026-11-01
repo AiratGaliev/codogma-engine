@@ -11,6 +11,13 @@ import {
   updateSceneObject,
 } from "../src/domain/scene-model.ts";
 
+
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`Expected item at index ${index}.`);
+  return item;
+}
+
 const fixtureScene: SceneDocument = {
   id: "scene-1",
   sceneType: "SCENE",
@@ -27,8 +34,8 @@ test("parses and validates a real scene-shaped document without discarding field
   const parsed = parseSceneContent(JSON.stringify(fixtureScene));
   assert.equal(parsed.id, "scene-1");
   assert.equal(parsed.settings?.sceneKey, "Level");
-  assert.equal(parsed.displayList[0].texture?.key, "dino");
-  assert.deepEqual(parsed.displayList[0].components, ["PushOnClick"]);
+  assert.equal(at(parsed.displayList, 0).texture?.key, "dino");
+  assert.deepEqual(at(parsed.displayList, 0).components, ["PushOnClick"]);
 });
 
 test("lists display objects and prefab instances with stable ids and useful labels", () => {
@@ -42,11 +49,11 @@ test("lists display objects and prefab instances with stable ids and useful labe
 
 test("updates transforms immutably and preserves unedited object metadata", () => {
   const updated = updateSceneObject(fixtureScene, "image-1", { x: 465, rotation: 15 });
-  assert.equal(updated.displayList[0].x, 465);
-  assert.equal(updated.displayList[0].rotation, 15);
-  assert.equal(updated.displayList[0].texture?.key, "dino");
-  assert.equal(updated.displayList[0].components?.[0], "PushOnClick");
-  assert.equal(fixtureScene.displayList[0].x, 400);
+  assert.equal(at(updated.displayList, 0).x, 465);
+  assert.equal(at(updated.displayList, 0).rotation, 15);
+  assert.equal(at(updated.displayList, 0).texture?.key, "dino");
+  assert.equal(at(updated.displayList, 0).components?.[0], "PushOnClick");
+  assert.equal(at(fixtureScene.displayList, 0).x, 400);
 });
 
 test("fallback hierarchy ids can update and remove legacy objects without serialized ids", () => {
@@ -55,12 +62,12 @@ test("fallback hierarchy ids can update and remove legacy objects without serial
     displayList: [{ type: "Text", label: "Legacy", x: 12, y: 24 }],
     plainObjects: [],
   };
-  const [entry] = getSceneObjects(legacyScene);
+  const entry = at(getSceneObjects(legacyScene), 0);
   assert.equal(entry.id, "displayList-0");
 
   const updated = updateSceneObject(legacyScene, entry.id, { x: 64 });
-  assert.equal(updated.displayList[0].x, 64);
-  assert.equal(legacyScene.displayList[0].x, 12);
+  assert.equal(at(updated.displayList, 0).x, 64);
+  assert.equal(at(legacyScene.displayList, 0).x, 12);
 
   const removed = removeSceneObject(updated, entry.id);
   assert.equal(removed.displayList.length, 0);
@@ -79,9 +86,9 @@ test("creates supported Image, Text and Container nodes without changing the leg
   const containerScene = createSceneObject(textScene, "Container");
   const objects = getSceneObjects(containerScene);
   assert.equal(objects.length, 6);
-  assert.equal(objects[3].source.texture?.key, "dino");
-  assert.equal(objects[4].source.text, "New text");
-  assert.deepEqual(objects[5].source.list, []);
+  assert.equal(at(objects, 3).source.texture?.key, "dino");
+  assert.equal(at(objects, 4).source.text, "New text");
+  assert.deepEqual(at(objects, 5).source.list, []);
   assert.equal(fixtureScene.displayList.length, 3);
 });
 

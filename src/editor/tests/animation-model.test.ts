@@ -8,6 +8,13 @@ import {
   getAnimationFrameDurationMs, getAnimationDurationMs, getAnimationTimelinePosition,
 } from "../src/domain/animation-model.ts";
 
+
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`Expected item at index ${index}.`);
+  return item;
+}
+
 const fixture: AnimationDocument = {
   anims: [{ key: "walk", frameRate: 12, repeat: -1, frames: [{ key: "dino", frame: "walk_0" }, { key: "dino", frame: "walk_1", duration: 80 }], customMetadata: { source: "fixture" } }],
   globalTimeScale: 1,
@@ -18,30 +25,30 @@ const fixture: AnimationDocument = {
 
 test("parses Phaser JSONAnimations and preserves unknown metadata", () => {
   const parsed = parseAnimationContent(JSON.stringify(fixture));
-  assert.equal((parsed.anims[0].customMetadata as { source: string }).source, "fixture");
+  assert.equal((at(parsed.anims, 0).customMetadata as { source: string }).source, "fixture");
   assert.equal(parsed.vendorRootField, 42);
   assert.equal(parsed.meta.vendorField, "preserve");
-  assert.equal(getAnimations(parsed)[0].frameCount, 2);
+  assert.equal(at(getAnimations(parsed), 0).frameCount, 2);
   assert.equal(isAnimationContent(parsed), true);
 });
 
 test("creates unique animations and updates properties immutably", () => {
   const first = createAnimation(fixture, "walk");
   const second = createAnimation(first, "walk");
-  assert.equal(second.anims[1].key, "walk_1");
-  assert.equal(second.anims[1].frameRate, 24);
+  assert.equal(at(second.anims, 1).key, "walk_1");
+  assert.equal(at(second.anims, 1).frameRate, 24);
   const changed = updateAnimation(second, "walk", { frameRate: 30, yoyo: true });
-  assert.equal(changed.anims[0].yoyo, true);
-  assert.equal(fixture.anims[0].frameRate, 12);
+  assert.equal(at(changed.anims, 0).yoyo, true);
+  assert.equal(at(fixture.anims, 0).frameRate, 12);
   assert.throws(() => updateAnimation(changed, "walk", { key: "walk_1" }), /Duplicate animation key/);
 });
 
 test("appends, reorders and removes animation frame references", () => {
   const appended = appendAnimationFrame(fixture, "walk", { key: "coins" });
   const moved = moveAnimationFrame(appended, "walk", 2, 0);
-  assert.deepEqual(moved.anims[0].frames[0], { key: "coins" });
-  assert.equal(removeAnimationFrame(moved, "walk", 1).anims[0].frames.length, 2);
-  assert.equal(fixture.anims[0].frames.length, 2);
+  assert.deepEqual(at(at(moved.anims, 0).frames, 0), { key: "coins" });
+  assert.equal(at(removeAnimationFrame(moved, "walk", 1).anims, 0).frames.length, 2);
+  assert.equal(at(fixture.anims, 0).frames.length, 2);
 });
 
 test("deletes animations and updates settings without losing unknown fields", () => {
@@ -54,7 +61,7 @@ test("creates and formats a valid Phaser v3 animation file", () => {
   const created = createAnimation(createAnimationDocument(), "idle", { frames: [{ key: "dino" }] });
   const output = formatAnimationContent(created);
   assert.ok(output.endsWith("\n"));
-  assert.equal(parseAnimationContent(output).anims[0].key, "idle");
+  assert.equal(at(parseAnimationContent(output).anims, 0).key, "idle");
 });
 
 test("rejects malformed animation JSON, duplicate keys and invalid frames", () => {
@@ -77,8 +84,8 @@ test("calculates the Phaser frame timeline from explicit durations, frame rate a
     ],
   };
 
-  assert.equal(getAnimationFrameDurationMs(animation, animation.frames[0]), 80);
-  assert.equal(getAnimationFrameDurationMs(animation, animation.frames[1]), 100);
+  assert.equal(getAnimationFrameDurationMs(animation, at(animation.frames, 0)), 80);
+  assert.equal(getAnimationFrameDurationMs(animation, at(animation.frames, 1)), 100);
   assert.equal(getAnimationDurationMs(animation), 280);
   assert.equal(getAnimationDurationMs(animation, 2), 140);
 

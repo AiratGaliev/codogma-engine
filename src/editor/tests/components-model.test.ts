@@ -7,6 +7,13 @@ import {
   removeUserComponentDefinition, updateUserComponentDefinition,
 } from "../src/domain/components-model.ts";
 
+
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`Expected item at index ${index}.`);
+  return item;
+}
+
 const fixture: UserComponentsDocument = {
   components: [{ name: "PushOnClick", baseClass: "UserComponent", gameObjectType: "Phaser.GameObjects.Image",
     properties: [{ name: "pushScale", label: "Push Scale", defValue: 0.5, type: { id: "number" } }], generateAwakeEvent: true }],
@@ -23,11 +30,11 @@ test("parses .components documents and keeps metadata", () => {
 
 test("attaches components and initializes declared property defaults", () => {
   const object = { id: "one", type: "Image", components: [], x: 12 };
-  const attached = attachUserComponent(object, fixture.components[0]);
+  const attached = attachUserComponent(object, at(fixture.components, 0));
   assert.deepEqual(attached.components, ["PushOnClick"]);
   assert.equal(attached["PushOnClick.pushScale"], 0.5);
   assert.equal(object.components.length, 0);
-  assert.equal(attachUserComponent(attached, fixture.components[0]).components?.length, 1);
+  assert.equal(attachUserComponent(attached, at(fixture.components, 0)).components?.length, 1);
 });
 
 test("detaches a component and removes only its namespaced properties", () => {
@@ -42,7 +49,7 @@ test("creates, updates and removes User Component definitions", () => {
   const definition = createUserComponentDefinition("Blink", { properties: [{ name: "speed", type: { id: "number" }, defValue: 2 }] });
   const added = addUserComponentDefinition(fixture, definition);
   const updated = updateUserComponentDefinition(added, "Blink", { displayName: "Blinking" });
-  assert.equal(updated.components[1].displayName, "Blinking");
+  assert.equal(at(updated.components, 1).displayName, "Blinking");
   assert.equal(removeUserComponentDefinition(updated, "Blink").components.length, 1);
   assert.equal(fixture.components.length, 1);
 });
@@ -52,5 +59,5 @@ test("serializes the existing .components contract and rejects invalid names", (
   assert.ok(output.endsWith("\n"));
   assert.deepEqual(JSON.parse(output), fixture);
   assert.throws(() => createUserComponentDefinition("Bad Name"), /identifier/);
-  assert.throws(() => addUserComponentDefinition(fixture, fixture.components[0]), /already exists/);
+  assert.throws(() => addUserComponentDefinition(fixture, at(fixture.components, 0)), /already exists/);
 });
