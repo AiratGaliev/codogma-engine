@@ -13,6 +13,8 @@ import {
   readProjectFile,
   type ProjectEntry,
 } from "../services/editor-api";
+import { getSceneObjectEffects, type FxObject } from "../domain/fx-model.ts";
+import { createFxPreview, type FxPreviewResult } from "./fx-preview.ts";
 
 interface PhaserGameObject {
   x: number;
@@ -36,6 +38,15 @@ interface PhaserGameObject {
   setStrokeStyle?(width: number, color: number, alpha?: number): PhaserGameObject;
   setDepth?(depth: number): PhaserGameObject;
   destroy?(): void;
+  add?(child: PhaserGameObject): PhaserGameObject;
+  once?(event: string, listener: (...args: unknown[]) => void): PhaserGameObject;
+  off?(event: string, listener?: (...args: unknown[]) => void): PhaserGameObject;
+  listeners?(event: string): Array<(...args: unknown[]) => void>;
+  filters?: { internal: { remove(filter: unknown): void } };
+  parentContainer?: {
+    addAt(child: PhaserGameObject, index: number): unknown;
+    getIndex(child: PhaserGameObject): number;
+  } | null;
 }
 
 interface PhaserPointer {
@@ -47,6 +58,10 @@ interface PhaserPointer {
 interface PhaserSceneApi {
   input: {
     on(event: string, listener: (pointer: PhaserPointer) => void): void;
+  };
+  events: {
+    on(event: "update", listener: () => void): void;
+    off(event: "update", listener: () => void): void;
   };
   cameras?: {
     main?: {
@@ -72,6 +87,9 @@ interface PhaserSceneApi {
       color?: number,
       alpha?: number,
     ): PhaserGameObject;
+    container(x: number, y: number): PhaserGameObject;
+    graphics(): PhaserGameObject;
+    gradient(config: Record<string, unknown>, x: number, y: number, width: number, height: number): PhaserGameObject;
   };
 }
 
@@ -115,6 +133,19 @@ interface PhaserNamespace {
     };
   }) => PhaserGameApi;
   Scene: PhaserSceneConstructor;
+  Actions: {
+    AddMaskShape(parent: PhaserGameObject, config: Record<string, unknown>): unknown[];
+    AddEffectBloom(parent: PhaserGameObject, config: Record<string, unknown>): Array<{ parallelFilters?: { destroy(): void } }>;
+    AddEffectShine(parent: PhaserGameObject, config: Record<string, unknown>): Array<{
+      parallelFilters?: { destroy(): void };
+      blendFilter?: { destroy(): void };
+      tween?: { destroy(): void };
+      dynamicTexture?: { destroy(): void };
+    }>;
+  };
+  Geom: {
+    Rectangle: new (x: number, y: number, width: number, height: number) => unknown;
+  };
 }
 
 declare global {
@@ -148,6 +179,7 @@ interface Props {
 interface SceneEntry {
   id: string;
   type: string;
+  parentId: string | null;
   source: Record<string, unknown>;
 }
 
@@ -300,7 +332,12 @@ function PhaserSceneViewport(props: Props) {
   let resizeObserver: ResizeObserver | undefined;
   let sceneReady = false;
   let selectionFrame: PhaserGameObject | undefined;
+  let phaserApi: PhaserNamespace | undefined;
+  let webGlRenderer = false;
+  let canvasFxWarningShown = false;
   const gameObjects = new Map<string, PhaserGameObject>();
+  const fxPreviewResources = new Map<string, { fingerprint: string; result: FxPreviewResult }>();
+  const failedFxPreviews = new Map<string, string>();
   const [runtimeState, setRuntimeState] = createSignal<"loading" | "ready" | "error">("loading");
   const [runtimeError, setRuntimeError] = createSignal("");
   const [gameReady, setGameReady] = createSignal(false);
@@ -325,9 +362,15 @@ function PhaserSceneViewport(props: Props) {
     if (drag && Object.keys(drag.patch).length > 0) props.onTransform(drag.id, drag.patch);
   }
 
-  function createEntry(entry: SceneEntry, runtime: PhaserSceneApi, imageKeys: Set<string>): PhaserGameObject {
+  function createEntry(
+    entry: SceneEntry,
+    runtime: PhaserSceneApi,
+    imageKeys: Set<string>,
+  ): PhaserGameObject {
     const x = numeric(entry.source.x, RUNTIME_WIDTH / 2);
     const y = numeric(entry.source.y, RUNTIME_HEIGHT / 2);
+
+    if (entry.type === "Container") return runtime.add.container(x, y);
 
     if (entry.type === "Image") {
       const texture = entry.source.texture;
@@ -335,9 +378,7 @@ function PhaserSceneViewport(props: Props) {
         texture && typeof texture === "object"
           ? String((texture as Record<string, unknown>).key ?? "")
           : "";
-      if (key && imageKeys.has(key)) {
-        return runtime.add.image(x, y, key);
-      }
+      if (key && imageKeys.has(key)) return runtime.add.image(x, y, key);
       props.onStatus("warning", `Texture "${key || "(empty)"}" was not found in the project's Asset Packs.`);
     }
 
@@ -363,6 +404,73 @@ function PhaserSceneViewport(props: Props) {
     return placeholder;
   }
 
+  function clearFxPreviews(): void {
+    for (const resource of fxPreviewResources.values()) resource.result.dispose();
+    fxPreviewResources.clear();
+    failedFxPreviews.clear();
+  }
+
+  function syncFxPreviews(entries: SceneEntry[]): void {
+    if (!sceneRuntime || !phaserApi) return;
+    const desired = new Map<string, { parentId: string; effect: FxObject; fingerprint: string }>();
+
+    for (const entry of entries) {
+      if (!gameObjects.has(entry.id)) continue;
+      for (const effect of getSceneObjectEffects(entry.source as never)) {
+        const key = `${entry.id}:${effect.id}`;
+        desired.set(key, {
+          parentId: entry.id,
+          effect: effect.source,
+          fingerprint: JSON.stringify(effect.source),
+        });
+      }
+    }
+
+    for (const [key, resource] of fxPreviewResources) {
+      const next = desired.get(key);
+      if (!next || next.fingerprint !== resource.fingerprint) {
+        resource.result.dispose();
+        fxPreviewResources.delete(key);
+      }
+    }
+    for (const [key, fingerprint] of failedFxPreviews) {
+      if (desired.get(key)?.fingerprint !== fingerprint) failedFxPreviews.delete(key);
+    }
+
+    if (desired.size === 0) {
+      canvasFxWarningShown = false;
+      return;
+    }
+    if (!webGlRenderer) {
+      if (!canvasFxWarningShown) {
+        props.onStatus("warning", "FX settings are saved, but Scene View preview requires WebGL. Canvas renderer does not support Phaser FX filters.");
+        canvasFxWarningShown = true;
+      }
+      return;
+    }
+    canvasFxWarningShown = false;
+
+    for (const [key, item] of desired) {
+      if (fxPreviewResources.has(key) || failedFxPreviews.get(key) === item.fingerprint) continue;
+      const parent = gameObjects.get(item.parentId);
+      if (!parent) continue;
+      try {
+        const result = createFxPreview(
+          sceneRuntime as never,
+          phaserApi as never,
+          parent as never,
+          item.effect,
+        );
+        fxPreviewResources.set(key, { fingerprint: item.fingerprint, result });
+        for (const diagnostic of result.diagnostics) props.onStatus("warning", diagnostic);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failedFxPreviews.set(key, item.fingerprint);
+        props.onStatus("warning", `FX preview "${item.effect.type}" is unavailable: ${message}`);
+      }
+    }
+  }
+
   function syncScene() {
     if (!sceneReady || !sceneRuntime) return;
     const current = props.scene;
@@ -370,6 +478,7 @@ function PhaserSceneViewport(props: Props) {
       ? getSceneObjects(current).map((entry) => ({
           id: entry.id,
           type: entry.type,
+          parentId: entry.parentId,
           source: entry.source as Record<string, unknown>,
         }))
       : [];
@@ -380,6 +489,8 @@ function PhaserSceneViewport(props: Props) {
       let object = gameObjects.get(entry.id);
       if (!object) {
         const createdObject = createEntry(entry, sceneRuntime, assets);
+        const parentObject = entry.parentId ? gameObjects.get(entry.parentId) : undefined;
+        if (parentObject?.add) parentObject.add(createdObject);
         object = createdObject;
         createdObject.setInteractive?.();
         createdObject.on?.("pointerdown", (pointer) => {
@@ -434,6 +545,8 @@ function PhaserSceneViewport(props: Props) {
         object.setText?.(String(entry.source.text ?? entry.source.label ?? ""));
       }
     }
+
+    syncFxPreviews(entries);
 
     for (const [id, object] of gameObjects) {
       if (!activeIds.has(id)) {
@@ -548,6 +661,8 @@ function PhaserSceneViewport(props: Props) {
             const activeGame = sceneGame ?? game;
             const canvas = activeGame?.canvas;
             const rendererName = activeGame?.renderer?.constructor?.name ?? "none";
+            webGlRenderer = /webgl/i.test(rendererName);
+            phaserApi = phaser;
             const renderType = activeGame?.config?.renderType ?? "unknown";
             if (canvas && mount && canvas.parentElement !== mount) {
               mount.append(canvas);
@@ -599,12 +714,15 @@ function PhaserSceneViewport(props: Props) {
     onCleanup(() => {
       disposed = true;
       resizeObserver?.disconnect();
+      clearFxPreviews();
       game?.destroy(true);
       props.onCanvasReady?.(null);
       transformDrag = undefined;
       game = undefined;
       setGameReady(false);
       sceneRuntime = undefined;
+      phaserApi = undefined;
+      webGlRenderer = false;
       sceneReady = false;
       selectionFrame = undefined;
       gameObjects.clear();
