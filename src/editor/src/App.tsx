@@ -59,6 +59,10 @@ import {
   createProjectFolder,
   type ProjectEntry,
 } from "./services/editor-api";
+import {
+  connectEditorMcpBridge,
+  type EditorMcpHandler,
+} from "./services/editor-mcp-bridge";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
@@ -420,6 +424,8 @@ function App() {
   let hierarchyHomeSlot: HTMLDivElement | undefined;
   let inspectorHomeSlot: HTMLDivElement | undefined;
   let bottomDockedContent: HTMLDivElement | undefined;
+  let sceneCanvas: HTMLCanvasElement | null = null;
+  let disposeEditorMcpBridge: (() => void) | undefined;
   let bottomTabPointerDrag: { panel: BottomTab; pointerId: number; startX: number; startY: number; active: boolean } | undefined;
   let suppressDockTabClick = false;
   let resizeState:
@@ -660,23 +666,23 @@ function App() {
   let sceneLoadSequence = 0;
   let documentLoadSequence = 0;
 
-  async function loadScene(path: string, reloadCurrent = false) {
-    if (path === scenePath() && !reloadCurrent) return;
+  async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
+    if (path === scenePath() && !reloadCurrent) return true;
     if (animationDirty() || componentDirty()) {
-      if (!window.confirm("The active animation or User Components file has unsaved changes. Discard them and open the scene?")) return;
+      if (!window.confirm("The active animation or User Components file has unsaved changes. Discard them and open the scene?")) return false;
     }
     if (dirty()) {
       const discardChanges = window.confirm(
         "This scene has unsaved changes. Discard them and open the requested scene?",
       );
-      if (!discardChanges) return;
+      if (!discardChanges) return false;
     }
 
     const request = ++sceneLoadSequence;
     setLoadError("");
     try {
       const content = await readProjectFile(path);
-      if (request !== sceneLoadSequence) return;
+      if (request !== sceneLoadSequence) return false;
       const parsed = parseSceneContent(content) as SceneDocument;
       setScene(parsed);
       setScenePath(path);
@@ -696,11 +702,13 @@ function App() {
       setActiveViewport("Scene");
       setGameLoaded(false);
       log("success", `Opened ${path}`);
+      return true;
     } catch (error) {
-      if (request !== sceneLoadSequence) return;
+      if (request !== sceneLoadSequence) return false;
       const message = error instanceof Error ? error.message : String(error);
       setLoadError(message);
       log("error", message);
+      return false;
     }
   }
 
@@ -1248,10 +1256,10 @@ function App() {
     return saveScene();
   }
 
-  async function saveScene() {
+  async function saveScene(): Promise<boolean> {
     const current = scene();
     const path = scenePath();
-    if (!current || !path || saving()) return;
+    if (!current || !path || saving()) return false;
 
     setSaving(true);
     try {
@@ -1262,10 +1270,12 @@ function App() {
         setPrefabCatalog((catalog) => catalog.map((item) => item.path === path ? { path, document: current as PrefabDocument } : item));
       }
       log("success", `Saved ${path}`);
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log("error", `Save failed: ${message}`);
       setLoadError(message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1674,6 +1684,158 @@ function App() {
     });
   }
 
+  function readMcpPath(value: unknown, field: string): string {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(`MCP command requires a non-empty ${field}.`);
+    }
+    const normalized = value.replace(/\\/g, "/").replace(/^\/+/, "");
+    const segments = normalized.split("/");
+    if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+      throw new Error("MCP project paths must stay inside the selected project.");
+    }
+    return segments.join("/");
+  }
+
+  function captureSceneScreenshot(args: Record<string, unknown>) {
+    const source = sceneCanvas;
+    if (!source?.isConnected || source.width <= 0 || source.height <= 0) {
+      throw new Error("The SolidJS Scene viewport has no ready Phaser Canvas. Switch to Scene view and retry.");
+    }
+
+    const coordinate = (value: unknown, fallback: number) =>
+      typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : fallback;
+    const x = Math.max(0, Math.min(source.width - 1, coordinate(args.x, 0)));
+    const y = Math.max(0, Math.min(source.height - 1, coordinate(args.y, 0)));
+    const width = Math.max(1, Math.min(source.width - x, coordinate(args.width, source.width - x)));
+    const height = Math.max(1, Math.min(source.height - y, coordinate(args.height, source.height - y)));
+    if (width * height > 16_777_216) {
+      throw new Error("Scene screenshot region is too large (maximum 16 megapixels).");
+    }
+
+    const output = document.createElement("canvas");
+    output.width = width;
+    output.height = height;
+    const context = output.getContext("2d");
+    if (!context) throw new Error("Could not allocate a 2D context for the Scene screenshot.");
+
+    try {
+      context.drawImage(source, x, y, width, height, 0, 0, width, height);
+      const dataUrl = output.toDataURL("image/png");
+      const separator = dataUrl.indexOf(",");
+      if (separator < 0) throw new Error("The Phaser Canvas returned an invalid PNG data URL.");
+      return { __image: true, data: dataUrl.slice(separator + 1), mimeType: "image/png" };
+    } finally {
+      output.width = 1;
+      output.height = 1;
+    }
+  }
+
+  async function readTextureContentBounds(args: Record<string, unknown>) {
+    const relativePath = readMcpPath(args.url, "texture url");
+    const encodedPath = relativePath.split("/").map(encodeURIComponent).join("/");
+    const response = await fetch(`/editor/project/${encodedPath}`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Cannot load texture "${relativePath}" (${response.status}).`);
+    }
+
+    const blob = await response.blob();
+    if (blob.size > 32 * 1024 * 1024) {
+      throw new Error("Texture is too large to inspect (maximum 32 MiB).");
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const image = new Image();
+      image.src = objectUrl;
+      await image.decode();
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      if (!width || !height || width * height > 16_777_216) {
+        throw new Error("Texture dimensions are invalid or exceed the 16 megapixel inspection limit.");
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      try {
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) throw new Error("Could not allocate a texture inspection context.");
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, width, height).data;
+        let minX = width, minY = height, maxX = -1, maxY = -1;
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (pixels[(y * width + x) * 4 + 3] === 0) continue;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+        return maxX < 0
+          ? { x: 0, y: 0, width: 0, height: 0 }
+          : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+      } finally {
+        canvas.width = 1;
+        canvas.height = 1;
+      }
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function refreshProjectTreeFromBridge() {
+    try {
+      const result = await getProjectFiles();
+      setProjectTree(result.rootFile);
+      setProjectName(result.rootFile.name);
+      log("info", "Project files changed outside the active editor document; Project tree refreshed.");
+    } catch (error) {
+      log("warning", `Could not refresh the Project tree after an MCP file change: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const editorMcpHandlers: Record<string, EditorMcpHandler> = {
+    "ide-get-active-scene": async () => {
+      const current = scene();
+      const currentPath = scenePath();
+      if (!current || !currentPath) throw new Error("There is no Scene document open in the SolidJS Editor Host.");
+      const settings = (current as SceneDocument & { settings?: Record<string, unknown> }).settings ?? {};
+      return {
+        scenePath: currentPath,
+        sceneKey: settings.sceneKey,
+        sceneId: current.id,
+      };
+    },
+    "ide-open-scene": async (args) => {
+      const requestedPath = readMcpPath(args.scenePath, "scenePath");
+      const opened = await loadScene(requestedPath);
+      if (!opened || scenePath() !== requestedPath) {
+        throw new Error(`Scene "${requestedPath}" was not opened. The operation may have been cancelled or the file is invalid.`);
+      }
+      return `Scene opened in the SolidJS Editor Host: ${requestedPath}`;
+    },
+    "ide-save-scene": async (args) => {
+      const requestedPath = readMcpPath(args.scenePath, "scenePath");
+      if (scenePath() !== requestedPath) {
+        throw new Error(`Scene "${requestedPath}" is not the active scene in the SolidJS Editor Host. Open it first.`);
+      }
+      if (!(await saveScene())) throw new Error(`Could not save scene "${requestedPath}".`);
+      return `Scene saved: ${requestedPath}`;
+    },
+    "scene-get-screenshot": async (args) => {
+      const requestedPath = args.scenePath === undefined ? scenePath() : readMcpPath(args.scenePath, "scenePath");
+      if (!requestedPath || requestedPath !== scenePath()) {
+        throw new Error("The requested scene is not open in the SolidJS Scene viewport.");
+      }
+      return captureSceneScreenshot(args);
+    },
+    "assets-get-texture-content-bounding-box": readTextureContentBounds,
+  };
+
   onMount(() => {
     for (const panel of layout().dockedPanels) {
       const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
@@ -1684,10 +1846,21 @@ function App() {
     }
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleWorkbenchResize);
+    disposeEditorMcpBridge = connectEditorMcpBridge(editorMcpHandlers, {
+      onStatus: (status, message) => {
+        if (status === "connected") log("success", "SolidJS Editor Host MCP session connected.");
+        else if (status === "disconnected") log("warning", message || "SolidJS Editor Host MCP session disconnected.");
+      },
+      onError: (message) => log("error", `MCP bridge: ${message}`),
+      onFilesChanged: refreshProjectTreeFromBridge,
+    });
     void loadProject();
   });
 
   onCleanup(() => {
+    disposeEditorMcpBridge?.();
+    disposeEditorMcpBridge = undefined;
+    sceneCanvas = null;
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("resize", handleWorkbenchResize);
   });
@@ -2134,6 +2307,7 @@ function App() {
                     onSelect={setSelectedId}
                     onTransform={updateObjectProperties}
                     onStatus={log}
+                    onCanvasReady={(canvas) => { sceneCanvas = canvas; }}
                   />
                 )}
               </Show>
