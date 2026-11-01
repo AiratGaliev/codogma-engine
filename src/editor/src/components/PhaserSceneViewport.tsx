@@ -173,6 +173,7 @@ type TransformTool = "select" | "move" | "rotate" | "scale";
 
 interface Props {
   scene: SceneDocument | null;
+  scenePath: string | null;
   selectedId: string | null;
   projectTree: ProjectEntry | null;
   theme: "dark" | "light";
@@ -342,6 +343,8 @@ function PhaserSceneViewport(props: Props) {
   let resizeObserver: ResizeObserver | undefined;
   let sceneReady = false;
   let selectionFrame: PhaserGameObject | undefined;
+  let activeScenePath: string | null | undefined;
+  let activeProjectTree: ProjectEntry | null | undefined;
   let phaserApi: PhaserNamespace | undefined;
   let webGlRenderer = false;
   let canvasFxWarningShown = false;
@@ -489,6 +492,20 @@ function PhaserSceneViewport(props: Props) {
 
   function syncScene() {
     if (!sceneReady || !sceneRuntime) return;
+
+    if (activeScenePath !== props.scenePath || activeProjectTree !== props.projectTree) {
+      clearFxPreviews();
+      for (const object of [...gameObjects.values()].reverse()) object.destroy?.();
+      gameObjects.clear();
+      selectionFrame?.destroy?.();
+      selectionFrame = sceneRuntime.add.rectangle(0, 0, 1, 1, 0x000000, 0);
+      selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
+      selectionFrame.setDepth?.(1000);
+      selectionFrame.setAlpha?.(0);
+      activeScenePath = props.scenePath;
+      activeProjectTree = props.projectTree;
+    }
+
     const current = props.scene;
     const entries = current
       ? getSceneObjects(current).map((entry) => ({
@@ -655,6 +672,8 @@ function PhaserSceneViewport(props: Props) {
               failedFxPreviews.clear();
               selectionFrame = undefined;
               sceneRuntime = undefined;
+              activeScenePath = undefined;
+              activeProjectTree = undefined;
               sceneReady = false;
             });
             this.cameras?.main?.setBackgroundColor(props.theme === "dark" ? "#202a37" : "#f2f5f9");
