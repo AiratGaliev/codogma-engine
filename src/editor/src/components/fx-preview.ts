@@ -375,15 +375,16 @@ function createBloomPreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
   if (!parallel) {
     throw new Error("Phaser did not create the Bloom filter. Confirm the object supports WebGL filters.");
   }
+  const createdParallel: FxParallelFilters = parallel;
 
   let filterList: FxFilterList;
   try {
     filterList = filterListFor(parent, fx.preFX === true);
   } catch (error) {
-    try { parallel.top.clear(); } catch { /* Ignore partial Phaser setup. */ }
-    try { parallel.bottom.clear(); } catch { /* Ignore partial Phaser setup. */ }
-    try { parallel.blend.destroy(); } catch { /* Ignore partial Phaser setup. */ }
-    try { parallel.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { createdParallel.top.clear(); } catch { /* Ignore partial Phaser setup. */ }
+    try { createdParallel.bottom.clear(); } catch { /* Ignore partial Phaser setup. */ }
+    try { createdParallel.blend.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { createdParallel.destroy(); } catch { /* Ignore partial Phaser setup. */ }
     throw error;
   }
 
@@ -391,7 +392,7 @@ function createBloomPreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
   function dispose(): void {
     if (disposed) return;
     disposed = true;
-    disposeParallelFilters(filterList, parallel);
+    disposeParallelFilters(filterList, createdParallel);
     parent.off?.("destroy", parentDestroyed);
   }
 
@@ -416,8 +417,9 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
     throw new Error("Phaser did not create the Shine effect. Confirm the object supports WebGL filters.");
   }
 
-  const parallel = effect.parallelFilters;
-  const directBlend = effect.blendFilter;
+  const createdEffect = effect;
+  const parallel = createdEffect.parallelFilters;
+  const directBlend = createdEffect.blendFilter;
   if (!parallel && !directBlend) {
     throw new Error("Phaser did not create the Shine filter. Confirm the object supports WebGL filters.");
   }
@@ -432,8 +434,8 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
     try { parallel?.blend.destroy(); } catch { /* Ignore partial Phaser setup. */ }
     try { parallel?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
     try { directBlend?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
-    try { effect.tween?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
-    try { effect.dynamicTexture?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { createdEffect.tween?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try { createdEffect.dynamicTexture?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
     throw error;
   }
 
@@ -455,8 +457,8 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
     // AddEffectShine registers its own DESTROY handler before this preview.
     // That handler releases the tween and DynamicTexture during GameObject.destroy().
     if (!fromParentDestroy) {
-      try { effect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
-      try { effect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
+      try { createdEffect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
+      try { createdEffect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
     }
   }
 

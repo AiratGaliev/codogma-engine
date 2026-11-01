@@ -109,11 +109,11 @@ function colorPreview(value: unknown): string {
 
 function EffectFields(props: { effect: () => FxObject; onUpdate: Props["onUpdate"]; onError: Props["onError"] }) {
   // The FX type is immutable; keep field descriptors stable while values update reactively.
-  const fields = fieldsFor(props.effect().type);
+  const fields = fieldsFor(props.effect());
 
   return (
     <div class="fx-field-list">
-      <For each={fields()}>
+      <For each={fields}>
         {(field) => (
           <Show
             when={isBooleanField(field)}
