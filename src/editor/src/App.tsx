@@ -63,7 +63,9 @@ import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
 type ViewportTab = "Scene" | "Game";
-type BottomTab = "Project" | "Animation" | "Components" | "Console";
+type SidePanelId = "Hierarchy" | "Inspector";
+type BottomTab = "Project" | "Animation" | "Components" | "Console" | SidePanelId;
+type FocusContext = "global" | "scene" | "hierarchy" | "inspector" | "project" | "animation" | "components" | "console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
 
 interface ConsoleMessage {
@@ -81,6 +83,8 @@ interface LayoutState {
   hierarchyVisible: boolean;
   inspectorVisible: boolean;
   bottomTab: BottomTab;
+  bottomTabOrder: BottomTab[];
+  dockedPanels: SidePanelId[];
   consoleDocked: boolean;
 }
 
@@ -99,6 +103,8 @@ const DEFAULT_LAYOUT: LayoutState = {
   hierarchyVisible: true,
   inspectorVisible: true,
   bottomTab: "Project",
+  bottomTabOrder: ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"],
+  dockedPanels: [],
   consoleDocked: false,
 };
 
@@ -106,6 +112,12 @@ function defaultLayout(compact: boolean): LayoutState {
   return compact
     ? { ...DEFAULT_LAYOUT, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }
     : { ...DEFAULT_LAYOUT };
+}
+
+function normalizeBottomTabOrder(value: unknown): BottomTab[] {
+  const allowed: BottomTab[] = ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"];
+  const supplied = Array.isArray(value) ? value.filter((item): item is BottomTab => allowed.includes(item)) : [];
+  return [...new Set(supplied), ...allowed.filter((item) => !supplied.includes(item))];
 }
 
 function clampLayoutValue(value: unknown, fallback: number, min: number, max: number): number {
@@ -228,13 +240,18 @@ function PanelHeader(props: {
   icon: string;
   theme: Theme;
   trailing?: string;
+  onDragStart?: (event: DragEvent) => void;
+  onUndock?: () => void;
 }) {
   return (
-    <div class="panel-header">
+    <div class="panel-header" draggable={Boolean(props.onDragStart)} onDragStart={props.onDragStart} classList={{ "panel-header-draggable": Boolean(props.onDragStart) }}>
       <Icon theme={props.theme} name={props.icon} size={14} />
       <span>{props.title}</span>
       <Show when={props.trailing}>
         <span class="panel-header-trailing">{props.trailing}</span>
+      </Show>
+      <Show when={props.onUndock}>
+        <button class="panel-undock-button" aria-label={`Undock ${props.title}`} title={`Move ${props.title} back to its default panel`} onClick={(event) => { event.stopPropagation(); props.onUndock?.(); }}>Undock</button>
       </Show>
     </div>
   );
@@ -345,6 +362,18 @@ function App() {
         const savedLeft = compact && parsed.leftWidth === DEFAULT_LAYOUT.leftWidth ? defaults.leftWidth : parsed.leftWidth;
         const savedRight = compact && parsed.rightWidth === DEFAULT_LAYOUT.rightWidth ? defaults.rightWidth : parsed.rightWidth;
         const savedBottom = compact && parsed.bottomHeight === DEFAULT_LAYOUT.bottomHeight ? defaults.bottomHeight : parsed.bottomHeight;
+        const dockedPanels = Array.isArray(parsed.dockedPanels)
+          ? parsed.dockedPanels.filter((panel): panel is SidePanelId => panel === "Hierarchy" || panel === "Inspector")
+          : [];
+        const bottomTabOrder = normalizeBottomTabOrder(parsed.bottomTabOrder);
+        const requestedBottomTab = parsed.bottomTab;
+        const validBottomTab =
+          requestedBottomTab === "Project" ||
+          requestedBottomTab === "Animation" ||
+          requestedBottomTab === "Components" ||
+          (requestedBottomTab === "Console" && (compact || parsed.consoleDocked === true)) ||
+          (requestedBottomTab === "Hierarchy" && dockedPanels.includes("Hierarchy")) ||
+          (requestedBottomTab === "Inspector" && dockedPanels.includes("Inspector"));
         return {
           leftWidth: clampLayoutValue(savedLeft, defaults.leftWidth, 170, 360),
           rightWidth: clampLayoutValue(savedRight, defaults.rightWidth, 210, 420),
@@ -353,12 +382,9 @@ function App() {
           hierarchyVisible: typeof parsed.hierarchyVisible === "boolean" ? parsed.hierarchyVisible : defaults.hierarchyVisible,
           inspectorVisible: typeof parsed.inspectorVisible === "boolean" ? parsed.inspectorVisible : defaults.inspectorVisible,
           consoleDocked: parsed.consoleDocked === true,
-          bottomTab:
-            parsed.bottomTab === "Animation" ||
-            parsed.bottomTab === "Components" ||
-            (parsed.bottomTab === "Console" && (compact || parsed.consoleDocked === true))
-              ? parsed.bottomTab
-              : "Project",
+          dockedPanels,
+          bottomTabOrder,
+          bottomTab: validBottomTab ? requestedBottomTab as BottomTab : "Project",
         };
       } catch {
         window.localStorage.removeItem("codogma.editor.layout");
@@ -372,6 +398,7 @@ function App() {
   const [activeMenu, setActiveMenu] = createSignal("");
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [paletteQuery, setPaletteQuery] = createSignal("");
+  const [focusContext, setFocusContext] = createSignal<FocusContext>("global");
   const [tool, setTool] = createSignal<"select" | "move" | "rotate" | "scale">("select");
   const [gameInstance, setGameInstance] = createSignal(0);
   const [gameLoaded, setGameLoaded] = createSignal(false);
@@ -385,6 +412,13 @@ function App() {
 
   let messageId = 0;
   let paletteInput: HTMLInputElement | undefined;
+  let paletteDialog: HTMLDivElement | undefined;
+  let previousPaletteFocus: HTMLElement | null = null;
+  let hierarchyPanelElement: HTMLElement | undefined;
+  let inspectorPanelElement: HTMLElement | undefined;
+  let hierarchyHomeSlot: HTMLDivElement | undefined;
+  let inspectorHomeSlot: HTMLDivElement | undefined;
+  let bottomDockedContent: HTMLDivElement | undefined;
   let resizeState:
     | {
         kind: "left" | "right" | "bottom" | "console";
@@ -461,6 +495,12 @@ function App() {
     );
   });
 
+  const visibleBottomTabs = createMemo(() => layout().bottomTabOrder.filter((tab) => {
+    if (tab === "Hierarchy" || tab === "Inspector") return layout().dockedPanels.includes(tab);
+    if (tab === "Console") return compactWorkbench() || layout().consoleDocked;
+    return true;
+  }));
+
   const visibleConsoleMessages = createMemo(() => {
     const level = consoleLevel();
     return level === "all"
@@ -505,12 +545,12 @@ function App() {
     {
       id: "hierarchy",
       title: "Toggle Hierarchy panel",
-      run: () => setLayout((current) => ({ ...current, hierarchyVisible: !current.hierarchyVisible })),
+      run: () => toggleSidePanel("Hierarchy"),
     },
     {
       id: "inspector",
       title: "Toggle Inspector panel",
-      run: () => setLayout((current) => ({ ...current, inspectorVisible: !current.inspectorVisible })),
+      run: () => toggleSidePanel("Inspector"),
     },
     {
       id: "project",
@@ -526,6 +566,42 @@ function App() {
       id: "components",
       title: "Show User Components",
       run: () => setLayout((current) => ({ ...current, bottomTab: "Components" })),
+    },
+    {
+      id: "tool-select",
+      title: "Select tool",
+      shortcut: "Q",
+      run: () => setTool("select"),
+    },
+    {
+      id: "tool-move",
+      title: "Move tool",
+      shortcut: "W",
+      run: () => setTool("move"),
+    },
+    {
+      id: "tool-rotate",
+      title: "Rotate tool",
+      shortcut: "E",
+      run: () => setTool("rotate"),
+    },
+    {
+      id: "tool-scale",
+      title: "Scale tool",
+      shortcut: "R",
+      run: () => setTool("scale"),
+    },
+    {
+      id: "rename",
+      title: "Rename selected object",
+      shortcut: "F2",
+      run: renameSelectedObject,
+    },
+    {
+      id: "delete",
+      title: "Delete selected object",
+      shortcut: "Delete",
+      run: deleteSelectedObject,
     },
     {
       id: "console",
@@ -1293,9 +1369,78 @@ function App() {
     resizeState = undefined;
   }
 
-  function handleConsoleDragStart(event: DragEvent) {
-    event.dataTransfer?.setData("text/plain", "Console");
+  function handlePanelDragStart(event: DragEvent, panel: string) {
+    event.dataTransfer?.setData("text/plain", panel);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleConsoleDragStart(event: DragEvent) {
+    handlePanelDragStart(event, "Console");
+  }
+
+  function dockSidePanel(panel: SidePanelId, announce = true) {
+    const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
+    if (!node || !bottomDockedContent) {
+      log("error", `Cannot dock ${panel}: panel mount is unavailable.`);
+      return;
+    }
+    if (!layout().dockedPanels.includes(panel)) {
+      bottomDockedContent.appendChild(node);
+      node.classList.add("bottom-docked-panel");
+      setLayout((current) => ({
+        ...current,
+        dockedPanels: [...current.dockedPanels, panel],
+        bottomTab: panel,
+      }));
+      if (announce) log("success", `${panel} docked into Bottom workspace`);
+    } else {
+      setLayout((current) => ({ ...current, bottomTab: panel }));
+    }
+  }
+
+  function undockSidePanel(panel: SidePanelId) {
+    if (!layout().dockedPanels.includes(panel)) return;
+    const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
+    const home = panel === "Hierarchy" ? hierarchyHomeSlot : inspectorHomeSlot;
+    if (node && home) {
+      home.appendChild(node);
+      node.classList.remove("bottom-docked-panel");
+    }
+    setLayout((current) => ({
+      ...current,
+      dockedPanels: current.dockedPanels.filter((item) => item !== panel),
+      bottomTab: current.bottomTab === panel ? "Project" : current.bottomTab,
+    }));
+    log("info", `${panel} returned to its default panel`);
+  }
+
+  function toggleSidePanel(panel: SidePanelId) {
+    if (layout().dockedPanels.includes(panel)) undockSidePanel(panel);
+    const key = panel === "Hierarchy" ? "hierarchyVisible" : "inspectorVisible";
+    setLayout((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function resetWorkbenchLayout() {
+    undockSidePanel("Hierarchy");
+    undockSidePanel("Inspector");
+    setLayout(defaultLayout(compactWorkbench()));
+  }
+
+  function handleBottomTabDragStart(event: DragEvent, tab: BottomTab) {
+    handlePanelDragStart(event, tab);
+  }
+
+  function reorderBottomTab(source: BottomTab, target: BottomTab) {
+    if (source === target) return;
+    setLayout((current) => {
+      const order = [...current.bottomTabOrder];
+      const sourceIndex = order.indexOf(source);
+      const targetIndex = order.indexOf(target);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      order.splice(sourceIndex, 1);
+      order.splice(targetIndex, 0, source);
+      return { ...current, bottomTabOrder: order, bottomTab: source };
+    });
   }
 
   function handleDockDragOver(event: DragEvent) {
@@ -1313,11 +1458,24 @@ function App() {
 
   function handleDockDrop(event: DragEvent) {
     const panel = event.dataTransfer?.getData("text/plain");
-    if (panel !== "Console") return;
+    const targetElement = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-dock-tab]")
+      : null;
+    const targetTab = targetElement?.dataset.dockTab as BottomTab | undefined;
+    const bottomTabs: BottomTab[] = ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"];
+    if (!panel || !bottomTabs.includes(panel as BottomTab)) return;
     event.preventDefault();
     setDockTargetActive(false);
-    setLayout((current) => ({ ...current, consoleDocked: true, bottomTab: "Console" }));
-    log("success", "Console docked into Bottom workspace");
+    if ((panel === "Hierarchy" || panel === "Inspector") && !layout().dockedPanels.includes(panel)) {
+      dockSidePanel(panel);
+      return;
+    }
+    if (panel === "Console" && !layout().consoleDocked && !compactWorkbench()) {
+      setLayout((current) => ({ ...current, consoleDocked: true, bottomTab: "Console" }));
+      log("success", "Console docked into Bottom workspace");
+      return;
+    }
+    if (targetTab) reorderBottomTab(panel as BottomTab, targetTab);
   }
 
   function undockConsole() {
@@ -1325,18 +1483,47 @@ function App() {
     log("info", "Console moved back to its own dock");
   }
 
-  function runCommand(command: Command) {
+  function closePalette(restoreFocus = true) {
     setPaletteOpen(false);
     setPaletteQuery("");
+    const focusTarget = previousPaletteFocus;
+    previousPaletteFocus = null;
+    if (restoreFocus && focusTarget) {
+      queueMicrotask(() => {
+        if (focusTarget.isConnected) focusTarget.focus({ preventScroll: true });
+      });
+    }
+  }
+
+  function runCommand(command: Command) {
+    closePalette();
     command.run();
   }
 
   function openPalette() {
+    if (paletteOpen()) return;
+    previousPaletteFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPaletteOpen(true);
     setPaletteQuery("");
     setActiveMenu("");
     setCommandIndex(0);
     queueMicrotask(() => paletteInput?.focus());
+  }
+
+  function renameSelectedObject() {
+    const selected = selectedObject();
+    if (!selected) return;
+    const label = window.prompt("Object name", selected.name);
+    if (label?.trim()) updateSelectedProperty("label", label.trim());
+  }
+
+  function handleFocusIn(event: FocusEvent) {
+    const target = event.target;
+    const contextElement = target instanceof HTMLElement
+      ? target.closest<HTMLElement>("[data-focus-context]")
+      : null;
+    const context = contextElement?.dataset.focusContext as FocusContext | undefined;
+    setFocusContext(context ?? "global");
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -1347,43 +1534,73 @@ function App() {
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
     if (event.key === "Escape") {
-      setPaletteOpen(false);
+      if (paletteOpen()) closePalette();
       setActiveMenu("");
       setShowObjectMenu(false);
       return;
     }
 
-    if (isEditable) return;
-
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "s") {
       event.preventDefault();
       void saveActiveDocument();
-    } else if (modifier && event.key.toLowerCase() === "z" && event.shiftKey) {
-      event.preventDefault();
-      redo();
-    } else if (modifier && event.key.toLowerCase() === "z") {
-      event.preventDefault();
-      undo();
-    } else if (modifier && event.key.toLowerCase() === "p") {
+      return;
+    }
+    if (modifier && event.key.toLowerCase() === "p") {
       event.preventDefault();
       openPalette();
-    } else if (event.key === "F2") {
+      return;
+    }
+    if (isEditable) return;
+
+    if (modifier && event.key.toLowerCase() === "z" && event.shiftKey) {
       event.preventDefault();
-      const selected = selectedObject();
-      if (!selected) return;
-      const label = window.prompt("Object name", selected.name);
-      if (label?.trim()) updateSelectedProperty("label", label.trim());
+      redo();
+      return;
+    }
+    if (modifier && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      undo();
+      return;
+    }
+
+    if (focusContext() !== "scene" && focusContext() !== "hierarchy") return;
+
+    if (event.key === "F2") {
+      event.preventDefault();
+      renameSelectedObject();
     } else if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
       deleteSelectedObject();
     } else if (event.key.toLowerCase() === "w") {
+      event.preventDefault();
       setTool("move");
     } else if (event.key.toLowerCase() === "e") {
+      event.preventDefault();
       setTool("rotate");
     } else if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
       setTool("scale");
     } else if (event.key.toLowerCase() === "q") {
+      event.preventDefault();
       setTool("select");
+    }
+  }
+
+  function handlePaletteKeyDown(event: KeyboardEvent) {
+    if (event.key !== "Tab") return;
+    const focusable = paletteDialog?.querySelectorAll<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   }
 
@@ -1407,6 +1624,7 @@ function App() {
   }
 
   onMount(() => {
+    for (const panel of layout().dockedPanels) dockSidePanel(panel, false);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleWorkbenchResize);
     void loadProject();
@@ -1484,8 +1702,8 @@ function App() {
       data-testid="workbench"
       data-layout={compactWorkbench() ? "compact" : "wide"}
       classList={{
-        "hierarchy-hidden": !layout().hierarchyVisible,
-        "inspector-hidden": !layout().inspectorVisible,
+        "hierarchy-hidden": !layout().hierarchyVisible || layout().dockedPanels.includes("Hierarchy"),
+        "inspector-hidden": !layout().inspectorVisible || layout().dockedPanels.includes("Inspector"),
       }}
       style={{
         "--left-panel": `${layout().leftWidth}px`,
@@ -1496,6 +1714,7 @@ function App() {
       onPointerMove={moveResize}
       onPointerUp={endResize}
       onPointerCancel={endResize}
+      onFocusIn={handleFocusIn}
     >
       <header class="app-header">
         <div class="title-bar">
@@ -1640,7 +1859,7 @@ function App() {
           <button class="toolbar-icon-button" aria-label="Toggle theme" onClick={toggleTheme} title="Toggle light / dark theme">
             <span class="theme-symbol">{theme() === "dark" ? "☼" : "◐"}</span>
           </button>
-          <button class="toolbar-icon-button" aria-label="Reset layout" onClick={() => setLayout(defaultLayout(compactWorkbench()))} title="Reset workspace layout">
+          <button class="toolbar-icon-button" aria-label="Reset layout" onClick={resetWorkbenchLayout} title="Reset workspace layout">
             <Icon theme={theme()} name="reload" />
           </button>
         </div>
@@ -1648,8 +1867,9 @@ function App() {
 
       <div class="workspace-row">
         <Show when={layout().hierarchyVisible}>
-          <aside class="panel hierarchy-panel" data-testid="hierarchy-panel">
-            <PanelHeader title="Hierarchy" icon="file-tree" theme={theme()} trailing={sceneObjects().length ? String(sceneObjects().length) : "—"} />
+          <div class="panel-home-slot" ref={(element) => { hierarchyHomeSlot = element; }}>
+          <aside ref={(element) => { hierarchyPanelElement = element; }} class="panel hierarchy-panel" data-testid="hierarchy-panel" data-focus-context="hierarchy" data-dock-panel="Hierarchy">
+            <PanelHeader title="Hierarchy" icon="file-tree" theme={theme()} trailing={sceneObjects().length ? String(sceneObjects().length) : "—"} onDragStart={(event) => handlePanelDragStart(event, "Hierarchy")} onUndock={() => undockSidePanel("Hierarchy")} />
             <div class="panel-toolbar">
               <label class="search-control">
                 <Icon theme={theme()} name="search" size={13} />
@@ -1787,9 +2007,10 @@ function App() {
               <span>Scene tree</span>
             </div>
           </aside>
+          </div>
         </Show>
 
-        <Show when={layout().hierarchyVisible}>
+        <Show when={layout().hierarchyVisible && !layout().dockedPanels.includes("Hierarchy")}>
           <div
             class="vertical-splitter"
             data-testid="splitter-hierarchy"
@@ -1828,7 +2049,7 @@ function App() {
               <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
             </div>
 
-            <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"}>
+            <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"} tabIndex={0} data-focus-context="scene" onPointerDown={(event) => { if (event.target === event.currentTarget) event.currentTarget.focus({ preventScroll: true }); }}>
               <div class="scene-controls">
                 <div class="scene-control-group">
                   <span class="scene-control-muted">Scene</span>
@@ -1891,6 +2112,8 @@ function App() {
         </main>
 
         <Show when={layout().inspectorVisible}>
+          <div class="panel-home-slot" ref={(element) => { inspectorHomeSlot = element; }}>
+          <Show when={!layout().dockedPanels.includes("Inspector")}>
           <div
             class="vertical-splitter"
             data-testid="splitter-inspector"
@@ -1899,8 +2122,9 @@ function App() {
             aria-label="Resize Inspector panel"
             onPointerDown={(event) => startResize("right", event)}
           />
-          <aside class="panel inspector-panel" data-testid="inspector-panel">
-            <PanelHeader title="Inspector" icon="editor-inspector" theme={theme()} trailing={selectedObject() ? selectedObject()!.type : "—"} />
+          </Show>
+          <aside ref={(element) => { inspectorPanelElement = element; }} class="panel inspector-panel" data-testid="inspector-panel" data-focus-context="inspector" data-dock-panel="Inspector">
+            <PanelHeader title="Inspector" icon="editor-inspector" theme={theme()} trailing={selectedObject() ? selectedObject()!.type : "—"} onDragStart={(event) => handlePanelDragStart(event, "Inspector")} onUndock={() => undockSidePanel("Inspector")} />
             <Show when={selectedObject()} fallback={<div class="inspector-empty"><Icon theme={theme()} name="node-2d" size={24} /><strong>No object selected</strong><span>Select an object in Hierarchy or Scene.</span></div>}>
               <div class="inspector-scroll">
                 <div class="inspector-object-heading">
@@ -2150,6 +2374,7 @@ function App() {
               <span>{documentDirty() ? "Modified" : "In sync"}</span>
             </div>
           </aside>
+          </div>
         </Show>
       </div>
 
@@ -2177,20 +2402,24 @@ function App() {
             onDragLeave={handleDockDragLeave}
             onDrop={handleDockDrop}
           >
-            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Project"} classList={{ active: bottomTab() === "Project" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Project" }))}>
-              <Icon theme={theme()} name="folder" size={13} /> Project
-            </button>
-            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Animation"} classList={{ active: bottomTab() === "Animation" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Animation" }))}>
-              <Icon theme={theme()} name="animation" size={13} /> Animation
-            </button>
-            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Components"} classList={{ active: bottomTab() === "Components" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Components" }))}>
-              <Icon theme={theme()} name="script" size={13} /> Components
-            </button>
-            <Show when={compactWorkbench() || layout().consoleDocked}>
-              <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Console"} classList={{ active: bottomTab() === "Console" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Console" }))}>
-                <Icon theme={theme()} name="script" size={13} /> Console
-              </button>
-            </Show>
+            <For each={visibleBottomTabs()}>
+              {(tab) => (
+                <button
+                  class="dock-tab"
+                  role="tab"
+                  data-dock-tab={tab}
+                  draggable
+                  aria-selected={bottomTab() === tab}
+                  classList={{ active: bottomTab() === tab }}
+                  onDragStart={(event) => handleBottomTabDragStart(event, tab)}
+                  onClick={() => setLayout((current) => ({ ...current, bottomTab: tab }))}
+                  title={`Drag to reorder ${tab}`}
+                >
+                  <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
+                  {tab}
+                </button>
+              )}
+            </For>
             <div class="dock-tabs-spacer" />
             <button class="toolbar-icon-button tiny" aria-label="Hide bottom dock" title="Hide bottom workspace" onClick={() => setLayout((current) => ({ ...current, bottomHeight: 150 }))}>
               <span>−</span>
@@ -2472,6 +2701,13 @@ function App() {
               onUndock={!compactWorkbench() && layout().consoleDocked ? undockConsole : undefined}
             />
           </Show>
+          <div
+            class="bottom-docked-content"
+            ref={(element) => { bottomDockedContent = element; }}
+            data-testid="bottom-docked-content"
+            data-focus-context={bottomTab().toLowerCase()}
+            style={{ display: layout().dockedPanels.includes(bottomTab() as SidePanelId) ? "flex" : "none" }}
+          />
         </div>
 
         <Show when={!compactWorkbench() && !layout().consoleDocked}>
@@ -2530,9 +2766,9 @@ function App() {
 
       <Show when={paletteOpen()}>
         <div class="modal-backdrop" onClick={(event) => {
-          if (event.target === event.currentTarget) setPaletteOpen(false);
+          if (event.target === event.currentTarget) closePalette();
         }}>
-          <div class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+          <div class="command-palette" ref={(element) => { paletteDialog = element; }} role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={handlePaletteKeyDown}>
             <div class="palette-search">
               <Icon theme={theme()} name="search" size={16} />
               <input
