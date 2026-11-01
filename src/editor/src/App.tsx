@@ -3057,7 +3057,28 @@ function App() {
                     </div>
                   </div>
                   <div class="animation-timeline-ruler" data-testid="animation-timeline-ruler">
-                    <div class="animation-ruler-track" style={{ width: `${Math.max(1, animationTimelineWidth())}px` }}>
+                    <div
+                      class="animation-ruler-track"
+                      role="slider"
+                      aria-label="Animation timeline playhead"
+                      aria-valuemin={0}
+                      aria-valuemax={Math.round(animationCycleDurationMs())}
+                      aria-valuenow={Math.round(animationPlayheadMs())}
+                      tabIndex={0}
+                      style={{ width: `${Math.max(1, animationTimelineWidth())}px` }}
+                      onClick={(event) => {
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        if (bounds.width <= 0) return;
+                        const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+                        seekAnimationTimeline(animationCycleDurationMs() * ratio);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                        event.preventDefault();
+                        const step = event.shiftKey ? 100 : 16;
+                        seekAnimationTimeline(animationPlayheadMs() + (event.key === "ArrowRight" ? step : -step));
+                      }}
+                    >
                       <For each={animationRulerTicks()}>
                         {(tick) => (
                           <div class="animation-ruler-tick" style={{ left: `${tick.position}%` }}>
