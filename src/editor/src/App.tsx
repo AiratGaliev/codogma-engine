@@ -434,6 +434,9 @@ function App() {
   let bottomDockedContent: HTMLDivElement | undefined;
   let sceneCanvas: HTMLCanvasElement | null = null;
   let disposeEditorMcpBridge: (() => void) | undefined;
+  let animationPlaybackRaf = 0;
+  let animationPlaybackLastTimestamp = 0;
+  let animationPlaybackElapsed = 0;
   let bottomTabPointerDrag: { panel: BottomTab; pointerId: number; startX: number; startY: number; active: boolean } | undefined;
   let suppressDockTabClick = false;
   let resizeState:
@@ -692,6 +695,7 @@ function App() {
       const content = await readProjectFile(path);
       if (request !== sceneLoadSequence) return false;
       const parsed = parseSceneContent(content) as SceneDocument;
+      stopAnimationPreview(true);
       setScene(parsed);
       setScenePath(path);
       setSavedContent(content);
@@ -843,6 +847,19 @@ function App() {
     await refreshProjectTree();
   }
 
+  function stopAnimationPreview(reset = true) {
+    if (animationPlaybackRaf) cancelAnimationFrame(animationPlaybackRaf);
+    animationPlaybackRaf = 0;
+    animationPlaybackLastTimestamp = 0;
+    animationPlaybackElapsed = 0;
+    setAnimationPlaying(false);
+    if (reset) {
+      setAnimationPlayheadMs(0);
+      setAnimationPreviewFrameIndex(0);
+      setSelectedAnimationFrameIndex(0);
+    }
+  }
+
   async function loadAnimationFile(path: string, sourceContent?: string) {
     if (path === animationPath()) return;
     if ((dirty() || componentDirty()) &&
@@ -900,6 +917,7 @@ function App() {
       const document = createAnimationDocument();
       const content = formatAnimationContent(document);
       await writeProjectFile(path, content);
+      stopAnimationPreview(true);
       setAnimationDocument(document);
       setAnimationPath(path);
       setSavedAnimationContent(content);
@@ -915,6 +933,7 @@ function App() {
   function addAnimationClip() {
     const current = animationDocument();
     if (!current) return;
+    stopAnimationPreview(true);
     const source = selectedObject()?.source;
     const texture = source?.texture;
     const textureKey = texture && typeof texture === "object" ? String(texture.key ?? "") : "";
@@ -923,6 +942,7 @@ function App() {
     });
     setAnimationDocument(next);
     setSelectedAnimationKey(next.anims.at(-1)?.key ?? "");
+    setSelectedAnimationFrameIndex(0);
   }
 
   function updateSelectedAnimation(patch: Record<string, unknown>) {
@@ -930,6 +950,7 @@ function App() {
     const key = selectedAnimationKey();
     if (!current || !key) return;
     try {
+      stopAnimationPreview(false);
       const next = updateAnimation(current, key, patch);
       setAnimationDocument(next);
       if (typeof patch.key === "string") setSelectedAnimationKey(patch.key);
@@ -940,6 +961,7 @@ function App() {
     const current = animationDocument();
     if (!current) return;
     try {
+      stopAnimationPreview(true);
       const next = removeAnimation(current, key);
       setAnimationDocument(next);
       setSelectedAnimationKey(next.anims[0]?.key ?? "");
@@ -950,8 +972,12 @@ function App() {
     const current = animationDocument();
     const key = selectedAnimationKey();
     if (!current || !key) return;
-    try { setAnimationDocument(removeAnimationFrame(current, key, index)); }
-    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+    try {
+      stopAnimationPreview(false);
+      setAnimationDocument(removeAnimationFrame(current, key, index));
+      const count = activeAnimation()?.frames.length ?? 0;
+      setSelectedAnimationFrameIndex(Math.max(0, Math.min(index, count - 2)));
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function moveAnimationFrameBy(index: number, offset: -1 | 1) {
@@ -960,8 +986,11 @@ function App() {
     const frames = activeAnimation()?.frames ?? [];
     const target = index + offset;
     if (!current || !key || target < 0 || target >= frames.length) return;
-    try { setAnimationDocument(moveAnimationFrame(current, key, index, target)); }
-    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+    try {
+      stopAnimationPreview(false);
+      setAnimationDocument(moveAnimationFrame(current, key, index, target));
+      setSelectedAnimationFrameIndex(target);
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function updateAnimationFrame(index: number, patch: Record<string, unknown>) {
@@ -970,7 +999,11 @@ function App() {
     const frames = activeAnimation()?.frames;
     if (!current || !key || !frames || index < 0 || index >= frames.length) return;
     const nextFrames = frames.map((frame, frameIndex) => frameIndex === index ? { ...frame, ...patch } : frame);
-    try { setAnimationDocument(updateAnimation(current, key, { frames: nextFrames })); }
+    try {
+      stopAnimationPreview(false);
+      setAnimationDocument(updateAnimation(current, key, { frames: nextFrames }));
+      setSelectedAnimationFrameIndex(index);
+    }
     catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -981,6 +1014,7 @@ function App() {
     if (!current || !key || !frameKey) return;
     try {
       setAnimationDocument(appendAnimationFrame(current, key, { key: frameKey }));
+      setSelectedAnimationFrameIndex(activeAnimation()?.frames.length ?? 0);
       setAnimationFrameKey("");
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
@@ -1902,12 +1936,152 @@ function App() {
     disposeEditorMcpBridge?.();
     disposeEditorMcpBridge = undefined;
     sceneCanvas = null;
+    stopAnimationPreview(false);
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("resize", handleWorkbenchResize);
   });
 
   const currentObject = () => selectedObject()?.source;
   const activeAnimation = createMemo(() => animationDocument()?.anims.find((item) => item.key === selectedAnimationKey()));
+  const animationTimeScale = createMemo(() => animationDocument()?.globalTimeScale ?? 1);
+  const animationCycleDurationMs = createMemo(() => {
+    const animation = activeAnimation();
+    return animation ? getAnimationDurationMs(animation, animationTimeScale()) : 0;
+  });
+  const animationDurationLabel = createMemo(() => {
+    const duration = animationCycleDurationMs();
+    return `${(duration / 1000).toFixed(2)} s`;
+  });
+  const animationFrameSegments = createMemo(() => {
+    const animation = activeAnimation();
+    if (!animation) return [];
+    let offsetMs = 0;
+    let offsetPx = 0;
+    return animation.frames.map((frame, index) => {
+      const durationMs = getAnimationFrameDurationMs(animation, frame, animationTimeScale());
+      const widthPx = Math.max(64, Math.min(220, durationMs * 0.8));
+      const segment = { frame, index, startMs: offsetMs, durationMs, leftPx: offsetPx, widthPx };
+      offsetMs += durationMs;
+      offsetPx += widthPx;
+      return segment;
+    });
+  });
+  const animationTimelineWidth = createMemo(() =>
+    animationFrameSegments().reduce((width, segment) => width + segment.widthPx, 0),
+  );
+  const animationPosition = createMemo(() => {
+    const animation = activeAnimation();
+    return animation
+      ? getAnimationTimelinePosition(animation, animationPlayheadMs(), animationTimeScale())
+      : null;
+  });
+  const animationPlayheadLeftPx = createMemo(() => {
+    const position = animationPosition();
+    const segment = animationFrameSegments().find((item) => item.index === position?.frameIndex);
+    return segment ? segment.leftPx + segment.widthPx * (position?.progress ?? 0) : 0;
+  });
+  const animationPreviewFrame = createMemo(() =>
+    activeAnimation()?.frames[animationPreviewFrameIndex()] ?? null,
+  );
+  const animationPreviewAsset = createMemo(() => {
+    const frame = animationPreviewFrame();
+    return frame ? animationAssetSources().find((asset) => asset.key === frame.key) : undefined;
+  });
+  const selectedAnimationFrame = createMemo(() =>
+    activeAnimation()?.frames[selectedAnimationFrameIndex()] ?? null,
+  );
+  const animationRulerTicks = createMemo(() => {
+    const duration = animationCycleDurationMs();
+    return Array.from({ length: 5 }, (_, index) => ({
+      index,
+      position: index * 25,
+      label: `${(duration * index / 4 / 1000).toFixed(2)}s`,
+    }));
+  });
+
+  function pauseAnimationPreview() {
+    if (animationPlaybackRaf) cancelAnimationFrame(animationPlaybackRaf);
+    animationPlaybackRaf = 0;
+    animationPlaybackLastTimestamp = 0;
+    setAnimationPlaying(false);
+  }
+
+  function selectAnimationFrame(index: number) {
+    const segment = animationFrameSegments().find((item) => item.index === index);
+    if (!segment) return;
+    pauseAnimationPreview();
+    setSelectedAnimationFrameIndex(index);
+    setAnimationPreviewFrameIndex(index);
+    setAnimationPlayheadMs(segment.startMs);
+  }
+
+  function playAnimationPreview() {
+    const animation = activeAnimation();
+    if (!animation?.frames.length) return;
+    pauseAnimationPreview();
+
+    const currentPosition = getAnimationTimelinePosition(animation, animationPlayheadMs(), animationTimeScale());
+    animationPlaybackElapsed = currentPosition.completed ? 0 : animationPlayheadMs();
+    setAnimationPlayheadMs(animationPlaybackElapsed);
+    const initialPosition = getAnimationTimelinePosition(animation, animationPlaybackElapsed, animationTimeScale());
+    setAnimationPreviewFrameIndex(Math.max(0, initialPosition.frameIndex));
+    setAnimationPlaying(true);
+
+    const tick = (timestamp: number) => {
+      if (!animationPlaying()) {
+        animationPlaybackRaf = 0;
+        return;
+      }
+      if (!animationPlaybackLastTimestamp) animationPlaybackLastTimestamp = timestamp;
+      const delta = Math.min(100, Math.max(0, timestamp - animationPlaybackLastTimestamp));
+      animationPlaybackLastTimestamp = timestamp;
+      animationPlaybackElapsed += delta;
+
+      const position = getAnimationTimelinePosition(animation, animationPlaybackElapsed, animationTimeScale());
+      setAnimationPlayheadMs(position.completed ? position.totalDurationMs : animationPlaybackElapsed);
+      setAnimationPreviewFrameIndex(Math.max(0, position.frameIndex));
+
+      if (position.completed) {
+        animationPlaybackRaf = 0;
+        animationPlaybackLastTimestamp = 0;
+        setAnimationPlaying(false);
+        return;
+      }
+      animationPlaybackRaf = requestAnimationFrame(tick);
+    };
+
+    animationPlaybackRaf = requestAnimationFrame(tick);
+  }
+
+  function seekAnimationTimeline(positionMs: number) {
+    const animation = activeAnimation();
+    if (!animation) return;
+    pauseAnimationPreview();
+    const nextPosition = Math.max(0, Math.min(animationCycleDurationMs(), positionMs));
+    const framePosition = getAnimationTimelinePosition(animation, nextPosition, animationTimeScale());
+    setAnimationPlayheadMs(nextPosition);
+    setAnimationPreviewFrameIndex(Math.max(0, framePosition.frameIndex));
+    setSelectedAnimationFrameIndex(Math.max(0, framePosition.frameIndex));
+  }
+
+  function handleAnimationFrameDrop(event: DragEvent, targetIndex: number) {
+    event.preventDefault();
+    const sourceIndex = Number(event.dataTransfer?.getData("text/plain"));
+    const animation = activeAnimation();
+    if (!animation || !Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex >= animation.frames.length) return;
+    if (sourceIndex === targetIndex) return;
+    const current = animationDocument();
+    if (!current) return;
+    try {
+      setAnimationDocument(moveAnimationFrame(current, animation.key, sourceIndex, targetIndex));
+      setSelectedAnimationFrameIndex(targetIndex);
+      setAnimationPreviewFrameIndex(targetIndex);
+      pauseAnimationPreview();
+    } catch (error) {
+      log("error", `Could not reorder animation frames: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   const components = () => {
     const value = currentObject()?.components;
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
