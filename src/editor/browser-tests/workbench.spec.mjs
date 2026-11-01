@@ -184,3 +184,57 @@ test("Console panel can be dragged into the bottom Dock and undocked again", asy
   await expect(page.getByTestId("splitter-console")).toBeVisible();
   await expect(page.getByTestId("console-panel")).toBeVisible();
 });
+
+
+test("Hierarchy and Inspector panels dock into Bottom, persist and restore to their home slots", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(page.getByTestId("inspector-panel")).toBeVisible();
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+
+  await page.getByRole("button", { name: "Undock Hierarchy" }).click();
+  await expect(page.locator(".workspace-row").getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toHaveCount(0);
+
+  await page.locator(".inspector-panel .panel-header").dragTo(bottomTabs);
+  await expect(bottomTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("inspector-panel")).toBeVisible();
+  await page.getByRole("button", { name: "Undock Inspector" }).click();
+  await expect(page.locator(".workspace-row").getByTestId("inspector-panel")).toBeVisible();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("inspector-panel")).toHaveCount(0);
+});
+
+test("Bottom Dock tabs can be reordered and scene shortcuts respect the focused panel", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+
+  await bottomTabs.getByRole("tab", { name: "Project" }).dragTo(bottomTabs.getByRole("tab", { name: "Animation" }));
+  const tabOrder = await bottomTabs.locator("[data-dock-tab]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-dock-tab")),
+  );
+  expect(tabOrder.indexOf("Project")).toBeGreaterThan(tabOrder.indexOf("Animation"));
+
+  const hierarchyItem = page.getByTestId("hierarchy-item-dino");
+  await hierarchyItem.click();
+  await page.keyboard.press("w");
+  await expect(page.getByRole("button", { name: "Move tool" })).toHaveAttribute("aria-pressed", "true");
+
+  const positionX = page.getByLabel("Position X");
+  await positionX.focus();
+  await page.keyboard.press("e");
+  await expect(page.getByRole("button", { name: "Move tool" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Rotate tool" })).toHaveAttribute("aria-pressed", "false");
+
+  await page.keyboard.press("Control+p");
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(positionX).toBeFocused();
+});
