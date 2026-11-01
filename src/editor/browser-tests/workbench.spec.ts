@@ -412,8 +412,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].preFX).toBe(false);
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Level.scene SCENE" })).toBeVisible();
-  await page.getByRole("button", { name: "Level.scene SCENE" }).click();
+  await expect(page.getByRole("button", { name: "Level.scene SCENE", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Level.scene SCENE", exact: true }).click();
   await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible();
   await page.getByTestId("hierarchy-item-circletarget").click();
   await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
