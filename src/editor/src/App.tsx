@@ -1624,7 +1624,13 @@ function App() {
   }
 
   onMount(() => {
-    for (const panel of layout().dockedPanels) dockSidePanel(panel, false);
+    for (const panel of layout().dockedPanels) {
+      const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
+      if (node && bottomDockedContent) {
+        bottomDockedContent.appendChild(node);
+        node.classList.add("bottom-docked-panel");
+      }
+    }
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleWorkbenchResize);
     void loadProject();
