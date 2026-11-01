@@ -1355,3 +1355,27 @@ test("multi-file importer keeps a selected batch in one Asset Pack entry", async
         packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
     }
 })
+
+
+test("sprite metadata Inspector keeps future schemas read-only without throwing", async () => {
+    const sectionClass = packUi.editor.properties.SpriteFrameMetadataSection
+    const item = new TestImageFrameItem({
+        type: "spritesheet",
+        key: "future",
+        url: "images/future.png",
+        frameConfig: { frameWidth: 16, frameHeight: 16 },
+        codogma: {
+            schemaVersion: 999,
+            assetId: "future-schema",
+            customField: "must remain untouched",
+            frames: {}
+        }
+    }, createSourceFile(16, 16))
+    await item.preload()
+    const originalMetadata = JSON.parse(JSON.stringify(item.getData().codogma))
+
+    const state = sectionClass.prototype.getFrameState.call({ _frameSelect: null }, item)
+
+    assert.match(state.error, /новее поддерживаемой/)
+    assert.deepEqual(item.getData().codogma, originalMetadata)
+})

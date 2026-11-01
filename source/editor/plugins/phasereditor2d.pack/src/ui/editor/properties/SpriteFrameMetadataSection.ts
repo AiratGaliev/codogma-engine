@@ -98,12 +98,14 @@ namespace phasereditor2d.pack.ui.editor.properties {
 
                 const state = this.getFrameState(item);
 
-                if (!state) {
+                if (!state || state.error) {
                     for (const input of [pivotX, pivotY, trimX, trimY, trimWidth, trimHeight,
                         cropX, cropY, cropWidth, cropHeight, collisionShapes]) {
                         input.disabled = true;
                     }
-                    this._status.textContent = "No decoded image frames are available.";
+                    this._status.textContent = state && state.error
+                        ? `Metadata is read-only: ${state.error}`
+                        : "No decoded image frames are available.";
                     return;
                 }
 
@@ -201,7 +203,7 @@ namespace phasereditor2d.pack.ui.editor.properties {
                 const item = this.getSelectedItem();
                 const state = item && this.getFrameState(item);
 
-                if (!item || !state) {
+                if (!item || !state || state.error) {
                     return;
                 }
 
@@ -248,7 +250,7 @@ namespace phasereditor2d.pack.ui.editor.properties {
             const item = this.getSelectedItem();
             const state = item && this.getFrameState(item);
 
-            if (!item || !state) {
+            if (!item || !state || state.error) {
                 return;
             }
 
@@ -307,14 +309,21 @@ namespace phasereditor2d.pack.ui.editor.properties {
 
             const data = item.getData();
             const source = typeof data.url === "string" ? item.getFileFromAssetUrl(data.url) : null;
-            const metadata = core.SpriteAssetMetadata.ensure(data, source, descriptors);
 
-            return {
-                metadata,
-                key,
-                descriptor,
-                frame: metadata.frames[key]
-            };
+            try {
+                const metadata = core.SpriteAssetMetadata.ensure(data, source, descriptors);
+
+                return {
+                    metadata,
+                    key,
+                    descriptor,
+                    frame: metadata.frames[key]
+                };
+            } catch (error) {
+                return {
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
         }
 
         private fullRect(rect: core.ISpriteAssetRect) {
