@@ -1032,6 +1032,89 @@ test("Importer.reimportItem restores the original project data when the new sour
 })
 
 
+test("Importer.reimportItem logs recovery failure and preserves the original reimport error", async () => {
+    const originalGetAllPacks = packCore.AssetPackUtils.getAllPacks
+    const originalConsoleError = console.error
+    packCore.AssetPackUtils.getAllPacks = async () => []
+
+    const reimportError = new Error("simulated reimport build failure")
+    const restoreError = new Error("simulated recovery preload failure")
+    let preloadCount = 0
+    let loggedArgs = null
+
+    try {
+        const source = createSourceFile(32, 32, 1000)
+        const item = new TestImageFrameItem({
+            type: "spritesheet",
+            key: "hero",
+            url: "images/hero.png",
+            frameConfig: { frameWidth: 16, frameHeight: 16 }
+        }, source)
+
+        const originalPreload = item.preload.bind(item)
+        item.preload = async () => {
+            preloadCount += 1
+            if (preloadCount === 3) {
+                throw restoreError
+            }
+            return originalPreload()
+        }
+
+        await item.preload()
+
+        const metadata = spriteMetadata.ensure(
+            item.getData(),
+            source,
+            spriteMetadata.describeFrames(item.getFrames())
+        )
+        metadata.frames["0"].pivot = { x: 0.2, y: 0.8 }
+        item.getData().codogma = metadata
+
+        const before = JSON.parse(JSON.stringify(item.getData()))
+        const importer = new class extends packUi.importers.Importer {
+            constructor() {
+                super("spritesheet")
+            }
+
+            acceptFile() {
+                return true
+            }
+
+            createItemData() {
+                return {
+                    url: "images/hero.png",
+                    frameConfig: { frameWidth: 16, frameHeight: 16 }
+                }
+            }
+        }()
+
+        item.build = async () => {
+            throw reimportError
+        }
+        item.source = createSourceFile(48, 32, 2000)
+        console.error = (...args) => {
+            loggedArgs = args
+        }
+
+        await assert.rejects(
+            importer.reimportItem({ getItems: () => [item] }, item),
+            error => error === reimportError
+        )
+
+        assert.deepEqual(item.getData(), before)
+        assert.ok(loggedArgs, "a failed recovery must be written to the logger")
+        assert.equal(loggedArgs[0], "[AssetPack] Failed to restore item after reimport failure.")
+        assert.equal(loggedArgs[1].assetKey, "hero")
+        assert.equal(loggedArgs[1].sourceUrl, "images/hero.png")
+        assert.equal(loggedArgs[1].reimportError, reimportError)
+        assert.equal(loggedArgs[1].restoreError, restoreError)
+    } finally {
+        console.error = originalConsoleError
+        packCore.AssetPackUtils.getAllPacks = originalGetAllPacks
+    }
+})
+
+
 test("sprite metadata frame map safely preserves special frame names", () => {
     const frames = Object.create(null)
     frames["__proto__"] = {
