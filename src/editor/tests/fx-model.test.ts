@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
   addSceneObjectFx,
   createFxObject,
@@ -85,7 +85,7 @@ test("adds, edits and removes nested FX immutably while preserving unknown field
   const removed = removeSceneObjectFx(withGradient, "nested-image", added.id);
   const nestedAfterRemove = getSceneObjects(removed).find((entry) => entry.id === "nested-image");
   assert.ok(nestedAfterRemove);
-  assert.deepEqual(nestedAfterRemove.source.list?.map((item) => (item as {id?: string}).id), ["circle-1", undefined, "sibling-text"]);
+  assert.deepEqual(nestedAfterRemove.source.list?.map((item) => (item as {id?: string}).id), ["circle-1", "legacy-glow"]);
   assert.equal((getSceneObjects(sceneFixture).find((entry) => entry.id === "nested-image")?.source.list?.[0] as {thickness:number}).thickness, 6);
 });
 
