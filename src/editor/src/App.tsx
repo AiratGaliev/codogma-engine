@@ -2410,6 +2410,7 @@ function App() {
                         role="treeitem"
                         data-testid={`hierarchy-item-${entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
                         aria-selected={selectedId() === entry.id}
+                        aria-level={entry.depth + 1}
                         classList={{ selected: selectedId() === entry.id, locked: lockedObjects().has(entry.id) }}
                         onClick={() => setSelectedId(entry.id)}
                         onDblClick={() => {
@@ -2417,7 +2418,7 @@ function App() {
                           if (nextName?.trim()) updateSelectedProperty("label", nextName.trim());
                         }}
                       >
-                        <span class="hierarchy-indent" />
+                        <span class="hierarchy-indent" style={{ width: `${8 + entry.depth * 14}px` }} />
                         <Icon
                           theme={theme()}
                           name={
@@ -2705,7 +2706,7 @@ function App() {
                   </section>
                 </Show>
 
-                <Show when={selectedObject()?.type !== "Prefab"}>
+                <Show when={selectedObject() && selectedObject()?.type !== "Prefab"}>
                   <FxInspector
                     effects={getSceneObjectEffects(selectedObject()!.source)}
                     unsupportedTypes={getUnsupportedSceneObjectEffects(selectedObject()!.source)}
