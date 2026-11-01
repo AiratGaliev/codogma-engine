@@ -47,6 +47,7 @@ interface LayoutState {
   hierarchyVisible: boolean;
   inspectorVisible: boolean;
   bottomTab: BottomTab;
+  consoleDocked: boolean;
 }
 
 interface Command {
@@ -64,6 +65,7 @@ const DEFAULT_LAYOUT: LayoutState = {
   hierarchyVisible: true,
   inspectorVisible: true,
   bottomTab: "Project",
+  consoleDocked: false,
 };
 
 function defaultLayout(compact: boolean): LayoutState {
@@ -210,10 +212,18 @@ function ConsolePanel(props: {
   onLevelChange: (level: string) => void;
   messages: ConsoleMessage[];
   onClear: () => void;
+  onDragStart?: (event: DragEvent) => void;
+  onUndock?: () => void;
 }) {
+
   return (
     <section class="console-panel" classList={{ [props.className]: true }} data-testid="console-panel">
-      <div class="console-header">
+      <div
+        class="console-header"
+        draggable={Boolean(props.onDragStart)}
+        onDragStart={props.onDragStart}
+        classList={{ "console-header-draggable": Boolean(props.onDragStart) }}
+      >
         <div class="console-title"><Icon theme={props.theme} name="script" size={13} /> Console</div>
         <select aria-label="Console message filter" value={props.level} onChange={(event) => props.onLevelChange(event.currentTarget.value)}>
           <option value="all">All</option>
@@ -223,6 +233,11 @@ function ConsolePanel(props: {
           <option value="error">Error</option>
         </select>
         <div class="console-header-spacer" />
+        <Show when={props.onUndock}>
+          <button class="console-undock-button" aria-label="Undock Console" title="Move Console back to its own dock" onClick={props.onUndock}>
+            Undock
+          </button>
+        </Show>
         <span class="console-count">{props.messages.length} messages</span>
         <button class="toolbar-icon-button tiny" aria-label="Clear console" title="Clear console" onClick={props.onClear}>
           <Icon theme={props.theme} name="remove" size={12} />
@@ -282,7 +297,12 @@ function App() {
           consoleHeight: clampLayoutValue(parsed.consoleHeight, defaults.consoleHeight, 56, 180),
           hierarchyVisible: typeof parsed.hierarchyVisible === "boolean" ? parsed.hierarchyVisible : defaults.hierarchyVisible,
           inspectorVisible: typeof parsed.inspectorVisible === "boolean" ? parsed.inspectorVisible : defaults.inspectorVisible,
-          bottomTab: parsed.bottomTab === "Animation" || (compact && parsed.bottomTab === "Console") ? parsed.bottomTab : "Project",
+          consoleDocked: parsed.consoleDocked === true,
+          bottomTab:
+            parsed.bottomTab === "Animation" ||
+            (parsed.bottomTab === "Console" && (compact || parsed.consoleDocked === true))
+              ? parsed.bottomTab
+              : "Project",
         };
       } catch {
         window.localStorage.removeItem("codogma.editor.layout");
@@ -301,6 +321,7 @@ function App() {
   const [gameLoaded, setGameLoaded] = createSignal(false);
   const [consoleLevel, setConsoleLevel] = createSignal("all");
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
+  const [dockTargetActive, setDockTargetActive] = createSignal(false);
   const [hiddenObjects, setHiddenObjects] = createSignal(new Set<string>());
   const [lockedObjects, setLockedObjects] = createSignal(new Set<string>());
   const [showObjectMenu, setShowObjectMenu] = createSignal(false);
@@ -418,7 +439,7 @@ function App() {
       id: "console",
       title: "Show Console workspace",
       run: () => {
-        if (compactWorkbench()) setLayout((current) => ({ ...current, bottomTab: "Console" }));
+        if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
         else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
       },
     },
@@ -685,6 +706,38 @@ function App() {
     resizeState = undefined;
   }
 
+  function handleConsoleDragStart(event: DragEvent) {
+    event.dataTransfer?.setData("text/plain", "Console");
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDockDragOver(event: DragEvent) {
+    if (!event.dataTransfer?.types.includes("text/plain")) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    setDockTargetActive(true);
+  }
+
+  function handleDockDragLeave(event: DragEvent & { currentTarget: HTMLDivElement }) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDockTargetActive(false);
+  }
+
+  function handleDockDrop(event: DragEvent) {
+    const panel = event.dataTransfer?.getData("text/plain");
+    if (panel !== "Console") return;
+    event.preventDefault();
+    setDockTargetActive(false);
+    setLayout((current) => ({ ...current, consoleDocked: true, bottomTab: "Console" }));
+    log("success", "Console docked into Bottom workspace");
+  }
+
+  function undockConsole() {
+    setLayout((current) => ({ ...current, consoleDocked: false, bottomTab: "Project" }));
+    log("info", "Console moved back to its own dock");
+  }
+
   function runCommand(command: Command) {
     setPaletteOpen(false);
     setPaletteQuery("");
@@ -806,7 +859,7 @@ function App() {
       { label: "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
       { label: "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
       { label: "Console", action: () => {
-        if (compactWorkbench()) setLayout((current) => ({ ...current, bottomTab: "Console" }));
+        if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
         else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
       } },
     ],
@@ -1368,16 +1421,28 @@ function App() {
         onPointerDown={(event) => startResize("bottom", event)}
       />
 
-      <section class="bottom-dock" data-testid="bottom-dock">
+      <section
+        class="bottom-dock"
+        data-testid="bottom-dock"
+        classList={{ "console-docked": compactWorkbench() || layout().consoleDocked }}
+      >
         <div class="bottom-upper-panel">
-          <div class="bottom-tabs" role="tablist" aria-label="Bottom workspace">
+          <div
+            class="bottom-tabs"
+            role="tablist"
+            aria-label="Bottom workspace"
+            classList={{ "dock-drop-target": dockTargetActive() }}
+            onDragOver={handleDockDragOver}
+            onDragLeave={handleDockDragLeave}
+            onDrop={handleDockDrop}
+          >
             <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Project"} classList={{ active: bottomTab() === "Project" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Project" }))}>
               <Icon theme={theme()} name="folder" size={13} /> Project
             </button>
             <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Animation"} classList={{ active: bottomTab() === "Animation" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Animation" }))}>
               <Icon theme={theme()} name="animation" size={13} /> Animation
             </button>
-            <Show when={compactWorkbench()}>
+            <Show when={compactWorkbench() || layout().consoleDocked}>
               <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Console"} classList={{ active: bottomTab() === "Console" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Console" }))}>
                 <Icon theme={theme()} name="script" size={13} /> Console
               </button>
@@ -1472,7 +1537,7 @@ function App() {
             </div>
           </Show>
 
-          <Show when={compactWorkbench() && bottomTab() === "Console"}>
+          <Show when={(compactWorkbench() || layout().consoleDocked) && bottomTab() === "Console"}>
             <ConsolePanel
               className="compact-console-panel"
               theme={theme()}
@@ -1480,11 +1545,12 @@ function App() {
               onLevelChange={setConsoleLevel}
               messages={visibleConsoleMessages()}
               onClear={() => setConsoleMessages([])}
+              onUndock={!compactWorkbench() && layout().consoleDocked ? undockConsole : undefined}
             />
           </Show>
         </div>
 
-        <Show when={!compactWorkbench()}>
+        <Show when={!compactWorkbench() && !layout().consoleDocked}>
           <>
         <div
           class="console-splitter"
@@ -1501,6 +1567,7 @@ function App() {
           onLevelChange={setConsoleLevel}
           messages={visibleConsoleMessages()}
           onClear={() => setConsoleMessages([])}
+          onDragStart={handleConsoleDragStart}
         />
           </>
         </Show>
