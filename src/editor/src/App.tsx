@@ -1561,13 +1561,20 @@ function App() {
     if (label?.trim()) updateSelectedProperty("label", label.trim());
   }
 
-  function handleFocusIn(event: FocusEvent) {
-    const target = event.target;
+  function updateFocusContext(target: EventTarget | null) {
     const contextElement = target instanceof HTMLElement
       ? target.closest<HTMLElement>("[data-focus-context]")
       : null;
     const context = contextElement?.dataset.focusContext as FocusContext | undefined;
     setFocusContext(context ?? "global");
+  }
+
+  function handleFocusIn(event: FocusEvent) {
+    updateFocusContext(event.target);
+  }
+
+  function handleContextPointerDown(event: PointerEvent) {
+    updateFocusContext(event.target);
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -1765,6 +1772,7 @@ function App() {
       onPointerUp={endResize}
       onPointerCancel={endResize}
       onFocusIn={handleFocusIn}
+      onPointerDown={handleContextPointerDown}
     >
       <header class="app-header">
         <div class="title-bar">
