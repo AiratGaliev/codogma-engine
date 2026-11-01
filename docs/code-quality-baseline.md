@@ -9,24 +9,30 @@
 |---|---|---|---|
 | Root install | `npm ci` в `.github/workflows/ci.yml` | Воспроизводимую установку по root lockfile | Корректность каждой MCP tool schema или всех транзитивных packages |
 | Root dependency audit | `npm audit --audit-level=low` | Известные npm advisory по текущему lockfile и базе npm на момент выполнения | License audit, неизвестные уязвимости, race/security semantics |
-| Editor install/audit | `npm ci` и `npm audit --audit-level=low` в `source/editor` | Установку и advisory scan editor lockfile | Runtime/visual correctness |
+| Legacy Editor install/audit | `npm ci` и `npm audit --audit-level=low` в `source/editor` | Установку и advisory scan legacy Colibri lockfile | Runtime/visual correctness и качество нового SolidJS Host |
+| SolidJS Host install/build | Отдельный package в `src/editor`; committed `src/editor/package-lock.json`, CI `npm ci --no-audit --no-fund`, `npm run typecheck`, `npm run build` | Воспроизводимую установку по Host lockfile, проверку всего TS/TSX scope и Vite production build | Полное user workflow/runtime acceptance и target-browser/mobile matrix |
+| SolidJS Host domain/browser | `npm test` → Vitest `tests/**/*.test.ts`; `npm run test:browser` → Playwright `browser-tests/**/*.spec.ts`; CI job `editor-host` | TypeScript domain/integration regression и Chromium acceptance для реализованных Host slices | Specialized workflows, mobile/target-browser coverage и production cutover |
 | Editor build/typecheck | `npm run build` → `tsc -b` | Компиляцию существующих TypeScript project references | Полный строгий режим, покрытие runtime-ветвей, browser acceptance |
 | Server smoke | Запуск `server/server.mjs`, HTTP-запрос к editor/product и editor page | Сервер стартует и отдаёт ключевые ресурсы | Полную безопасность file API или корректность игры в browser |
 | Security smoke | `npm run test:security` → `tests/security-smoke-test.mjs` | Loopback/Host/Origin guards, перечисленные существующие/dangling symlink и upload сценарии, внешний config symlink, MCP compatibility smoke | Adversarial TOCTOU race across path-based mutation syscalls; all write tools and all MCP argument schemas |
 | MCP E2E | `npm run test:e2e` → `tests/mcp-e2e-test.mjs`; workflow ограничен PR в `test`/`main` и manual dispatch | Инициализацию MCP, список tools и отдельные сценарии scene-create/add-object/prefab/texture-size | UI/browser acceptance по умолчанию; полный набор tools; FX/Box2D runtime |
-| Browser acceptance | Ручной процесс в README и roadmap | Только если записан конкретный результат по конкретной функции | Не автоматизирован текущим CI как полное покрытие редактора |
+| SolidJS Host TypeScript + browser acceptance | CI Fast #478, HEAD `5345dc2c10c6cf7665dc527b8ee6b37afd0d9478`: lockfile-based `npm ci`, complete ADR-0002 strict typecheck + Vite production build, 36 Vitest tests and 9 Chromium Playwright tests | Strictly typechecks Host source, domain/unit/integration tests and TS tool configs; covers first-slice Scene/Workbench layout, dock/tab/focus behaviour | Not full functional acceptance, specialized tools, target-browser/mobile matrix or production cutover |
+| Independent functional acceptance | Separate CODQA issues on exact candidate SHA and real fixtures/browser/runtime | Only recorded scenarios and evidence in each QA issue | Not implied by Host CI green status |
 
 На PR #10 GitHub Actions CI Fast завершился успешно на head `3c96dde67eb865a0ee70fdbd5134ab995f846443`; оба dependency audit сообщили 0 vulnerabilities, editor build, server smoke и security smoke прошли. PR был слит в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01`. В доступном evidence нет отдельного повторного запуска workflow на merge commit; не утверждать, что весь CI был запущен повторно после слияния.
 
 ## Toolchain baseline
 
 - Root scripts: `start`, `dev`, `mcp`, `mcp:builtin`, `build`, `watch`, `test:e2e`, `test:security`.
-- Editor scripts: `start` / `build` / `clean` через TypeScript compiler.
-- Editor devDependencies: TypeScript `5.3.3`, `colibri-packer ^1.0.1`.
+- Legacy Editor scripts: `start` / `build` / `clean` через TypeScript project references.
+- SolidJS Host scripts in `src/editor/package.json`: `dev`, `typecheck`, `build`, `test`, `test:browser`; root shortcuts: `dev:editor-host`, `build:editor-host`, `test:editor-host`, `test:editor-host:browser`.
+- Legacy `source/editor` devDependencies: TypeScript `5.3.3`, `colibri-packer ^1.0.1`.
+- New `src/editor` dependencies: SolidJS `1.9.16`; devDependencies include TypeScript `5.9.3`, Vite `8.3.5`, `vite-plugin-solid 2.11.14`, Tailwind CSS `4.3.3`, `@tailwindcss/vite 4.3.3`, Vitest `5.0.5`, `@types/node` and Playwright `1.64.1`.
+- Host-owned implementation, tests and supported tool configs are `.ts`/`.tsx`; `src/editor/tsconfig.json` explicitly disables JavaScript and enables the complete ADR-0002 strict profile: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `forceConsistentCasingInFileNames`, `noUnusedLocals` and `noUnusedParameters`. Domain model `.mjs` + `.d.mts` pairs were removed. Vitest 5.0.5 runs the TypeScript unit/integration tests; Playwright runs the TypeScript browser tests. `src/editor/package-lock.json` is committed and CI installs the Host package reproducibly with `npm ci --no-audit --no-fund`. Existing Node backend and legacy Colibri files remain outside automatic migration.
 - `source/editor/tsconfig-base.json` задаёт DOM/ESNext, composite/declarations, отключает автоматические ambient `@types` через `types: []`, но не задаёт `strict: true`, `noUncheckedIndexedAccess` или `exactOptionalPropertyTypes` в общем base config. Индивидуальные project configs надо проверить отдельно перед окончательным legacy baseline.
 - `source/editor/tsconfig.json` использует TypeScript project references. Нельзя менять общий config механически, пока не выявлены межпроектные зависимости и generated declarations.
 - `source/editor/tslint.json` и `source/editor/lint.sh` сохранились, но TSLint отсутствует в текущем `source/editor/package.json` и не вызывается CI. Скрипт использует `npx tslint`, поэтому это не воспроизводимая рабочая lint-команда текущего manifest. Считать TSLint **остатком legacy tooling**, а не активным quality gate.
-- Нет активных scripts/dependencies для ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser или Vitest в root/editor manifests.
+- Root manifests include ESLint/typescript-eslint, Prettier, Knip and dependency-cruiser. New Host uses scoped TypeScript/domain tests and Playwright browser acceptance. Knip/dependency-cruiser remain report-oriented where documented; no repository-wide legacy Colibri lint rewrite is implied.
 - В дереве есть два основных test scripts. Большое количество файлов в `tests/workspace/test-typescript` — fixture проекта и regression fixtures, но само по себе оно не означает, что каждый fixture автоматически тестируется.
 
 ## Найденные gaps и минимальные решения
@@ -45,7 +51,7 @@
 
 ## Правила обновления baseline
 
-1. Новый Core и новые packages имеют собственные строгие config/quality gates. Для модернизации существующего editor quality checks добавляются поэтапно в новом/изменяемом Codogma-owned scope; не делать массовый lint/format rewrite legacy editor.
+1. Любой новый Codogma-owned production/test/tooling scope следует TypeScript-only source policy из ADR-0002 и получает отдельный strict tsconfig. Для модернизации существующих legacy packages quality checks добавляются поэтапно в новом/изменяемом scope; не делать массовый lint/format rewrite legacy editor.
 2. Knip/dependency-cruiser первоначально работают в report mode. Настроить generated output, dynamic plugin registry и scripts entry points до включения blocking check.
 3. Локальные и CI результаты фиксировать вместе с точным commit SHA и командами. Если проверка не запускалась или была skipped, указывать это явно.
 4. Успешные сборка/typecheck/server smoke не заменяют unit tests, browser acceptance, security regression или production build evidence.

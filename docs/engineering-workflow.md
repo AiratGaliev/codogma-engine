@@ -37,6 +37,14 @@
 
 Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
 
+## Правила выбора целевого Editor UI (01.11.2026)
+
+- Все новые пользовательские панели, UX и authoring workflows редактора реализуются в самостоятельном SolidJS Host `src/editor/`.
+- В `source/editor/` / Colibri не начинать новые features, controls, panels, UI refactors или постоянные integration bridges. Допускаются только критические bug/security fixes, release blockers и временные compatibility fixes, без которых нельзя безопасно завершить migration; всегда объяснять, почему изменение нельзя выполнить в SolidJS Host или общем domain/backend слое.
+- Старый редактор разрешено использовать как reference пользовательского поведения, supported formats, edge cases и regression fixtures. Переиспользовать можно проверенные data/domain/runtime contracts и алгоритмы после аудита; не копировать Colibri Workbench, Parts, controls, plugin registry, globals, private imports, lifecycle и UI coupling.
+- Наличие legacy UI или Done issue не считается миграцией. Для каждого workflow проверять реализацию в SolidJS, save/reopen/serialization, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [migration plan](editor-ui-migration.md). Координация — COD-82; inventory — COD-16.
+- Не перемещать `source/editor/` в `src/editor/`. COD-22 отменена; новый Host уже существует как отдельное приложение. Cutover выполняется в COD-87, Colibri removal отдельно в COD-88.
+
 ## 1. Перед началом каждой задачи
 
 1. Прочитать актуальный `README.md`, этот документ, `docs/technical-specification.md`, `docs/roadmap.md` и `docs/capability-matrix.md`. Для затрагиваемой подсистемы изучить связанные ADR, tests, capability/dependency matrices и известные residuals.

@@ -1,5 +1,32 @@
 # Change Log
 
+## Unreleased (2026-11-01 — TypeScript-only source policy)
+
+### Engineering standards
+
+* Standardized all new Codogma-owned production modules, backend/service logic, tooling and tests on TypeScript; UI containing JSX uses TSX.
+* Required TypeScript config files wherever tooling supports them natively, while retaining native declarative formats such as JSON/YAML, HTML, CSS and `.pen` sources.
+* Made the full strict TypeScript compiler profile mandatory for each new TS/TSX scope, disabled JavaScript in the Editor Host tsconfig and aligned ADR-0002, ADR-0005, the technical specification, migration docs, README and agent instructions.
+* Explicitly preserved existing legacy JS/MJS, generated and vendored files from automatic mass migration; new feature logic must not be added to JavaScript files.
+
+## Unreleased (2026-11-01 — TypeScript-only Editor Host and Vitest)
+
+### Editor Host
+
+* Converted all five new Host domain models from JavaScript modules plus `.d.mts` sidecars to typed TypeScript implementations.
+* Migrated the Host's unit/integration tests to TypeScript and Vitest; converted Playwright acceptance specs, config and isolated backend fixture launcher to TypeScript.
+* Removed JavaScript support from the Host TypeScript scope, included unit and browser test sources in typecheck, and separated Vitest and Playwright test discovery.
+* Kept the Node backend, legacy Colibri client and repository-level JavaScript smoke/security tooling outside the Host migration boundary.
+
+### Verification
+
+* [CI Fast #478](https://github.com/AiratGaliev/codogma-engine/actions/runs/41338597813) — **success** on HEAD `5345dc2c10c6cf7665dc527b8ee6b37afd0d9478`; both `editor-host` and `fast-checks` jobs passed. The Host install step ran `npm ci --no-audit --no-fund` from the committed lockfile.
+* SolidJS Host full ADR-0002 strict typecheck + Vite production build — **success**.
+* Vitest — **6 test files, 36 tests passed, 0 failed**.
+* Chromium Playwright acceptance — **9 passed**.
+* `fast-checks` — **success**, including root/editor build, regression suite, server/security smoke, mini-service security, localization and MCP package checks.
+* Committed `src/editor/package-lock.json` and switched the Editor Host CI install to `npm ci --no-audit --no-fund`; setup-node caching now keys off the lockfile and the generated-lockfile artifact upload was removed.
+
 ## Unreleased (2026-11-01 — Sprite asset authoring and reimport)
 
 ### Editor

@@ -26,17 +26,23 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "deps:check": "depcruise server mini-services tests --config .dependency-cruiser.cjs",
-    "knip": "knip"
+    "knip": "knip",
+    "dev:editor-host": "npm --prefix src/editor run dev",
+    "build:editor-host": "npm --prefix src/editor run build",
+    "test:editor-host": "npm --prefix src/editor run test",
+    "test:editor-host:browser": "npm --prefix src/editor run test:browser"
   },
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^16.5.0",
     "@codogma/localization": "file:packages/localization",
     "@phaserjs/editor-mcp-server": "^1.0.6"
   },
   "overrides": {
     "@phaserjs/editor-mcp-server": {
       "zod": "4.6.7"
-    }
+    },
+    "minimatch": "11.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

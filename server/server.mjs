@@ -22,6 +22,8 @@
  *   OpenBrowser, OpenFileManager, OpenVSCode
  */
 
+import 'dotenv/config'
+
 import http from "http"
 import fs from "fs"
 import fsp from "fs/promises"
@@ -34,8 +36,10 @@ import {
     handleBridgeRequest,
     handleOfficialBridgeRequest,
     handleBridgeEvents,
+    handleBridgeActivate,
     handleBridgeResult,
     bridgeClientCount,
+    getBridgeStatus,
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
@@ -51,6 +55,11 @@ const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "tes
 const MAX_API_BODY_BYTES = 32 * 1024 * 1024
 const MAX_UPLOAD_BODY_BYTES = 128 * 1024 * 1024
 const EDITOR_DIR = path.resolve(process.env.EDITOR_DIR || path.join(ROOT, "source", "editor"))
+const EDITOR_HOST_DIR = path.resolve(process.env.EDITOR_HOST_DIR || path.join(ROOT, "src", "editor", "dist"))
+const EDITOR_UI = process.env.CODOGMA_EDITOR_UI || "legacy"
+if (!["legacy", "solidjs"].includes(EDITOR_UI)) {
+    throw new Error(`Unsupported CODOGMA_EDITOR_UI value "${EDITOR_UI}". Use "legacy" or "solidjs".`)
+}
 const PLUGINS_DIR = path.join(EDITOR_DIR, "plugins")
 const EDITOR_ICONS_DIR = path.resolve(ROOT, "src", "editor", "icons")
 const DEV_MODE = process.env.DEV_MODE === "1"
@@ -359,6 +368,14 @@ function pluginAssetURL(pluginId, rel) {
 }
 
 function renderIndexHTML() {
+    if (EDITOR_UI === "solidjs") {
+        const indexPath = safeJoin(EDITOR_HOST_DIR, "index.html")
+        if (!indexPath || !fs.existsSync(indexPath) || !fs.statSync(indexPath).isFile()) {
+            throw new Error(`SolidJS Editor Host production bundle is missing at "${EDITOR_HOST_DIR}". Run "npm --prefix src/editor run build" or roll back with CODOGMA_EDITOR_UI=legacy.`)
+        }
+        return fs.readFileSync(indexPath, "utf8")
+    }
+
     const productPath = path.join(EDITOR_DIR, "product.json")
     const product = JSON.parse(fs.readFileSync(productPath, "utf8"))
     const plugins = readPluginsManifest()
@@ -889,8 +906,13 @@ const server = http.createServer(async (req, res) => {
         }
 
         // MCP editor bridge (SSE channel to the running editor client)
-        if (urlPath === "/editor/mcp-bridge/events") {
+        if (urlPath === "/editor/mcp-bridge/events" && req.method === "GET") {
             return await handleBridgeEvents(req, res)
+        }
+
+        // MCP editor bridge (the focused editor tab claims command ownership)
+        if (urlPath === "/editor/mcp-bridge/activate" && req.method === "POST") {
+            return await handleBridgeActivate(req, res)
         }
 
         // MCP editor bridge (editor client posts command results)
@@ -900,7 +922,7 @@ const server = http.createServer(async (req, res) => {
 
         // MCP editor bridge status (for the MCP Server Configuration dialog)
         if (urlPath === "/editor/mcp-bridge-status") {
-            return sendJSON(res, { connected: bridgeClientCount() > 0, clients: bridgeClientCount() })
+            return sendJSON(res, getBridgeStatus())
         }
 
         // AI Chat (v5-style feature): LLM agent with MCP tool access
@@ -926,6 +948,25 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" })
             res.end(html)
             return
+        }
+
+        // Immutable Vite assets for the opt-in SolidJS production entrypoint.
+        // The path is resolved and served only from the configured dist root.
+        if (EDITOR_UI === "solidjs" && rest.startsWith("assets/")) {
+            // Preserve the "assets/" segment: Vite emits URLs relative to the
+            // dist root, not relative to dist/assets.
+            const relativeAssetPath = rest.split("?")[0]
+            const full = safeJoin(EDITOR_HOST_DIR, relativeAssetPath)
+            if (!full) {
+                res.writeHead(403, { "Content-Type": "text/plain" })
+                res.end("Forbidden")
+                return
+            }
+            return serveFile(req, res, full, "public, max-age=31536000, immutable", EDITOR_HOST_DIR)
+        }
+
+        if (rest === "host-mode") {
+            return sendJSON(res, { ui: EDITOR_UI, rollbackAvailable: EDITOR_UI !== "legacy" })
         }
 
         if (rest === "product.json") {
@@ -1310,6 +1351,7 @@ server.listen(PORT, "127.0.0.1", () => {
     log(`Codogma Engine server running at http://localhost:${PORT}/editor/`)
     log(`  project:  ${PROJECT_DIR}`)
     log(`  editor:   ${EDITOR_DIR}`)
+    log(`  editor ui: ${EDITOR_UI}${EDITOR_UI === "solidjs" ? ` (bundle: ${EDITOR_HOST_DIR})` : ""}`)
     log(`  dev mode: ${DEV_MODE}`)
     log(`  mcp:      http://localhost:${PORT}/editor/mcp (Streamable HTTP)`)
     log(`  stdio:    node server/mcp-launcher.mjs (@codogma/editor-mcp-server)`)
