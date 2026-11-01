@@ -20,7 +20,7 @@
 
 ### Verification
 
-* [CI Fast #474](https://github.com/AiratGaliev/codogma-engine/actions/runs/41335387791) — **success** on HEAD `7978ac24ead4d108339bbae2ef781e8d32f9508a`; both `editor-host` and `fast-checks` jobs passed.
+* [CI Fast #478](https://github.com/AiratGaliev/codogma-engine/actions/runs/41338597813) — **success** on HEAD `5345dc2c10c6cf7665dc527b8ee6b37afd0d9478`; both `editor-host` and `fast-checks` jobs passed. The Host install step ran `npm ci --no-audit --no-fund` from the committed lockfile.
 * SolidJS Host full ADR-0002 strict typecheck + Vite production build — **success**.
 * Vitest — **6 test files, 36 tests passed, 0 failed**.
 * Chromium Playwright acceptance — **9 passed**.
