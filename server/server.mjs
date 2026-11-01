@@ -953,7 +953,9 @@ const server = http.createServer(async (req, res) => {
         // Immutable Vite assets for the opt-in SolidJS production entrypoint.
         // The path is resolved and served only from the configured dist root.
         if (EDITOR_UI === "solidjs" && rest.startsWith("assets/")) {
-            const relativeAssetPath = rest.slice("assets/".length).split("?")[0]
+            // Preserve the "assets/" segment: Vite emits URLs relative to the
+            // dist root, not relative to dist/assets.
+            const relativeAssetPath = rest.split("?")[0]
             const full = safeJoin(EDITOR_HOST_DIR, relativeAssetPath)
             if (!full) {
                 res.writeHead(403, { "Content-Type": "text/plain" })
