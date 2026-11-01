@@ -2566,6 +2566,7 @@ function App() {
                 {(currentScene) => (
                   <PhaserSceneViewport
                     scene={currentScene()}
+                    scenePath={scenePath()}
                     selectedId={selectedId()}
                     projectTree={projectTree()}
                     theme={theme()}
