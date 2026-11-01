@@ -11,7 +11,11 @@
 
 ### Verification
 
-* The PR CI run is the acceptance gate for the migrated TypeScript package, deterministic lockfile installation and browser tests; record its exact run and commit SHA after the new head completes CI.
+* [CI Fast #470](https://github.com/AiratGaliev/codogma-engine/actions/runs/41332498006) — **success** on HEAD `79ab4d3f589f9489b020163cf7d420cebd6cefc5`; both `editor-host` and `fast-checks` jobs passed.
+* SolidJS Host typecheck + Vite production build — **success**.
+* Vitest — **6 test files, 36 tests passed, 0 failed**.
+* Chromium Playwright acceptance — **9 passed**.
+* The CI package install currently uses `npm install --no-audit --no-fund`; the generated Host lockfile is uploaded as a workflow artifact. Do not claim a committed/reproducible Host `npm ci` install until its lockfile is synchronized in the repository.
 
 ## Unreleased (2026-11-01 — Sprite asset authoring and reimport)
 

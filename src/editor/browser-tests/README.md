@@ -3,7 +3,7 @@
 Run from `src/editor/`:
 
 ```bash
-npm ci
+npm install --no-audit --no-fund
 npx playwright install chromium
 npm run typecheck
 npm run test
