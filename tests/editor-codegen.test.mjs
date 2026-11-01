@@ -379,3 +379,355 @@ test("Particle Emitter codegen omits removed frames and uses an explicit texture
     assert.doesNotMatch(clearedArgs[3], /\bframe\b/,
         "clearing the frame selection must remove the stale frame config from generated code")
 })
+
+
+/* ================= asset-authored Arcade geometry ================= */
+
+test("Arcade Body applies a single rectangle from sprite asset metadata", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    let size
+    let offset
+
+    const body = {
+        setSize: (width, height, center) => { size = { width, height, center } },
+        setOffset: (x, y) => { offset = { x, y } }
+    }
+    const obj = {
+        body,
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            getComponent: () => ({
+                getTextureKeys: () => ({
+                    collisionShapes: [{ type: "rectangle", x: 3, y: 4, width: 12, height: 10 }]
+                })
+            })
+        })
+    }
+
+    assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), true)
+    assert.equal(body.__isCircle, false)
+    assert.deepEqual(size, { width: 12, height: 10, center: false })
+    assert.deepEqual(offset, { x: 3, y: 4 })
+})
+
+test("Arcade Body applies a single circle from sprite asset metadata", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    let radius
+    let offset
+
+    const body = {
+        setCircle: value => { radius = value },
+        setOffset: (x, y) => { offset = { x, y } }
+    }
+    const obj = {
+        body,
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            getComponent: () => ({
+                getTextureKeys: () => ({
+                    collisionShapes: [{ type: "circle", x: 12, y: 10, radius: 5 }]
+                })
+            })
+        })
+    }
+
+    assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), true)
+    assert.equal(body.__isCircle, true)
+    assert.equal(body.__radius, 5)
+    assert.equal(radius, 5)
+    assert.deepEqual(offset, { x: 7, y: 5 })
+})
+
+test("Arcade Body does not approximate polygon or compound asset collision geometry", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    const body = {
+        setSize: () => { throw new Error("polygon must not be converted to a rectangle") },
+        setCircle: () => { throw new Error("polygon must not be converted to a circle") },
+        setOffset: () => { throw new Error("unsupported geometry must not mutate the body") }
+    }
+
+    for (const collisionShapes of [
+        [{ type: "polygon", points: [[0, 0], [16, 0], [8, 16]] }],
+        [
+            { type: "rectangle", x: 0, y: 0, width: 8, height: 8 },
+            { type: "circle", x: 8, y: 8, radius: 4 }
+        ]
+    ]) {
+        const obj = {
+            body,
+            getEditorSupport: () => ({
+                hasComponent: () => true,
+                getComponent: () => ({ getTextureKeys: () => ({ collisionShapes }) })
+            })
+        }
+
+        assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), false)
+    }
+})
+
+
+test("TextureComponent applies asset crop and trim to Phaser frame and object", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const calls = { texture: null, origin: null, crop: null, trim: null, updated: false }
+    const originalFrame = {
+        setTrim: () => { throw new Error("shared Texture Manager frame must not be mutated") },
+        clone() {
+            return {
+                setTrim: (...args) => { calls.trim = args }
+            }
+        }
+    }
+    const obj = {
+        originX: 0.2,
+        originY: 0.8,
+        frame: originalFrame,
+        setTexture: (key, frameKey) => {
+            calls.texture = [key, frameKey]
+            obj.frame = originalFrame
+        },
+        setFrame: (frame, updateSize, updateOrigin) => {
+            calls.setFrame = [frame, updateSize, updateOrigin]
+            obj.frame = frame
+        },
+        setOrigin: (x, y) => { calls.origin = [x, y] },
+        setCrop: (...args) => { calls.crop = args },
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            onUpdateAfterSetTexture: () => { calls.updated = true }
+        })
+    }
+    const component = Object.create(TextureComponent.prototype)
+    component._textureKeys = {}
+    component.getObject = () => obj
+
+    component.setTextureKeys({
+        key: "hero",
+        frame: 2,
+        crop: { x: 1, y: 2, width: 12, height: 10 },
+        trim: { actualWidth: 16, actualHeight: 16, x: 2, y: 3, width: 10, height: 9 }
+    })
+
+    assert.deepEqual(calls.texture, ["hero", 2])
+    assert.deepEqual(calls.origin, [0.2, 0.8])
+    assert.deepEqual(calls.crop, [1, 2, 12, 10])
+    assert.deepEqual(calls.trim, [16, 16, 2, 3, 10, 9])
+    assert.equal(calls.setFrame[1], true)
+    assert.equal(calls.setFrame[2], false)
+    assert.notEqual(calls.setFrame[0], originalFrame)
+    assert.equal(calls.updated, true)
+})
+
+test("TextureComponent rejects trim metadata when the Phaser Frame cannot apply it", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const obj = {
+        originX: 0.5,
+        originY: 0.5,
+        frame: {},
+        setTexture() {},
+        setOrigin() {},
+        getEditorSupport: () => ({
+            hasComponent: () => false,
+            onUpdateAfterSetTexture() {}
+        })
+    }
+    const component = Object.create(TextureComponent.prototype)
+    component._textureKeys = {}
+    component.getObject = () => obj
+
+    assert.throws(() => component.setTextureKeys({
+        key: "hero",
+        trim: { actualWidth: 16, actualHeight: 16, x: 1, y: 1, width: 14, height: 14 }
+    }), /cannot apply isolated trim metadata/)
+})
+
+
+/* ================= retained 9-slice and tiled draw authoring ================= */
+
+test("NineSlice Inspector properties preserve the other slice edges", () => {
+    const NineSliceComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.NineSliceComponent
+    const calls = []
+    const obj = {
+        width: 120,
+        height: 80,
+        leftWidth: 8,
+        rightWidth: 12,
+        topHeight: 6,
+        bottomHeight: 10,
+        setSlices: (...values) => calls.push(values)
+    }
+
+    NineSliceComponent.leftWidth.setValue(obj, 14)
+    NineSliceComponent.rightWidth.setValue(obj, 16)
+    NineSliceComponent.topHeight.setValue(obj, 9)
+    NineSliceComponent.bottomHeight.setValue(obj, 11)
+
+    assert.deepEqual(calls, [
+        [120, 80, 14, 12, 6, 10],
+        [120, 80, 8, 16, 6, 10],
+        [120, 80, 8, 12, 9, 10],
+        [120, 80, 8, 12, 6, 11]
+    ])
+})
+
+test("TileSprite Inspector stores repeat position and scale independently", () => {
+    const TileSpriteComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TileSpriteComponent
+    const tile = {
+        tilePositionX: 0,
+        tilePositionY: 0,
+        tileScaleX: 1,
+        tileScaleY: 1
+    }
+
+    TileSpriteComponent.tilePositionX.setValue(tile, 24)
+    TileSpriteComponent.tilePositionY.setValue(tile, 12)
+    TileSpriteComponent.tileScaleX.setValue(tile, 0.5)
+    TileSpriteComponent.tileScaleY.setValue(tile, 2)
+
+    assert.deepEqual(tile, {
+        tilePositionX: 24,
+        tilePositionY: 12,
+        tileScaleX: 0.5,
+        tileScaleY: 2
+    })
+})
+
+
+test("TextureComponent codegen clones a shared frame before applying trim", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const trim = {
+        actualWidth: 32,
+        actualHeight: 24,
+        x: 2,
+        y: 1,
+        width: 28,
+        height: 20
+    }
+    const support = {
+        isNestedPrefabInstance: () => false,
+        getComponent: () => ({ getTextureKeys: () => ({ trim }) })
+    }
+    const obj = {
+        getEditorSupport: () => support
+    }
+    const args = {
+        objectVarName: "sprite",
+        statements: []
+    }
+
+    TextureComponent.prototype.buildSetObjectPropertiesCodeDOM.call(
+        { getObject: () => obj },
+        args
+    )
+
+    assert.deepEqual(
+        args.statements.map(statement => ({
+            method: statement.getMethodName(),
+            args: statement.getArgs()
+        })),
+        [
+            { method: "setFrame", args: ["sprite.frame.clone()", "true", "false"] },
+            { method: "setTrim", args: ["32", "24", "2", "1", "28", "20"] }
+        ]
+    )
+})
+
+
+
+
+
+test("Arcade asset collision geometry is rejected when outside the original source canvas", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    let mutationCount = 0
+    const body = {
+        setSize: () => { mutationCount++ },
+        setOffset: () => { mutationCount++ },
+        setCircle: () => { mutationCount++ }
+    }
+    const obj = {
+        body,
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            getComponent: () => ({
+                getTextureKeys: () => ({
+                    sourceSize: { width: 40, height: 48 },
+                    collisionShapes: [
+                        { type: "rectangle", x: 34, y: 0, width: 10, height: 10 }
+                    ]
+                })
+            })
+        })
+    }
+
+    assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), false)
+    assert.equal(mutationCount, 0)
+})
+
+
+test("existing Phaser Layer groups preserve depth-first display-list ordering", () => {
+    const Scene = globalThis.phasereditor2d.scene.ui.Scene
+    const Layer = globalThis.phasereditor2d.scene.ui.sceneobjects.Layer
+    const before = {}
+    const childA = {}
+    const childB = {}
+    const after = {}
+    const layer = Object.create(Layer.prototype)
+    layer.getEditorSupport = () => ({
+        getObjectChildren: () => [childA, childB]
+    })
+
+    const scene = Object.create(Scene.prototype)
+    scene.getGameObjects = () => [before, layer, after]
+
+    const order = scene.buildObjectSortingMap()
+
+    assert.deepEqual(
+        [before, layer, childA, childB, after].map(object => order.get(object)),
+        [0, 1, 2, 3, 4]
+    )
+
+    const selected = [after, childB, layer, before]
+    scene.sortObjectsByRenderingOrder(selected)
+
+    assert.deepEqual(selected, [before, layer, childB, after])
+})
+
+
+test("changing a sprite texture does not overwrite an already-authored Arcade Body", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    const previousApply = ArcadeComponent.applyAssetCollisionGeometry
+    let applyCount = 0
+
+    ArcadeComponent.applyAssetCollisionGeometry = () => {
+        applyCount++
+        return true
+    }
+
+    try {
+        const obj = {
+            body: { width: 7, height: 9 },
+            originX: 0.5,
+            originY: 0.5,
+            frame: {},
+            setTexture() {},
+            getEditorSupport: () => ({
+                hasComponent: () => false,
+                onUpdateAfterSetTexture() {}
+            })
+        }
+        const component = Object.create(TextureComponent.prototype)
+        component._textureKeys = {}
+        component.getObject = () => obj
+
+        component.setTextureKeys({
+            key: "enemy",
+            collisionShapes: [{ type: "rectangle", x: 1, y: 2, width: 20, height: 24 }],
+            sourceSize: { width: 32, height: 32 }
+        })
+
+        assert.equal(applyCount, 0)
+        assert.deepEqual({ width: obj.body.width, height: obj.body.height }, { width: 7, height: 9 })
+    } finally {
+        ArcadeComponent.applyAssetCollisionGeometry = previousApply
+    }
+})

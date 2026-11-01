@@ -1,3 +1,5 @@
+/// <reference path="./SpriteAssetMetadata.ts" />
+
 namespace phasereditor2d.pack.core {
 
     import controls = colibri.ui.controls;
@@ -88,6 +90,15 @@ namespace phasereditor2d.pack.core {
 
         getData() {
             return this._data;
+        }
+
+        setData(data: any) {
+
+            if (!data || typeof data !== "object" || Array.isArray(data)) {
+                throw new Error("Asset Pack item data must be an object.");
+            }
+
+            this._data = data;
         }
 
         addToPhaserCache(game: Phaser.Game, cache: parsers.AssetPackCache) {

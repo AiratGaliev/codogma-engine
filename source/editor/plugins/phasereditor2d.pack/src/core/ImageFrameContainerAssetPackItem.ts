@@ -8,6 +8,7 @@ namespace phasereditor2d.pack.core {
 
         private _frames: AssetPackImageFrame[];
         private _thumbnail: controls.IImage;
+        private _thumbnailCacheKey: string;
         private static _cache: Map<string, controls.IImage> = new Map();
 
         constructor(pack: AssetPack, data: any) {
@@ -64,7 +65,7 @@ namespace phasereditor2d.pack.core {
 
                 .filter(file => file !== null && file !== undefined)
 
-                .map(file => file.getFullName() + "@" + file.getModTime()).join(",");
+                .map(file => file.getFullName() + "@" + file.getSize() + "@" + file.getModTime()).join(",");
 
             return key;
         }
@@ -77,6 +78,7 @@ namespace phasereditor2d.pack.core {
 
             if (cache.has(key)) {
 
+                this._thumbnailCacheKey = key;
                 this._thumbnail = cache.get(key);
 
                 return controls.PreloadResult.NOTHING_LOADED;
@@ -105,6 +107,7 @@ namespace phasereditor2d.pack.core {
             });
 
             this._thumbnail = new controls.ImageWrapper(img);
+            this._thumbnailCacheKey = key;
 
             cache.set(key, this._thumbnail);
 
@@ -177,6 +180,13 @@ namespace phasereditor2d.pack.core {
         resetCache() {
 
             this._frames = null;
+
+            if (this._thumbnailCacheKey) {
+                ImageFrameContainerAssetPackItem._cache.delete(this._thumbnailCacheKey);
+                this._thumbnailCacheKey = null;
+            }
+
+            this._thumbnail = null;
         }
 
         protected abstract createParser(): parsers.ImageFrameParser;

@@ -250,20 +250,74 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const sprite = obj as Image;
 
-            // I have to scale to 1 and later restore the original scale
-            // see issue https://github.com/PhaserEditor2D/PhaserEditor2D-v3/issues/250
+            // Сохраняем исходный scale: Phaser рассчитывает начальные размеры Arcade Body при scale = 1.
             const { scaleX, scaleY } = sprite;
 
             sprite.setScale(1, 1);
-
             sprite.scene.physics.add.existing(sprite);
-
             sprite.setScale(scaleX, scaleY);
 
             const body = ArcadeComponent.getBody(obj);
             body.enable = false;
 
+            // Если sprite создан из asset с одной Arcade-совместимой фигурой,
+            // переносим её в существующую модель Arcade Body.
+            ArcadeComponent.applyAssetCollisionGeometry(obj);
+
             obj.getEditorSupport().setComponentActive(ArcadeComponent, true);
+        }
+
+        /**
+         * Arcade Physics поддерживает одну прямоугольную или круглую форму на Body.
+         * Polygon и compound shapes остаются в asset metadata для других physics adapters
+         * и намеренно не преобразуются в приблизительный прямоугольник.
+         */
+        static applyAssetCollisionGeometry(obj: ISceneGameObject): boolean {
+
+            const editorSupport = obj.getEditorSupport();
+
+            if (!editorSupport.hasComponent(TextureComponent)) {
+                return false;
+            }
+
+            const textureComponent = editorSupport.getComponent(TextureComponent) as TextureComponent;
+            const textureKeys = textureComponent.getTextureKeys();
+            const shapes = textureKeys.collisionShapes;
+
+            if (!Array.isArray(shapes) || shapes.length !== 1) {
+                return false;
+            }
+
+            const shape = shapes[0];
+            const body = ArcadeComponent.getBody(obj);
+
+            const sourceSize = textureKeys.sourceSize;
+            const validationError = pack.core.SpriteAssetMetadata.validateCollisionShapes(
+                shapes,
+                sourceSize && sourceSize.width,
+                sourceSize && sourceSize.height
+            );
+
+            if (!body || !shape || typeof shape !== "object" || validationError !== null) {
+                return false;
+            }
+
+            if (shape.type === "rectangle" || shape.type === "rect") {
+                body["__isCircle"] = false;
+                body.setSize(shape.width, shape.height, false);
+                body.setOffset(shape.x, shape.y);
+                return true;
+            }
+
+            if (shape.type === "circle") {
+                body["__isCircle"] = true;
+                body["__radius"] = shape.radius;
+                body.setCircle(shape.radius);
+                body.setOffset(shape.x - shape.radius, shape.y - shape.radius);
+                return true;
+            }
+
+            return false;
         }
 
         static disableBody(obj: ISceneGameObject) {
