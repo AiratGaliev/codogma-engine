@@ -20,6 +20,10 @@
 
     const MCP_BRIDGE_EVENTS = "/editor/mcp-bridge/events";
     const MCP_BRIDGE_RESULT = "/editor/mcp-bridge/result";
+    const MCP_BRIDGE_ACTIVATE = "/editor/mcp-bridge/activate";
+
+    let bridgeClientId = null;
+    let bridgeActivationPending = false;
 
     const AI_CHAT_MAX_ATTACHMENTS = 8;
 
@@ -78,12 +82,34 @@
         return strip(a) === strip(b);
     }
 
-    function postResult(id, result) {
+    function activateBridgeSession() {
+
+        if (!bridgeClientId || bridgeActivationPending) return;
+
+        bridgeActivationPending = true;
+
+        fetch(MCP_BRIDGE_ACTIVATE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ clientId: bridgeClientId })
+        })
+            .catch(e => console.warn("[Phaser Editor AI] MCP session activation failed", e))
+            .finally(() => { bridgeActivationPending = false; });
+    }
+
+    function postResult(id, result, clientId = bridgeClientId) {
+
+        if (!clientId) return Promise.reject(new Error("MCP bridge session is not established."));
 
         return fetch(MCP_BRIDGE_RESULT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, result })
+            credentials: "same-origin",
+            body: JSON.stringify({ id, clientId, result })
+        }).then(response => {
+            if (!response.ok) throw new Error(`MCP bridge result rejected (${response.status}).`);
+            return response.json();
         });
     }
 
@@ -526,7 +552,21 @@
 
         try {
 
-            const es = new EventSource(MCP_BRIDGE_EVENTS);
+            const url = new URL(MCP_BRIDGE_EVENTS, window.location.href);
+            url.searchParams.set("clientType", "legacy");
+            const es = new EventSource(url.pathname + url.search);
+
+            es.addEventListener("connected", ev => {
+                try {
+                    const session = JSON.parse(ev.data);
+                    if (typeof session.clientId !== "string") return;
+                    bridgeClientId = session.clientId;
+                    activateBridgeSession();
+                    console.log("%c[Phaser Editor AI]%c MCP bridge session ready", "color:#ff9d45", "color:inherit");
+                } catch (e) {
+                    console.error("Invalid MCP bridge session event", e);
+                }
+            });
 
             es.addEventListener("command", ev => {
 
@@ -538,23 +578,24 @@
                     return;
                 }
 
+                // A stale SSE connection must never execute or answer commands
+                // owned by a newer editor session.
+                if (!bridgeClientId || cmd.clientId !== bridgeClientId) return;
+
                 const handler = commandHandlers[cmd.tool];
 
                 const promise = handler
-                    ? Promise.resolve()
-                        .then(() => handler(cmd.args || {}))
-                        .catch(e => { throw e; })
+                    ? Promise.resolve().then(() => handler(cmd.args || {}))
                     : Promise.reject(new Error(`The editor client does not implement the command '${cmd.tool}'.`));
 
                 promise
-                    .then(result => postResult(cmd.id, result))
-                    .catch(e => postResult(cmd.id, { __error: String(e.message || e) }));
+                    .then(result => postResult(cmd.id, result, cmd.clientId))
+                    .catch(e => postResult(cmd.id, { __error: String(e.message || e) }, cmd.clientId))
+                    .catch(e => console.error("MCP bridge command result failed", e));
             });
 
             es.addEventListener("files-changed", () => {
 
-                // project files were modified externally (e.g. by an MCP agent);
-                // the workbench re-syncs the file tree on window focus
                 setTimeout(() => {
                     try {
                         window.dispatchEvent(new FocusEvent("focus"));
@@ -565,19 +606,24 @@
             es.addEventListener("error", () => {
 
                 es.close();
-
+                bridgeClientId = null;
+                bridgeActivationPending = false;
                 setTimeout(connectBridge, 5000);
             });
-
-            console.log("%c[Phaser Editor AI]%c MCP bridge connected", "color:#ff9d45", "color:inherit");
 
         } catch (e) {
 
             console.error("MCP bridge connection failed", e);
-
+            bridgeClientId = null;
+            bridgeActivationPending = false;
             setTimeout(connectBridge, 5000);
         }
     }
+
+    window.addEventListener("focus", activateBridgeSession);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") activateBridgeSession();
+    });
 
     // ------------------------------------------------------------------
     // AI panel (chat) + MCP config dialog
