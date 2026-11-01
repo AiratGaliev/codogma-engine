@@ -27,7 +27,9 @@ interface PhaserGameObject {
   setRotation?(radians: number): PhaserGameObject;
   setAlpha?(alpha: number): PhaserGameObject;
   setInteractive?(): PhaserGameObject;
-  on?(event: string, callback: () => void): PhaserGameObject;
+  disableInteractive?(): PhaserGameObject;
+  setVisible?(visible: boolean): PhaserGameObject;
+  on?(event: string, callback: (pointer?: PhaserPointer) => void): PhaserGameObject;
   setText?(text: string): PhaserGameObject;
   setSize?(width: number, height: number): PhaserGameObject;
   setFillStyle?(color: number, alpha?: number): PhaserGameObject;
@@ -36,7 +38,21 @@ interface PhaserGameObject {
   destroy?(): void;
 }
 
+interface PhaserPointer {
+  worldX?: number;
+  worldY?: number;
+  isDown?: boolean;
+}
+
 interface PhaserSceneApi {
+  input: {
+    on(event: string, listener: (pointer: PhaserPointer) => void): void;
+  };
+  cameras?: {
+    main?: {
+      setBackgroundColor(color: string): void;
+    };
+  };
   load: {
     image(key: string, url: string): void;
   };
@@ -74,7 +90,6 @@ interface PhaserGameApi {
   pause(): void;
   resume(): void;
   scale: {
-    resize?(width: number, height: number): void;
     refresh?(): void;
   };
 }
@@ -113,13 +128,19 @@ interface ImageAsset {
   path: string;
 }
 
+type TransformTool = "select" | "move" | "rotate" | "scale";
+
 interface Props {
   scene: SceneDocument | null;
   selectedId: string | null;
   projectTree: ProjectEntry | null;
   theme: "dark" | "light";
   active: boolean;
+  tool: () => TransformTool;
+  hiddenIds: () => ReadonlySet<string>;
+  lockedIds: () => ReadonlySet<string>;
   onSelect: (id: string) => void;
+  onTransform: (id: string, patch: Record<string, number>) => void;
   onStatus: (level: "info" | "success" | "warning" | "error", message: string) => void;
 }
 
@@ -283,6 +304,26 @@ function PhaserSceneViewport(props: Props) {
   const [runtimeError, setRuntimeError] = createSignal("");
   const [gameReady, setGameReady] = createSignal(false);
 
+  let transformDrag: {
+    id: string;
+    tool: Exclude<TransformTool, "select">;
+    object: PhaserGameObject;
+    pointerStartX: number;
+    pointerStartY: number;
+    objectStartX: number;
+    objectStartY: number;
+    rotationStart: number;
+    scaleXStart: number;
+    scaleYStart: number;
+    patch: Record<string, number>;
+  } | undefined;
+
+  function finishTransformDrag() {
+    const drag = transformDrag;
+    transformDrag = undefined;
+    if (drag && Object.keys(drag.patch).length > 0) props.onTransform(drag.id, drag.patch);
+  }
+
   function createEntry(entry: SceneEntry, runtime: PhaserSceneApi, imageKeys: Set<string>): PhaserGameObject {
     const x = numeric(entry.source.x, RUNTIME_WIDTH / 2);
     const y = numeric(entry.source.y, RUNTIME_HEIGHT / 2);
@@ -339,7 +380,32 @@ function PhaserSceneViewport(props: Props) {
       if (!object) {
         object = createEntry(entry, sceneRuntime, assets);
         object.setInteractive?.();
-        object.on?.("pointerdown", () => props.onSelect(entry.id));
+        object.on?.("pointerdown", (pointer) => {
+          if (props.lockedIds().has(entry.id)) return;
+          props.onSelect(entry.id);
+          const activeTool = props.tool();
+          if (activeTool === "select" || !pointer) {
+            transformDrag = undefined;
+            return;
+          }
+
+          const liveSource = props.scene
+            ? getSceneObjects(props.scene).find((candidate) => candidate.id === entry.id)?.source as Record<string, unknown> | undefined
+            : undefined;
+          transformDrag = {
+            id: entry.id,
+            tool: activeTool,
+            object,
+            pointerStartX: numeric(pointer.worldX, object.x),
+            pointerStartY: numeric(pointer.worldY, object.y),
+            objectStartX: object.x,
+            objectStartY: object.y,
+            rotationStart: numeric(liveSource?.rotation, 0) * (Math.PI / 180),
+            scaleXStart: numeric(liveSource?.scaleX, 1),
+            scaleYStart: numeric(liveSource?.scaleY, 1),
+            patch: {},
+          };
+        });
         gameObjects.set(entry.id, object);
       }
 
@@ -356,6 +422,10 @@ function PhaserSceneViewport(props: Props) {
       );
       object.setRotation?.(numeric(entry.source.rotation, 0) * (Math.PI / 180));
       object.setAlpha?.(numeric(entry.source.alpha, 1));
+      object.setDepth?.(numeric(entry.source.depth, 0));
+      object.setVisible?.(!props.hiddenIds().has(entry.id));
+      if (props.lockedIds().has(entry.id)) object.disableInteractive?.();
+      else object.setInteractive?.();
       if (entry.type === "Text") {
         object.setText?.(String(entry.source.text ?? entry.source.label ?? ""));
       }
@@ -368,7 +438,9 @@ function PhaserSceneViewport(props: Props) {
       }
     }
 
-    const selected = props.selectedId ? gameObjects.get(props.selectedId) : undefined;
+    const selected = props.selectedId && !props.hiddenIds().has(props.selectedId)
+      ? gameObjects.get(props.selectedId)
+      : undefined;
     if (selected && selectionFrame) {
       const width = Math.max(12, numeric(selected.displayWidth, numeric(selected.width, 38)));
       const height = Math.max(12, numeric(selected.displayHeight, numeric(selected.height, 28)));
@@ -385,7 +457,14 @@ function PhaserSceneViewport(props: Props) {
   createEffect(() => {
     props.scene;
     props.selectedId;
+    props.hiddenIds();
+    props.lockedIds();
     if (sceneReady) syncScene();
+  });
+
+  createEffect(() => {
+    const background = props.theme === "dark" ? "#202a37" : "#f2f5f9";
+    sceneRuntime?.cameras?.main?.setBackgroundColor(background);
   });
 
   createEffect(() => {
@@ -427,6 +506,34 @@ function PhaserSceneViewport(props: Props) {
 
           create() {
             sceneRuntime = this;
+            this.cameras?.main?.setBackgroundColor(props.theme === "dark" ? "#202a37" : "#f2f5f9");
+            this.input.on("pointermove", (pointer) => {
+              const drag = transformDrag;
+              if (!drag || pointer.isDown !== true) return;
+              const pointerX = numeric(pointer.worldX, drag.pointerStartX);
+              const pointerY = numeric(pointer.worldY, drag.pointerStartY);
+              const deltaX = pointerX - drag.pointerStartX;
+              const deltaY = pointerY - drag.pointerStartY;
+
+              if (drag.tool === "move") {
+                const x = drag.objectStartX + deltaX;
+                const y = drag.objectStartY + deltaY;
+                drag.object.setPosition?.(x, y);
+                drag.patch = { x, y };
+              } else if (drag.tool === "rotate") {
+                const rotation = drag.rotationStart + deltaX * 0.01;
+                drag.object.setRotation?.(rotation);
+                drag.patch = { rotation: rotation * (180 / Math.PI) };
+              } else {
+                const factor = Math.max(0.01, 1 + deltaX / 100);
+                const scaleX = drag.scaleXStart * factor;
+                const scaleY = drag.scaleYStart * factor;
+                drag.object.setScale?.(scaleX, scaleY);
+                drag.patch = { scaleX, scaleY };
+              }
+            });
+            this.input.on("pointerup", () => finishTransformDrag());
+            this.input.on("pointerupoutside", () => finishTransformDrag());
             (this as PhaserSceneApi & { __imageKeys?: Set<string> }).__imageKeys =
               new Set(imageAssets.map((asset) => asset.key));
             selectionFrame = this.add.rectangle(0, 0, 1, 1, 0x000000, 0);
@@ -471,9 +578,8 @@ function PhaserSceneViewport(props: Props) {
         });
 
         resizeObserver = new ResizeObserver(() => {
-          if (!game) return;
-          game.scale.resize?.(RUNTIME_WIDTH, RUNTIME_HEIGHT);
-          game.scale.refresh?.();
+          // Scale.FIT preserves the logical 800×600 world and recalculates the display fit.
+          game?.scale.refresh?.();
         });
         resizeObserver.observe(mount);
       } catch (error) {
@@ -489,6 +595,7 @@ function PhaserSceneViewport(props: Props) {
       disposed = true;
       resizeObserver?.disconnect();
       game?.destroy(true);
+      transformDrag = undefined;
       game = undefined;
       setGameReady(false);
       sceneRuntime = undefined;
