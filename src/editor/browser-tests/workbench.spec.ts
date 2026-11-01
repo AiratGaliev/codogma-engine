@@ -9,6 +9,10 @@ const baselineScene = await readFile(
   resolve(repositoryRoot, "tests/workspace/test-typescript/scenes/Level.scene"),
   "utf8",
 );
+const fxAcceptanceScene = await readFile(
+  resolve(repositoryRoot, "tests/workspace/test-typescript/scenes/fx-acceptance.scene"),
+  "utf8",
+);
 
 test.beforeEach(async ({ page }) => {
   const response = await page.request.post("http://127.0.0.1:3000/editor/api", {
@@ -359,4 +363,84 @@ test("Animation workspace previews and persists a Phaser JSONAnimations timeline
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("100");
   await page.getByTestId("animation-timeline-frame-1").click();
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("160");
+});
+
+test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Gradient and Shine data", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  const writeResponse = await page.request.post("http://127.0.0.1:3000/editor/api", {
+    data: {
+      method: "SetFileString",
+      body: { path: "scenes/Level.scene", content: fxAcceptanceScene },
+    },
+  });
+  expect(writeResponse.ok()).toBeTruthy();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible();
+  await expect(page.getByTestId("hierarchy-item-paneldino")).toBeVisible();
+  await expect(page.getByTestId("hierarchy-item-circlefx")).toHaveCount(0);
+
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByTestId("fx-inspector")).toBeVisible();
+  await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toBeVisible();
+  await expect(page.getByTestId("fx-card-64b0a02a-3983-4f7f-91f7-679622bb6c38")).toBeVisible();
+  await expect(page.getByLabel("Circle Thickness")).toHaveValue("6");
+  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
+  await expect(page.getByLabel("Bloom filter stage")).toHaveValue("external");
+
+  await page.getByLabel("Circle Thickness").fill("10");
+  await page.getByLabel("Bloom Threshold").fill("0.45");
+  await page.getByLabel("Bloom Blur Quality").fill("2");
+  await page.getByTestId("save-scene").click();
+  await expect(page.getByTestId("save-scene")).toBeDisabled();
+
+  let saved = await page.evaluate(async () => {
+    const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
+    return response.json();
+  });
+  let circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  expect(circleTarget.list[0].thickness).toBe(10);
+  expect(circleTarget.list[1].threshold).toBe(0.45);
+  expect(circleTarget.list[1].blurQuality).toBe(2);
+  expect(circleTarget.list[1].preFX).toBe(false);
+
+  await page.reload();
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
+  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
+
+  await page.getByTestId("hierarchy-item-paneldino").click();
+  await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("1500");
+  await page.getByLabel("Shine Reveal").check();
+
+  await page.getByTestId("hierarchy-item-gradienttarget").click();
+  await expect(page.getByTestId("fx-card-d7548c09-2f26-450a-85f4-f7aa2c7475b0")).toBeVisible();
+  await expect(page.getByLabel("Gradient Alpha")).toHaveValue("0.45");
+  await page.getByLabel("Gradient Alpha").fill("0.6");
+  await page.getByTestId("save-scene").click();
+
+  saved = await page.evaluate(async () => {
+    const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
+    return response.json();
+  });
+  const panel = saved.displayList.find((item: { id?: string }) => item.id === "317de9d0-d961-417f-bb05-b182fa41c107");
+  const shine = panel.list.find((item: { id?: string }) => item.id === "0ecf0bc5-f543-4b6d-87ca-a53e5399321e").list[0];
+  const gradientTarget = saved.displayList.find((item: { id?: string }) => item.id === "8f836a97-d201-49da-b69f-012575bf98f5");
+  expect(shine.reveal).toBe(true);
+  expect(gradientTarget.list[0].alpha).toBe(0.6);
+
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await page.getByRole("button", { name: "Remove Bloom effect" }).click();
+  await page.getByTestId("save-scene").click();
+  saved = await page.evaluate(async () => {
+    const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
+    return response.json();
+  });
+  circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle"]);
+  expect(pageErrors).toEqual([]);
 });
