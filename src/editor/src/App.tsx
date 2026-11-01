@@ -193,7 +193,10 @@ function PanelHeader(props: {
 }
 
 function App() {
-  const [theme, setTheme] = createSignal<Theme>("dark");
+  const [theme, setTheme] = createSignal<Theme>(() => {
+    const stored = window.localStorage.getItem("codogma.editor.theme");
+    return stored === "light" ? "light" : "dark";
+  });
   const [projectName, setProjectName] = createSignal("Project");
   const [projectTree, setProjectTree] = createSignal<ProjectEntry | null>(null);
   const [scene, setScene] = createSignal<SceneDocument | null>(null);
@@ -208,7 +211,27 @@ function App() {
   const [loadError, setLoadError] = createSignal("");
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
   const bottomTab = () => layout().bottomTab;
-  const [layout, setLayout] = createSignal<LayoutState>({ ...DEFAULT_LAYOUT });
+  const [layout, setLayout] = createSignal<LayoutState>(() => {
+    const stored = window.localStorage.getItem("codogma.editor.layout");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Partial<LayoutState>;
+        return {
+          ...DEFAULT_LAYOUT,
+          ...parsed,
+          leftWidth: Math.min(360, Math.max(170, Number(parsed.leftWidth ?? DEFAULT_LAYOUT.leftWidth))),
+          rightWidth: Math.min(420, Math.max(210, Number(parsed.rightWidth ?? DEFAULT_LAYOUT.rightWidth))),
+          bottomHeight: Math.min(420, Math.max(150, Number(parsed.bottomHeight ?? DEFAULT_LAYOUT.bottomHeight))),
+          consoleHeight: Math.min(180, Math.max(56, Number(parsed.consoleHeight ?? DEFAULT_LAYOUT.consoleHeight))),
+        };
+      } catch {
+        window.localStorage.removeItem("codogma.editor.layout");
+      }
+    }
+    return window.innerWidth <= 1360
+      ? { ...DEFAULT_LAYOUT, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }
+      : { ...DEFAULT_LAYOUT };
+  });
   const [hierarchySearch, setHierarchySearch] = createSignal("");
   const [projectSearch, setProjectSearch] = createSignal("");
   const [selectedProjectPath, setSelectedProjectPath] = createSignal("");
@@ -350,35 +373,9 @@ function App() {
     setConsoleMessages((current) => [...current, entry].slice(-250));
   }
 
-  function initializeTheme() {
-    const storedTheme = window.localStorage.getItem("codogma.editor.theme");
-    if (storedTheme === "light" || storedTheme === "dark") setTheme(storedTheme);
-  }
-
   function toggleTheme() {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
     setActiveMenu("");
-  }
-
-  function initializeLayout() {
-    const stored = window.localStorage.getItem("codogma.editor.layout");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Partial<LayoutState>;
-        setLayout({
-          ...DEFAULT_LAYOUT,
-          ...parsed,
-          leftWidth: Math.min(360, Math.max(170, Number(parsed.leftWidth ?? DEFAULT_LAYOUT.leftWidth))),
-          rightWidth: Math.min(420, Math.max(210, Number(parsed.rightWidth ?? DEFAULT_LAYOUT.rightWidth))),
-          bottomHeight: Math.min(420, Math.max(150, Number(parsed.bottomHeight ?? DEFAULT_LAYOUT.bottomHeight))),
-          consoleHeight: Math.min(180, Math.max(56, Number(parsed.consoleHeight ?? DEFAULT_LAYOUT.consoleHeight))),
-        });
-      } catch {
-        window.localStorage.removeItem("codogma.editor.layout");
-      }
-    } else if (window.innerWidth <= 1360) {
-      setLayout((current) => ({ ...current, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }));
-    }
   }
 
   createEffect(() => {
@@ -661,8 +658,6 @@ function App() {
   }
 
   onMount(() => {
-    initializeTheme();
-    initializeLayout();
     window.addEventListener("keydown", handleKeyDown);
     void loadProject();
   });

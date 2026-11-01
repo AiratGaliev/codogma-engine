@@ -99,4 +99,7 @@ test("discovers scene files recursively and prioritizes Level.scene", () => {
     ],
   };
   assert.deepEqual(findScenePaths(root), ["scenes/Level.scene", "Main.scene", "scenes/Other.scene"]);
+  assert.deepEqual(findScenePaths({ name: "test-typescript", isFile: false, children: [
+    { name: "scenes", isFile: false, children: [{ name: "Level.scene", isFile: true }] },
+  ] }), ["scenes/Level.scene"]);
 });

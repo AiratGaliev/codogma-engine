@@ -173,9 +173,13 @@ export function createSceneObject(scene, kind) {
 export function findScenePaths(rootFile) {
   const paths = [];
 
-  function visit(node, prefix) {
+  function visit(node, prefix, isRoot = false) {
     if (!node || typeof node.name !== "string") return;
-    const relativePath = prefix ? `${prefix}/${node.name}` : node.name;
+    const relativePath = isRoot
+      ? ""
+      : prefix
+        ? `${prefix}/${node.name}`
+        : node.name;
 
     if (node.isFile) {
       if (node.name.toLowerCase().endsWith(".scene")) paths.push(relativePath);
@@ -185,10 +189,12 @@ export function findScenePaths(rootFile) {
     for (const child of node.children ?? []) visit(child, relativePath);
   }
 
-  visit(rootFile, "");
+  // GetProjectFiles.rootFile.name is the selected project directory name, not
+  // a path segment accepted by /editor/project/<relative-path>.
+  visit(rootFile, "", true);
   return paths.sort((left, right) => {
-    const leftDefault = left.toLowerCase().endsWith("/level.scene") ? 0 : 1;
-    const rightDefault = right.toLowerCase().endsWith("/level.scene") ? 0 : 1;
+    const leftDefault = left.toLowerCase().endsWith("/level.scene") || left.toLowerCase() === "level.scene" ? 0 : 1;
+    const rightDefault = right.toLowerCase().endsWith("/level.scene") || right.toLowerCase() === "level.scene" ? 0 : 1;
     return leftDefault - rightDefault || left.localeCompare(right);
   });
 }
