@@ -2103,9 +2103,25 @@ function App() {
                 <For each={(scene() as PrefabDocument | null)?.prefabProperties ?? []}>
                   {(property) => (
                     <div class="prefab-property-definition-row">
-                      <span>{property.label ?? property.name}</span>
-                      <code>{property.name}</code>
+                      <div class="prefab-property-label">
+                        <span>{property.label ?? property.name}</span>
+                        <code>{property.name}</code>
+                      </div>
                       <span>{property.type.id}</span>
+                      <Show when={property.type.id === "boolean"}>
+                        <input type="checkbox" aria-label={`Prefab default ${property.name}`} checked={Boolean(property.defValue)} onChange={(event) => updatePrefabPropertyDefault(property.name, { defValue: event.currentTarget.checked })} />
+                      </Show>
+                      <Show when={property.type.id === "option"}>
+                        <select aria-label={`Prefab default ${property.name}`} value={String(property.defValue ?? "")} onChange={(event) => updatePrefabPropertyDefault(property.name, { defValue: event.currentTarget.value })}>
+                          <For each={property.type.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
+                        </select>
+                      </Show>
+                      <Show when={property.type.id === "string" || property.type.id === "number"}>
+                        <input aria-label={`Prefab default ${property.name}`} type={property.type.id === "number" ? "number" : "text"} value={String(property.defValue ?? "")} onChange={(event) => {
+                          const value = property.type.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
+                          if (property.type.id !== "number" || Number.isFinite(value)) updatePrefabPropertyDefault(property.name, { defValue: value });
+                        }} />
+                      </Show>
                       <button class="toolbar-icon-button tiny" aria-label={`Remove Prefab property ${property.name}`} onClick={() => removePrefabPropertyFromDocument(property.name)}>
                         <Icon theme={theme()} name="remove" size={11} />
                       </button>
