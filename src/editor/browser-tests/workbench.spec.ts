@@ -428,7 +428,7 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].blurQuality).toBe(2);
   expect(circleTarget.list[1].preFX).toBe(false);
 
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("button", { name: "Level.scene SCENE", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Level.scene SCENE", exact: true }).click();
   await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible();
@@ -439,7 +439,9 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await page.getByTestId("hierarchy-item-paneldino").press("Enter");
   await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("1500");
-  await page.getByLabel("Shine Reveal").check();
+  const shineCard = page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9");
+  await shineCard.getByText("Reveal", { exact: true }).click();
+  await expect(page.getByLabel("Shine Reveal")).toBeChecked();
 
   await page.getByTestId("hierarchy-item-gradienttarget").click();
   await expect(page.getByTestId("fx-card-d7548c09-2f26-450a-85f4-f7aa2c7475b0")).toBeVisible();
