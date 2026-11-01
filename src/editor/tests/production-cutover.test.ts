@@ -23,7 +23,7 @@ async function reserveLoopbackPort(): Promise<number> {
 
 async function startEditorServer(editorUi: "solidjs" | "legacy"): Promise<{ origin: string; stop: () => Promise<void> }> {
     const port = await reserveLoopbackPort()
-    const child = spawn(process.execPath, [join(repositoryRoot, "server", "server.ts")], {
+    const child = spawn(process.execPath, [join(repositoryRoot, "server", "server.mjs")], {
         cwd: repositoryRoot,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
