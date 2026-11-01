@@ -114,7 +114,7 @@ namespace phasereditor2d.pack.ui.editor.properties {
 
                 const frame = state.frame;
                 const sourceRect = state.descriptor.sourceRect;
-                const trim = frame.trim || this.fullRect(sourceRect);
+                const trim = frame.trim || state.descriptor.trimRect || this.fullRect(sourceRect);
                 const crop = frame.crop || this.fullRect(sourceRect);
                 const pivot = frame.pivot || { x: 0.5, y: 0.5 };
 
@@ -219,12 +219,18 @@ namespace phasereditor2d.pack.ui.editor.properties {
                     }
                 } else {
                     const sourceRect = state.descriptor.sourceRect;
-                    const rect = frame[group] || this.fullRect(sourceRect);
+                    const trimBounds = state.descriptor.sourceSize || {
+                        width: sourceRect.width,
+                        height: sourceRect.height
+                    };
+                    const rect = frame[group] || (group === "trim"
+                        ? state.descriptor.trimRect
+                        : this.fullRect(sourceRect));
                     rect[axis] = value;
 
                     if (rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height <= 0
-                        || rect.x + rect.width > sourceRect.width
-                        || rect.y + rect.height > sourceRect.height) {
+                        || rect.x + rect.width > (group === "trim" ? trimBounds.width : sourceRect.width)
+                        || rect.y + rect.height > (group === "trim" ? trimBounds.height : sourceRect.height)) {
                         this._status.textContent = `${group} rectangle must stay inside the frame and have positive dimensions.`;
                         this.updateWithSelection();
                         return;

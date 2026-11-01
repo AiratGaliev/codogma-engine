@@ -110,10 +110,11 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const metadata = itemData && itemData[pack.core.SpriteAssetMetadata.DATA_KEY];
             const frameMetadata = metadata && metadata.frames && metadata.frames[metadataFrameKey];
             const sourceRect = frameMetadata && frameMetadata.sourceRect;
+            const sourceSize = frameMetadata && frameMetadata.sourceSize;
             const trim = frameMetadata && frameMetadata.trim && sourceRect
                 ? Object.assign({}, frameMetadata.trim, {
-                    actualWidth: sourceRect.width,
-                    actualHeight: sourceRect.height
+                    actualWidth: sourceSize ? sourceSize.width : sourceRect.width,
+                    actualHeight: sourceSize ? sourceSize.height : sourceRect.height
                 })
                 : undefined;
 

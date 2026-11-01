@@ -7,9 +7,19 @@ namespace phasereditor2d.pack.core {
         height: number;
     }
 
+    export interface ISpriteAssetSize {
+        width: number;
+        height: number;
+    }
+
     export interface ISpriteAssetFrameDescriptor {
         key: string;
+        /** Physical rectangle stored in the source image/atlas texture. */
         sourceRect: ISpriteAssetRect;
+        /** Original, untrimmed sprite canvas size. */
+        sourceSize: ISpriteAssetSize;
+        /** Visible sprite rectangle positioned inside sourceSize. */
+        trimRect: ISpriteAssetRect;
     }
 
     export interface ISpriteAssetRectangleCollisionShape {
@@ -97,6 +107,14 @@ namespace phasereditor2d.pack.core {
                     if (!frame.sourceRect) {
                         frame.sourceRect = this.clone(descriptor.sourceRect);
                     }
+
+                    if (!frame.sourceSize) {
+                        frame.sourceSize = this.clone(descriptor.sourceSize);
+                    }
+
+                    if (!frame.trimRect) {
+                        frame.trimRect = this.clone(descriptor.trimRect);
+                    }
                 }
             }
 
@@ -138,10 +156,19 @@ namespace phasereditor2d.pack.core {
                     continue;
                 }
 
-                if (!previous.sourceRect || this.sameRect(previous.sourceRect, descriptor.sourceRect)) {
+                const geometryChanged = !!previous.sourceRect
+                    && !this.sameRect(previous.sourceRect, descriptor.sourceRect)
+                    || !!previous.sourceSize
+                    && !this.sameSize(previous.sourceSize, descriptor.sourceSize)
+                    || !!previous.trimRect
+                    && !this.sameRect(previous.trimRect, descriptor.trimRect);
+
+                if (!geometryChanged) {
                     const preserved = this.clone(previous);
                     preserved.id = preserved.id || this.createId();
                     preserved.sourceRect = this.clone(descriptor.sourceRect);
+                    preserved.sourceSize = this.clone(descriptor.sourceSize);
+                    preserved.trimRect = this.clone(descriptor.trimRect);
                     nextFrames[key] = preserved;
                     continue;
                 }
@@ -153,7 +180,11 @@ namespace phasereditor2d.pack.core {
                         frameKey: key,
                         previousSourceRect: this.clone(previous.sourceRect),
                         currentSourceRect: this.clone(descriptor.sourceRect),
-                        message: "Исходный прямоугольник кадра изменился; прежние пользовательские настройки сохранены отдельно."
+                        previousSourceSize: this.clone(previous.sourceSize),
+                        currentSourceSize: this.clone(descriptor.sourceSize),
+                        previousTrimRect: this.clone(previous.trimRect),
+                        currentTrimRect: this.clone(descriptor.trimRect),
+                        message: "Геометрия кадра или исходного canvas изменилась; прежние пользовательские настройки сохранены отдельно."
                     });
                     nextFrames[key] = this.createFrame(descriptor);
                     continue;
@@ -162,6 +193,8 @@ namespace phasereditor2d.pack.core {
                 const updated = this.clone(previous);
                 updated.id = updated.id || this.createId();
                 updated.sourceRect = this.clone(descriptor.sourceRect);
+                updated.sourceSize = this.clone(descriptor.sourceSize);
+                updated.trimRect = this.clone(descriptor.trimRect);
                 nextFrames[key] = updated;
             }
 
@@ -194,16 +227,35 @@ namespace phasereditor2d.pack.core {
         static describeFrames(frames: AssetPackImageFrame[]): ISpriteAssetFrameDescriptor[] {
 
             return frames.map(frame => {
-                const source = frame.getFrameData().src as any;
+                const data = frame.getFrameData();
+                const source = data.src as any;
+                const destination = data.dst as any;
+                const sourceSize = data.srcSize as any;
+
+                const sourceRect = {
+                    x: Number(source.x) || 0,
+                    y: Number(source.y) || 0,
+                    width: Number(source.w ?? source.width) || frame.getWidth(),
+                    height: Number(source.h ?? source.height) || frame.getHeight()
+                };
+
+                const originalSize = {
+                    width: Number(sourceSize && (sourceSize.x ?? sourceSize.width)) || sourceRect.width,
+                    height: Number(sourceSize && (sourceSize.y ?? sourceSize.height)) || sourceRect.height
+                };
+
+                const trimRect = {
+                    x: Number(destination && destination.x) || 0,
+                    y: Number(destination && destination.y) || 0,
+                    width: Number(destination && (destination.w ?? destination.width)) || sourceRect.width,
+                    height: Number(destination && (destination.h ?? destination.height)) || sourceRect.height
+                };
 
                 return {
                     key: String(frame.getName()),
-                    sourceRect: {
-                        x: Number(source.x) || 0,
-                        y: Number(source.y) || 0,
-                        width: Number(source.w ?? source.width) || frame.getWidth(),
-                        height: Number(source.h ?? source.height) || frame.getHeight()
-                    }
+                    sourceRect,
+                    sourceSize: originalSize,
+                    trimRect
                 };
             });
         }
@@ -331,7 +383,9 @@ namespace phasereditor2d.pack.core {
 
             return {
                 id: this.createId(),
-                sourceRect: this.clone(descriptor.sourceRect)
+                sourceRect: this.clone(descriptor.sourceRect),
+                sourceSize: this.clone(descriptor.sourceSize),
+                trimRect: this.clone(descriptor.trimRect)
             };
         }
 
@@ -367,6 +421,12 @@ namespace phasereditor2d.pack.core {
             return Number(a.x) === Number(b.x)
                 && Number(a.y) === Number(b.y)
                 && Number(a.width) === Number(b.width)
+                && Number(a.height) === Number(b.height);
+        }
+
+        private static sameSize(a: ISpriteAssetSize, b: ISpriteAssetSize): boolean {
+
+            return Number(a.width) === Number(b.width)
                 && Number(a.height) === Number(b.height);
         }
 

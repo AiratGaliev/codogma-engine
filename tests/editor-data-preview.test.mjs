@@ -1176,3 +1176,64 @@ test("single Image Asset Pack metadata is resolved by its actual frame key", () 
         { type: "rectangle", x: 2, y: 1, width: 12, height: 20 }
     ])
 })
+
+
+test("atlas frame descriptors preserve packed rect, source size and trim offset", () => {
+    const descriptor = spriteMetadata.describeFrames([{
+        getName: () => "hero",
+        getWidth: () => 20,
+        getHeight: () => 30,
+        getFrameData: () => ({
+            src: { x: 64, y: 96, w: 20, h: 30 },
+            dst: { x: 5, y: 7, w: 20, h: 30 },
+            srcSize: { x: 40, y: 48 }
+        })
+    }])[0]
+
+    assert.deepEqual(descriptor, {
+        key: "hero",
+        sourceRect: { x: 64, y: 96, width: 20, height: 30 },
+        sourceSize: { width: 40, height: 48 },
+        trimRect: { x: 5, y: 7, width: 20, height: 30 }
+    })
+})
+
+test("reimport reports atlas trim geometry changes even when packed rect is unchanged", () => {
+    const previousData = {
+        type: "atlas",
+        url: "images/atlas.png",
+        codogma: {
+            schemaVersion: 1,
+            assetId: "atlas-asset",
+            frames: {
+                hero: {
+                    id: "hero-frame",
+                    sourceRect: { x: 64, y: 96, width: 20, height: 30 },
+                    sourceSize: { width: 40, height: 48 },
+                    trimRect: { x: 5, y: 7, width: 20, height: 30 },
+                    pivot: { x: 0.25, y: 0.75 }
+                }
+            },
+            orphanedFrames: [],
+            conflicts: []
+        }
+    }
+
+    const updated = spriteMetadata.reconcile(
+        previousData,
+        previousData,
+        [{
+            key: "hero",
+            sourceRect: { x: 64, y: 96, width: 20, height: 30 },
+            sourceSize: { width: 48, height: 48 },
+            trimRect: { x: 8, y: 7, width: 20, height: 30 }
+        }],
+        sourceFile(2048, 2000)
+    )
+
+    assert.equal(updated.frames.hero.id !== "hero-frame", true)
+    assert.equal(updated.orphanedFrames[0].id, "hero-frame")
+    assert.equal(updated.conflicts[0].type, "frame-geometry-changed")
+    assert.deepEqual(updated.conflicts[0].previousSourceSize, { width: 40, height: 48 })
+    assert.deepEqual(updated.conflicts[0].currentTrimRect, { x: 8, y: 7, width: 20, height: 30 })
+})
