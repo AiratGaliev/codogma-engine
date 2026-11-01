@@ -20,11 +20,7 @@ function emitter() {
       return this;
     },
     once(event: string, listener: Listener) {
-      const wrapped: Listener = (...args) => {
-        this.off(event, wrapped);
-        listener(...args);
-      };
-      this.on(event, wrapped);
+      this.on(event, listener);
       return this;
     },
     off(event: string, listener?: Listener) {
@@ -197,7 +193,12 @@ test("Gradient creates a sibling Game Object, follows transforms and reports par
   effect.color1 = 0xff0000;
   effect.color2 = "#2020ff";
   effect.alpha = 0.45;
-  const result = createFxPreview(env.scene as never, env.phaser as never, env.parent as never, effect);
+  const result = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    effect,
+  );
 
   expect(env.gradientConfig?.bands).toBeDefined();
   expect(result.diagnostics[0]).toContain("does not inherit the parent object's alpha");
@@ -224,6 +225,7 @@ test("Shine releases action listeners, filters, tween and DynamicTexture on disp
   expect(env.parent.listeners("destroy")).toHaveLength(0);
   expect(env.removedMasks).toEqual(["shine-filter", "shine-tween", "shine-texture"]);
 });
+
 test("Circle and Gradient helpers keep their order adjacent to a nested Container sibling", () => {
   const env = previewEnvironment();
   const parent = env.parent as unknown as FxDisplayObject;
