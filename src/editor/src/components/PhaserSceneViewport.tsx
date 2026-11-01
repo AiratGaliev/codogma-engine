@@ -65,6 +65,8 @@ interface PhaserSceneConstructor {
 
 interface PhaserGameApi {
   canvas?: HTMLCanvasElement;
+  renderer?: { constructor?: { name?: string } } | null;
+  config?: { renderType?: number; parent?: unknown; customEnvironment?: boolean };
   events: {
     once(event: string, listener: () => void): void;
   };
@@ -431,7 +433,17 @@ function PhaserSceneViewport(props: Props) {
             selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
             selectionFrame?.setDepth?.(1000);
             selectionFrame?.setAlpha?.(0);
-            const canvas = (this as unknown as { game?: PhaserGameApi }).game?.canvas ?? game?.canvas;
+            const sceneGame = (this as unknown as { sys?: { game?: PhaserGameApi } }).sys?.game;
+            const activeGame = sceneGame ?? game;
+            const canvas = activeGame?.canvas;
+            const rendererName = activeGame?.renderer?.constructor?.name ?? "none";
+            const renderType = activeGame?.config?.renderType ?? "unknown";
+            const parentMatches = activeGame?.config?.parent === mount;
+            const mountConnected = Boolean(mount?.isConnected);
+            props.onStatus(
+              "info",
+              `Phaser diagnostics · renderer=${rendererName} · renderType=${renderType} · canvas=${Boolean(canvas)} · parent=${parentMatches} · mountConnected=${mountConnected}`,
+            );
             if (canvas && mount && canvas.parentElement !== mount) {
               mount.append(canvas);
             }
