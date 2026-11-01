@@ -4,6 +4,7 @@ import {
   appendAnimationFrame, createAnimation, createAnimationDocument, formatAnimationContent,
   getAnimations, isAnimationContent, moveAnimationFrame, parseAnimationContent,
   removeAnimation, removeAnimationFrame, updateAnimation, updateAnimationSettings,
+  getAnimationFrameDurationMs, getAnimationDurationMs, getAnimationTimelinePosition,
 } from "../src/domain/animation-model.mjs";
 
 const fixture = {
@@ -60,4 +61,73 @@ test("rejects malformed animation JSON, duplicate keys and invalid frames", () =
   assert.throws(() => parseAnimationContent(JSON.stringify({ anims: [], meta: {} })), /not a Phaser/);
   assert.throws(() => parseAnimationContent(JSON.stringify({ meta: { contentType: "Phaser v3 Animations" }, anims: [{ key: "a", frames: [] }, { key: "a", frames: [] }] })), /Duplicate animation key/);
   assert.throws(() => parseAnimationContent(JSON.stringify({ meta: { contentType: "Phaser v3 Animations" }, anims: [{ key: "a", frames: [{ frame: "missing-key" }] }] })), /invalid frame reference/);
+});
+
+
+test("calculates the Phaser frame timeline from explicit durations, frame rate and time scale", () => {
+  const animation = {
+    key: "walk",
+    frameRate: 10,
+    repeat: 0,
+    frames: [
+      { key: "dino", frame: "walk_0", duration: 80 },
+      { key: "dino", frame: "walk_1" },
+      { key: "dino", frame: "walk_2" },
+    ],
+  };
+
+  assert.equal(getAnimationFrameDurationMs(animation, animation.frames[0]), 80);
+  assert.equal(getAnimationFrameDurationMs(animation, animation.frames[1]), 100);
+  assert.equal(getAnimationDurationMs(animation), 280);
+  assert.equal(getAnimationDurationMs(animation, 2), 140);
+
+  const first = getAnimationTimelinePosition(animation, 40);
+  assert.equal(first.frameIndex, 0);
+  assert.equal(first.progress, 0.5);
+  assert.equal(first.completed, false);
+
+  const second = getAnimationTimelinePosition(animation, 100);
+  assert.equal(second.frameIndex, 1);
+  assert.equal(second.elapsedInFrameMs, 20);
+
+  const complete = getAnimationTimelinePosition(animation, 280);
+  assert.equal(complete.completed, true);
+  assert.equal(complete.frameIndex, 2);
+  assert.equal(complete.progress, 1);
+});
+
+test("handles Phaser repeat delay, infinite repeat and yoyo without changing serialized frames", () => {
+  const animation = {
+    key: "bounce",
+    frameRate: 10,
+    repeat: 1,
+    repeatDelay: 50,
+    yoyo: true,
+    frames: [{ key: "sheet", frame: 0 }, { key: "sheet", frame: 1, duration: 200 }],
+  };
+
+  const repeatGap = getAnimationTimelinePosition(animation, 325);
+  assert.equal(repeatGap.waiting, true);
+  assert.equal(repeatGap.cycleIndex, 0);
+
+  const reverseCycle = getAnimationTimelinePosition(animation, 350);
+  assert.equal(reverseCycle.frameIndex, 1);
+  assert.equal(reverseCycle.elapsedInFrameMs, 0);
+  assert.equal(reverseCycle.progress, 0);
+  assert.equal(reverseCycle.cycleIndex, 1);
+
+  const infinite = getAnimationTimelinePosition({ ...animation, repeat: -1 }, 10_000);
+  assert.equal(infinite.completed, false);
+  assert.ok(infinite.cycleIndex > 1);
+
+  assert.deepEqual(animation.frames, [{ key: "sheet", frame: 0 }, { key: "sheet", frame: 1, duration: 200 }],
+    "preview calculations must not mutate Phaser JSONAnimations.");
+});
+
+test("handles empty animation timelines and rejects invalid preview time", () => {
+  const empty = getAnimationTimelinePosition({ key: "empty", frames: [] }, 0);
+  assert.equal(empty.frameIndex, -1);
+  assert.equal(empty.completed, true);
+  assert.equal(getAnimationDurationMs({ key: "empty", frames: [] }), 0);
+  assert.throws(() => getAnimationTimelinePosition({ key: "x", frames: [] }, Number.NaN), /non-negative finite/);
 });

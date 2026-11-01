@@ -37,3 +37,17 @@ export function removeAnimationFrame(document: AnimationDocument, animationKey: 
 export function moveAnimationFrame(document: AnimationDocument, animationKey: string, fromIndex: number, toIndex: number): AnimationDocument;
 export function updateAnimationSettings(document: AnimationDocument, patch: Record<string, unknown>): AnimationDocument;
 export function formatAnimationContent(document: AnimationDocument): string;
+
+export interface AnimationTimelinePosition {
+  frameIndex: number;
+  elapsedInFrameMs: number;
+  frameDurationMs: number;
+  progress: number;
+  cycleIndex: number;
+  completed: boolean;
+  waiting: boolean;
+  totalDurationMs: number;
+}
+export function getAnimationFrameDurationMs(animation: PhaserAnimationConfig, frame: AnimationFrame, globalTimeScale?: number): number;
+export function getAnimationDurationMs(animation: PhaserAnimationConfig, globalTimeScale?: number): number;
+export function getAnimationTimelinePosition(animation: PhaserAnimationConfig, elapsedMs: number, globalTimeScale?: number): AnimationTimelinePosition;

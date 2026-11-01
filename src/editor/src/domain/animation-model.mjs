@@ -262,7 +262,6 @@ export function getAnimationTimelinePosition(animation, elapsedMs, globalTimeSca
     cyclePositionMs -= duration;
   }
 
-  if (reversed) elapsedInFrameMs = frameDurations[frameIndex] - elapsedInFrameMs;
   const frameDurationMs = frameDurations[frameIndex];
   return {
     frameIndex,
