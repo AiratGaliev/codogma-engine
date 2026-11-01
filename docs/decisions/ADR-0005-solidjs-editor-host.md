@@ -1,6 +1,6 @@
 # ADR-0005: SolidJS Editor Host и замена Colibri UI
 
-**Статус:** принято как целевое UI-направление; реализация не начата.  
+**Статус:** принято как целевое UI-направление; первый SolidJS Host/Scene vertical slice реализуется в COD-80 (PR #30); полная миграция и production cutover не завершены.  
 **Дата:** 30.10.2026  
 **Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md).
 
