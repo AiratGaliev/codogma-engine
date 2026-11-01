@@ -21,6 +21,8 @@ Development priorities:
 - Preserve working functionality while improving maintainability, tests and developer documentation.
 - Clearly distinguish implemented behaviour, known limitations and future work.
 
+**Source-language standard:** all new first-party functionality and tests are authored in TypeScript (`.ts`); UI components that contain JSX use `.tsx`. Tool configurations use TypeScript when supported natively; declarative formats such as `package.json`, `tsconfig.json`, GitHub Actions YAML, HTML, CSS and `.pen` remain in their native formats. New strict scopes use the full compiler profile and do not add JavaScript feature logic. Existing legacy JS/MJS, generated files and vendored sources are not mass-migrated; see [ADR-0002](docs/decisions/ADR-0002-typescript-toolchain.md) for scope and documented exceptions.
+
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
 ## AI-assisted development

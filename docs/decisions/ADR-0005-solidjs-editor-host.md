@@ -2,7 +2,7 @@
 
 **Статус:** принято как целевое UI-направление; COD-80 (PR #30) реализовал и CI-проверил первый SolidJS Host/Workbench + Scene vertical slice. Полная staged migration, session-aware MCP routing, production cutover и Colibri removal ещё не завершены.  
 **Дата:** 30.10.2026  
-**Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [Стандарт reference для 2D Editor Host](../editor-reference-standard.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md).
+**Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [Стандарт reference для 2D Editor Host](../editor-reference-standard.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md), [ADR-0002: общий TypeScript toolchain](ADR-0002-typescript-toolchain.md).
 
 ## Контекст и решение
 
@@ -36,10 +36,13 @@
 
 ## Языковая граница и тестовая инфраструктура
 
-- Весь собственный source нового Host в `src/editor/src/` — TypeScript (`.ts`) и SolidJS TSX (`.tsx`). Не добавлять JavaScript-реализации доменных моделей с параллельными `.d.mts` декларациями: интерфейсы и реализация должны проверяться одним TypeScript compiler.
-- Unit/integration tests в `src/editor/tests/` — TypeScript (`.test.ts`) и выполняются Vitest. Browser acceptance в `src/editor/browser-tests/` — TypeScript Playwright specs; `playwright.config.ts` и TypeScript fixture launcher также входят в Host typecheck.
-- Host `tsconfig.json` не включает `allowJs`; JavaScript/МJS в Host source/test scope не допускаются. Существующий Node backend (`server/*.mjs`), Playwright/Node tooling вне Host и legacy `source/editor/` остаются за этой границей.
-- Vitest и Playwright имеют раздельные test discovery patterns, чтобы браузерные сценарии не запускались в Node runner и наоборот. Production build не включает тестовые файлы.
+- Host следует общему правилу TypeScript-only для нового Codogma-owned кода из [ADR-0002](ADR-0002-typescript-toolchain.md); этот раздел уточняет его для SolidJS приложения.
+- Весь собственный source нового Host в `src/editor/src/` — `.ts` и SolidJS `.tsx`. UI-компоненты с JSX используют TSX; services/domain/models/state/commands/helpers — TS. JavaScript/MJS реализации и парные `.d.mts` sidecar declarations в Host source не допускаются.
+- Unit/integration tests в `src/editor/tests/` — TypeScript (`.test.ts`); Playwright acceptance в `src/editor/browser-tests/` — TypeScript (`.spec.ts`). При использовании JSX тестовый файл может иметь `.tsx`. `playwright.config.ts`, `vite.config.ts` и fixture launchers — TypeScript и включены в Host typecheck. Vitest и Playwright имеют отдельные discovery patterns; browser scenarios не исполняются Vitest в Node runner.
+- `src/editor/tsconfig.json` обязан включать `allowJs: false`, `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `noImplicitOverride: true`, `noImplicitReturns: true`, `noFallthroughCasesInSwitch: true`, `forceConsistentCasingInFileNames: true`, а также `noUnusedLocals`/`noUnusedParameters`. `include` должен охватывать весь TS/TSX source, unit/integration tests, Playwright specs и TS tool configs; `exclude`/границы проекта не должны оставлять новые Host-файлы вне typecheck.
+- Нативные data/config formats (`package.json`, `tsconfig.json`, YAML workflows, HTML, CSS, JSON tokens) сохраняют свои форматы. `.js`/`.mjs` не используются для Host конфигураций, если инструмент поддерживает `.ts`.
+- Граница исключения — уже существующие Node backend `server/*.mjs`, legacy Colibri `source/editor/` и repository-level JS smoke/security scripts. Они не мигрируются автоматически этим ADR. Это не разрешение писать в них новую feature logic: новые Codogma-owned функции должны следовать ADR-0002, а legacy entry point при необходимости остаётся минимальным interop/bootstrap adapter до отдельной миграции.
+- Production build не включает тестовые файлы.
 
 ## Архитектурные правила
 

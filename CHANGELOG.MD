@@ -1,5 +1,14 @@
 # Change Log
 
+## Unreleased (2026-11-01 — TypeScript-only source policy)
+
+### Engineering standards
+
+* Standardized all new Codogma-owned production modules, backend/service logic, tooling and tests on TypeScript; UI containing JSX uses TSX.
+* Required TypeScript config files wherever tooling supports them natively, while retaining native declarative formats such as JSON/YAML, HTML, CSS and `.pen` sources.
+* Made the full strict TypeScript compiler profile mandatory for each new TS/TSX scope, disabled JavaScript in the Editor Host tsconfig and aligned ADR-0002, ADR-0005, the technical specification, migration docs, README and agent instructions.
+* Explicitly preserved existing legacy JS/MJS, generated and vendored files from automatic mass migration; new feature logic must not be added to JavaScript files.
+
 ## Unreleased (2026-11-01 — TypeScript-only Editor Host and Vitest)
 
 ### Editor Host

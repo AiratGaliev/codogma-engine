@@ -41,6 +41,17 @@ A third-party skill is supplemental guidance, not permission to change the archi
 - The engine-owned MCP registry and execution remain in the existing server architecture. The TypeScript stdio package is an adapter; do not create a competing registry or duplicate schemas.
 - The main server uses Node.js built-in APIs. Do not introduce Express, Fastify or another server framework just because a generic Node.js skill uses it.
 
+## Language and test-source policy
+
+Follow the normative standard in [ADR-0002](docs/decisions/ADR-0002-typescript-toolchain.md) and section 12.1 of the [technical specification](docs/technical-specification.md):
+
+- Author all new Codogma-owned functionality, production modules and test code in TypeScript. Use `.tsx` only for UI/components containing JSX and `.ts` for domain, services, contracts, backend logic, tooling, helpers and tests.
+- Use TypeScript config files (`*.config.ts`) whenever the tool supports TypeScript natively. Do not introduce `.js`/`.mjs` source or config merely to avoid setting up TypeScript. Keep externally mandated declarative formats as-is: `package.json`, `tsconfig.json`, YAML workflows, JSON/TOML manifests, HTML, CSS and `.pen` files are not converted to TS.
+- Every new TS/TSX scope gets its own `tsconfig` with the full strict profile: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, and `forceConsistentCasingInFileNames`. Keep `allowJs` disabled; include production source, tests and supported TypeScript tool configs in the typecheck.
+- Do not create paired JavaScript implementations and `.d.mts`/`.d.ts` declarations for first-party modules. Generated package declarations and required ambient/external declarations are allowed.
+- Existing legacy JavaScript/MJS, vendored code and generated output are not subject to automatic mass migration. Do not add new feature logic to existing JS/MJS files: put new logic in TS and keep any unavoidable legacy entry point as the smallest possible interop/bootstrap wrapper. Record any unavoidable new exception with its reason, owner and exit condition.
+- Test source must be TypeScript even when a package retains an existing Node built-in runner for legacy `.mjs` smoke scripts. Select a TS-capable runner/build path for new TS tests; do not add Vitest repository-wide without a scoped decision. The new Editor Host specifically uses Vitest for `.test.ts` and Playwright for `.spec.ts.
+
 ## How to use the installed skills
 
 The selected third-party skills live in .agents/skills/. Load only the skill relevant to the current task, then read its referenced files when needed. Do not load all skills for every request.
@@ -84,8 +95,9 @@ The selected third-party skills live in .agents/skills/. Load only the skill rel
 
 ### Testing and browser automation
 
-- Use the scripts that actually exist in the repository. Root unit tests currently use Node's built-in node:test; do not silently introduce Jest, Vitest or another framework because a skill demonstrates it.
+- Use the scripts that actually exist in the repository. Existing root unit/smoke checks may continue using Node's built-in `node:test` for their current legacy JavaScript files; new test source must be TypeScript and needs a TS-capable runner/build path.
 - The existing npm run test:e2e is an MCP integration flow, not a browser-based Playwright suite.
+- New test source is TypeScript as specified above; existing Node built-in `.mjs` smoke/security tests remain legacy compatibility checks and are not a pattern for new feature tests.
 - The playwright-cli skill is instructions only. Check whether the playwright-cli executable is installed before invoking it; installing the skill does not install the CLI or browsers.
 - The SolidJS skill's testing section contains Vitest examples. Do not add Vitest or Solid-specific test packages solely because the skill recommends them; use the repository's existing runner and approved dependencies unless the test architecture is deliberately changed.
 - Never clear cookies, local/session storage, IndexedDB, persistent browser profiles, or invoke delete-data, kill-all or broad close-all commands unless that destructive action is explicitly part of the user's request. Prefer isolated, ephemeral browser sessions.

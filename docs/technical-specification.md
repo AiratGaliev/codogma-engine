@@ -3,7 +3,7 @@
 | Поле | Значение |
 |---|---|
 | Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
-| Версия документа | 1.14 |
+| Версия документа | 1.15 |
 | Дата | 01.11.2026 |
 | Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
 | Связанный документ | [Дорожная карта](roadmap.md) |
@@ -802,8 +802,13 @@ codogma-engine/
 
 #### Язык и типизация
 
-- TypeScript — основной и обязательный язык нового Engine Core, Project Model, Runtime Adapters, editor integrations, build tools и platform adapters. JavaScript допускается для конфигурационных файлов/скриптов, где это оправдано, генерации и vendored/upstream кода; причины фиксируются, а новый runtime-код нельзя писать на нетипизированном JavaScript по умолчанию.
-- Для новых Codogma modules обязательна отдельная TypeScript config с strict: true и совместимыми дополнительными гарантиями: noUncheckedIndexedAccess, exactOptionalPropertyTypes, noImplicitOverride, noImplicitReturns, noFallthroughCasesInSwitch и forceConsistentCasingInFileNames. Каждая опция подтверждается compilation fixture; несовместимость с наследуемым кодом не должна отключать строгий режим новых модулей.
+- **TypeScript — обязательный язык исходного кода всего нового Codogma-owned функционала**: Engine Core, Project Model, runtime/adapters, Editor Host и его feature modules, backend/service logic, MCP packages, CLI/build/devtools и тесты. Новые модели, сервисы, бизнес-логика, утилиты и тестовый код не пишутся на JavaScript (`.js`, `.mjs`, `.cjs`) или JSDoc вместо TS.
+- UI-компоненты с JSX пишутся в `.tsx`; остальной прикладной код, контракты, тесты и helpers — в `.ts`. TypeScript должен проходить проверку в соответствующем package/scope; UI, domain, integration, browser и contract tests остаются типизированными исходниками. Runner выбирается по задаче и поддержке TS (для нового Host — Vitest и Playwright); Vitest не навязывается автоматически всем пакетам.
+- Config files используют TypeScript (`*.config.ts`), когда инструмент поддерживает такой формат нативно. Не добавлять `.js`/`.mjs` конфиги только ради удобства. Декларативные файлы, чей формат задан внешним контрактом, сохраняют исходный формат: `package.json`, `tsconfig.json`, JSON/YAML/TOML manifests и workflows, HTML, CSS, `.pen` и другие data/assets. Эти файлы не являются JavaScript source и не должны искусственно конвертироваться в TS.
+- Для каждого нового TS/TSX scope обязателен отдельный `tsconfig` с полным профилем: `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `noImplicitOverride: true`, `noImplicitReturns: true`, `noFallthroughCasesInSwitch: true`, `forceConsistentCasingInFileNames: true`. Дополнительно включать `noUnusedLocals` и `noUnusedParameters`, если scope позволяет; `allowJs` не включать.
+- Не создавать `.d.mts`/`.d.ts` sidecar declarations для собственных TS-модулей. Допускаются generated declarations и необходимые ambient/external declarations. Generated JS output не считается авторским исходником.
+- Исключения: существующий legacy-код; vendored/upstream sources; generated files; обязательные внешние manifests; минимальные bootstrap/interop entry points, которые реально не поддерживаются выбранным TS toolchain. Каждое новое исключение требует причины, владельца и условия пересмотра; feature/business logic должна оставаться в TS. Существующие `.js`/`.mjs`/`.cjs` не переписываются массово, но новый функционал не реализуется расширением таких файлов: новая логика выносится в TS-модуль, legacy entry point оставляется минимальным адаптером до отдельной миграции.
+- Строгий профиль должен применяться к новым модулям изолированно: несовместимость с legacy-кодом не является основанием отключать strict flags в новом scope.
 - Не использовать any как способ обхода архитектурной границы. Для неизвестных JSON/SDK/plugin inputs использовать unknown, runtime validation и type narrowing. Casts и non-null assertions требуют локального обоснования, если они пересекают границу доверия или скрывают невозможное состояние.
 - Запрещать @ts-ignore в новом коде; редкое @ts-expect-error допустимо только с пояснением проверяемой причины и тестом. При смене schema, платформенного SDK или external data проверять runtime values, не полагаясь только на compile-time types.
 - Включить type-only imports, discriminated unions, exhaustive handling через never и явные типы публичных экспортов/контрактов там, где это повышает устойчивость API. Не создавать дублирующие декларации одной модели в Core, editor и serializer.
