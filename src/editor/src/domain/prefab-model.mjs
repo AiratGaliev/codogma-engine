@@ -1,5 +1,5 @@
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const createId = () => globalThis.crypto?.randomUUID?.() ?? \`codogma-\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
+const createId = () => globalThis.crypto?.randomUUID?.() ?? `codogma-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function assertScene(scene) {
   if (!scene || typeof scene !== "object" || Array.isArray(scene) ||
@@ -68,7 +68,7 @@ export function addPrefabProperty(prefab, property) {
     throw new TypeError("Prefab property name must be a valid identifier.");
   }
   const properties = Array.isArray(prefab.prefabProperties) ? prefab.prefabProperties : [];
-  if (properties.some((item) => item.name === property.name)) throw new Error(\`Prefab property "\${property.name}" already exists.\`);
+  if (properties.some((item) => item.name === property.name)) throw new Error(`Prefab property "${property.name}" already exists.`);
   if (!property.type || !["string", "number", "boolean", "option"].includes(property.type.id)) {
     throw new TypeError("Prefab property type must be string, number, boolean or option.");
   }
@@ -83,11 +83,11 @@ export function updatePrefabProperty(prefab, propertyName, patch) {
   assertPrefab(prefab);
   const properties = prefab.prefabProperties ?? [];
   const index = properties.findIndex((item) => item.name === propertyName);
-  if (index < 0) throw new Error(\`Prefab property "\${propertyName}" was not found.\`);
+  if (index < 0) throw new Error(`Prefab property "${propertyName}" was not found.`);
   const next = properties.slice();
   next[index] = { ...next[index], ...clone(patch) };
   if (next.some((item, itemIndex) => itemIndex !== index && item.name === next[index].name)) {
-    throw new Error(\`Prefab property "\${next[index].name}" already exists.\`);
+    throw new Error(`Prefab property "${next[index].name}" already exists.`);
   }
   return { ...prefab, prefabProperties: next };
 }
@@ -95,7 +95,7 @@ export function updatePrefabProperty(prefab, propertyName, patch) {
 export function removePrefabProperty(prefab, propertyName) {
   assertPrefab(prefab);
   const properties = prefab.prefabProperties ?? [];
-  if (!properties.some((item) => item.name === propertyName)) throw new Error(\`Prefab property "\${propertyName}" was not found.\`);
+  if (!properties.some((item) => item.name === propertyName)) throw new Error(`Prefab property "${propertyName}" was not found.`);
   return { ...prefab, prefabProperties: properties.filter((item) => item.name !== propertyName) };
 }
 

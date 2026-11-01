@@ -10,10 +10,10 @@ function assertDocument(document) {
         typeof component.name !== "string" || !component.name.trim()) {
       throw new TypeError("Each User Component requires a non-empty name.");
     }
-    if (names.has(component.name)) throw new Error(\`Duplicate User Component "\${component.name}".\`);
+    if (names.has(component.name)) throw new Error(`Duplicate User Component "${component.name}".`);
     names.add(component.name);
     if (component.properties !== undefined && !Array.isArray(component.properties)) {
-      throw new TypeError(\`User Component "\${component.name}" properties must be an array.\`);
+      throw new TypeError(`User Component "${component.name}" properties must be an array.`);
     }
   }
 }
@@ -27,7 +27,7 @@ export function parseUserComponentsContent(content) {
   if (typeof content !== "string" || !content.trim()) throw new TypeError("The User Components file is empty.");
   let parsed;
   try { parsed = JSON.parse(content); }
-  catch (error) { throw new SyntaxError(\`The User Components file is not valid JSON: \${error instanceof Error ? error.message : String(error)}\`); }
+  catch (error) { throw new SyntaxError(`The User Components file is not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
   assertDocument(parsed);
   return parsed;
 }
@@ -54,7 +54,7 @@ export function addUserComponentDefinition(document, definition) {
     throw new TypeError("User Component name must be a valid TypeScript identifier.");
   }
   if (document.components.some((item) => item.name === definition.name)) {
-    throw new Error(\`User Component "\${definition.name}" already exists.\`);
+    throw new Error(`User Component "${definition.name}" already exists.`);
   }
   const properties = definition.properties ?? [];
   if (!Array.isArray(properties) || properties.some((item) =>
@@ -67,11 +67,11 @@ export function addUserComponentDefinition(document, definition) {
 export function updateUserComponentDefinition(document, name, patch) {
   assertDocument(document);
   const index = document.components.findIndex((item) => item.name === name);
-  if (index < 0) throw new Error(\`User Component "\${name}" was not found.\`);
+  if (index < 0) throw new Error(`User Component "${name}" was not found.`);
   const components = document.components.slice();
   components[index] = { ...components[index], ...clone(patch) };
   if (components.some((item, itemIndex) => itemIndex !== index && item.name === components[index].name)) {
-    throw new Error(\`User Component "\${components[index].name}" already exists.\`);
+    throw new Error(`User Component "${components[index].name}" already exists.`);
   }
   assertDocument({ ...document, components });
   return { ...document, components };
@@ -80,7 +80,7 @@ export function updateUserComponentDefinition(document, name, patch) {
 export function removeUserComponentDefinition(document, name) {
   assertDocument(document);
   const components = document.components.filter((item) => item.name !== name);
-  if (components.length === document.components.length) throw new Error(\`User Component "\${name}" was not found.\`);
+  if (components.length === document.components.length) throw new Error(`User Component "${name}" was not found.`);
   return { ...document, components };
 }
 
@@ -94,7 +94,7 @@ export function attachUserComponent(object, definition) {
   components.push(definition.name);
   next.components = components;
   for (const property of definition.properties ?? []) {
-    const key = \`\${definition.name}.\${property.name}\`;
+    const key = `${definition.name}.${property.name}`;
     if (!Object.hasOwn(next, key) && Object.hasOwn(property, "defValue")) next[key] = clone(property.defValue);
   }
   return next;
@@ -104,11 +104,11 @@ export function detachUserComponent(object, componentName) {
   if (!object || typeof object !== "object") throw new TypeError("A scene object is required.");
   const next = clone(object);
   next.components = (Array.isArray(next.components) ? next.components : []).filter((name) => name !== componentName);
-  for (const key of Object.keys(next)) if (key.startsWith(\`\${componentName}.\`)) delete next[key];
+  for (const key of Object.keys(next)) if (key.startsWith(`${componentName}.`)) delete next[key];
   return next;
 }
 
 export function formatUserComponentsContent(document) {
   assertDocument(document);
-  return \`\${JSON.stringify(document, null, 4)}\\n\`;
+  return `${JSON.stringify(document, null, 4)}\n`;
 }

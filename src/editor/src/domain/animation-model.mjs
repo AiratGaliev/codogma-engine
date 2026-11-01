@@ -11,12 +11,12 @@ function assertDocument(document) {
     if (!animation || typeof animation !== "object" || typeof animation.key !== "string" || !animation.key.trim()) {
       throw new TypeError("Each animation requires a non-empty key.");
     }
-    if (keys.has(animation.key)) throw new Error(\`Duplicate animation key "\${animation.key}".\`);
+    if (keys.has(animation.key)) throw new Error(`Duplicate animation key "${animation.key}".`);
     keys.add(animation.key);
-    if (!Array.isArray(animation.frames)) throw new TypeError(\`Animation "\${animation.key}" must have a frames array.\`);
+    if (!Array.isArray(animation.frames)) throw new TypeError(`Animation "${animation.key}" must have a frames array.`);
     for (const frame of animation.frames) {
       if (!frame || typeof frame !== "object" || typeof frame.key !== "string" || !frame.key.trim()) {
-        throw new TypeError(\`Animation "\${animation.key}" contains an invalid frame reference.\`);
+        throw new TypeError(`Animation "${animation.key}" contains an invalid frame reference.`);
       }
     }
   }
@@ -31,8 +31,8 @@ function uniqueKey(document, preferred) {
   const used = new Set(document.anims.map((item) => item.key));
   if (!used.has(base)) return base;
   let suffix = 1;
-  while (used.has(\`\${base}_\${suffix}\`)) suffix += 1;
-  return \`\${base}_\${suffix}\`;
+  while (used.has(`${base}_${suffix}`)) suffix += 1;
+  return `${base}_${suffix}`;
 }
 
 export function createAnimationDocument() {
@@ -48,7 +48,7 @@ export function parseAnimationContent(content) {
   if (typeof content !== "string" || !content.trim()) throw new TypeError("The animation file is empty.");
   let parsed;
   try { parsed = JSON.parse(content); }
-  catch (error) { throw new SyntaxError(\`The animation file is not valid JSON: \${error instanceof Error ? error.message : String(error)}\`); }
+  catch (error) { throw new SyntaxError(`The animation file is not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
   assertDocument(parsed);
   if (parsed.meta?.contentType !== CONTENT_TYPE) throw new TypeError("The JSON file is not a Phaser v3 Animations document.");
   return parsed;
@@ -81,7 +81,7 @@ export function updateAnimation(document, key, patch) {
   assertDocument(document);
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new TypeError("Animation patch must be an object.");
   const index = document.anims.findIndex((item) => item.key === key);
-  if (index < 0) throw new Error(\`Animation "\${key}" was not found.\`);
+  if (index < 0) throw new Error(`Animation "${key}" was not found.`);
   const anims = document.anims.slice();
   anims[index] = { ...anims[index], ...clone(patch) };
   const next = { ...document, anims };
@@ -92,7 +92,7 @@ export function updateAnimation(document, key, patch) {
 export function removeAnimation(document, key) {
   assertDocument(document);
   const anims = document.anims.filter((item) => item.key !== key);
-  if (anims.length === document.anims.length) throw new Error(\`Animation "\${key}" was not found.\`);
+  if (anims.length === document.anims.length) throw new Error(`Animation "${key}" was not found.`);
   return { ...document, anims };
 }
 
@@ -100,14 +100,14 @@ export function appendAnimationFrame(document, animationKey, frame) {
   assertDocument(document);
   if (!frame || typeof frame.key !== "string" || !frame.key.trim()) throw new TypeError("A frame requires a non-empty Asset Pack key.");
   const animation = document.anims.find((item) => item.key === animationKey);
-  if (!animation) throw new Error(\`Animation "\${animationKey}" was not found.\`);
+  if (!animation) throw new Error(`Animation "${animationKey}" was not found.`);
   return updateAnimation(document, animationKey, { frames: [...animation.frames, clone(frame)] });
 }
 
 export function removeAnimationFrame(document, animationKey, frameIndex) {
   assertDocument(document);
   const animation = document.anims.find((item) => item.key === animationKey);
-  if (!animation) throw new Error(\`Animation "\${animationKey}" was not found.\`);
+  if (!animation) throw new Error(`Animation "${animationKey}" was not found.`);
   if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex >= animation.frames.length) throw new RangeError("Animation frame index is out of range.");
   return updateAnimation(document, animationKey, { frames: animation.frames.filter((_, index) => index !== frameIndex) });
 }
@@ -115,7 +115,7 @@ export function removeAnimationFrame(document, animationKey, frameIndex) {
 export function moveAnimationFrame(document, animationKey, fromIndex, toIndex) {
   assertDocument(document);
   const animation = document.anims.find((item) => item.key === animationKey);
-  if (!animation) throw new Error(\`Animation "\${animationKey}" was not found.\`);
+  if (!animation) throw new Error(`Animation "${animationKey}" was not found.`);
   if (![fromIndex, toIndex].every(Number.isInteger) ||
       fromIndex < 0 || toIndex < 0 || fromIndex >= animation.frames.length || toIndex >= animation.frames.length) {
     throw new RangeError("Animation frame index is out of range.");
@@ -141,5 +141,5 @@ export function formatAnimationContent(document) {
     contentType: CONTENT_TYPE,
   };
   normalized.settings ??= { sourceLang: "JAVA_SCRIPT", generateCode: false, esModule: false };
-  return \`\${JSON.stringify(normalized, null, 4)}\\n\`;
+  return `${JSON.stringify(normalized, null, 4)}\n`;
 }
