@@ -101,7 +101,7 @@ Asset-level pivot/crop/trim/collision metadata копируется в scene obj
 - Polygon и compound shapes сохраняются и валидируются, но не преобразуются в ложный bounding box и не считаются автоматически поддержанными Arcade runtime.
 - Для polygon/compound нужна совместимая physics adapter integration и отдельная runtime acceptance. До неё данные остаются в asset/scene metadata.
 
-9-slice и tiled draw mode уже являются Scene Editor workflows для Phaser NineSlice/TileSprite и не дублируются в asset-frame schema. Sorting layers/groups и Y-based ordering принадлежат общему 2D render-order контракту COD-41.
+9-slice и tiled draw mode уже являются Scene Editor workflows для Phaser NineSlice/TileSprite и не дублируются в asset-frame schema. Существующие Phaser `Layer` groups сохраняют порядок по depth-first display-list hierarchy. Именованные Sorting Layers, независимый `sortingOrder` и Y-based ordering ещё не реализованы и принадлежат общему 2D render-order контракту COD-41; не следует трактовать обычный Layer как полноценную систему Sorting Layers.
 
 ## Проверки и acceptance
 

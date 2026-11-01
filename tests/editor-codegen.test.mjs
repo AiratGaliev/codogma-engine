@@ -661,3 +661,27 @@ test("Arcade asset collision geometry is rejected when outside the original sour
     assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), false)
     assert.equal(mutationCount, 0)
 })
+
+
+test("existing Phaser Layer groups preserve depth-first display-list ordering", () => {
+    const Scene = globalThis.phasereditor2d.scene.ui.Scene
+    const Layer = globalThis.phasereditor2d.scene.ui.sceneobjects.Layer
+    const before = {}
+    const childA = {}
+    const childB = {}
+    const after = {}
+    const layer = Object.create(Layer.prototype)
+    layer.getEditorSupport = () => ({
+        getObjectChildren: () => [childA, childB]
+    })
+
+    const scene = Object.create(Scene.prototype)
+    scene.getGameObjects = () => [before, layer, after]
+
+    const order = scene.buildObjectSortingMap()
+
+    assert.deepEqual(
+        [before, layer, childA, childB, after].map(object => order.get(object)),
+        [0, 1, 2, 3, 4]
+    )
+})
