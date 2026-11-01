@@ -1246,6 +1246,39 @@ textarea::placeholder {
   background: var(--surface-panel);
 }
 
+.bottom-dock.console-docked {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.bottom-tabs.dock-drop-target {
+  outline: 1px dashed var(--accent-selection);
+  outline-offset: -2px;
+  background: var(--surface-panel-header);
+}
+
+.console-header-draggable {
+  cursor: grab;
+}
+
+.console-header-draggable:active {
+  cursor: grabbing;
+}
+
+.console-undock-button {
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: 8px;
+}
+
+.console-undock-button:hover {
+  border-color: var(--accent-selection);
+  color: var(--text-primary);
+}
+
 .bottom-upper-panel {
   display: grid;
   min-height: 0;
