@@ -120,7 +120,10 @@ function EffectFields(props: { effect: FxObject; onUpdate: Props["onUpdate"]; on
               <label class="inspector-field fx-inspector-field" title={field.description}>
                 <span>{field.label}</span>
                 <div class="fx-field-control">
-                  <Show when={isTextField(field) && field.color}>
+                  <Show
+                    when={isTextField(field) && field.color}
+                    fallback={<span class="fx-color-spacer" aria-hidden="true" />}
+                  >
                     <span class="fx-color-swatch" aria-hidden="true" style={{ background: colorPreview(fieldValue(props.effect, field)) }} />
                   </Show>
                   <input
