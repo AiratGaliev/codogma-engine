@@ -115,9 +115,9 @@ function attachHelper(parent: FxDisplayObject, helper: FxDisplayObject, indexOff
 
 function setHelperTransform(helper: FxDisplayObject, parent: FxDisplayObject, depthOffset: number): void {
   helper.setPosition(number(parent.x, 0), number(parent.y, 0));
-  helper.setOrigin?.(number(parent.originX, 0.5), number(parent.originY, 0.5));
   helper.setRotation?.(number(parent.rotation, 0));
   helper.setScale?.(number(parent.scaleX, 1), number(parent.scaleY, 1));
+  helper.setAlpha?.(number(parent.alpha, 1));
   helper.setVisible?.(parent.active !== false && parent.visible !== false);
   helper.setDepth?.(number(parent.depth, 0) + depthOffset);
   helper.setScrollFactor?.(number(parent.scrollFactorX, 1), number(parent.scrollFactorY, 1));
@@ -137,8 +137,11 @@ function createCirclePreview(
   let lastWidth = 0;
   let lastHeight = 0;
   let syncListener: UpdateListener;
+  const helperDestroyed: DestroyListener = () => dispose();
 
   const removeVisuals = () => {
+    background?.off?.("destroy", helperDestroyed);
+    ring?.off?.("destroy", helperDestroyed);
     if (mask && parent.filters?.internal) {
       try {
         parent.filters.internal.remove(mask);
@@ -193,6 +196,8 @@ function createCirclePreview(
       0.4,
     );
     ring = scene.add.graphics();
+    background.once?.("destroy", helperDestroyed);
+    ring.once?.("destroy", helperDestroyed);
   };
 
   const sync = () => {
@@ -302,13 +307,16 @@ function createGradientPreview(
   };
   scene.events.on("update", sync);
   const parentDestroyed: DestroyListener = () => dispose();
+  const gradientDestroyed: DestroyListener = () => dispose();
   parent.once?.("destroy", parentDestroyed);
+  gradient.once?.("destroy", gradientDestroyed);
 
   function dispose(): void {
     if (disposed) return;
     disposed = true;
     scene.events.off("update", sync);
     parent.off?.("destroy", parentDestroyed);
+    gradient.off?.("destroy", gradientDestroyed);
     if (gradient.active !== false) gradient.destroy?.();
   }
 
