@@ -65,6 +65,9 @@ interface PhaserSceneConstructor {
 
 interface PhaserGameApi {
   canvas?: HTMLCanvasElement;
+  events: {
+    once(event: string, listener: () => void): void;
+  };
   destroy(removeCanvas?: boolean): void;
   scale: {
     resize?(width: number, height: number): void;
@@ -124,6 +127,10 @@ interface SceneEntry {
 const RUNTIME_WIDTH = 800;
 const RUNTIME_HEIGHT = 600;
 const phaserLoads = new Map<string, Promise<PhaserNamespace>>();
+
+// Phaser 4 destroys a Game asynchronously. A replacement instance must wait
+// for the previous DESTROY event so its renderer cannot race the old teardown.
+let phaserDestroyBarrier: Promise<void> = Promise.resolve();
 
 function encodeProjectPath(path: string): string {
   return path
@@ -389,6 +396,7 @@ function PhaserSceneViewport(props: Props) {
           loadPhaserRuntime(runtimePath),
           discoverImageAssets(props.projectTree),
         ]);
+        await phaserDestroyBarrier;
         if (disposed || !mount) return;
 
         const ImageScene = class extends phaser.Scene {
@@ -454,8 +462,14 @@ function PhaserSceneViewport(props: Props) {
     onCleanup(() => {
       disposed = true;
       resizeObserver?.disconnect();
-      game?.destroy(true);
-      game = undefined;
+      if (game) {
+        const previousGame = game;
+        phaserDestroyBarrier = new Promise<void>((resolve) => {
+          previousGame.events.once("destroy", resolve);
+        });
+        previousGame.destroy(true);
+        game = undefined;
+      }
       sceneRuntime = undefined;
       sceneReady = false;
       selectionFrame = undefined;
