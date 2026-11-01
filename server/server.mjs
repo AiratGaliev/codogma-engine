@@ -55,6 +55,11 @@ const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "tes
 const MAX_API_BODY_BYTES = 32 * 1024 * 1024
 const MAX_UPLOAD_BODY_BYTES = 128 * 1024 * 1024
 const EDITOR_DIR = path.resolve(process.env.EDITOR_DIR || path.join(ROOT, "source", "editor"))
+const EDITOR_HOST_DIR = path.resolve(process.env.EDITOR_HOST_DIR || path.join(ROOT, "src", "editor", "dist"))
+const EDITOR_UI = process.env.CODOGMA_EDITOR_UI || "legacy"
+if (!["legacy", "solidjs"].includes(EDITOR_UI)) {
+    throw new Error(`Unsupported CODOGMA_EDITOR_UI value "${EDITOR_UI}". Use "legacy" or "solidjs".`)
+}
 const PLUGINS_DIR = path.join(EDITOR_DIR, "plugins")
 const EDITOR_ICONS_DIR = path.resolve(ROOT, "src", "editor", "icons")
 const DEV_MODE = process.env.DEV_MODE === "1"
@@ -363,6 +368,14 @@ function pluginAssetURL(pluginId, rel) {
 }
 
 function renderIndexHTML() {
+    if (EDITOR_UI === "solidjs") {
+        const indexPath = safeJoin(EDITOR_HOST_DIR, "index.html")
+        if (!indexPath || !fs.existsSync(indexPath) || !fs.statSync(indexPath).isFile()) {
+            throw new Error(`SolidJS Editor Host production bundle is missing at "${EDITOR_HOST_DIR}". Run "npm --prefix src/editor run build" or roll back with CODOGMA_EDITOR_UI=legacy.`)
+        }
+        return fs.readFileSync(indexPath, "utf8")
+    }
+
     const productPath = path.join(EDITOR_DIR, "product.json")
     const product = JSON.parse(fs.readFileSync(productPath, "utf8"))
     const plugins = readPluginsManifest()
@@ -937,6 +950,23 @@ const server = http.createServer(async (req, res) => {
             return
         }
 
+        // Immutable Vite assets for the opt-in SolidJS production entrypoint.
+        // The path is resolved and served only from the configured dist root.
+        if (EDITOR_UI === "solidjs" && rest.startsWith("assets/")) {
+            const relativeAssetPath = rest.slice("assets/".length).split("?")[0]
+            const full = safeJoin(EDITOR_HOST_DIR, relativeAssetPath)
+            if (!full) {
+                res.writeHead(403, { "Content-Type": "text/plain" })
+                res.end("Forbidden")
+                return
+            }
+            return serveFile(req, res, full, "public, max-age=31536000, immutable", EDITOR_HOST_DIR)
+        }
+
+        if (rest === "host-mode") {
+            return sendJSON(res, { ui: EDITOR_UI, rollbackAvailable: EDITOR_UI !== "legacy" })
+        }
+
         if (rest === "product.json") {
             return serveFile(req, res, path.join(EDITOR_DIR, "product.json"), "no-store", EDITOR_DIR)
         }
@@ -1319,6 +1349,7 @@ server.listen(PORT, "127.0.0.1", () => {
     log(`Codogma Engine server running at http://localhost:${PORT}/editor/`)
     log(`  project:  ${PROJECT_DIR}`)
     log(`  editor:   ${EDITOR_DIR}`)
+    log(`  editor ui: ${EDITOR_UI}${EDITOR_UI === "solidjs" ? ` (bundle: ${EDITOR_HOST_DIR})` : ""}`)
     log(`  dev mode: ${DEV_MODE}`)
     log(`  mcp:      http://localhost:${PORT}/editor/mcp (Streamable HTTP)`)
     log(`  stdio:    node server/mcp-launcher.mjs (@codogma/editor-mcp-server)`)
