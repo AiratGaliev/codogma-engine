@@ -26,7 +26,7 @@
 
 **Границы COD-80, которые не следует смешивать с полной миграцией:** Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Docking в COD-80 ограничен перемещением Hierarchy/Inspector в Bottom Dock с возвратом в домашние слоты и перестановкой вкладок внутри Bottom Dock; произвольные floating windows, свободные split-зоны и произвольная перекомпоновка всех панелей не заявляются. Animation поддерживает базовую работу с Phaser JSON: открыть/создать файл, добавить/изменить/удалить clip и frame references; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом. User Components и Prefab поддерживают существующие базовые модели/операции, но полноценные script lifecycle, code generation и nested Prefab overrides требуют следующих slices; полный feature parity со старым Colibri не является целью migration. Специализированные Sprite/Spine/Tilemap/Physics/FX/importer workflows, session-aware MCP SSE routing, production cutover, rollback window и Colibri removal не входят в COD-80.
 
-Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck и production build, 25 domain tests и Chromium acceptance (7 tests на CI Fast #425). `fast-checks` проверяет `npm audit --audit-level=low` и остальные общие проверки репозитория.
+Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck и production build, 36 domain tests и Chromium acceptance (9 tests на CI Fast #453). `fast-checks` проверяет `npm audit --audit-level=low` и остальные общие проверки репозитория.
 
 ## 0. Правила переноса и реестр пользовательских workflows
 
@@ -112,7 +112,7 @@ codogma-engine/
 
 | Этап | Работа | Результат |
 |---|---|---|
-| 1. SolidJS foundation | `src/editor/` создан в COD-80: Vite + Solid plugin, TSX config, Tailwind 4, scripts, loopback/strict port и backend proxy | **Выполнено в COD-80 / PR #30; CI Fast #425 подтверждён** |
+| 1. SolidJS foundation | `src/editor/` создан в COD-80: Vite + Solid plugin, TSX config, Tailwind 4, scripts, loopback/strict port и backend proxy | **Выполнено в COD-80 / PR #30; CI Fast #453 подтверждён** |
 | 2. Unity-like Workbench | COD-80: Menu/toolbar, базовые панели, tabs/splitters, Hierarchy/Inspector, Project/Assets, Console, Scene/Game viewport, tokens/themes, shortcuts, command/focus model и persisted layout; универсальный docking продолжает COD-83 | **Первый рабочий slice реализован; общий docking/layout ещё частичный** |
 | 3. Scene workflow | COD-80: project/scene open, Phaser Canvas, Hierarchy/selection, Inspector/Transform, save/reopen и Undo/Redo | **Первый vertical slice реализован; независимая acceptance CODQA-18 ожидает candidate** |
 | 4. Feature migration | Prefabs, components, assets/importers, Sprite, Animation/Spine, Tilemap, Physics, FX/Particles, code editor integration | Перенос авторских workflows по vertical slices |
