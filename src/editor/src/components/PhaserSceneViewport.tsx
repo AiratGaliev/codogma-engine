@@ -30,6 +30,7 @@ interface PhaserGameObject {
   height?: number;
   displayWidth?: number;
   displayHeight?: number;
+  rotation?: number;
   setOrigin?(x: number, y: number): PhaserGameObject;
   setPosition?(x: number, y: number): PhaserGameObject;
   setScale?(x: number, y?: number): PhaserGameObject;
