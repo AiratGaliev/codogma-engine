@@ -164,3 +164,23 @@ test("Workbench switches between the wide and compact dock compositions", async 
   await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
   await expect(page.getByTestId("console-panel")).toHaveCount(0);
 });
+
+
+test("Console panel can be dragged into the bottom Dock and undocked again", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toBeVisible();
+
+  await page.locator(".desktop-console-panel .console-header").dragTo(page.locator(".bottom-tabs"));
+
+  await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toHaveCount(0);
+  await expect(page.getByTestId("bottom-dock")).toHaveClass(/console-docked/);
+
+  await page.getByRole("button", { name: "Undock Console" }).click();
+  await expect(page.getByRole("tab", { name: "Console" })).toHaveCount(0);
+  await expect(page.getByTestId("splitter-console")).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+});
