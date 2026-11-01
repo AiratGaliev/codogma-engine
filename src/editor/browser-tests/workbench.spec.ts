@@ -393,7 +393,11 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
 
   await page.getByLabel("Circle Thickness").fill("10");
   await page.getByLabel("Bloom Threshold").fill("0.45");
+  await page.getByLabel("Bloom Threshold").press("Tab");
+  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
   await page.getByLabel("Bloom Blur Quality").fill("2");
+  await page.getByLabel("Bloom Blur Quality").press("Tab");
+  await expect(page.getByLabel("Bloom Blur Quality")).toHaveValue("2");
   await page.getByTestId("save-scene").click();
   await expect(page.getByTestId("save-scene")).toBeDisabled();
 
