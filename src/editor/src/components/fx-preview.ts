@@ -3,7 +3,7 @@ import type { CircleFx, FxObject, GradientFx, BloomFx, ShineFx } from "../domain
 type UpdateListener = () => void;
 type DestroyListener = (...args: unknown[]) => void;
 
-interface FxDisplayObject {
+export interface FxDisplayObject {
   x?: number;
   y?: number;
   width?: number;
@@ -46,7 +46,7 @@ interface FxContainer {
   getIndex(child: FxDisplayObject): number;
 }
 
-interface FxScene {
+export interface FxSceneAdapter {
   events: {
     on(event: "update", listener: UpdateListener): void;
     off(event: "update", listener: UpdateListener): void;
@@ -65,7 +65,7 @@ interface FxController {
   dynamicTexture?: { destroy(): void };
 }
 
-interface FxPhaser {
+export interface FxPhaserAdapter {
   Actions: {
     AddMaskShape(parent: FxDisplayObject, config: Record<string, unknown>): unknown[];
     AddEffectBloom(parent: FxDisplayObject, config: Record<string, unknown>): FxController[];
@@ -128,6 +128,7 @@ function createCirclePreview(
   phaser: FxPhaser,
   parent: FxDisplayObject,
   fx: CircleFx,
+  renderOrderOffset: number,
 ): FxPreviewResult {
   let disposed = false;
   let mask: unknown;
@@ -138,10 +139,20 @@ function createCirclePreview(
   let syncListener: UpdateListener;
 
   const removeVisuals = () => {
-    if (mask && parent.filters?.internal) parent.filters.internal.remove(mask);
+    if (mask && parent.filters?.internal) {
+      try {
+        parent.filters.internal.remove(mask);
+      } catch {
+        // The renderer may already have released its FilterList during shutdown.
+      }
+    }
     mask = undefined;
-    if (background?.active !== false) background?.destroy?.();
-    if (ring?.active !== false) ring?.destroy?.();
+    if (background?.active !== false) {
+      try { background?.destroy?.(); } catch { /* Ignore already-destroyed preview helpers. */ }
+    }
+    if (ring?.active !== false) {
+      try { ring?.destroy?.(); } catch { /* Ignore already-destroyed preview helpers. */ }
+    }
     background = undefined;
     ring = undefined;
   };
@@ -216,7 +227,7 @@ function createCirclePreview(
     ring.strokeEllipse?.(x, y, size.width * circleScale, size.height * circleScale);
     setHelperTransform(ring, parent, 0.001);
     attachHelper(parent, background, 0);
-    attachHelper(parent, ring, 1);
+    attachHelper(parent, ring, 1 + renderOrderOffset);
   };
 
   buildVisuals();
@@ -252,6 +263,7 @@ function createGradientPreview(
   scene: FxScene,
   parent: FxDisplayObject,
   fx: GradientFx,
+  renderOrderOffset: number,
 ): FxPreviewResult {
   const size = dimensions(parent);
   const alpha = Math.max(0, Math.min(1, number(fx.alpha, 0.2)));
@@ -286,7 +298,7 @@ function createGradientPreview(
     gradient.setVisible?.(parent.active !== false && parent.visible !== false);
     gradient.setScrollFactor?.(number(parent.scrollFactorX, 1), number(parent.scrollFactorY, 1));
     gradient.setDepth?.(number(parent.depth, 0) + 0.001);
-    attachHelper(parent, gradient, 1);
+    attachHelper(parent, gradient, 1 + renderOrderOffset);
   };
   scene.events.on("update", sync);
   const parentDestroyed: DestroyListener = () => dispose();
@@ -319,7 +331,16 @@ function createBloomPreview(phaser: FxPhaser, parent: FxDisplayObject, fx: Bloom
   if (!effect?.parallelFilters) {
     throw new Error("Phaser did not create the Bloom filter. Confirm the object supports WebGL filters.");
   }
-  return { dispose: () => effect.parallelFilters?.destroy(), diagnostics: [] };
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    try { effect.parallelFilters?.destroy(); } catch { /* Ignore a filter already released by Phaser. */ }
+    parent.off?.("destroy", parentDestroyed);
+  };
+  const parentDestroyed: DestroyListener = () => dispose();
+  parent.once?.("destroy", parentDestroyed);
+  return { dispose, diagnostics: [] };
 }
 
 function createShinePreview(phaser: FxPhaser, parent: FxDisplayObject, fx: ShineFx): FxPreviewResult {
@@ -335,6 +356,9 @@ function createShinePreview(phaser: FxPhaser, parent: FxDisplayObject, fx: Shine
   })[0];
   const after = parent.listeners?.("destroy") ?? [];
   const actionListeners = after.filter((listener) => !before.includes(listener));
+  if (!effect || (!effect.parallelFilters && !effect.blendFilter && !effect.tween && !effect.dynamicTexture)) {
+    throw new Error("Phaser did not create the Shine effect. Confirm the object supports WebGL filters.");
+  }
   let disposed = false;
   const parentDestroyed: DestroyListener = () => dispose();
   parent.once?.("destroy", parentDestroyed);
@@ -344,28 +368,31 @@ function createShinePreview(phaser: FxPhaser, parent: FxDisplayObject, fx: Shine
     disposed = true;
     actionListeners.forEach((listener) => parent.off?.("destroy", listener));
     parent.off?.("destroy", parentDestroyed);
-    if (effect?.parallelFilters) effect.parallelFilters.destroy();
-    else effect?.blendFilter?.destroy();
-    effect?.tween?.destroy();
-    effect?.dynamicTexture?.destroy();
+    try {
+      if (effect.parallelFilters) effect.parallelFilters.destroy();
+      else effect.blendFilter?.destroy();
+    } catch { /* Filter may already have been released by the parent. */ }
+    try { effect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
+    try { effect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
   }
 
   return { dispose, diagnostics: [] };
 }
 
 export function createFxPreview(
-  scene: FxScene,
-  phaser: FxPhaser,
+  scene: FxSceneAdapter,
+  phaser: FxPhaserAdapter,
   parent: FxDisplayObject,
   effect: FxObject,
+  renderOrderOffset = 0,
 ): FxPreviewResult {
   switch (effect.type) {
     case "Circle":
-      return createCirclePreview(scene, phaser, parent, effect);
+      return createCirclePreview(scene, phaser, parent, effect, renderOrderOffset);
     case "Bloom":
       return createBloomPreview(phaser, parent, effect);
     case "Gradient":
-      return createGradientPreview(scene, parent, effect);
+      return createGradientPreview(scene, parent, effect, renderOrderOffset);
     case "Shine":
       return createShinePreview(phaser, parent, effect);
   }
