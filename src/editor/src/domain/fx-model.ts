@@ -120,7 +120,11 @@ function findSceneNode(
   scene: SceneDocument,
   id: string,
 ): { parent: SceneObject | null; node: SceneObject | null } {
-  const visit = (items: SceneObject[], parent: SceneObject | null, prefix: string): { parent: SceneObject | null; node: SceneObject | null } => {
+  const visit = (
+    items: unknown[],
+    parent: SceneObject | null,
+    prefix: string,
+  ): { parent: SceneObject | null; node: SceneObject | null } => {
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
       if (!isRecord(item)) continue;
@@ -129,8 +133,7 @@ function findSceneNode(
         : `${prefix}${index}`;
       if (nodeId === id) return { parent, node: item as SceneObject };
       if (Array.isArray(item.list)) {
-        const nested = item.list.filter(isRecord) as SceneObject[];
-        const found = visit(nested, item as SceneObject, `${nodeId}-list-`);
+        const found = visit(item.list, item as SceneObject, `${nodeId}-list-`);
         if (found.node) return found;
       }
     }
@@ -143,36 +146,30 @@ function findSceneNode(
   }
   return { parent: null, node: null };
 }
-
 function updateSceneNode(
-  items: SceneObject[],
+  items: unknown[],
   id: string,
   collectionPrefix: string,
   update: (node: SceneObject) => SceneObject,
-): { items: SceneObject[]; changed: boolean } {
+): { items: unknown[]; changed: boolean } {
   let changed = false;
   const next = items.map((item, index) => {
+    if (!isRecord(item)) return item;
     const nodeId = typeof item.id === "string" && item.id.length > 0
       ? item.id
       : `${collectionPrefix}${index}`;
     if (nodeId === id) {
       changed = true;
-      return update(item);
+      return update(item as SceneObject);
     }
     if (!Array.isArray(item.list)) return item;
-    const nested = updateSceneNode(
-      item.list.filter(isRecord) as SceneObject[],
-      id,
-      `${nodeId}-list-`,
-      update,
-    );
+    const nested = updateSceneNode(item.list, id, `${nodeId}-list-`, update);
     if (!nested.changed) return item;
     changed = true;
     return { ...item, list: nested.items };
   });
   return { items: changed ? next : items, changed };
 }
-
 function updateSceneParent(
   scene: SceneDocument,
   parentId: string,
