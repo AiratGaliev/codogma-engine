@@ -35,7 +35,7 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 |---|---|
 | Browser-based IDE | A local Node.js server serves the editor at <code>/editor/</code> and connects it to a project directory. |
 | Scene authoring | Visual scene editing, inspectors, serialization and generated game code. |
-| Project assets | Asset Pack Editor and asset tools for textures, spritesheets, tilemaps and other supported asset types. |
+| Project assets | Asset Pack Editor and asset tools for textures, spritesheets, tilemaps and other supported asset types; versioned sprite/frame metadata, trim/crop/pivot authoring and conflict-aware image/spritesheet reimport. See [Sprite asset metadata](docs/sprite-asset-metadata.md) for supported runtime boundaries. |
 | Animation and components | Animation tools, User Components Editor and code editors. |
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
 | Scene effects and objects | Phaser 4 filters, supported game-object types and corresponding editor/compiler integration. |
