@@ -2962,7 +2962,7 @@ function App() {
                   <For each={animationDocument()?.anims ?? []}>
                     {(animation) => (
                       <div class="animation-clip-row" classList={{ selected: selectedAnimationKey() === animation.key }}>
-                        <button class="animation-clip-select" onClick={() => setSelectedAnimationKey(animation.key)}>
+                        <button class="animation-clip-select" onClick={() => { stopAnimationPreview(true); setSelectedAnimationKey(animation.key); }}>
                           <Icon theme={theme()} name="animation" size={13} />
                           <span>{animation.key}</span>
                           <small>{animation.frames.length} frames</small>
@@ -3007,53 +3007,134 @@ function App() {
                       <input aria-label="Global animation time scale" type="number" min="0.01" step="any" value={String(animationDocument()?.globalTimeScale ?? 1)} onChange={(event) => {
                         const current = animationDocument();
                         const value = Number(event.currentTarget.value);
-                        if (current && Number.isFinite(value) && value > 0) setAnimationDocument({ ...current, globalTimeScale: value });
+                        if (current && Number.isFinite(value) && value > 0) {
+                          pauseAnimationPreview();
+                          setAnimationDocument({ ...current, globalTimeScale: value });
+                        }
                       }} />
                     </label>
+                    <label class="inspector-field">
+                      <span>Initial delay (ms)</span>
+                      <input aria-label="Animation initial delay" type="number" min="0" step="any" value={String(activeAnimation()?.delay ?? 0)} onChange={(event) => updateSelectedAnimation({ delay: Math.max(0, Number(event.currentTarget.value)) })} />
+                    </label>
+                    <label class="inspector-field">
+                      <span>Repeat delay (ms)</span>
+                      <input aria-label="Animation repeat delay" type="number" min="0" step="any" value={String(activeAnimation()?.repeatDelay ?? 0)} onChange={(event) => updateSelectedAnimation({ repeatDelay: Math.max(0, Number(event.currentTarget.value)) })} />
+                    </label>
+                    <label class="inspector-field animation-yoyo-field">
+                      <span>Yoyo</span>
+                      <input aria-label="Animation yoyo" type="checkbox" checked={Boolean(activeAnimation()?.yoyo)} onChange={(event) => updateSelectedAnimation({ yoyo: event.currentTarget.checked })} />
+                    </label>
                   </div>
-                  <div class="animation-frame-toolbar">
-                    <strong>Sprite frames</strong>
-                    <span>{activeAnimation()?.frames.length ?? 0} frames</span>
+                  <div class="animation-preview-toolbar">
+                    <div class="animation-transport-actions">
+                      <button class="toolbar-icon-button" aria-label="Play animation" title="Play" disabled={!activeAnimation()?.frames.length || animationPlaying()} onClick={playAnimationPreview}>▶</button>
+                      <button class="toolbar-icon-button" aria-label="Pause animation" title="Pause" disabled={!animationPlaying()} onClick={pauseAnimationPreview}>Ⅱ</button>
+                      <button class="toolbar-icon-button" aria-label="Stop animation" title="Stop and rewind" disabled={!animationDocument()} onClick={() => stopAnimationPreview(true)}>■</button>
+                      <span class="animation-preview-separator" />
+                      <span class="animation-preview-time" data-testid="animation-playhead-time">{(animationPlayheadMs() / 1000).toFixed(2)} s</span>
+                    </div>
+                    <div class="animation-preview-meta">
+                      <span>FPS {activeAnimation()?.frameRate ?? 24}</span>
+                      <span>{animationDurationLabel()} / loop</span>
+                      <span>{activeAnimation()?.frames.length ?? 0} frames</span>
+                    </div>
                   </div>
-                  <div class="animation-frame-list">
-                    <Show when={(activeAnimation()?.frames.length ?? 0) > 0} fallback={<div class="timeline-empty">No frames. Add an Asset Pack key below.</div>}>
-                      <For each={activeAnimation()?.frames ?? []}>
-                        {(frame, index) => (
-                          <div class="animation-frame-card" data-testid={`animation-frame-${index()}`}>
-                            <div class="animation-frame-heading">
-                              <strong>#{index() + 1}</strong>
-                              <span>{frame.key}</span>
-                              <div class="animation-frame-actions">
-                                <button class="toolbar-icon-button tiny" aria-label={`Move frame ${index() + 1} up`} disabled={index() === 0} onClick={() => moveAnimationFrameBy(index(), -1)}>↑</button>
-                                <button class="toolbar-icon-button tiny" aria-label={`Move frame ${index() + 1} down`} disabled={index() === (activeAnimation()?.frames.length ?? 0) - 1} onClick={() => moveAnimationFrameBy(index(), 1)}>↓</button>
-                                <button class="toolbar-icon-button tiny" aria-label={`Remove frame ${index() + 1}`} onClick={() => deleteAnimationFrame(index())}>
-                                  <Icon theme={theme()} name="remove" size={11} />
-                                </button>
-                              </div>
-                            </div>
-                            <div class="animation-frame-fields">
-                              <label class="inspector-field">
-                                <span>Asset key</span>
-                                <input aria-label={`Frame ${index() + 1} asset key`} value={frame.key} onChange={(event) => updateAnimationFrame(index(), { key: event.currentTarget.value })} />
-                              </label>
-                              <label class="inspector-field">
-                                <span>Frame</span>
-                                <input aria-label={`Frame ${index() + 1} texture frame`} value={String(frame.frame ?? "")} onChange={(event) => updateAnimationFrame(index(), { frame: event.currentTarget.value || undefined })} />
-                              </label>
-                              <label class="inspector-field">
-                                <span>Duration (ms)</span>
-                                <input aria-label={`Frame ${index() + 1} duration`} type="number" min="0" step="any" value={String(frame.duration ?? "")} onChange={(event) => updateAnimationFrame(index(), { duration: event.currentTarget.value === "" ? undefined : Number(event.currentTarget.value) })} />
-                              </label>
-                            </div>
+                  <div class="animation-preview-stage" data-testid="animation-preview-stage">
+                    <Show when={animationPreviewAsset()} fallback={<div class="animation-preview-placeholder"><Icon theme={theme()} name="image-texture" size={25} /><span>{animationPreviewFrame()?.key ?? "Select a clip frame"}</span><small>Asset Pack preview unavailable</small></div>}>
+                      {(asset) => (
+                        <img
+                          class="animation-preview-image"
+                          data-testid="animation-preview-image"
+                          src={`/editor/project/${asset().url.split("/").map(encodeURIComponent).join("/")}`}
+                          alt={`Asset Pack image ${asset().key}`}
+                        />
+                      )}
+                    </Show>
+                    <div class="animation-preview-caption">
+                      <span>{animationPreviewFrame() ? `${animationPreviewFrame()!.key}${animationPreviewFrame()!.frame !== undefined ? ` · ${animationPreviewFrame()!.frame}` : ""}` : "No frame selected"}</span>
+                      <span>{animationPosition()?.waiting ? "Repeat delay / initial delay" : animationPlaying() ? "Playing" : "Preview"}</span>
+                    </div>
+                  </div>
+                  <div class="animation-timeline-ruler" data-testid="animation-timeline-ruler">
+                    <div class="animation-ruler-track" style={{ width: `${Math.max(1, animationTimelineWidth())}px` }}>
+                      <For each={animationRulerTicks()}>
+                        {(tick) => (
+                          <div class="animation-ruler-tick" style={{ left: `${tick.position}%` }}>
+                            <span>{tick.label}</span>
+                            <i />
                           </div>
                         )}
                       </For>
-                    </Show>
+                    </div>
                   </div>
+                  <div class="animation-frame-strip-scroll">
+                    <div class="animation-frame-strip" data-testid="animation-frame-strip" style={{ width: `${Math.max(1, animationTimelineWidth())}px` }}>
+                      <For each={animationFrameSegments()}>
+                        {(segment) => {
+                          const asset = () => animationAssetSources().find((item) => item.key === segment.frame.key);
+                          return (
+                            <button
+                              class="animation-frame-strip-item"
+                              classList={{
+                                selected: selectedAnimationFrameIndex() === segment.index,
+                                playing: animationPreviewFrameIndex() === segment.index,
+                              }}
+                              data-testid={`animation-timeline-frame-${segment.index}`}
+                              draggable
+                              style={{ width: `${segment.widthPx}px`, left: `${segment.leftPx}px` }}
+                              title={`Frame ${segment.index + 1}: ${segment.frame.key} · ${segment.durationMs.toFixed(1)} ms`}
+                              onClick={() => selectAnimationFrame(segment.index)}
+                              onDragStart={(event) => event.dataTransfer?.setData("text/plain", String(segment.index))}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={(event) => handleAnimationFrameDrop(event, segment.index)}
+                            >
+                              <Show when={asset()}>
+                                {(source) => <img src={`/editor/project/${source().url.split("/").map(encodeURIComponent).join("/")}`} alt="" />}
+                              </Show>
+                              <span>#{segment.index + 1} · {segment.frame.key}</span>
+                              <small>{segment.durationMs.toFixed(0)} ms</small>
+                            </button>
+                          );
+                        }}
+                      </For>
+                      <div class="animation-timeline-playhead" data-testid="animation-timeline-playhead" style={{ left: `${animationPlayheadLeftPx()}px` }} />
+                    </div>
+                  </div>
+                  <div class="animation-frame-toolbar">
+                    <strong>Frame properties</strong>
+                    <span>{selectedAnimationFrame() ? `Frame ${selectedAnimationFrameIndex() + 1} of ${activeAnimation()?.frames.length ?? 0}` : "No frame selected"}</span>
+                  </div>
+                  <Show when={selectedAnimationFrame()}>
+                    {(frame) => (
+                      <div class="animation-selected-frame-fields" data-testid="animation-selected-frame-fields">
+                        <label class="inspector-field">
+                          <span>Asset Pack key</span>
+                          <input aria-label="Selected frame asset key" list="animation-asset-keys" value={frame().key} onChange={(event) => updateAnimationFrame(selectedAnimationFrameIndex(), { key: event.currentTarget.value.trim() })} />
+                          <datalist id="animation-asset-keys">
+                            <For each={animationAssetSources()}>{(asset) => <option value={asset.key} />}</For>
+                          </datalist>
+                        </label>
+                        <label class="inspector-field">
+                          <span>Texture frame (optional)</span>
+                          <input aria-label="Selected texture frame" value={String(frame().frame ?? "")} onChange={(event) => updateAnimationFrame(selectedAnimationFrameIndex(), { frame: event.currentTarget.value || undefined })} />
+                        </label>
+                        <label class="inspector-field">
+                          <span>Duration override (ms)</span>
+                          <input aria-label="Selected frame duration" type="number" min="0" step="any" value={String(frame().duration ?? "")} placeholder={String(1000 / (activeAnimation()?.frameRate ?? 24))} onChange={(event) => updateAnimationFrame(selectedAnimationFrameIndex(), { duration: event.currentTarget.value === "" ? undefined : Number(event.currentTarget.value) })} />
+                        </label>
+                        <div class="animation-frame-inspector-actions">
+                          <button class="toolbar-icon-button tiny" aria-label="Move selected frame up" disabled={selectedAnimationFrameIndex() === 0} onClick={() => moveAnimationFrameBy(selectedAnimationFrameIndex(), -1)}>↑</button>
+                          <button class="toolbar-icon-button tiny" aria-label="Move selected frame down" disabled={selectedAnimationFrameIndex() >= (activeAnimation()?.frames.length ?? 0) - 1} onClick={() => moveAnimationFrameBy(selectedAnimationFrameIndex(), 1)}>↓</button>
+                          <button class="toolbar-icon-button tiny" aria-label="Remove selected frame" onClick={() => deleteAnimationFrame(selectedAnimationFrameIndex())}><Icon theme={theme()} name="remove" size={11} /></button>
+                        </div>
+                      </div>
+                    )}
+                  </Show>
                   <div class="animation-add-frame">
                     <label class="inspector-field">
                       <span>Asset Pack key</span>
-                      <input aria-label="New animation frame asset key" placeholder="e.g. dino" value={animationFrameKey()} onInput={(event) => setAnimationFrameKey(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") addAnimationFrame(); }} />
+                      <input aria-label="New animation frame asset key" list="animation-asset-keys" placeholder="e.g. dino" value={animationFrameKey()} onInput={(event) => setAnimationFrameKey(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") addAnimationFrame(); }} />
                     </label>
                     <button class="subtle-button" disabled={!selectedAnimationKey() || !animationFrameKey().trim()} onClick={addAnimationFrame}>Add frame</button>
                   </div>
