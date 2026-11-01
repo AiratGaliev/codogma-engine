@@ -71,17 +71,20 @@ function displayObject() {
     active: true,
     visible: true,
     depth: 2,
+    rotation: 0,
+    scrollFactorX: 1,
+    scrollFactorY: 1,
     destroyCalls: 0,
     filters: undefined as FxDisplayObject["filters"],
     setPosition(x: number, y: number) { this.x = x; this.y = y; return this; },
     setSize(width: number, height: number) { this.width = width; this.height = height; return this; },
     setOrigin(x: number, y: number) { this.originX = x; this.originY = y; return this; },
-    setRotation(_value: number) { return this; },
+    setRotation(value: number) { this.rotation = value; return this; },
     setScale(x: number, y = x) { this.scaleX = x; this.scaleY = y; return this; },
     setAlpha(value: number) { this.alpha = value; return this; },
     setVisible(value: boolean) { this.visible = value; return this; },
     setDepth(value: number) { this.depth = value; return this; },
-    setScrollFactor(_x: number, _y: number) { return this; },
+    setScrollFactor(x: number, y = x) { this.scrollFactorX = x; this.scrollFactorY = y; return this; },
     clear() { return this; },
     lineStyle(_width: number, _color: number, _alpha: number) { return this; },
     strokeEllipse(_x: number, _y: number, _width: number, _height: number) { return this; },
@@ -302,7 +305,7 @@ test("Bloom uses the internal FilterList for preFX and repeated preview replacem
   expect(env.filterLists.external.list).toHaveLength(0);
 });
 
-test("Gradient creates a sibling Game Object, follows transforms and reports parent alpha limitation", () => {
+test("Gradient converts numeric colors and tracks parent transforms, bounds and scroll factors", () => {
   const env = previewEnvironment();
   const effect = createFxObject("Gradient", "gradient");
   effect.color1 = 0xff0000;
@@ -315,14 +318,38 @@ test("Gradient creates a sibling Game Object, follows transforms and reports par
     effect,
   );
 
-  expect(env.gradientConfig?.bands).toBeDefined();
+  const band = (env.gradientConfig?.bands as Array<{colorStart:number[];colorEnd:number[];size:number}>)[0];
+  expect(band?.colorStart).toEqual([1, 0, 0, 0.45]);
+  expect(band?.colorEnd).toEqual([32 / 255, 32 / 255, 1, 0.45]);
+  expect(band?.size).toBe(1);
   expect(result.diagnostics[0]).toContain("does not inherit the parent object's alpha");
-  env.parent.x = 220;
+
+  Object.assign(env.parent, {
+    x: 220, y: 140, width: 80, height: 60,
+    originX: 0.25, originY: 0.75,
+    rotation: 0.3, scaleX: 1.5, scaleY: 0.5,
+    scrollFactorX: 0.4, scrollFactorY: 0.8,
+    depth: 12, active: true, visible: true,
+  });
   env.sceneEvents.emit("update");
-  expect(env.created[0]?.x).toBe(220);
+
+  const gradient = env.created[0];
+  expect(gradient?.x).toBe(220);
+  expect(gradient?.y).toBe(140);
+  expect(gradient?.width).toBe(80);
+  expect(gradient?.height).toBe(60);
+  expect(gradient?.originX).toBe(0.25);
+  expect(gradient?.originY).toBe(0.75);
+  expect(gradient?.rotation).toBe(0.3);
+  expect(gradient?.scaleX).toBe(1.5);
+  expect(gradient?.scaleY).toBe(0.5);
+  expect(gradient?.scrollFactorX).toBe(0.4);
+  expect(gradient?.scrollFactorY).toBe(0.8);
+  expect(gradient?.depth).toBeCloseTo(12.001);
+
   result.dispose();
   expect(env.sceneEvents.count("update")).toBe(0);
-  expect(env.created[0]?.destroyCalls).toBe(1);
+  expect(gradient?.destroyCalls).toBe(1);
 });
 
 test("Shine removes ParallelFilters and nested Blend, action listeners, tween and DynamicTexture", () => {

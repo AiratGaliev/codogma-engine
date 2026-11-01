@@ -419,7 +419,7 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
 
-  await page.getByTestId("hierarchy-item-paneldino").click();
+  await page.getByTestId("hierarchy-item-paneldino").press("Enter");
   await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("1500");
   await page.getByLabel("Shine Reveal").check();
