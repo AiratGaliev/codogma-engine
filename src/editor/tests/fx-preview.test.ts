@@ -55,6 +55,7 @@ function displayObject() {
     visible: true,
     depth: 2,
     destroyCalls: 0,
+    filters: undefined as { internal: { remove(filter: unknown): void } } | undefined,
     setPosition(x: number, y: number) { this.x = x; this.y = y; return this; },
     setSize(width: number, height: number) { this.width = width; this.height = height; return this; },
     setOrigin(x: number, y: number) { this.originX = x; this.originY = y; return this; },
