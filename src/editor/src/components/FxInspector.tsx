@@ -16,6 +16,7 @@ interface TextField {
   label: string;
   initial: string;
   description: string;
+  step?: number;
   color?: boolean;
 }
 
