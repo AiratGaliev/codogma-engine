@@ -1379,3 +1379,30 @@ test("sprite metadata Inspector keeps future schemas read-only without throwing"
     assert.match(state.error, /новее поддерживаемой/)
     assert.deepEqual(item.getData().codogma, originalMetadata)
 })
+
+
+test("ImageParser keeps the real height of a non-square image canvas", () => {
+    const originalGetImage = packCore.AssetPackUtils.getImageFromPackUrl
+    const image = {
+        getWidth: () => 32,
+        getHeight: () => 64
+    }
+    const item = new packCore.ImageAssetPackItem(null, {
+        type: "image",
+        key: "portrait",
+        url: "images/portrait.png"
+    })
+
+    packCore.AssetPackUtils.getImageFromPackUrl = () => image
+
+    try {
+        const frames = new packCore.parsers.ImageParser(item).parseFrames()
+        const descriptor = spriteMetadata.describeFrames(frames)[0]
+
+        assert.deepEqual(descriptor.sourceSize, { width: 32, height: 64 })
+        assert.deepEqual(descriptor.sourceRect, { x: 0, y: 0, width: 32, height: 64 })
+        assert.deepEqual(descriptor.trimRect, { x: 0, y: 0, width: 32, height: 64 })
+    } finally {
+        packCore.AssetPackUtils.getImageFromPackUrl = originalGetImage
+    }
+})
