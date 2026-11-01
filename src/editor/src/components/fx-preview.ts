@@ -21,7 +21,7 @@ export interface FxDisplayObject {
   depth?: number;
   scrollFactorX?: number;
   scrollFactorY?: number;
-  parentContainer?: FxContainer | null;
+  parentContainer?: FxContainerAdapter | null;
   filters?: { internal: { remove(filter: unknown): void } };
   setPosition(x: number, y: number): FxDisplayObject;
   setSize?(width: number, height: number): FxDisplayObject;
@@ -41,8 +41,9 @@ export interface FxDisplayObject {
   listeners?(event: string): DestroyListener[];
 }
 
-interface FxContainer {
-  addAt(child: FxDisplayObject, index: number): FxContainer;
+export interface FxContainerAdapter {
+  add(child: FxDisplayObject): FxContainerAdapter;
+  addAt(child: FxDisplayObject, index: number): FxContainerAdapter;
   getIndex(child: FxDisplayObject): number;
 }
 
