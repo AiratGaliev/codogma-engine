@@ -1,9 +1,7 @@
 import { defineConfig } from "@playwright/test";
-import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const editorDirectory = fileURLToPath(new URL(".", import.meta.url));
-const repositoryRoot = resolve(editorDirectory, "../..");
 
 export default defineConfig({
   testDir: "./browser-tests",
