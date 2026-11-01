@@ -378,9 +378,10 @@ function PhaserSceneViewport(props: Props) {
     for (const entry of entries) {
       let object = gameObjects.get(entry.id);
       if (!object) {
-        object = createEntry(entry, sceneRuntime, assets);
-        object.setInteractive?.();
-        object.on?.("pointerdown", (pointer) => {
+        const createdObject = createEntry(entry, sceneRuntime, assets);
+        object = createdObject;
+        createdObject.setInteractive?.();
+        createdObject.on?.("pointerdown", (pointer) => {
           if (props.lockedIds().has(entry.id)) return;
           props.onSelect(entry.id);
           const activeTool = props.tool();
@@ -395,18 +396,18 @@ function PhaserSceneViewport(props: Props) {
           transformDrag = {
             id: entry.id,
             tool: activeTool,
-            object,
-            pointerStartX: numeric(pointer.worldX, object.x),
-            pointerStartY: numeric(pointer.worldY, object.y),
-            objectStartX: object.x,
-            objectStartY: object.y,
+            object: createdObject,
+            pointerStartX: numeric(pointer.worldX, createdObject.x),
+            pointerStartY: numeric(pointer.worldY, createdObject.y),
+            objectStartX: createdObject.x,
+            objectStartY: createdObject.y,
             rotationStart: numeric(liveSource?.rotation, 0) * (Math.PI / 180),
             scaleXStart: numeric(liveSource?.scaleX, 1),
             scaleYStart: numeric(liveSource?.scaleY, 1),
             patch: {},
           };
         });
-        gameObjects.set(entry.id, object);
+        gameObjects.set(entry.id, createdObject);
       }
 
       const x = numeric(entry.source.x, RUNTIME_WIDTH / 2);
