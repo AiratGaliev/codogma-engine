@@ -2932,7 +2932,13 @@ textarea::placeholder {
 }
 
 .fx-field-control input {
+  width: 100%;
   min-width: 0;
+}
+
+.fx-color-spacer {
+  width: 14px;
+  height: 14px;
 }
 
 .fx-color-swatch {
