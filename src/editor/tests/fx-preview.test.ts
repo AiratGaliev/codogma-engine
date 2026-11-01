@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
 import { createFxObject } from "../src/domain/fx-model.ts";
-import { createFxPreview } from "../src/components/fx-preview.ts";
+import {
+  createFxPreview,
+  type FxContainerAdapter,
+  type FxDisplayObject,
+  type FxPhaserAdapter,
+  type FxSceneAdapter,
+} from "../src/components/fx-preview.ts";
 
 type Listener = (...args: unknown[]) => void;
 
@@ -77,6 +83,7 @@ function previewEnvironment() {
   const sceneEvents = emitter();
   const created: Array<ReturnType<typeof displayObject>> = [];
   const removedMasks: unknown[] = [];
+  const maskConfigs: Record<string, unknown>[] = [];
   let maskConfig: Record<string, unknown> | undefined;
   let gradientConfig: Record<string, unknown> | undefined;
   let bloomConfig: Record<string, unknown> | undefined;
@@ -99,7 +106,8 @@ function previewEnvironment() {
     Actions: {
       AddMaskShape: (_parent: ReturnType<typeof displayObject>, config: Record<string, unknown>) => {
         maskConfig = config;
-        return [{ id: "mask" }];
+        maskConfigs.push(config);
+        return [{ id: `mask-${maskConfigs.length}` }];
       },
       AddEffectBloom: (_parent: ReturnType<typeof displayObject>, config: Record<string, unknown>) => {
         bloomConfig = config;
@@ -122,6 +130,7 @@ function previewEnvironment() {
   return {
     scene, phaser, parent, created, removedMasks, sceneEvents,
     get maskConfig() { return maskConfig; },
+    maskConfigs,
     get gradientConfig() { return gradientConfig; },
     get bloomConfig() { return bloomConfig; },
     get shineConfig() { return shineConfig; },
@@ -130,7 +139,12 @@ function previewEnvironment() {
 
 test("Circle creates a Phaser mask and keeps helper objects in sync, then disposes them", () => {
   const env = previewEnvironment();
-  const result = createFxPreview(env.scene as never, env.phaser as never, env.parent as never, createFxObject("Circle", "circle"));
+  const result = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    createFxObject("Circle", "circle"),
+  );
   expect(env.maskConfig?.shape).toBe("circle");
   expect(env.maskConfig?.useInternal).toBe(true);
   expect(env.created).toHaveLength(2);
@@ -140,11 +154,22 @@ test("Circle creates a Phaser mask and keeps helper objects in sync, then dispos
   env.sceneEvents.emit("update");
   expect(env.created[0]?.x).toBe(150);
   expect(env.created[0]?.alpha).toBeCloseTo(0.3);
+  expect(env.created[1]?.alpha).toBeCloseTo(0.75);
+
+  const previousHelpers = env.created.slice();
+  env.parent.width = 96;
+  env.parent.height = 48;
+  env.sceneEvents.emit("update");
+  expect(env.maskConfigs).toHaveLength(2);
+  expect(env.removedMasks).toContainEqual({ id: "mask-1" });
+  expect(previousHelpers.every((helper) => helper.destroyCalls === 1)).toBe(true);
+  expect(env.created).toHaveLength(4);
 
   result.dispose();
   result.dispose();
   expect(env.sceneEvents.count("update")).toBe(0);
-  expect(env.removedMasks).toContainEqual({ id: "mask" });
+  expect(env.removedMasks).toContainEqual({ id: "mask-1" });
+  expect(env.removedMasks).toContainEqual({ id: "mask-2" });
   expect(env.created.every((item) => item.destroyCalls === 1)).toBe(true);
 });
 
@@ -154,7 +179,12 @@ test("Bloom passes legacy filter settings and releases its ParallelFilters", () 
   effect.preFX = false;
   effect.threshold = 0.35;
   effect.blurSteps = 8;
-  const result = createFxPreview(env.scene as never, env.phaser as never, env.parent as never, effect);
+  const result = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    effect,
+  );
 
   expect(env.bloomConfig).toMatchObject({ threshold: 0.35, blurSteps: 8, useInternal: false });
   result.dispose();
@@ -181,11 +211,62 @@ test("Gradient creates a sibling Game Object, follows transforms and reports par
 
 test("Shine releases action listeners, filters, tween and DynamicTexture on disposal", () => {
   const env = previewEnvironment();
-  const result = createFxPreview(env.scene as never, env.phaser as never, env.parent as never, createFxObject("Shine", "shine"));
+  const result = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    createFxObject("Shine", "shine"),
+  );
   expect(env.shineConfig?.useExternal).toBe(false);
   expect(env.parent.listeners("destroy")).toHaveLength(2);
 
   result.dispose();
   expect(env.parent.listeners("destroy")).toHaveLength(0);
   expect(env.removedMasks).toEqual(["shine-filter", "shine-tween", "shine-texture"]);
+});
+test("Circle and Gradient helpers keep their order adjacent to a nested Container sibling", () => {
+  const env = previewEnvironment();
+  const parent = env.parent as unknown as FxDisplayObject;
+  const sibling = displayObject() as unknown as FxDisplayObject;
+  const children: FxDisplayObject[] = [parent, sibling];
+  const container: FxContainerAdapter = {
+    getIndex: (child) => children.indexOf(child),
+    addAt(child, index) {
+      const existing = children.indexOf(child);
+      if (existing >= 0) children.splice(existing, 1);
+      children.splice(Math.min(Math.max(0, index), children.length), 0, child);
+      (child as FxDisplayObject & { parentContainer?: FxContainerAdapter }).parentContainer = container;
+      return container;
+    },
+    add(child) {
+      return this.addAt(child, children.length);
+    },
+  };
+  (parent as FxDisplayObject & { parentContainer?: FxContainerAdapter }).parentContainer = container;
+
+  const circle = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    parent,
+    createFxObject("Circle", "circle"),
+    0,
+  );
+  const gradient = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    parent,
+    createFxObject("Gradient", "gradient"),
+    1,
+  );
+
+  expect(children).toEqual([
+    env.created[0],
+    parent,
+    env.created[1],
+    env.created[2],
+    sibling,
+  ]);
+
+  gradient.dispose();
+  circle.dispose();
 });
