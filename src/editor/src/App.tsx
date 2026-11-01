@@ -29,7 +29,7 @@ import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
 type ViewportTab = "Scene" | "Game";
-type BottomTab = "Project" | "Animation";
+type BottomTab = "Project" | "Animation" | "Console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
 
 interface ConsoleMessage {
@@ -65,6 +65,17 @@ const DEFAULT_LAYOUT: LayoutState = {
   inspectorVisible: true,
   bottomTab: "Project",
 };
+
+function defaultLayout(compact: boolean): LayoutState {
+  return compact
+    ? { ...DEFAULT_LAYOUT, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }
+    : { ...DEFAULT_LAYOUT };
+}
+
+function clampLayoutValue(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
 
 function iconPath(theme: Theme, name: string): string {
   return `/editor/app/editor-icons/${theme}/godot/${name}.svg`;
@@ -192,6 +203,48 @@ function PanelHeader(props: {
   );
 }
 
+function ConsolePanel(props: {
+  className: string;
+  theme: Theme;
+  level: string;
+  onLevelChange: (level: string) => void;
+  messages: ConsoleMessage[];
+  onClear: () => void;
+}) {
+  return (
+    <section class="console-panel" classList={{ [props.className]: true }} data-testid="console-panel">
+      <div class="console-header">
+        <div class="console-title"><Icon theme={props.theme} name="script" size={13} /> Console</div>
+        <select aria-label="Console message filter" value={props.level} onChange={(event) => props.onLevelChange(event.currentTarget.value)}>
+          <option value="all">All</option>
+          <option value="info">Info</option>
+          <option value="success">Success</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+        </select>
+        <div class="console-header-spacer" />
+        <span class="console-count">{props.messages.length} messages</span>
+        <button class="toolbar-icon-button tiny" aria-label="Clear console" title="Clear console" onClick={props.onClear}>
+          <Icon theme={props.theme} name="remove" size={12} />
+        </button>
+      </div>
+      <div class="console-messages" role="log" aria-label="Editor console" aria-live="polite">
+        <Show when={props.messages.length > 0} fallback={<div class="console-empty">No messages. Editor diagnostics will appear here.</div>}>
+          <For each={props.messages}>
+            {(message) => (
+              <div class="console-message" classList={{ [message.level]: true }}>
+                <span class="console-time">{message.time}</span>
+                <span class="console-level">{message.level.toUpperCase()}</span>
+                <span class="console-text">{message.text}</span>
+              </div>
+            )}
+          </For>
+        </Show>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [theme, setTheme] = createSignal<Theme>((() => {
     const stored = window.localStorage.getItem("codogma.editor.theme");
@@ -211,26 +264,31 @@ function App() {
   const [loadError, setLoadError] = createSignal("");
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
   const bottomTab = () => layout().bottomTab;
+  const [compactWorkbench, setCompactWorkbench] = createSignal(window.innerWidth <= 1360);
   const [layout, setLayout] = createSignal<LayoutState>((() => {
+    const compact = window.innerWidth <= 1360;
+    const defaults = defaultLayout(compact);
     const stored = window.localStorage.getItem("codogma.editor.layout");
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as Partial<LayoutState>;
+        const savedLeft = compact && parsed.leftWidth === DEFAULT_LAYOUT.leftWidth ? defaults.leftWidth : parsed.leftWidth;
+        const savedRight = compact && parsed.rightWidth === DEFAULT_LAYOUT.rightWidth ? defaults.rightWidth : parsed.rightWidth;
+        const savedBottom = compact && parsed.bottomHeight === DEFAULT_LAYOUT.bottomHeight ? defaults.bottomHeight : parsed.bottomHeight;
         return {
-          ...DEFAULT_LAYOUT,
-          ...parsed,
-          leftWidth: Math.min(360, Math.max(170, Number(parsed.leftWidth ?? DEFAULT_LAYOUT.leftWidth))),
-          rightWidth: Math.min(420, Math.max(210, Number(parsed.rightWidth ?? DEFAULT_LAYOUT.rightWidth))),
-          bottomHeight: Math.min(420, Math.max(150, Number(parsed.bottomHeight ?? DEFAULT_LAYOUT.bottomHeight))),
-          consoleHeight: Math.min(180, Math.max(56, Number(parsed.consoleHeight ?? DEFAULT_LAYOUT.consoleHeight))),
+          leftWidth: clampLayoutValue(savedLeft, defaults.leftWidth, 170, 360),
+          rightWidth: clampLayoutValue(savedRight, defaults.rightWidth, 210, 420),
+          bottomHeight: clampLayoutValue(savedBottom, defaults.bottomHeight, 150, 420),
+          consoleHeight: clampLayoutValue(parsed.consoleHeight, defaults.consoleHeight, 56, 180),
+          hierarchyVisible: typeof parsed.hierarchyVisible === "boolean" ? parsed.hierarchyVisible : defaults.hierarchyVisible,
+          inspectorVisible: typeof parsed.inspectorVisible === "boolean" ? parsed.inspectorVisible : defaults.inspectorVisible,
+          bottomTab: parsed.bottomTab === "Animation" || (compact && parsed.bottomTab === "Console") ? parsed.bottomTab : "Project",
         };
       } catch {
         window.localStorage.removeItem("codogma.editor.layout");
       }
     }
-    return window.innerWidth <= 1360
-      ? { ...DEFAULT_LAYOUT, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }
-      : { ...DEFAULT_LAYOUT };
+    return defaults;
   })());
   const [hierarchySearch, setHierarchySearch] = createSignal("");
   const [projectSearch, setProjectSearch] = createSignal("");
@@ -356,6 +414,14 @@ function App() {
       title: "Show Animation workspace",
       run: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })),
     },
+    {
+      id: "console",
+      title: "Show Console workspace",
+      run: () => {
+        if (compactWorkbench()) setLayout((current) => ({ ...current, bottomTab: "Console" }));
+        else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
+      },
+    },
   ]);
 
   const filteredCommands = createMemo(() => {
@@ -399,10 +465,21 @@ function App() {
     window.localStorage.setItem("codogma.editor.layout", JSON.stringify(current));
   });
 
-  async function loadScene(path: string) {
+  let sceneLoadSequence = 0;
+
+  async function loadScene(path: string, reloadCurrent = false) {
+    if (dirty() && (path !== scenePath() || reloadCurrent)) {
+      const discardChanges = window.confirm(
+        "This scene has unsaved changes. Discard them and open the requested scene?",
+      );
+      if (!discardChanges) return;
+    }
+
+    const request = ++sceneLoadSequence;
     setLoadError("");
     try {
       const content = await readProjectFile(path);
+      if (request !== sceneLoadSequence) return;
       const parsed = parseSceneContent(content) as SceneDocument;
       setScene(parsed);
       setScenePath(path);
@@ -417,6 +494,7 @@ function App() {
       setGameLoaded(false);
       log("success", `Opened ${path}`);
     } catch (error) {
+      if (request !== sceneLoadSequence) return;
       const message = error instanceof Error ? error.message : String(error);
       setLoadError(message);
       log("error", message);
@@ -512,6 +590,17 @@ function App() {
     try {
       const patch = { [key]: value };
       applySceneChange(updateSceneObject(current, selected.id, patch));
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function updateObjectProperties(id: string, patch: Record<string, number>) {
+    const current = scene();
+    if (!current) return;
+    try {
+      const next = updateSceneObject(current, id, patch) as SceneDocument;
+      applySceneChange(next, id);
     } catch (error) {
       log("error", error instanceof Error ? error.message : String(error));
     }
@@ -657,12 +746,35 @@ function App() {
     }
   }
 
+  function handleWorkbenchResize() {
+    const previousCompact = compactWorkbench();
+    const nextCompact = window.innerWidth <= 1360;
+    if (previousCompact === nextCompact) return;
+    setCompactWorkbench(nextCompact);
+    setLayout((current) => {
+      const previousDefaults = defaultLayout(previousCompact);
+      const nextDefaults = defaultLayout(nextCompact);
+      return {
+        ...current,
+        leftWidth: current.leftWidth === previousDefaults.leftWidth ? nextDefaults.leftWidth : current.leftWidth,
+        rightWidth: current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
+        bottomHeight: current.bottomHeight === previousDefaults.bottomHeight ? nextDefaults.bottomHeight : current.bottomHeight,
+        consoleHeight: current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
+        bottomTab: !nextCompact && current.bottomTab === "Console" ? "Project" : current.bottomTab,
+      };
+    });
+  }
+
   onMount(() => {
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleWorkbenchResize);
     void loadProject();
   });
 
-  onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+  onCleanup(() => {
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("resize", handleWorkbenchResize);
+  });
 
   const currentObject = () => selectedObject()?.source;
   const components = () => {
@@ -675,7 +787,7 @@ function App() {
   const menuItems: Record<string, Array<{ label: string; shortcut?: string; action: () => void; disabled?: boolean }>> = {
     File: [
       { label: "Save scene", shortcut: "Ctrl+S", action: () => void saveScene(), disabled: !scene() || saving() },
-      { label: "Reload scene from disk", action: () => scenePath() && void loadScene(scenePath()), disabled: !scenePath() },
+      { label: "Reload scene from disk", action: () => scenePath() && void loadScene(scenePath(), true), disabled: !scenePath() },
     ],
     Edit: [
       { label: "Undo", shortcut: "Ctrl+Z", action: undo, disabled: historyIndex() <= 0 },
@@ -687,12 +799,15 @@ function App() {
       { label: `${layout().hierarchyVisible ? "Hide" : "Show"} Hierarchy`, action: () => setLayout((current) => ({ ...current, hierarchyVisible: !current.hierarchyVisible })) },
       { label: `${layout().inspectorVisible ? "Hide" : "Show"} Inspector`, action: () => setLayout((current) => ({ ...current, inspectorVisible: !current.inspectorVisible })) },
       { label: "Toggle light / dark theme", action: toggleTheme },
-      { label: "Reset workspace layout", action: () => setLayout({ ...DEFAULT_LAYOUT }) },
+      { label: "Reset workspace layout", action: () => setLayout(defaultLayout(compactWorkbench())) },
     ],
     Window: [
       { label: "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
       { label: "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
-      { label: "Console", action: () => document.querySelector(".console-panel")?.scrollIntoView({ block: "nearest" }) },
+      { label: "Console", action: () => {
+        if (compactWorkbench()) setLayout((current) => ({ ...current, bottomTab: "Console" }));
+        else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
+      } },
     ],
     Help: [
       { label: "Editor Host architecture", action: () => log("info", "SolidJS Host · legacy Colibri remains available at /editor/") },
@@ -703,6 +818,7 @@ function App() {
     <div
       class="workbench"
       data-testid="workbench"
+      data-layout={compactWorkbench() ? "compact" : "wide"}
       classList={{
         "hierarchy-hidden": !layout().hierarchyVisible,
         "inspector-hidden": !layout().inspectorVisible,
@@ -860,7 +976,7 @@ function App() {
           <button class="toolbar-icon-button" aria-label="Toggle theme" onClick={toggleTheme} title="Toggle light / dark theme">
             <span class="theme-symbol">{theme() === "dark" ? "☼" : "◐"}</span>
           </button>
-          <button class="toolbar-icon-button" aria-label="Reset layout" onClick={() => setLayout({ ...DEFAULT_LAYOUT })} title="Reset workspace layout">
+          <button class="toolbar-icon-button" aria-label="Reset layout" onClick={() => setLayout(defaultLayout(compactWorkbench()))} title="Reset workspace layout">
             <Icon theme={theme()} name="reload" />
           </button>
         </div>
@@ -1069,7 +1185,11 @@ function App() {
                     projectTree={projectTree()}
                     theme={theme()}
                     active={activeViewport() === "Scene"}
+                    tool={() => tool()}
+                    hiddenIds={() => hiddenObjects()}
+                    lockedIds={() => lockedObjects()}
                     onSelect={setSelectedId}
+                    onTransform={updateObjectProperties}
                     onStatus={log}
                   />
                 )}
@@ -1256,6 +1376,11 @@ function App() {
             <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Animation"} classList={{ active: bottomTab() === "Animation" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Animation" }))}>
               <Icon theme={theme()} name="animation" size={13} /> Animation
             </button>
+            <Show when={compactWorkbench()}>
+              <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Console"} classList={{ active: bottomTab() === "Console" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Console" }))}>
+                <Icon theme={theme()} name="script" size={13} /> Console
+              </button>
+            </Show>
             <div class="dock-tabs-spacer" />
             <button class="toolbar-icon-button tiny" aria-label="Hide bottom dock" title="Hide bottom workspace" onClick={() => setLayout((current) => ({ ...current, bottomHeight: 150 }))}>
               <span>−</span>
@@ -1345,8 +1470,21 @@ function App() {
               </div>
             </div>
           </Show>
+
+          <Show when={compactWorkbench() && bottomTab() === "Console"}>
+            <ConsolePanel
+              className="compact-console-panel"
+              theme={theme()}
+              level={consoleLevel()}
+              onLevelChange={setConsoleLevel}
+              messages={visibleConsoleMessages()}
+              onClear={() => setConsoleMessages([])}
+            />
+          </Show>
         </div>
 
+        <Show when={!compactWorkbench()}>
+          <>
         <div
           class="console-splitter"
           data-testid="splitter-console"
@@ -1355,36 +1493,16 @@ function App() {
           aria-label="Resize Console panel"
           onPointerDown={(event) => startResize("console", event)}
         />
-        <section class="console-panel">
-          <div class="console-header">
-            <div class="console-title"><Icon theme={theme()} name="script" size={13} /> Console</div>
-            <select aria-label="Console message filter" value={consoleLevel()} onChange={(event) => setConsoleLevel(event.currentTarget.value)}>
-              <option value="all">All</option>
-              <option value="info">Info</option>
-              <option value="success">Success</option>
-              <option value="warning">Warning</option>
-              <option value="error">Error</option>
-            </select>
-            <div class="console-header-spacer" />
-            <span class="console-count">{visibleConsoleMessages().length} messages</span>
-            <button class="toolbar-icon-button tiny" aria-label="Clear console" title="Clear console" onClick={() => setConsoleMessages([])}>
-              <Icon theme={theme()} name="remove" size={12} />
-            </button>
-          </div>
-          <div class="console-messages" role="log" aria-label="Editor console" aria-live="polite">
-            <Show when={visibleConsoleMessages().length > 0} fallback={<div class="console-empty">No messages. Editor diagnostics will appear here.</div>}>
-              <For each={visibleConsoleMessages()}>
-                {(message) => (
-                  <div class="console-message" classList={{ [message.level]: true }}>
-                    <span class="console-time">{message.time}</span>
-                    <span class="console-level">{message.level.toUpperCase()}</span>
-                    <span class="console-text">{message.text}</span>
-                  </div>
-                )}
-              </For>
-            </Show>
-          </div>
-        </section>
+        <ConsolePanel
+          className="desktop-console-panel"
+          theme={theme()}
+          level={consoleLevel()}
+          onLevelChange={setConsoleLevel}
+          messages={visibleConsoleMessages()}
+          onClear={() => setConsoleMessages([])}
+        />
+          </>
+        </Show>
       </section>
 
       <footer class="status-bar">
