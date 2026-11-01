@@ -2056,6 +2056,9 @@ function App() {
             <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Animation"} classList={{ active: bottomTab() === "Animation" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Animation" }))}>
               <Icon theme={theme()} name="animation" size={13} /> Animation
             </button>
+            <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Components"} classList={{ active: bottomTab() === "Components" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Components" }))}>
+              <Icon theme={theme()} name="script" size={13} /> Components
+            </button>
             <Show when={compactWorkbench() || layout().consoleDocked}>
               <button class="dock-tab" role="tab" aria-selected={bottomTab() === "Console"} classList={{ active: bottomTab() === "Console" }} onClick={() => setLayout((current) => ({ ...current, bottomTab: "Console" }))}>
                 <Icon theme={theme()} name="script" size={13} /> Console
@@ -2137,20 +2140,197 @@ function App() {
           </Show>
 
           <Show when={bottomTab() === "Animation"}>
-            <div class="animation-workspace">
-              <div class="animation-track-list">
-                <div class="track-header">TRACK / PROPERTY</div>
-                <div class="track-row"><Icon theme={theme()} name="sprite-2d" size={13} /> {selectedObject()?.name ?? "No selected object"}</div>
-                <div class="track-row muted"><Icon theme={theme()} name="animation" size={13} /> Sprite frames</div>
-              </div>
+            <div class="animation-workspace" data-testid="animation-workspace">
+              <aside class="animation-track-list">
+                <div class="track-header animation-file-header">
+                  <span>ANIMATIONS</span>
+                  <button class="toolbar-icon-button tiny" aria-label="Create animation file" title="New Phaser animation JSON" onClick={() => void createAnimationFile()}>
+                    <Icon theme={theme()} name="add" size={12} />
+                  </button>
+                </div>
+                <div class="animation-file-path">{animationPath() || "No .json animation file open"}</div>
+                <Show when={animationDocument()} fallback={<div class="timeline-empty">Open a Phaser v3 Animations JSON file from Project, or create one here.</div>}>
+                  <button class="subtle-button animation-add-clip" onClick={addAnimationClip}>+ New animation clip</button>
+                  <For each={animationDocument()?.anims ?? []}>
+                    {(animation) => (
+                      <div class="animation-clip-row" classList={{ selected: selectedAnimationKey() === animation.key }}>
+                        <button class="animation-clip-select" onClick={() => setSelectedAnimationKey(animation.key)}>
+                          <Icon theme={theme()} name="animation" size={13} />
+                          <span>{animation.key}</span>
+                          <small>{animation.frames.length} frames</small>
+                        </button>
+                        <button class="toolbar-icon-button tiny" aria-label={`Delete animation ${animation.key}`} title="Delete animation" onClick={() => deleteAnimationClip(animation.key)}>
+                          <Icon theme={theme()} name="remove" size={11} />
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </aside>
               <div class="animation-timeline">
                 <div class="timeline-toolbar">
-                  <strong>Animation Timeline</strong>
-                  <span>Frame tracks are not connected to a serializable animation model yet.</span>
+                  <div class="timeline-title">
+                    <strong>{activeAnimation()?.key ?? "Animation Timeline"}</strong>
+                    <span>{animationPath() || "Phaser JSONAnimations"}</span>
+                  </div>
+                  <div class="timeline-actions">
+                    <button class="subtle-button" onClick={() => void createAnimationFile()}>New file</button>
+                    <button class="primary-button" data-testid="save-animation" disabled={!animationDocument() || !animationDirty() || animationSaving()} onClick={() => void saveAnimationFile()}>
+                      {animationSaving() ? "Saving…" : "Save"}
+                    </button>
+                  </div>
                 </div>
-                <div class="timeline-ruler"><For each={["0.00", "0.25", "0.50", "0.75", "1.00"]}>{(time) => <span>{time}s</span>}</For></div>
-                <div class="timeline-empty">No animation clip selected</div>
+                <Show when={animationDocument()} fallback={<div class="timeline-empty">Animation authoring uses Phaser's existing JSONAnimations format.</div>}>
+                  <div class="animation-settings-grid">
+                    <label class="inspector-field">
+                      <span>Animation key</span>
+                      <input aria-label="Animation key" value={activeAnimation()?.key ?? ""} onChange={(event) => updateSelectedAnimation({ key: event.currentTarget.value.trim() })} />
+                    </label>
+                    <label class="inspector-field">
+                      <span>Frame rate</span>
+                      <input aria-label="Animation frame rate" type="number" min="0.01" step="any" value={String(activeAnimation()?.frameRate ?? 24)} onChange={(event) => updateSelectedAnimation({ frameRate: Number(event.currentTarget.value) })} />
+                    </label>
+                    <label class="inspector-field">
+                      <span>Repeat</span>
+                      <input aria-label="Animation repeat" type="number" step="1" value={String(activeAnimation()?.repeat ?? -1)} onChange={(event) => updateSelectedAnimation({ repeat: Math.trunc(Number(event.currentTarget.value)) })} />
+                    </label>
+                    <label class="inspector-field">
+                      <span>Global time scale</span>
+                      <input aria-label="Global animation time scale" type="number" min="0.01" step="any" value={String(animationDocument()?.globalTimeScale ?? 1)} onChange={(event) => {
+                        const current = animationDocument();
+                        const value = Number(event.currentTarget.value);
+                        if (current && Number.isFinite(value) && value > 0) setAnimationDocument({ ...current, globalTimeScale: value });
+                      }} />
+                    </label>
+                  </div>
+                  <div class="animation-frame-toolbar">
+                    <strong>Sprite frames</strong>
+                    <span>{activeAnimation()?.frames.length ?? 0} frames</span>
+                  </div>
+                  <div class="animation-frame-list">
+                    <Show when={(activeAnimation()?.frames.length ?? 0) > 0} fallback={<div class="timeline-empty">No frames. Add an Asset Pack key below.</div>}>
+                      <For each={activeAnimation()?.frames ?? []}>
+                        {(frame, index) => (
+                          <div class="animation-frame-card" data-testid={`animation-frame-${index()}`}>
+                            <div class="animation-frame-heading">
+                              <strong>#{index() + 1}</strong>
+                              <span>{frame.key}</span>
+                              <div class="animation-frame-actions">
+                                <button class="toolbar-icon-button tiny" aria-label={`Move frame ${index() + 1} up`} disabled={index() === 0} onClick={() => moveAnimationFrameBy(index(), -1)}>↑</button>
+                                <button class="toolbar-icon-button tiny" aria-label={`Move frame ${index() + 1} down`} disabled={index() === (activeAnimation()?.frames.length ?? 0) - 1} onClick={() => moveAnimationFrameBy(index(), 1)}>↓</button>
+                                <button class="toolbar-icon-button tiny" aria-label={`Remove frame ${index() + 1}`} onClick={() => deleteAnimationFrame(index())}>
+                                  <Icon theme={theme()} name="remove" size={11} />
+                                </button>
+                              </div>
+                            </div>
+                            <div class="animation-frame-fields">
+                              <label class="inspector-field">
+                                <span>Asset key</span>
+                                <input aria-label={`Frame ${index() + 1} asset key`} value={frame.key} onChange={(event) => updateAnimationFrame(index(), { key: event.currentTarget.value })} />
+                              </label>
+                              <label class="inspector-field">
+                                <span>Frame</span>
+                                <input aria-label={`Frame ${index() + 1} texture frame`} value={String(frame.frame ?? "")} onChange={(event) => updateAnimationFrame(index(), { frame: event.currentTarget.value || undefined })} />
+                              </label>
+                              <label class="inspector-field">
+                                <span>Duration (ms)</span>
+                                <input aria-label={`Frame ${index() + 1} duration`} type="number" min="0" step="any" value={String(frame.duration ?? "")} onChange={(event) => updateAnimationFrame(index(), { duration: event.currentTarget.value === "" ? undefined : Number(event.currentTarget.value) })} />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </For>
+                    </Show>
+                  </div>
+                  <div class="animation-add-frame">
+                    <label class="inspector-field">
+                      <span>Asset Pack key</span>
+                      <input aria-label="New animation frame asset key" placeholder="e.g. dino" value={animationFrameKey()} onInput={(event) => setAnimationFrameKey(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") addAnimationFrame(); }} />
+                    </label>
+                    <button class="subtle-button" disabled={!selectedAnimationKey() || !animationFrameKey().trim()} onClick={addAnimationFrame}>Add frame</button>
+                  </div>
+                </Show>
               </div>
+            </div>
+          </Show>
+
+          <Show when={bottomTab() === "Components"}>
+            <div class="components-workspace" data-testid="components-workspace">
+              <div class="components-toolbar">
+                <div class="components-file-heading">
+                  <strong>User Components</strong>
+                  <span>{componentDocumentPath() || "Open a .components file from Project"}</span>
+                </div>
+                <div class="timeline-actions">
+                  <button class="subtle-button" onClick={() => void createUserComponentsFile()}>New file</button>
+                  <button class="primary-button" data-testid="save-components" disabled={!componentDocument() || !componentDirty() || componentSaving()} onClick={() => void saveUserComponentsFile()}>
+                    {componentSaving() ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+              <Show when={componentDocument()} fallback={<div class="timeline-empty">Select a .components file in Project or create a new one. Definitions keep the legacy Phaser Editor JSON shape.</div>}>
+                <div class="components-create-row">
+                  <label class="inspector-field">
+                    <span>Component class name</span>
+                    <input aria-label="New User Component name" placeholder="e.g. Blink" value={newComponentName()} onInput={(event) => setNewComponentName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") addUserComponent(); }} />
+                  </label>
+                  <button class="subtle-button" disabled={!newComponentName().trim()} onClick={addUserComponent}>Add component</button>
+                </div>
+                <div class="components-definition-list">
+                  <Show when={(componentDocument()?.components.length ?? 0) > 0} fallback={<div class="timeline-empty">No definitions yet. Add the first User Component.</div>}>
+                    <For each={componentDocument()?.components ?? []}>
+                      {(definition) => (
+                        <section class="components-definition-card" data-testid={`component-definition-${definition.name}`}>
+                          <div class="components-definition-heading">
+                            <div><strong>{definition.displayName ?? definition.name}</strong><code>{definition.name}</code></div>
+                            <button class="toolbar-icon-button tiny" aria-label={`Delete definition ${definition.name}`} title="Remove definition" onClick={() => {
+                              if (window.confirm(`Remove User Component "${definition.name}" from this file? Existing scene references are preserved.`)) removeUserComponent(definition.name);
+                            }}>
+                              <Icon theme={theme()} name="remove" size={12} />
+                            </button>
+                          </div>
+                          <div class="components-definition-meta">
+                            <label class="inspector-field">
+                              <span>Display name</span>
+                              <input aria-label={`${definition.name} display name`} value={definition.displayName ?? definition.name} onChange={(event) => setComponentDocument((current) => current ? updateUserComponentDefinition(current, definition.name, { displayName: event.currentTarget.value }) : current)} />
+                            </label>
+                            <label class="inspector-field">
+                              <span>GameObject type</span>
+                              <input aria-label={`${definition.name} GameObject type`} value={definition.gameObjectType ?? "Phaser.GameObjects.Image"} onChange={(event) => setComponentDocument((current) => current ? updateUserComponentDefinition(current, definition.name, { gameObjectType: event.currentTarget.value }) : current)} />
+                            </label>
+                          </div>
+                          <div class="components-property-list">
+                            <strong>Properties</strong>
+                            <For each={definition.properties ?? []}>
+                              {(property) => (
+                                <div class="components-property-row">
+                                  <span>{property.label ?? property.name}</span>
+                                  <code>{property.name}</code>
+                                  <span class="components-property-type">{property.type?.id ?? "string"}</span>
+                                  <button class="toolbar-icon-button tiny" aria-label={`Remove ${definition.name} property ${property.name}`} onClick={() => removeUserComponentProperty(definition.name, property.name)}>
+                                    <Icon theme={theme()} name="remove" size={11} />
+                                  </button>
+                                </div>
+                              )}
+                            </For>
+                            <div class="components-add-property">
+                              <input aria-label={`${definition.name} new property name`} placeholder="propertyName" value={newComponentPropertyName()} onInput={(event) => setNewComponentPropertyName(event.currentTarget.value)} />
+                              <select aria-label="User Component property type" value={newComponentPropertyType()} onChange={(event) => setNewComponentPropertyType(event.currentTarget.value as "number" | "string" | "boolean")}>
+                                <option value="number">Number</option>
+                                <option value="string">String</option>
+                                <option value="boolean">Boolean</option>
+                              </select>
+                              <button class="toolbar-icon-button tiny" aria-label={`Add property to ${definition.name}`} disabled={!newComponentPropertyName().trim()} onClick={() => addUserComponentProperty(definition.name)}>
+                                <Icon theme={theme()} name="add" size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+                    </For>
+                  </Show>
+                </div>
+              </Show>
             </div>
           </Show>
 
