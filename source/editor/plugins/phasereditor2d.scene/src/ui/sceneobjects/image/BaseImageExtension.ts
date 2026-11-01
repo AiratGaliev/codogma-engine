@@ -64,6 +64,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                     frame,
                     crop: frameSettings && frameSettings.crop,
                     trim: frameSettings && frameSettings.trim,
+                    sourceSize: frameSettings && frameSettings.sourceSize,
                     collisionShapes: frameSettings && frameSettings.collisionShapes
                 });
 
@@ -125,6 +126,10 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 pivot: frameMetadata && frameMetadata.pivot,
                 crop: frameMetadata && frameMetadata.crop,
                 trim,
+                sourceSize: sourceSize || (sourceRect && {
+                    width: sourceRect.width,
+                    height: sourceRect.height
+                }),
                 collisionShapes: frameMetadata && frameMetadata.collisionShapes
             };
         }
@@ -158,6 +163,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                 frame,
                 crop: frameSettings.crop,
                 trim: frameSettings.trim,
+                sourceSize: frameSettings.sourceSize,
                 collisionShapes: frameSettings.collisionShapes
             });
             this.applyAssetPivot(obj, frameSettings.pivot);

@@ -445,9 +445,14 @@ namespace phasereditor2d.pack.core {
 
         private static addConflict(metadata: any, conflict: any) {
 
-            const signature = `${conflict.type}|${conflict.frameKey}|${JSON.stringify(conflict.currentSourceRect)}`;
+            const geometrySignature = (entry: any) => JSON.stringify([
+                entry.currentSourceRect,
+                entry.currentSourceSize,
+                entry.currentTrimRect
+            ]);
+            const signature = `${conflict.type}|${conflict.frameKey}|${geometrySignature(conflict)}`;
             const exists = metadata.conflicts.some((entry: any) =>
-                `${entry.type}|${entry.frameKey}|${JSON.stringify(entry.currentSourceRect)}` === signature
+                `${entry.type}|${entry.frameKey}|${geometrySignature(entry)}` === signature
             );
 
             if (!exists) {

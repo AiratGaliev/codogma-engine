@@ -1168,6 +1168,7 @@ test("single Image Asset Pack metadata is resolved by its actual frame key", () 
     assert.equal(result.frame, undefined)
     assert.deepEqual(result.pivot, { x: 0.5, y: 1 })
     assert.deepEqual(result.crop, { x: 1, y: 2, width: 12, height: 18 })
+    assert.deepEqual(result.sourceSize, { width: 16, height: 24 })
     assert.deepEqual(result.trim, {
         x: 2, y: 1, width: 12, height: 20,
         actualWidth: 16, actualHeight: 24

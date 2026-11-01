@@ -281,7 +281,8 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             }
 
             const textureComponent = editorSupport.getComponent(TextureComponent) as TextureComponent;
-            const shapes = textureComponent.getTextureKeys().collisionShapes;
+            const textureKeys = textureComponent.getTextureKeys();
+            const shapes = textureKeys.collisionShapes;
 
             if (!Array.isArray(shapes) || shapes.length !== 1) {
                 return false;
@@ -290,8 +291,14 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const shape = shapes[0];
             const body = ArcadeComponent.getBody(obj);
 
-            if (!body || !shape || typeof shape !== "object"
-                || pack.core.SpriteAssetMetadata.validateCollisionShapes(shapes) !== null) {
+            const sourceSize = textureKeys.sourceSize;
+            const validationError = pack.core.SpriteAssetMetadata.validateCollisionShapes(
+                shapes,
+                sourceSize && sourceSize.width,
+                sourceSize && sourceSize.height
+            );
+
+            if (!body || !shape || typeof shape !== "object" || validationError !== null) {
                 return false;
             }
 

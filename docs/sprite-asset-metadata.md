@@ -59,11 +59,11 @@
 
 ## Координаты и collision shapes
 
-Все координаты geometry задаются относительно левого верхнего угла исходного кадра.
+Collision geometry задаётся в координатах исходного, не обрезанного canvas (`sourceSize`), от его левого верхнего угла. Для обычных изображений эти координаты совпадают с пикселями изображения; для atlas frames они учитывают смещение `trimRect`.
 
-- Rectangle: `x`, `y` — левый верхний угол; `width` и `height` должны быть положительными, фигура должна помещаться в кадр.
-- Circle: `x`, `y` — центр; `radius` положительный, круг должен полностью помещаться в кадр.
-- Polygon: не менее трёх точек; каждая точка — пара чисел `[x, y]` или объект `{ "x": ..., "y": ... }` внутри кадра.
+- Rectangle: `x`, `y` — левый верхний угол; `width` и `height` положительные, прямоугольник целиком помещается в `sourceSize`.
+- Circle: `x`, `y` — центр; `radius` положительный, круг целиком помещается в `sourceSize`.
+- Polygon: не менее трёх точек; каждая точка — пара чисел `[x, y]` или объект `{ "x": ..., "y": ... }` внутри `sourceSize`.
 
 Render/trim data и physics collision data — разные сущности. Контур видимых пикселей сам по себе не становится физической формой.
 
@@ -92,7 +92,7 @@ Single-file и batch import используют существующие Import
 - trim передаётся через `TextureComponent` в клон Phaser `Frame` для конкретного GameObject через `Frame.setTrim()` и `setFrame()`; общий Texture Manager frame не мутируется;
 - crop передаётся в `TextureComponent` и Phaser `GameObject.setCrop()`;
 - Phaser 4.2.1 `NineSlice` не поддерживает trimmed textures; `NineSlice` и `TileSprite` не предоставляют `setCrop()`. Inspector предупреждает об этих ограничениях, а попытка применить неподдерживаемые настройки завершается явной ошибкой, а не молчаливой потерей данных;
-- collision shapes копируются в scene texture reference. При включении Arcade Body одна rectangle или circle автоматически задаёт Body size/offset.
+- collision shapes и `sourceSize` копируются в scene texture reference. При включении Arcade Body одна rectangle или circle автоматически задаёт Body size/offset в исходном canvas coordinate space.
 
 Asset-level pivot/crop/trim/collision metadata копируется в scene object при размещении кадра. Уже размещённые объекты сохраняют собственные scene settings и не переписываются при каждом изменении asset metadata; пользователь может обновить texture reference/объект осознанно.
 

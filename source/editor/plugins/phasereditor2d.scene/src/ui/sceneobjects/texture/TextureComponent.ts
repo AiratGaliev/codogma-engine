@@ -27,6 +27,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         frame?: string | number;
         crop?: ITextureRect;
         trim?: ITextureTrim;
+        sourceSize?: phasereditor2d.pack.core.ISpriteAssetSize;
         collisionShapes?: phasereditor2d.pack.core.ISpriteAssetCollisionShape[];
     }
 

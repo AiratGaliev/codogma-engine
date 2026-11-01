@@ -633,3 +633,31 @@ test("TextureComponent codegen clones a shared frame before applying trim", () =
 
 
 
+
+
+test("Arcade asset collision geometry is rejected when outside the original source canvas", () => {
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    let mutationCount = 0
+    const body = {
+        setSize: () => { mutationCount++ },
+        setOffset: () => { mutationCount++ },
+        setCircle: () => { mutationCount++ }
+    }
+    const obj = {
+        body,
+        getEditorSupport: () => ({
+            hasComponent: () => true,
+            getComponent: () => ({
+                getTextureKeys: () => ({
+                    sourceSize: { width: 40, height: 48 },
+                    collisionShapes: [
+                        { type: "rectangle", x: 34, y: 0, width: 10, height: 10 }
+                    ]
+                })
+            })
+        })
+    }
+
+    assert.equal(ArcadeComponent.applyAssetCollisionGeometry(obj), false)
+    assert.equal(mutationCount, 0)
+})

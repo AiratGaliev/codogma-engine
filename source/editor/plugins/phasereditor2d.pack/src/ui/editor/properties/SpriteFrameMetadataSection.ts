@@ -261,10 +261,14 @@ namespace phasereditor2d.pack.ui.editor.properties {
                 return;
             }
 
+            const sourceSize = state.descriptor.sourceSize || {
+                width: state.descriptor.sourceRect.width,
+                height: state.descriptor.sourceRect.height
+            };
             const validationError = core.SpriteAssetMetadata.validateCollisionShapes(
                 shapes,
-                state.descriptor.sourceRect.width,
-                state.descriptor.sourceRect.height
+                sourceSize.width,
+                sourceSize.height
             );
 
             if (validationError) {
