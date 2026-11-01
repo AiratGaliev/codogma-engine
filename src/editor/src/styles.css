@@ -464,6 +464,33 @@ textarea::placeholder {
   font-weight: 600;
 }
 
+.panel-home-slot {
+  display: contents;
+}
+
+.panel-header-draggable {
+  cursor: grab;
+}
+
+.panel-header-draggable:active {
+  cursor: grabbing;
+}
+
+.panel-undock-button {
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: var(--surface-control);
+  color: var(--text-secondary);
+  font-size: 8px;
+}
+
+.panel-undock-button:hover {
+  border-color: var(--accent-selection);
+  color: var(--text-primary);
+}
+
 .panel-header-trailing {
   margin-left: auto;
   color: var(--text-tertiary);
@@ -1294,6 +1321,35 @@ textarea::placeholder {
 .dock-tab {
   min-width: 82px;
   font-size: 10px;
+  cursor: grab;
+}
+
+.dock-tab:active {
+  cursor: grabbing;
+}
+
+.bottom-docked-content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-panel);
+}
+
+.bottom-docked-content > .panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-right: 0;
+}
+
+.bottom-docked-panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-right: 0;
 }
 
 .project-browser {
@@ -1890,6 +1946,11 @@ textarea::placeholder {
   .inspector-panel,
   .vertical-splitter {
     display: none;
+  }
+
+  .bottom-docked-content .hierarchy-panel,
+  .bottom-docked-content .inspector-panel {
+    display: flex;
   }
 
   .workbench:not(.hierarchy-hidden) .hierarchy-panel {
