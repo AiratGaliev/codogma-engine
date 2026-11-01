@@ -353,5 +353,7 @@ test("Animation workspace previews and persists a Phaser JSONAnimations timeline
   await expect(page.getByLabel("Animation key")).toHaveValue("walk_preview");
   await expect(page.getByLabel("Animation yoyo")).toBeChecked();
   await expect(page.getByLabel("Animation repeat delay")).toHaveValue("40");
+  await expect(page.getByLabel("Selected frame duration")).toHaveValue("100");
+  await page.getByTestId("animation-timeline-frame-1").click();
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("160");
 });
