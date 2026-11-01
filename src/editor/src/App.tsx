@@ -976,7 +976,7 @@ function App() {
       stopAnimationPreview(false);
       setAnimationDocument(removeAnimationFrame(current, key, index));
       const count = activeAnimation()?.frames.length ?? 0;
-      setSelectedAnimationFrameIndex(Math.max(0, Math.min(index, count - 2)));
+      setSelectedAnimationFrameIndex(Math.max(0, Math.min(index, count - 1)));
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -1014,7 +1014,9 @@ function App() {
     if (!current || !key || !frameKey) return;
     try {
       setAnimationDocument(appendAnimationFrame(current, key, { key: frameKey }));
-      setSelectedAnimationFrameIndex(activeAnimation()?.frames.length ?? 0);
+      const lastFrameIndex = Math.max(0, (activeAnimation()?.frames.length ?? 1) - 1);
+      setSelectedAnimationFrameIndex(lastFrameIndex);
+      setAnimationPreviewFrameIndex(lastFrameIndex);
       setAnimationFrameKey("");
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
@@ -2962,7 +2964,7 @@ function App() {
                   <For each={animationDocument()?.anims ?? []}>
                     {(animation) => (
                       <div class="animation-clip-row" classList={{ selected: selectedAnimationKey() === animation.key }}>
-                        <button class="animation-clip-select" onClick={() => { stopAnimationPreview(true); setSelectedAnimationKey(animation.key); }}>
+                        <button class="animation-clip-select" onClick={() => { stopAnimationPreview(true); setSelectedAnimationKey(animation.key); setSelectedAnimationFrameIndex(0); }}>
                           <Icon theme={theme()} name="animation" size={13} />
                           <span>{animation.key}</span>
                           <small>{animation.frames.length} frames</small>
