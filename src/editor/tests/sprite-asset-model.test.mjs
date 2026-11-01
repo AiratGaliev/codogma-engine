@@ -49,11 +49,36 @@ test("describes Image and Spritesheet frame geometry using Phaser frameConfig se
     url: "assets/coin.png",
     frameConfig: { frameWidth: 16, frameHeight: 16, margin: 2, spacing: 1, startFrame: 1, endFrame: 2 },
   }, 38, 20);
-  assert.deepEqual(frames.map(frame => frame.key), ["1", "2"]);
+  // Phaser counts source frames from zero. With two physical frames,
+  // startFrame=1/endFrame=2 selects only the second source frame, whose
+  // editor-facing frame name is renumbered to zero.
+  assert.deepEqual(frames.map(frame => frame.key), ["0"]);
   assert.deepEqual(frames.map(frame => frame.sourceRect), [
     { x: 19, y: 2, width: 16, height: 16 },
-    { x: 2, y: 2, width: 16, height: 16 },
   ]);
+
+  const completeFrames = describeSpriteAssetFrames({
+    type: "spritesheet",
+    key: "coin",
+    url: "assets/coin.png",
+    frameConfig: { frameWidth: 16, frameHeight: 16, margin: 2, spacing: 1 },
+  }, 38, 37);
+  assert.deepEqual(completeFrames.map(frame => frame.key), ["0", "1", "2", "3"]);
+  assert.deepEqual(completeFrames.map(frame => frame.sourceRect), [
+    { x: 2, y: 2, width: 16, height: 16 },
+    { x: 19, y: 2, width: 16, height: 16 },
+    { x: 2, y: 19, width: 16, height: 16 },
+    { x: 19, y: 19, width: 16, height: 16 },
+  ]);
+
+  const onlyFirstFrame = describeSpriteAssetFrames({
+    type: "spritesheet",
+    key: "coin",
+    url: "assets/coin.png",
+    frameConfig: { frameWidth: 16, frameHeight: 16, endFrame: 0 },
+  }, 38, 20);
+  assert.deepEqual(onlyFirstFrame.map(frame => frame.key), ["0"]);
+  assert.deepEqual(onlyFirstFrame[0].sourceRect, { x: 0, y: 0, width: 16, height: 16 });
 });
 
 test("ensures stable IDs/source fingerprints and preserves vendor fields", () => {
