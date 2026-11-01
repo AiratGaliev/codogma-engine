@@ -50,7 +50,6 @@ import {
   parseUserComponentsContent,
   removeUserComponentDefinition,
   updateUserComponentDefinition,
-  type UserComponentDefinition,
   type UserComponentsDocument,
 } from "./domain/components-model.mjs";
 import {
@@ -859,6 +858,30 @@ function App() {
   }
 
   async function openUserComponentsFile(path: string) {
+    if (path === componentDocumentPath()) return;
+    if ((dirty() || animationDirty()) &&
+        !window.confirm("The active scene or animation file has unsaved changes. Discard them?")) return;
+    if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
+    const request = ++documentLoadSequence;
+    try {
+      const content = await readProjectFile(path);
+      if (request !== documentLoadSequence) return;
+      const parsed = parseUserComponentsContent(content);
+      setComponentDocument(parsed);
+      setComponentDocumentPath(path);
+      setSavedComponentContent(formatUserComponentsContent(parsed));
+      setSelectedProjectPath(path);
+      setLayout((current) => ({ ...current, bottomTab: "Components" }));
+      setComponentSources((current) => [
+        ...current.filter((item) => item.path !== path),
+        { path, document: parsed },
+      ]);
+      log("success", `Opened User Components ${path}`);
+    } catch (error) {
+      if (request !== documentLoadSequence) return;
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
 
   async function openProjectFile(path: string) {
     const normalized = path.toLowerCase();
@@ -894,31 +917,6 @@ function App() {
     if (!root) throw new Error("The project tree is not loaded.");
     const existing = flattenProjectFiles(root).find((item) => item.path.toLowerCase() === path.toLowerCase());
     if (existing) throw new Error(`A project item already exists at "${path}".`);
-  }
-
-    if (path === componentDocumentPath()) return;
-    if ((dirty() || animationDirty()) &&
-        !window.confirm("The active scene or animation file has unsaved changes. Discard them?")) return;
-    if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
-    const request = ++documentLoadSequence;
-    try {
-      const content = await readProjectFile(path);
-      if (request !== documentLoadSequence) return;
-      const parsed = parseUserComponentsContent(content);
-      setComponentDocument(parsed);
-      setComponentDocumentPath(path);
-      setSavedComponentContent(formatUserComponentsContent(parsed));
-      setSelectedProjectPath(path);
-      setLayout((current) => ({ ...current, bottomTab: "Components" }));
-      setComponentSources((current) => [
-        ...current.filter((item) => item.path !== path),
-        { path, document: parsed },
-      ]);
-      log("success", `Opened User Components ${path}`);
-    } catch (error) {
-      if (request !== documentLoadSequence) return;
-      log("error", error instanceof Error ? error.message : String(error));
-    }
   }
 
   async function saveUserComponentsFile() {
@@ -1439,9 +1437,7 @@ function App() {
     return prefabId ? prefabCatalog().find((item) => item.document.id === prefabId) : undefined;
   });
   const selectedPrefabDefinition = createMemo(() => selectedPrefab()?.document ?? null);
-  const activeAnimation = createMemo(() =>
-    animationDocument()?.anims.find((item) => item.key === selectedAnimationKey()),
-  );
+
 
 
 
