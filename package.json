@@ -26,7 +26,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "deps:check": "depcruise server mini-services tests --config .dependency-cruiser.cjs",
-    "knip": "knip"
+    "knip": "knip",
+    "dev:editor-host": "npm --prefix src/editor run dev",
+    "build:editor-host": "npm --prefix src/editor run build",
+    "test:editor-host": "npm --prefix src/editor run test",
+    "test:editor-host:browser": "npm --prefix src/editor run test:browser"
   },
   "license": "MIT",
   "dependencies": {

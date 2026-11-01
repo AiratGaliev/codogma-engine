@@ -1,9 +1,29 @@
 # План миграции Editor UI: Colibri → SolidJS
 
-**Статус:** целевое направление принято; реализация нового Host не начата.  
+**Статус:** первый SolidJS Host и scene-authoring vertical slice реализованы в рабочей ветке; browser acceptance и CI ещё должны подтвердить результат.  
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.  
 **Решение:** [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).  
 **Нормативные требования:** [Техническое задание](technical-specification.md).
+
+## Текущий результат COD-80 — первый Host и Scene slice
+
+В `src/editor/` появился самостоятельный SolidJS 1.9 Editor Host на Vite 8 и Tailwind CSS 4. Он запускается отдельно от legacy клиента, использует только loopback интерфейс и проксирует существующие `/editor/*` endpoints. Node backend и `source/editor/` не переписываются.
+
+Реализованные операции первой вертикали:
+
+- загрузка текущего `PROJECT_DIR` через `GetProjectFiles`, рекурсивное обнаружение и открытие `.scene`;
+- Hierarchy и выбор display-list/plain-object элементов по стабильным IDs;
+- Inspector с Transform-полями, label, Text content и отображением уже сериализованных компонентов;
+- добавление Image/Text/Container узлов, удаление, Undo/Redo с восстановлением selection;
+- сохранение исходного JSON scene-format через `SetFileString`, повторное открытие после reload;
+- Workbench с menu/toolbar, Scene/Game tabs, resizable splitters, show/hide Hierarchy/Inspector, Project/Animation dock tabs, Console, command palette, keyboard shortcuts, dark/light themes и persisted layout;
+- Game View загружает существующий проектный `index.html` в iframe; закрытие Game View уничтожает iframe/runtime, повторный запуск создаёт новый экземпляр.
+
+Новые модели не заменяют Project Model или backend serializers: scene helper сохраняет неизвестные поля и обновляет только явно разрешённые свойства. Legacy client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`.
+
+**Границы первого slice, которые не следует считать готовыми возможностями:** Scene viewport пока показывает model-based authoring preview, а не использует canvas существующего Phaser.Game; drag-and-drop docking и перестановка панелей не реализованы (панели разделены фиксированными областями и resize splitters); Animation tab — базовая timeline workspace shell без clip/track serialization; компоненты только отображаются, их редакторы/добавление не перенесены; Game View запускает текущий generated `index.html` и не перегенерирует его после изменения `.scene`; MCP SSE routing остаётся за legacy UI. Это следующие slices, а не скрытые или имитируемые готовые контракты.
+
+Browser acceptance конфигурируется через `src/editor/playwright.config.mjs`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. GitHub Actions job `editor-host` запускает typecheck/build, domain tests и Chromium acceptance для Host/backend-sensitive changes.
 
 ## 1. Цель
 
