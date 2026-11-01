@@ -382,7 +382,7 @@ function PhaserSceneViewport(props: Props) {
         object = createdObject;
         createdObject.setInteractive?.();
         createdObject.on?.("pointerdown", (pointer) => {
-          if (props.lockedIds().has(entry.id)) return;
+          if (props.hiddenIds().has(entry.id) || props.lockedIds().has(entry.id)) return;
           props.onSelect(entry.id);
           const activeTool = props.tool();
           if (activeTool === "select" || !pointer) {
@@ -424,8 +424,10 @@ function PhaserSceneViewport(props: Props) {
       object.setRotation?.(numeric(entry.source.rotation, 0) * (Math.PI / 180));
       object.setAlpha?.(numeric(entry.source.alpha, 1));
       object.setDepth?.(numeric(entry.source.depth, 0));
-      object.setVisible?.(!props.hiddenIds().has(entry.id));
-      if (props.lockedIds().has(entry.id)) object.disableInteractive?.();
+      const isHidden = props.hiddenIds().has(entry.id);
+      const isLocked = props.lockedIds().has(entry.id);
+      object.setVisible?.(!isHidden);
+      if (isHidden || isLocked) object.disableInteractive?.();
       else object.setInteractive?.();
       if (entry.type === "Text") {
         object.setText?.(String(entry.source.text ?? entry.source.label ?? ""));
