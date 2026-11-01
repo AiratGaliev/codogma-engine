@@ -1,6 +1,6 @@
 # ADR-0005: SolidJS Editor Host и замена Colibri UI
 
-**Статус:** принято как целевое UI-направление; первый SolidJS Host/Scene vertical slice реализован в COD-80 (PR #30); общая migration, production cutover и Colibri removal ещё не завершены.  
+**Статус:** принято как целевое UI-направление; COD-80 (PR #30) реализовал и CI-проверил первый SolidJS Host/Workbench + Scene vertical slice. Полная staged migration, session-aware MCP routing, production cutover и Colibri removal ещё не завершены.  
 **Дата:** 30.10.2026  
 **Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md).
 
@@ -39,6 +39,8 @@
 5. **Нет долгосрочного Colibri bridge:** новый Host не импортирует Colibri, его registry, Parts, Workbench, globals или controls. Старый и новый UI работают как самостоятельные browser applications.
 6. **Сохранить backend и data contracts:** Node.js server, HTTP/file APIs, project/scene/prefab formats, serializers, importer metadata, codegen semantics, MCP schemas и Phaser runtime не переписываются только из-за смены UI.
 7. **Библиотеки выбирать по реальной потребности:** docking, CodeMirror/Monaco, router и virtualization utilities не становятся обязательными без workflow, который их требует.
+
+**Фактическая граница первого Host (COD-80, CI Fast #425):** SolidJS Host и Phaser Scene workflow прошли typecheck/build, 25 domain tests и 7 Chromium acceptance tests. Workbench поддерживает dock/undock Console, перенос Hierarchy/Inspector в Bottom Dock с возвратом в исходный слот, перестановку вкладок, сохранение layout и focus-aware shortcuts. Это не универсальная docking-система с произвольными floating/free-split зонами; оставшиеся authoring workflows и production migration перечислены в [плане миграции](../editor-ui-migration.md) и остаются открытыми.
 
 ## Два UI в переходный период
 
