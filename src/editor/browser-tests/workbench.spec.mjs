@@ -1,4 +1,24 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const browserTestDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(browserTestDirectory, "../../..");
+const baselineScene = await readFile(
+  resolve(repositoryRoot, "tests/workspace/test-typescript/scenes/Level.scene"),
+  "utf8",
+);
+
+test.beforeEach(async ({ page }) => {
+  const response = await page.request.post("http://127.0.0.1:3000/editor/api", {
+    data: {
+      method: "SetFileString",
+      body: { path: "scenes/Level.scene", content: baselineScene },
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+});
 
 test("Workbench opens the real project, edits a scene and persists the layout", async ({ page }) => {
   const pageErrors = [];
@@ -39,8 +59,17 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
 
   await page.getByRole("tab", { name: "Scene" }).click();
   await expect(page.getByTestId("scene-stage")).toBeVisible();
-  await expect(page.getByTestId("scene-stage").locator("canvas")).toBeVisible({ timeout: 20_000 });
+  const sceneCanvas = page.getByTestId("scene-stage").locator("canvas");
+  await expect(sceneCanvas).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("phaser-game-frame")).toHaveCount(0);
+
+  const canvasBounds = await sceneCanvas.boundingBox();
+  expect(canvasBounds).not.toBeNull();
+  await page.mouse.click(
+    canvasBounds.x + canvasBounds.width * 0.5,
+    canvasBounds.y + canvasBounds.height * (406 / 600),
+  );
+  await expect(page.getByLabel("Object name")).toHaveValue("text_1");
 
   await page.getByRole("button", { name: "Toggle theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");

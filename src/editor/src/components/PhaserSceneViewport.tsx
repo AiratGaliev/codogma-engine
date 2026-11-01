@@ -64,6 +64,7 @@ interface PhaserSceneConstructor {
 }
 
 interface PhaserGameApi {
+  canvas?: HTMLCanvasElement;
   destroy(removeCanvas?: boolean): void;
   scale: {
     resize?(width: number, height: number): void;
@@ -409,6 +410,10 @@ function PhaserSceneViewport(props: Props) {
             selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
             selectionFrame?.setDepth?.(1000);
             selectionFrame?.setAlpha?.(0);
+            const canvas = (this as unknown as { game?: PhaserGameApi }).game?.canvas ?? game?.canvas;
+            if (canvas && mount && canvas.parentElement !== mount) {
+              mount.append(canvas);
+            }
             sceneReady = true;
             setRuntimeState("ready");
             syncScene();
