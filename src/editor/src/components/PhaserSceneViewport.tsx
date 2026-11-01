@@ -51,6 +51,7 @@ interface PhaserGameObject {
   listeners?(event: string): Array<(...args: unknown[]) => void>;
   filters?: { internal: { remove(filter: unknown): void } };
   parentContainer?: {
+    add(child: PhaserGameObject): PhaserGameObject;
     addAt(child: PhaserGameObject, index: number): unknown;
     getIndex(child: PhaserGameObject): number;
   } | null;
