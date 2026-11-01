@@ -44,8 +44,8 @@ test("updates transforms immutably and preserves unedited object metadata", () =
   const updated = updateSceneObject(fixtureScene, "image-1", { x: 465, rotation: 15 });
   assert.equal(updated.displayList[0].x, 465);
   assert.equal(updated.displayList[0].rotation, 15);
-  assert.equal(updated.displayList[0].texture.key, "dino");
-  assert.equal(updated.displayList[0].components[0], "PushOnClick");
+  assert.equal(updated.displayList[0].texture?.key, "dino");
+  assert.equal(updated.displayList[0].components?.[0], "PushOnClick");
   assert.equal(fixtureScene.displayList[0].x, 400);
 });
 

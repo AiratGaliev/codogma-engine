@@ -115,8 +115,8 @@ test("edits pivot, trim, crop and collision shapes while preserving unknown fram
 test("validates rectangle, circle and polygon collision geometry without flattening polygons", () => {
   assert.equal(validateSpriteCollisionShapes([{ type: "circle", x: 10, y: 10, radius: 5 }], 32, 32), null);
   assert.equal(validateSpriteCollisionShapes([{ type: "polygon", points: [[0, 0], [16, 0], [8, 12]] }], 32, 32), null);
-  assert.match(validateSpriteCollisionShapes([{ type: "circle", x: 2, y: 2, radius: 5 }], 32, 32), /circle/);
-  assert.match(validateSpriteCollisionShapes([{ type: "polygon", points: [[0, 0], [1, 1], [2, 2]] }], 32, 32), /non-zero area/);
+  assert.match(validateSpriteCollisionShapes([{ type: "circle", x: 2, y: 2, radius: 5 }], 32, 32) ?? "", /circle/);
+  assert.match(validateSpriteCollisionShapes([{ type: "polygon", points: [[0, 0], [1, 1], [2, 2]] }], 32, 32) ?? "", /non-zero area/);
 });
 
 test("reimport preserves compatible frames and archives changed/removed authored metadata", () => {

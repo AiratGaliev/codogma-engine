@@ -24,7 +24,7 @@ const server = spawn(process.execPath, [join(repositoryRoot, "server", "server.m
 });
 
 let stopping = false;
-function stop(signal) {
+function stop(signal: NodeJS.Signals) {
   if (stopping) return;
   stopping = true;
   if (server.exitCode === null && server.signalCode === null) server.kill(signal);

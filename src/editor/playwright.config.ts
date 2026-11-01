@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 const editorDirectory = fileURLToPath(new URL(".", import.meta.url));
 const repositoryRoot = resolve(editorDirectory, "../..");
-const fixtureProject = resolve(repositoryRoot, "tests/workspace/test-typescript");
 
 export default defineConfig({
   testDir: "./browser-tests",

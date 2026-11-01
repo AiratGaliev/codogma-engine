@@ -48,7 +48,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   const savedX = await page.evaluate(async () => {
     const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
     const scene = await response.json();
-    return scene.displayList.find((object) => object.label === "dino").x;
+    return scene.displayList.find((object: { label?: string; x?: number }) => object.label === "dino")?.x;
   });
   expect(savedX).toBe(465);
 

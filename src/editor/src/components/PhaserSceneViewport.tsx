@@ -8,7 +8,7 @@ import {
 import {
   getSceneObjects,
   type SceneDocument,
-} from "../domain/scene-model.mjs";
+} from "../domain/scene-model.ts";
 import {
   readProjectFile,
   type ProjectEntry,
