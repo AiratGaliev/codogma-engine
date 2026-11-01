@@ -2,7 +2,7 @@
 
 **Статус:** принято как целевое UI-направление; COD-80 (PR #30) реализовал и CI-проверил первый SolidJS Host/Workbench + Scene vertical slice. Полная staged migration, session-aware MCP routing, production cutover и Colibri removal ещё не завершены.  
 **Дата:** 30.10.2026  
-**Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md).
+**Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [Стандарт reference для 2D Editor Host](../editor-reference-standard.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md).
 
 ## Контекст и решение
 
@@ -11,6 +11,10 @@
 Для нового Editor Host выбран **SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4**. Новый интерфейс пишется непосредственно на SolidJS в самостоятельном приложении `src/editor/`. Отдельный SolidJS PoC, framework bake-off и ожидание дополнительных сравнительных измерений перед началом реализации не требуются.
 
 Цель — профессиональный Web-first 2D Editor с рабочей средой, сопоставимой по основным сценариям с Unity Editor: панели, docking, Scene/Game view, Hierarchy, Inspector, Project/Assets, Animation/Timeline, Console, инструменты трансформации, команды, shortcuts, темы и сохранение layout.
+
+## Продуктовые reference и 2D-only scope
+
+Новый Host проектируется для 2D-игр. Основной UX-reference — Unity 6.6 Editor (6000.6); дополнительный reference по 2D authoring workflows — Cocos Creator 4.0 LTS. Unity 6.6 Manual на дату фиксации решения помечен Beta: его UX-паттерны можно изучать как продуктовый ориентир, но beta-only API/features не становятся стабильным техническим baseline. Не добавлять режим 2D/3D или 3D-only panels/gizmos/workflows. Colibri остаётся только источником legacy workflow/data/runtime evidence; его UI, registry, Parts/controls и lifecycle не являются архитектурным/визуальным шаблоном нового Host. Детальные правила и acceptance process — в [стандарте reference](../editor-reference-standard.md).
 
 ## Почему SolidJS
 
