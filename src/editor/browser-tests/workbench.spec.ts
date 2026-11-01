@@ -1,4 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+
+async function saveSceneWithShortcut(page: Page) {
+  const responsePromise = page.waitForResponse((response) => {
+    if (response.url() !== "http://127.0.0.1:5173/editor/api" || response.request().method() !== "POST") return false;
+    try {
+      return response.request().postDataJSON()?.method === "SetFileString";
+    } catch {
+      return false;
+    }
+  });
+  await page.keyboard.press("Control+s");
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  await expect(page.getByTestId("save-scene")).toBeDisabled();
+}
+
+async function readSavedScene(page: Page) {
+  const response = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene");
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,7 +69,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await page.getByTestId("redo").click();
   await expect(page.getByLabel("Position X")).toHaveValue("465");
 
-  await page.getByTestId("save-scene").click();
+  await saveSceneWithShortcut(page);
   await expect(page.getByTestId("save-scene")).toBeDisabled();
   const savedX = await page.evaluate(async () => {
     const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
@@ -398,22 +420,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await page.getByLabel("Bloom Blur Quality").fill("2");
   await page.getByLabel("Bloom Blur Quality").press("Tab");
   await expect(page.getByLabel("Bloom Blur Quality")).toHaveValue("2");
-  const firstSaveResponse = page.waitForResponse((response) => {
-    if (response.url() !== "http://127.0.0.1:5173/editor/api" || response.request().method() !== "POST") return false;
-    try {
-      return response.request().postDataJSON()?.method === "SetFileString";
-    } catch {
-      return false;
-    }
-  });
-  await page.keyboard.press("Control+s");
-  const firstSave = await firstSaveResponse;
-  expect(firstSave.ok()).toBeTruthy();
-  await expect(page.getByTestId("save-scene")).toBeDisabled();
-
-  const firstSceneResponse = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene");
-  expect(firstSceneResponse.ok()).toBeTruthy();
-  let saved = await firstSceneResponse.json();
+  await saveSceneWithShortcut(page);
+  let saved = await readSavedScene(page);
   let circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
   expect(circleTarget.list[0].thickness).toBe(10);
   expect(circleTarget.list[1].threshold).toBe(0.45);
@@ -437,12 +445,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByTestId("fx-card-d7548c09-2f26-450a-85f4-f7aa2c7475b0")).toBeVisible();
   await expect(page.getByLabel("Gradient Alpha")).toHaveValue("0.45");
   await page.getByLabel("Gradient Alpha").fill("0.6");
-  await page.getByTestId("save-scene").click();
-
-  saved = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene").then(async (response) => {
-    expect(response.ok()).toBeTruthy();
-    return response.json();
-  });
+  await saveSceneWithShortcut(page);
+  saved = await readSavedScene(page);
   const panel = saved.displayList.find((item: { id?: string }) => item.id === "317de9d0-d961-417f-bb05-b182fa41c107");
   const shine = panel.list.find((item: { id?: string }) => item.id === "0ecf0bc5-f543-4b6d-87ca-a53e5399321e").list[0];
   const gradientTarget = saved.displayList.find((item: { id?: string }) => item.id === "8f836a97-d201-49da-b69f-012575bf98f5");
@@ -451,11 +455,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
 
   await page.getByTestId("hierarchy-item-circletarget").click();
   await page.getByRole("button", { name: "Remove Bloom effect" }).click();
-  await page.getByTestId("save-scene").click();
-  saved = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene").then(async (response) => {
-    expect(response.ok()).toBeTruthy();
-    return response.json();
-  });
+  await saveSceneWithShortcut(page);
+  saved = await readSavedScene(page);
   circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
   expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle"]);
   expect(pageErrors).toEqual([]);
