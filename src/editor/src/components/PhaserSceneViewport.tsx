@@ -438,20 +438,20 @@ function PhaserSceneViewport(props: Props) {
             const canvas = activeGame?.canvas;
             const rendererName = activeGame?.renderer?.constructor?.name ?? "none";
             const renderType = activeGame?.config?.renderType ?? "unknown";
-            const parentMatches = activeGame?.config?.parent === mount;
-            const mountConnected = Boolean(mount?.isConnected);
-            props.onStatus(
-              "info",
-              `Phaser diagnostics · renderer=${rendererName} · renderType=${renderType} · canvas=${Boolean(canvas)} · parent=${parentMatches} · mountConnected=${mountConnected}`,
-            );
             if (canvas && mount && canvas.parentElement !== mount) {
               mount.append(canvas);
+            }
+            const canvasMounted = Boolean(canvas && mount?.contains(canvas));
+            if (!canvasMounted) {
+              throw new Error(
+                `Phaser ${rendererName} renderer did not attach its canvas to the Scene viewport (renderType=${renderType}, parent=${activeGame?.config?.parent === mount}).`,
+              );
             }
             sceneReady = true;
             setRuntimeState("ready");
             setGameReady(true);
             syncScene();
-            props.onStatus("success", `Phaser Scene View ready · ${runtimePath}`);
+            props.onStatus("success", `Phaser Scene View ready · ${rendererName} · ${runtimePath}`);
           }
         };
 
@@ -500,20 +500,19 @@ function PhaserSceneViewport(props: Props) {
 
   return (
     <div class="scene-viewport" data-testid="scene-viewport">
-      <div class="scene-stage phaser-scene-stage" data-testid="scene-stage" ref={(element) => { mount = element; }}>
-        <Show when={runtimeState() !== "ready"}>
-          <div class="phaser-runtime-state" role={runtimeState() === "error" ? "alert" : "status"}>
-            <Show when={runtimeState() === "loading"}>
-              <span class="runtime-loading-indicator" />
-              Loading the project's Phaser runtime…
-            </Show>
-            <Show when={runtimeState() === "error"}>
-              <strong>Scene View could not start</strong>
-              <span>{runtimeError()}</span>
-            </Show>
-          </div>
-        </Show>
-      </div>
+      <div class="scene-stage phaser-scene-stage" data-testid="scene-stage" ref={(element) => { mount = element; }} />
+      <Show when={runtimeState() !== "ready"}>
+        <div class="phaser-runtime-state" role={runtimeState() === "error" ? "alert" : "status"}>
+          <Show when={runtimeState() === "loading"}>
+            <span class="runtime-loading-indicator" />
+            Loading the project's Phaser runtime…
+          </Show>
+          <Show when={runtimeState() === "error"}>
+            <strong>Scene View could not start</strong>
+            <span>{runtimeError()}</span>
+          </Show>
+        </div>
+      </Show>
       <div class="viewport-coordinate">World space · {RUNTIME_WIDTH} × {RUNTIME_HEIGHT}</div>
     </div>
   );
