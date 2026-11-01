@@ -1073,13 +1073,13 @@ function App() {
                     onStatus={log}
                   />
                 )}
-              </div>
+              </Show>
               <div class="viewport-statusbar">
                 <span><Icon theme={theme()} name="tool-select" size={12} /> {tool()[0].toUpperCase() + tool().slice(1)} tool</span>
                 <span>Selected: {selectedObject()?.name ?? "None"}</span>
                 <span>Phaser runtime · live selection</span>
               </div>
-            </Show>
+            </div>
 
             <Show when={activeViewport() === "Game"}>
               <div class="game-viewport" data-testid="game-viewport">
