@@ -97,6 +97,7 @@ interface PhaserSceneApi {
     ): PhaserGameObject;
     container(x: number, y: number): PhaserGameObject;
     graphics(): PhaserGameObject;
+    existing(object: PhaserGameObject): PhaserGameObject;
     gradient(config: Record<string, unknown>, x: number, y: number, width: number, height: number): PhaserGameObject;
   };
 }
@@ -573,9 +574,19 @@ function PhaserSceneViewport(props: Props) {
       ? gameObjects.get(props.selectedId)
       : undefined;
     if (selected && selectionFrame) {
+      const container = selected.parentContainer;
+      if (container) {
+        if (selectionFrame.parentContainer !== container) container.add(selectionFrame);
+        const selectedIndex = container.getIndex(selected);
+        container.addAt(selectionFrame, Math.max(0, selectedIndex + 1));
+      } else if (selectionFrame.parentContainer) {
+        sceneRuntime?.add.existing(selectionFrame);
+      }
+
       const width = Math.max(12, numeric(selected.displayWidth, numeric(selected.width, 38)));
       const height = Math.max(12, numeric(selected.displayHeight, numeric(selected.height, 28)));
       selectionFrame.setPosition?.(selected.x, selected.y);
+      selectionFrame.setRotation?.(numeric(selected.rotation, 0));
       selectionFrame.setSize?.(width + 10, height + 10);
       selectionFrame.setFillStyle?.(0x000000, 0);
       selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
