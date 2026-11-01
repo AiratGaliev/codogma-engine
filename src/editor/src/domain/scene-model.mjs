@@ -27,6 +27,16 @@ function assertScene(scene) {
   }
 }
 
+function getSceneObjectId(source, collection, index) {
+  return source &&
+    typeof source === "object" &&
+    !Array.isArray(source) &&
+    typeof source.id === "string" &&
+    source.id.length > 0
+    ? source.id
+    : `${collection}-${index}`;
+}
+
 /**
  * Parse a legacy Codogma/Phaser Editor .scene file without changing its schema.
  * Unknown fields are deliberately preserved.
@@ -63,7 +73,7 @@ export function getSceneObjects(scene) {
     nodes.forEach((source, index) => {
       if (!source || typeof source !== "object" || Array.isArray(source)) return;
       objects.push({
-        id: typeof source.id === "string" ? source.id : `${collection}-${index}`,
+        id: getSceneObjectId(source, collection, index),
         name:
           typeof source.label === "string" && source.label.length > 0
             ? source.label
@@ -107,7 +117,7 @@ export function updateSceneObject(scene, id, patch) {
 
   for (const collection of ["displayList", "plainObjects"]) {
     const source = scene[collection] ?? [];
-    const index = source.findIndex((item) => item?.id === id);
+    const index = source.findIndex((item, itemIndex) => getSceneObjectId(item, collection, itemIndex) === id);
     if (index === -1) continue;
 
     const next = source.slice();
@@ -125,8 +135,8 @@ export function removeSceneObject(scene, id) {
 
   for (const collection of ["displayList", "plainObjects"]) {
     const source = scene[collection] ?? [];
-    if (source.some((item) => item?.id === id)) {
-      next[collection] = source.filter((item) => item?.id !== id);
+    if (source.some((item, index) => getSceneObjectId(item, collection, index) === id)) {
+      next[collection] = source.filter((item, index) => getSceneObjectId(item, collection, index) !== id);
       found = true;
     }
   }
