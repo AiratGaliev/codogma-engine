@@ -685,3 +685,44 @@ test("existing Phaser Layer groups preserve depth-first display-list ordering", 
         [0, 1, 2, 3, 4]
     )
 })
+
+
+test("changing a sprite texture does not overwrite an already-authored Arcade Body", () => {
+    const TextureComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.TextureComponent
+    const ArcadeComponent = globalThis.phasereditor2d.scene.ui.sceneobjects.ArcadeComponent
+    const previousApply = ArcadeComponent.applyAssetCollisionGeometry
+    let applyCount = 0
+
+    ArcadeComponent.applyAssetCollisionGeometry = () => {
+        applyCount++
+        return true
+    }
+
+    try {
+        const obj = {
+            body: { width: 7, height: 9 },
+            originX: 0.5,
+            originY: 0.5,
+            frame: {},
+            setTexture() {},
+            getEditorSupport: () => ({
+                hasComponent: () => false,
+                onUpdateAfterSetTexture() {}
+            })
+        }
+        const component = Object.create(TextureComponent.prototype)
+        component._textureKeys = {}
+        component.getObject = () => obj
+
+        component.setTextureKeys({
+            key: "enemy",
+            collisionShapes: [{ type: "rectangle", x: 1, y: 2, width: 20, height: 24 }],
+            sourceSize: { width: 32, height: 32 }
+        })
+
+        assert.equal(applyCount, 0)
+        assert.deepEqual({ width: obj.body.width, height: obj.body.height }, { width: 7, height: 9 })
+    } finally {
+        ArcadeComponent.applyAssetCollisionGeometry = previousApply
+    }
+})

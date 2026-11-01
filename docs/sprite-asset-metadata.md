@@ -92,7 +92,7 @@ Single-file и batch import используют существующие Import
 - trim передаётся через `TextureComponent` в клон Phaser `Frame` для конкретного GameObject через `Frame.setTrim()` и `setFrame()`; общий Texture Manager frame не мутируется;
 - crop передаётся в `TextureComponent` и Phaser `GameObject.setCrop()`;
 - Phaser 4.2.1 `NineSlice` не поддерживает trimmed textures; `NineSlice` и `TileSprite` не предоставляют `setCrop()`. Inspector предупреждает об этих ограничениях, а попытка применить неподдерживаемые настройки завершается явной ошибкой, а не молчаливой потерей данных;
-- collision shapes и `sourceSize` копируются в scene texture reference. При включении Arcade Body одна rectangle или circle автоматически задаёт Body size/offset в исходном canvas coordinate space.
+- collision shapes и `sourceSize` копируются в scene texture reference. При первом включении Arcade Body одна rectangle или circle задаёт начальные Body size/offset в исходном canvas coordinate space. После этого scene-level Body settings являются пользовательским override и не перезаписываются при последующей смене texture.
 
 Asset-level pivot/crop/trim/collision metadata копируется в scene object при размещении кадра. Уже размещённые объекты сохраняют собственные scene settings и не переписываются при каждом изменении asset metadata; пользователь может обновить texture reference/объект осознанно.
 
