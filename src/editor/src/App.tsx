@@ -20,16 +20,47 @@ import {
   type SceneObjectEntry,
 } from "./domain/scene-model.mjs";
 import {
+  appendAnimationFrame,
+  createAnimation,
+  createAnimationDocument,
+  formatAnimationContent,
+  isAnimationContent,
+  parseAnimationContent,
+  removeAnimation,
+  removeAnimationFrame,
+  updateAnimation,
+  type AnimationDocument,
+} from "./domain/animation-model.mjs";
+import {
+  createPrefabDocument,
+  createPrefabInstance,
+  addPrefabProperty,
+  removePrefabProperty,
+  type PrefabDocument,
+  type PrefabProperty,
+} from "./domain/prefab-model.mjs";
+import {
+  addUserComponentDefinition,
+  attachUserComponent,
+  createUserComponentDefinition,
+  detachUserComponent,
+  formatUserComponentsContent,
+  parseUserComponentsContent,
+  type UserComponentDefinition,
+  type UserComponentsDocument,
+} from "./domain/components-model.mjs";
+import {
   getProjectFiles,
   readProjectFile,
   writeProjectFile,
+  createProjectFolder,
   type ProjectEntry,
 } from "./services/editor-api";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
 type ViewportTab = "Scene" | "Game";
-type BottomTab = "Project" | "Animation" | "Console";
+type BottomTab = "Project" | "Animation" | "Components" | "Console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
 
 interface ConsoleMessage {
@@ -272,6 +303,26 @@ function App() {
   const [scenePath, setScenePath] = createSignal("");
   const [savedContent, setSavedContent] = createSignal("");
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
+  const [animationDocument, setAnimationDocument] = createSignal<AnimationDocument | null>(null);
+  const [animationPath, setAnimationPath] = createSignal("");
+  const [savedAnimationContent, setSavedAnimationContent] = createSignal("");
+  const [selectedAnimationKey, setSelectedAnimationKey] = createSignal("");
+  const [animationFrameKey, setAnimationFrameKey] = createSignal("");
+  const [animationSaving, setAnimationSaving] = createSignal(false);
+  const [componentSources, setComponentSources] = createSignal<Array<{ path: string; document: UserComponentsDocument }>>([]);
+  const [componentDocument, setComponentDocument] = createSignal<UserComponentsDocument | null>(null);
+  const [componentDocumentPath, setComponentDocumentPath] = createSignal("");
+  const [savedComponentContent, setSavedComponentContent] = createSignal("");
+  const [componentSaving, setComponentSaving] = createSignal(false);
+  const [newComponentName, setNewComponentName] = createSignal("");
+  const [newComponentPropertyName, setNewComponentPropertyName] = createSignal("");
+  const [newComponentPropertyType, setNewComponentPropertyType] = createSignal<"number" | "string" | "boolean">("number");
+  const [componentToAttach, setComponentToAttach] = createSignal("");
+  const [prefabCatalog, setPrefabCatalog] = createSignal<Array<{ path: string; document: PrefabDocument }>>([]);
+  const [selectedPrefabPath, setSelectedPrefabPath] = createSignal("");
+  const [prefabPropertyName, setPrefabPropertyName] = createSignal("");
+  const [prefabPropertyType, setPrefabPropertyType] = createSignal<"string" | "number" | "boolean" | "option">("boolean");
+  const [prefabPropertyDefault, setPrefabPropertyDefault] = createSignal("");
   const [history, setHistory] = createSignal<SceneDocument[]>([]);
   const [historyIndex, setHistoryIndex] = createSignal(-1);
   const [selectionHistory, setSelectionHistory] = createSignal<Array<{ before: string | null; after: string | null }>>([]);
@@ -301,6 +352,7 @@ function App() {
           consoleDocked: parsed.consoleDocked === true,
           bottomTab:
             parsed.bottomTab === "Animation" ||
+            parsed.bottomTab === "Components" ||
             (parsed.bottomTab === "Console" && (compact || parsed.consoleDocked === true))
               ? parsed.bottomTab
               : "Project",
@@ -349,6 +401,38 @@ function App() {
       return true;
     }
   });
+
+  const animationDirty = createMemo(() => {
+    const current = animationDocument();
+    const saved = savedAnimationContent();
+    if (!current || !saved) return false;
+    try { return formatAnimationContent(current) !== saved; }
+    catch { return true; }
+  });
+
+  const componentDirty = createMemo(() => {
+    const current = componentDocument();
+    const saved = savedComponentContent();
+    if (!current || !saved) return false;
+    try { return formatUserComponentsContent(current) !== saved; }
+    catch { return true; }
+  });
+
+  const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty());
+
+  const componentRegistry = createMemo(() =>
+    componentSources().flatMap((source) => source.document.components.map((definition) => ({
+      path: source.path,
+      definition,
+    }))),
+  );
+
+  const selectedPrefab = createMemo(() => {
+    const prefabId = currentObject()?.prefabId;
+    return prefabId ? prefabCatalog().find((item) => item.document.id === prefabId) : undefined;
+  });
+
+  const selectedPrefabDefinition = createMemo(() => selectedPrefab()?.document ?? null);
 
   const sceneObjects = createMemo(() => {
     const current = scene();
@@ -437,6 +521,11 @@ function App() {
       run: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })),
     },
     {
+      id: "components",
+      title: "Show User Components",
+      run: () => setLayout((current) => ({ ...current, bottomTab: "Components" })),
+    },
+    {
       id: "console",
       title: "Show Console workspace",
       run: () => {
@@ -488,9 +577,13 @@ function App() {
   });
 
   let sceneLoadSequence = 0;
+  let documentLoadSequence = 0;
 
   async function loadScene(path: string, reloadCurrent = false) {
     if (path === scenePath() && !reloadCurrent) return;
+    if (animationDirty() || componentDirty()) {
+      if (!window.confirm("The active animation or component file has unsaved changes. Discard them and open the scene?")) return;
+    }
     if (dirty()) {
       const discardChanges = window.confirm(
         "This scene has unsaved changes. Discard them and open the requested scene?",
@@ -513,6 +606,12 @@ function App() {
       const firstObject = getSceneObjects(parsed)[0];
       setSelectedId(firstObject?.id ?? null);
       setSelectedProjectPath(path);
+      setAnimationDocument(null);
+      setAnimationPath("");
+      setSavedAnimationContent("");
+      setComponentDocument(null);
+      setComponentDocumentPath("");
+      setSavedComponentContent("");
       setActiveViewport("Scene");
       setGameLoaded(false);
       log("success", `Opened ${path}`);
@@ -535,7 +634,22 @@ function App() {
       if (scenes.length === 0) {
         throw new Error("No .scene files were found in the selected project.");
       }
-      const preferred = scenes.find((path) => path.toLowerCase() === "scenes/level.scene") ?? scenes[0];
+      const files = flattenProjectFiles(result.rootFile);
+      const [prefabs, components] = await Promise.all([
+        Promise.all(scenes.map(async (path) => {
+          try {
+            const parsed = parseSceneContent(await readProjectFile(path));
+            return parsed.sceneType === "PREFAB" ? { path, document: parsed as PrefabDocument } : null;
+          } catch { return null; }
+        })),
+        Promise.all(files.filter(({ path }) => path.toLowerCase().endsWith(".components")).map(async ({ path }) => {
+          try { return { path, document: parseUserComponentsContent(await readProjectFile(path)) }; }
+          catch (error) { log("warning", `Could not read User Components file ${path}: ${error instanceof Error ? error.message : String(error)}`); return null; }
+        })),
+      ]);
+      setPrefabCatalog(prefabs.filter((item): item is { path: string; document: PrefabDocument } => item !== null));
+      setComponentSources(components.filter((item): item is { path: string; document: UserComponentsDocument } => item !== null));
+      const preferred = scenes.find((path) => path.toLowerCase() === "scenes/level.scene") ?? scenes.find((path) => !prefabs.some((item) => item?.path === path)) ?? scenes[0];
       await loadScene(preferred);
       log("info", `Project loaded · ${result.projectNumberOfFiles} files and folders`);
     } catch (error) {
@@ -586,6 +700,304 @@ function App() {
     log("info", "Redo");
   }
 
+  async function refreshProjectTree() {
+    const result = await getProjectFiles();
+    setProjectTree(result.rootFile);
+  }
+
+  async function ensureProjectFolder(relativePath: string) {
+    const existing = flattenProjectFiles(projectTree()!).find((item) => item.path === relativePath);
+    if (existing && !existing.entry.isFile) return;
+    await createProjectFolder(relativePath);
+    await refreshProjectTree();
+  }
+
+  async function loadAnimationFile(path: string) {
+    if (animationDirty() && !window.confirm("The active animation file has unsaved changes. Discard them?")) return;
+    const request = ++documentLoadSequence;
+    try {
+      const content = await readProjectFile(path);
+      if (request !== documentLoadSequence) return;
+      const parsed = parseAnimationContent(content);
+      setAnimationDocument(parsed);
+      setAnimationPath(path);
+      setSavedAnimationContent(formatAnimationContent(parsed));
+      setSelectedAnimationKey(parsed.anims[0]?.key ?? "");
+      setAnimationFrameKey("");
+      setSelectedProjectPath(path);
+      setLayout((current) => ({ ...current, bottomTab: "Animation" }));
+      log("success", `Opened animation file ${path}`);
+    } catch (error) {
+      if (request !== documentLoadSequence) return;
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function saveAnimationFile() {
+    const current = animationDocument();
+    const path = animationPath();
+    if (!current || !path || animationSaving()) return;
+    setAnimationSaving(true);
+    try {
+      const content = formatAnimationContent(current);
+      await writeProjectFile(path, content);
+      setSavedAnimationContent(content);
+      log("success", `Saved animations ${path}`);
+    } catch (error) {
+      log("error", `Animation save failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAnimationSaving(false);
+    }
+  }
+
+  async function createAnimationFile() {
+    const path = window.prompt("New Phaser animations JSON path", "animations/animations.json")?.trim();
+    if (!path) return;
+    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.json$/i.test(path) || path.split("/").includes("..")) {
+      log("error", "Animation file path must be a relative .json path inside the project.");
+      return;
+    }
+    const directory = path.split("/").slice(0, -1).join("/");
+    try {
+      if (directory) await ensureProjectFolder(directory);
+      const document = createAnimationDocument();
+      const content = formatAnimationContent(document);
+      await writeProjectFile(path, content);
+      setAnimationDocument(document);
+      setAnimationPath(path);
+      setSavedAnimationContent(content);
+      setSelectedAnimationKey("");
+      setLayout((current) => ({ ...current, bottomTab: "Animation" }));
+      await refreshProjectTree();
+      log("success", `Created animations file ${path}`);
+    } catch (error) {
+      log("error", `Could not create animations file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  function addAnimationClip() {
+    const current = animationDocument();
+    if (!current) return;
+    const source = selectedObject()?.source;
+    const texture = source?.texture;
+    const textureKey = texture && typeof texture === "object" ? String(texture.key ?? "") : "";
+    const next = createAnimation(current, "animation", {
+      frames: textureKey ? [{ key: textureKey }] : [],
+    });
+    setAnimationDocument(next);
+    setSelectedAnimationKey(next.anims.at(-1)?.key ?? "");
+  }
+
+  function updateSelectedAnimation(patch: Record<string, unknown>) {
+    const current = animationDocument();
+    const key = selectedAnimationKey();
+    if (!current || !key) return;
+    try { setAnimationDocument(updateAnimation(current, key, patch)); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function addAnimationFrame() {
+    const current = animationDocument();
+    const key = selectedAnimationKey();
+    const frameKey = animationFrameKey().trim();
+    if (!current || !key || !frameKey) return;
+    try {
+      setAnimationDocument(appendAnimationFrame(current, key, { key: frameKey }));
+      setAnimationFrameKey("");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  async function openUserComponentsFile(path: string) {
+    if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
+    const request = ++documentLoadSequence;
+    try {
+      const content = await readProjectFile(path);
+      if (request !== documentLoadSequence) return;
+      const parsed = parseUserComponentsContent(content);
+      setComponentDocument(parsed);
+      setComponentDocumentPath(path);
+      setSavedComponentContent(formatUserComponentsContent(parsed));
+      setSelectedProjectPath(path);
+      setLayout((current) => ({ ...current, bottomTab: "Components" }));
+      setComponentSources((current) => [
+        ...current.filter((item) => item.path !== path),
+        { path, document: parsed },
+      ]);
+      log("success", `Opened User Components ${path}`);
+    } catch (error) {
+      if (request !== documentLoadSequence) return;
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function saveUserComponentsFile() {
+    const current = componentDocument();
+    const path = componentDocumentPath();
+    if (!current || !path || componentSaving()) return;
+    setComponentSaving(true);
+    try {
+      const content = formatUserComponentsContent(current);
+      await writeProjectFile(path, content);
+      setSavedComponentContent(content);
+      setComponentSources((sources) => sources.map((item) => item.path === path ? { path, document: current } : item));
+      log("success", `Saved User Components ${path}`);
+    } catch (error) {
+      log("error", `Component save failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setComponentSaving(false);
+    }
+  }
+
+  async function createUserComponentsFile() {
+    const path = window.prompt("New User Components file path", "components/Behaviors.components")?.trim();
+    if (!path) return;
+    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.components$/i.test(path) || path.split("/").includes("..")) {
+      log("error", "User Components path must be a relative .components path inside the project.");
+      return;
+    }
+    const directory = path.split("/").slice(0, -1).join("/");
+    try {
+      if (directory) await ensureProjectFolder(directory);
+      const document: UserComponentsDocument = {
+        components: [],
+        outputLang: "TYPE_SCRIPT",
+        meta: {
+          app: "Codogma Engine - User Components Editor",
+          url: "https://codogma.com",
+          contentType: "phasereditor2d.core.scene.SceneContentType",
+        },
+      };
+      const content = formatUserComponentsContent(document);
+      await writeProjectFile(path, content);
+      setComponentDocument(document);
+      setComponentDocumentPath(path);
+      setSavedComponentContent(content);
+      setComponentSources((sources) => [...sources, { path, document }]);
+      setLayout((current) => ({ ...current, bottomTab: "Components" }));
+      await refreshProjectTree();
+    } catch (error) {
+      log("error", `Could not create User Components file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  function addUserComponent() {
+    const current = componentDocument();
+    const path = componentDocumentPath();
+    const name = newComponentName().trim();
+    if (!current || !path || !name) return;
+    try {
+      const next = addUserComponentDefinition(current, createUserComponentDefinition(name));
+      setComponentDocument(next);
+      setNewComponentName("");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function addUserComponentProperty(componentName: string) {
+    const current = componentDocument();
+    if (!current) return;
+    const component = current.components.find((item) => item.name === componentName);
+    const propertyName = newComponentPropertyName().trim();
+    if (!component || !propertyName) return;
+    const defaultValue = newComponentPropertyType() === "number" ? 0
+      : newComponentPropertyType() === "boolean" ? false : "";
+    try {
+      const next = {
+        ...current,
+        components: current.components.map((item) => item.name === componentName
+          ? { ...item, properties: [...(item.properties ?? []), {
+              name: propertyName,
+              label: propertyName,
+              defValue: defaultValue,
+              customDefinition: false,
+              type: { id: newComponentPropertyType() },
+            }] }
+          : item),
+      };
+      setComponentDocument(next);
+      setNewComponentPropertyName("");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function attachComponentToSelected(name: string) {
+    const current = scene();
+    const selected = selectedObject();
+    const definition = componentRegistry().find((item) => item.definition.name === name)?.definition;
+    if (!current || !selected || !definition) return;
+    try {
+      const nextSource = attachUserComponent(selected.source, definition);
+      applySceneChange(updateSceneObject(current, selected.id, nextSource), selected.id);
+      setComponentToAttach("");
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function detachComponentFromSelected(name: string) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      const nextSource = detachUserComponent(selected.source, name);
+      applySceneChange(updateSceneObject(current, selected.id, nextSource), selected.id);
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  async function createPrefabFromSelected() {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected || current.sceneType === "PREFAB") return;
+    const baseName = selected.name.replace(/[^A-Za-z0-9_-]+/g, "_") || "Prefab";
+    const path = window.prompt("Save Prefab scene as", `prefabs/${baseName}.scene`)?.trim();
+    if (!path) return;
+    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.scene$/i.test(path) || path.split("/").includes("..")) {
+      log("error", "Prefab path must be a relative .scene path inside the project.");
+      return;
+    }
+    const directory = path.split("/").slice(0, -1).join("/");
+    try {
+      if (directory) await ensureProjectFolder(directory);
+      const prefab = createPrefabDocument(current, selected.source, baseName);
+      await writeProjectFile(path, formatSceneContent(prefab as SceneDocument));
+      const withoutSource = removeSceneObject(current, selected.id);
+      const next = createPrefabInstance(withoutSource, prefab, {
+        label: selected.name,
+        x: Number(selected.source.x ?? 400),
+        y: Number(selected.source.y ?? 300),
+        rotation: Number(selected.source.rotation ?? 0),
+        scaleX: Number(selected.source.scaleX ?? 1),
+        scaleY: Number(selected.source.scaleY ?? 1),
+      });
+      const instance = getSceneObjects(next).at(-1);
+      applySceneChange(next, instance?.id ?? null);
+      setPrefabCatalog((catalog) => [...catalog.filter((item) => item.path !== path), { path, document: prefab }]);
+      await refreshProjectTree();
+      log("success", `Created Prefab ${path} and replaced the selected object with an instance`);
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function addPrefabInstance() {
+    const current = scene();
+    const prefab = prefabCatalog().find((item) => item.path === selectedPrefabPath());
+    if (!current || !prefab || current.sceneType === "PREFAB") return;
+    const next = createPrefabInstance(current, prefab.document, { x: 400, y: 300 });
+    const instance = getSceneObjects(next).at(-1);
+    applySceneChange(next, instance?.id ?? null);
+  }
+
+  function updatePrefabOverride(property: PrefabProperty, value: unknown) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected || !selected.source.prefabId) return;
+    const unlock = Array.isArray(selected.source.unlock) ? selected.source.unlock as string[] : [];
+    const nextUnlock = unlock.includes(property.name) ? unlock : [...unlock, property.name];
+    const next = updateSceneObject(current, selected.id, { [property.name]: value, unlock: nextUnlock });
+    applySceneChange(next, selected.id);
+  }
+
+  async function saveActiveDocument() {
+    if (animationDocument() && layout().bottomTab === "Animation") return saveAnimationFile();
+    if (componentDocument() && layout().bottomTab === "Components") return saveUserComponentsFile();
+    return saveScene();
+  }
+
   async function saveScene() {
     const current = scene();
     const path = scenePath();
@@ -596,6 +1008,9 @@ function App() {
       const content = formatSceneContent(current);
       await writeProjectFile(path, content);
       setSavedContent(content);
+      if (current.sceneType === "PREFAB") {
+        setPrefabCatalog((catalog) => catalog.map((item) => item.path === path ? { path, document: current as PrefabDocument } : item));
+      }
       log("success", `Saved ${path}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -606,7 +1021,7 @@ function App() {
     }
   }
 
-  function updateSelectedProperty(key: string, value: string | number) {
+  function updateSelectedProperty(key: string, value: string | number | boolean) {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
@@ -772,7 +1187,7 @@ function App() {
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      void saveScene();
+      void saveActiveDocument();
     } else if (modifier && event.key.toLowerCase() === "z" && event.shiftKey) {
       event.preventDefault();
       redo();
@@ -832,6 +1247,10 @@ function App() {
   });
 
   const currentObject = () => selectedObject()?.source;
+  const activeAnimation = createMemo(() => animationDocument()?.anims.find((item) => item.key === selectedAnimationKey()));
+  const selectedComponentDefinitions = createMemo(() => componentRegistry().filter((item) => components().includes(item.definition.name)));
+  const hasUnattachedComponents = createMemo(() => componentRegistry().filter((item) => !components().includes(item.definition.name)));
+  const prefabDocumentDirty = () => scene()?.sceneType === "PREFAB" ? dirty() : false;
   const components = () => {
     const value = currentObject()?.components;
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -842,6 +1261,10 @@ function App() {
   const menuItems: Record<string, Array<{ label: string; shortcut?: string; action: () => void; disabled?: boolean }>> = {
     File: [
       { label: "Save scene", shortcut: "Ctrl+S", action: () => void saveScene(), disabled: !scene() || saving() },
+      { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
+      { label: "Save User Components", action: () => void saveUserComponentsFile(), disabled: !componentDocument() || !componentDirty() },
+      { label: "New Animation file", action: () => void createAnimationFile() },
+      { label: "New User Components file", action: () => void createUserComponentsFile() },
       { label: "Reload scene from disk", action: () => scenePath() && void loadScene(scenePath(), true), disabled: !scenePath() },
     ],
     Edit: [
@@ -849,6 +1272,7 @@ function App() {
       { label: "Redo", shortcut: "Ctrl+Shift+Z", action: redo, disabled: historyIndex() < 0 || historyIndex() >= history().length - 1 },
       { label: "Command palette", shortcut: "Ctrl+P", action: openPalette },
       { label: "Delete selected object", shortcut: "Del", action: deleteSelectedObject, disabled: !selectedObject() },
+      { label: "Create Prefab from selected object", action: () => void createPrefabFromSelected(), disabled: !selectedObject() || scene()?.sceneType === "PREFAB" },
     ],
     View: [
       { label: `${layout().hierarchyVisible ? "Hide" : "Show"} Hierarchy`, action: () => setLayout((current) => ({ ...current, hierarchyVisible: !current.hierarchyVisible })) },
@@ -859,6 +1283,7 @@ function App() {
     Window: [
       { label: "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
       { label: "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
+      { label: "Components", action: () => setLayout((current) => ({ ...current, bottomTab: "Components" })) },
       { label: "Console", action: () => {
         if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
         else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
