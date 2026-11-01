@@ -39,6 +39,8 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Animation and components | The new Host has basic Phaser JSON animation clip/frame operations and initial Components/Prefab models. Full Timeline/tracks/keyframes/curves/events belong to COD-84; full User Components and TypeScript script authoring to COD-91 (using Core contracts COD-26/COD-27); complete nested Prefab overrides remain in COD-8. |
 | Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
 | Scene effects and objects | Legacy Colibri contains Phaser filters, supported game-object types and compiler integration. FX authoring/preview is **not yet migrated** to SolidJS; see COD-89 and independent acceptance CODQA-19. |
+| Spine authoring and preview | Legacy Spine serialization/plugin/MCP support exists; a complete SolidJS Host workflow is **not yet migrated**. See COD-90, session-aware routing COD-85 and browser/runtime acceptance CODQA-20 (live MCP checks also CODQA-8). |
+| Audio groups and particle preview | Existing engine/runtime requirements and legacy workflow are the reference; new SolidJS authoring/preview controls are **not yet migrated**. See COD-61 and CODQA-13. |
 | Editable tilemaps | Existing legacy Colibri workflows include Tilemap tools, layers, tilesets, painting and MCP data operations. Tilemap authoring UI is **not yet migrated** to SolidJS; see COD-40 and CODQA-14. |
 | Physics authoring | Existing legacy editor has Arcade Physics tooling and component-based Box2D body/world settings/codegen on Phaser GameObjects. New Host Physics UI is **not yet migrated** (COD-42); Box2D runtime acceptance remains in CODQA-1. External Box2D runtime setup may be required. Standalone B2Body/B2Shape nodes are not currently supported. |
 | MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes the engine-owned registry over stdio and forwards requests to <code>POST /editor/mcp</code>. The live Editor SSE bridge is still legacy-owned and broadcasts to connected clients; the new Host must not attach until session-aware routing COD-85 is implemented and accepted. |
@@ -73,31 +75,9 @@ cd ../..
 npm start
 ~~~
 
-This default command serves the **legacy Colibri** client at `http://127.0.0.1:3000/editor/`. It does not start the new SolidJS Host. To preview the new Host during migration, start the backend with an exact Origin allow-list and run Vite separately:
+This default command serves the **legacy Colibri** client at `http://127.0.0.1:3000/editor/`. It does not start the new SolidJS Host. The new Host runs independently during migration; see [Run the new SolidJS Editor Host](#run-the-new-solidjs-editor-host-parallel-migration-mode) below.
 
-**Terminal 1 — backend**
-
-~~~bash
-CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173 npm start
-~~~
-
-PowerShell equivalent:
-
-~~~powershell
-$env:CODOGMA_ALLOWED_ORIGINS="http://127.0.0.1:5173"
-npm start
-~~~
-
-**Terminal 2 — SolidJS Host**
-
-~~~bash
-npm --prefix src/editor ci
-npm run dev:editor-host
-~~~
-
-Open `http://127.0.0.1:5173/`. Vite proxies `/editor/*` to the local backend. During dual-run, do not edit the same `PROJECT_DIR` in both clients: only one editor may write a project until a concurrency/locking contract exists. Production `/editor/` remains on Colibri until COD-87 cutover.
-
-Open **http://localhost:3000/editor/**.
+Open **http://127.0.0.1:3000/editor/**.
 
 The server should respond at that address, and product metadata should be available at [http://localhost:3000/editor/product.json](http://localhost:3000/editor/product.json).
 
@@ -129,9 +109,8 @@ npm start
 **Terminal 2 — SolidJS Host:**
 
 ```bash
-cd src/editor
-npm install
-npm run dev
+npm --prefix src/editor ci
+npm run dev:editor-host
 ```
 
 Open **http://127.0.0.1:5173/**. The Vite server binds to IPv4 loopback, uses strict port 5173 and proxies only the existing `/editor/*` backend routes to port 3000. The exact Origin allow-list is required because the proxy rewrites the backend Host header; do not replace it with a wildcard.
