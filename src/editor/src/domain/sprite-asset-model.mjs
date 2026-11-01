@@ -117,36 +117,54 @@ export function describeSpriteAssetFrames(entry, imageWidth, imageHeight) {
   const config = isRecord(entry.frameConfig) ? entry.frameConfig : {};
   const frameWidth = Number(config.frameWidth ?? config.width);
   const frameHeight = Number(config.frameHeight ?? config.height);
-  const margin = Math.max(0, Number(config.margin) || 0);
-  const spacing = Math.max(0, Number(config.spacing) || 0);
+  const margin = Number(config.margin ?? 0);
+  const spacing = Number(config.spacing ?? 0);
   if (!Number.isInteger(frameWidth) || !Number.isInteger(frameHeight) || frameWidth <= 0 || frameHeight <= 0) {
     throw new TypeError("Spritesheet requires positive integer frameWidth and frameHeight.");
   }
+  if (!Number.isFinite(margin) || !Number.isFinite(spacing) || margin < 0 || spacing < 0) {
+    throw new RangeError("Spritesheet margin and spacing must be finite non-negative numbers.");
+  }
 
-  const columns = Math.floor((imageWidth - margin * 2 + spacing) / (frameWidth + spacing));
-  const rows = Math.floor((imageHeight - margin * 2 + spacing) / (frameHeight + spacing));
-  if (columns <= 0 || rows <= 0) {
+  // Keep the geometry and frame-window semantics in sync with Phaser's
+  // SpriteSheet parser: fit frames without extending beyond the source canvas,
+  // select source indices using startFrame/endFrame, and name selected frames
+  // sequentially from zero (not by their absolute source index).
+  const columns = Math.floor((imageWidth - margin + spacing) / (frameWidth + spacing));
+  const rows = Math.floor((imageHeight - margin + spacing) / (frameHeight + spacing));
+  const count = columns * rows;
+  if (columns <= 0 || rows <= 0 || count <= 0) {
     throw new RangeError("Spritesheet frame geometry does not fit inside the source image.");
   }
 
-  const count = columns * rows;
-  const startFrame = Math.max(0, Math.trunc(Number(config.startFrame) || 0));
-  const requestedEnd = Number.isFinite(Number(config.endFrame)) ? Math.trunc(Number(config.endFrame)) : count - 1;
-  const endFrame = Math.min(count - 1, requestedEnd);
-  if (startFrame > endFrame) throw new RangeError("Spritesheet startFrame must not exceed endFrame.");
+  const requestedStart = Number(config.startFrame ?? 0);
+  let startFrame = Number.isFinite(requestedStart) ? Math.trunc(requestedStart) : 0;
+  if (startFrame > count || startFrame < -count) startFrame = 0;
+  if (startFrame < 0) startFrame = count + startFrame;
+
+  const requestedEnd = Number(config.endFrame ?? -1);
+  let endFrame = Number.isFinite(requestedEnd) ? Math.trunc(requestedEnd) : -1;
+  if (endFrame === -1 || endFrame > count || endFrame < startFrame) endFrame = count;
 
   const descriptors = [];
-  for (let frameIndex = startFrame; frameIndex <= endFrame; frameIndex++) {
-    const column = frameIndex % columns;
-    const row = Math.floor(frameIndex / columns);
-    const x = margin + column * (frameWidth + spacing);
-    const y = margin + row * (frameHeight + spacing);
-    descriptors.push({
-      key: String(frameIndex),
-      sourceRect: { x, y, width: frameWidth, height: frameHeight },
-      sourceSize: { width: frameWidth, height: frameHeight },
-      trimRect: fullRect(frameWidth, frameHeight),
-    });
+  let x = margin;
+  let y = margin;
+  let name = 0;
+  for (let frameIndex = 0; frameIndex < count; frameIndex++) {
+    if (frameIndex >= startFrame && frameIndex <= endFrame) {
+      descriptors.push({
+        key: String(name++),
+        sourceRect: { x, y, width: frameWidth, height: frameHeight },
+        sourceSize: { width: frameWidth, height: frameHeight },
+        trimRect: fullRect(frameWidth, frameHeight),
+      });
+    }
+
+    x += frameWidth + spacing;
+    if (x + frameWidth > imageWidth) {
+      x = margin;
+      y += frameHeight + spacing;
+    }
   }
   return descriptors;
 }
