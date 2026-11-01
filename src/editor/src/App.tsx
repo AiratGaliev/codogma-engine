@@ -28,6 +28,7 @@ import {
   parseAnimationContent,
   removeAnimation,
   removeAnimationFrame,
+  moveAnimationFrame,
   updateAnimation,
   type AnimationDocument,
 } from "./domain/animation-model.mjs";
@@ -46,6 +47,8 @@ import {
   detachUserComponent,
   formatUserComponentsContent,
   parseUserComponentsContent,
+  removeUserComponentDefinition,
+  updateUserComponentDefinition,
   type UserComponentDefinition,
   type UserComponentsDocument,
 } from "./domain/components-model.mjs";
@@ -427,13 +430,6 @@ function App() {
     }))),
   );
 
-  const selectedPrefab = createMemo(() => {
-    const prefabId = currentObject()?.prefabId;
-    return prefabId ? prefabCatalog().find((item) => item.document.id === prefabId) : undefined;
-  });
-
-  const selectedPrefabDefinition = createMemo(() => selectedPrefab()?.document ?? null);
-
   const sceneObjects = createMemo(() => {
     const current = scene();
     return current ? getSceneObjects(current) : [];
@@ -582,7 +578,7 @@ function App() {
   async function loadScene(path: string, reloadCurrent = false) {
     if (path === scenePath() && !reloadCurrent) return;
     if (animationDirty() || componentDirty()) {
-      if (!window.confirm("The active animation or component file has unsaved changes. Discard them and open the scene?")) return;
+      if (!window.confirm("The active animation or User Components file has unsaved changes. Discard them and open the scene?")) return;
     }
     if (dirty()) {
       const discardChanges = window.confirm(
@@ -706,13 +702,19 @@ function App() {
   }
 
   async function ensureProjectFolder(relativePath: string) {
-    const existing = flattenProjectFiles(projectTree()!).find((item) => item.path === relativePath);
+    const root = projectTree();
+    if (!root) throw new Error("The project tree is not loaded.");
+    const existing = flattenProjectFiles(root).find((item) => item.path === relativePath);
     if (existing && !existing.entry.isFile) return;
+    if (existing?.entry.isFile) throw new Error(`A file already exists at "${relativePath}".`);
     await createProjectFolder(relativePath);
     await refreshProjectTree();
   }
 
   async function loadAnimationFile(path: string) {
+    if (path === animationPath()) return;
+    if ((dirty() || componentDirty()) &&
+        !window.confirm("The active scene or User Components file has unsaved changes. Discard them?")) return;
     if (animationDirty() && !window.confirm("The active animation file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
@@ -808,6 +810,9 @@ function App() {
   }
 
   async function openUserComponentsFile(path: string) {
+    if (path === componentDocumentPath()) return;
+    if ((dirty() || animationDirty()) &&
+        !window.confirm("The active scene or animation file has unsaved changes. Discard them?")) return;
     if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
@@ -1248,19 +1253,34 @@ function App() {
 
   const currentObject = () => selectedObject()?.source;
   const activeAnimation = createMemo(() => animationDocument()?.anims.find((item) => item.key === selectedAnimationKey()));
-  const selectedComponentDefinitions = createMemo(() => componentRegistry().filter((item) => components().includes(item.definition.name)));
-  const hasUnattachedComponents = createMemo(() => componentRegistry().filter((item) => !components().includes(item.definition.name)));
-  const prefabDocumentDirty = () => scene()?.sceneType === "PREFAB" ? dirty() : false;
   const components = () => {
     const value = currentObject()?.components;
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   };
 
+  const selectedComponentDefinitions = createMemo(() =>
+    componentRegistry().filter((item) => components().includes(item.definition.name)),
+  );
+  const hasUnattachedComponents = createMemo(() =>
+    componentRegistry().filter((item) => !components().includes(item.definition.name)),
+  );
+  const selectedPrefab = createMemo(() => {
+    const current = scene();
+    if (current?.sceneType === "PREFAB") return { path: scenePath(), document: current as PrefabDocument };
+    const prefabId = selectedObject()?.source.prefabId;
+    return prefabId ? prefabCatalog().find((item) => item.document.id === prefabId) : undefined;
+  });
+  const selectedPrefabDefinition = createMemo(() => selectedPrefab()?.document ?? null);
+  const activeAnimation = createMemo(() =>
+    animationDocument()?.anims.find((item) => item.key === selectedAnimationKey()),
+  );
+
+
 
 
   const menuItems: Record<string, Array<{ label: string; shortcut?: string; action: () => void; disabled?: boolean }>> = {
     File: [
-      { label: "Save scene", shortcut: "Ctrl+S", action: () => void saveScene(), disabled: !scene() || saving() },
+      { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !componentDocument() },
       { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
       { label: "Save User Components", action: () => void saveUserComponentsFile(), disabled: !componentDocument() || !componentDirty() },
       { label: "New Animation file", action: () => void createAnimationFile() },
