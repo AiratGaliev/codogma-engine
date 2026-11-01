@@ -1793,6 +1793,18 @@ textarea::placeholder {
 }
 
 @media (max-width: 1360px) {
+  .workbench {
+    grid-template-rows: 88px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
+  }
+
+  .app-header {
+    grid-template-rows: 24px 24px 40px;
+  }
+
+  .bottom-dock {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   .title-bar .document-title {
     margin-left: 10px;
   }
@@ -1808,7 +1820,7 @@ textarea::placeholder {
 
 @media (max-width: 920px) {
   .workbench {
-    grid-template-rows: 95px minmax(220px, 1fr) 4px 207px 30px;
+    grid-template-rows: 88px minmax(220px, 1fr) 4px 207px 30px;
     --left-panel: 194px;
     --right-panel: 250px;
     --console-height: 60px;
@@ -1833,7 +1845,7 @@ textarea::placeholder {
 
 @media (max-width: 780px) {
   .workbench {
-    grid-template-rows: 95px minmax(260px, 1fr) 4px 190px 30px;
+    grid-template-rows: 88px minmax(260px, 1fr) 4px 190px 30px;
     --console-height: 56px;
   }
 
@@ -1896,8 +1908,8 @@ textarea::placeholder {
 
 .phaser-scene-stage canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
 
