@@ -71,7 +71,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   expect(canvasBounds).not.toBeNull();
   await page.mouse.click(
     canvasBounds.x + canvasBounds.width * 0.5,
-    canvasBounds.y + canvasBounds.height * (406 / 600),
+    canvasBounds.y + canvasBounds.height * (432 / 600),
   );
   await expect(page.getByLabel("Object name")).toHaveValue("text_1");
 
