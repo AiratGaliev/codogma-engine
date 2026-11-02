@@ -214,7 +214,7 @@ For a typical local code change:
 2. Make the change in the target Host or shared server/domain subsystem; do not add new user-facing features to Colibri.
 3. For legacy TypeScript/compiler changes, run the root <code>npm run build</code>; for SolidJS Host changes, run <code>npm run build:editor-host</code> and the relevant Host domain tests.
 4. For MCP work, run the package contract tests and relevant security tests. Full MCP and browser E2E suites are not run on topic-branch PRs; their CI gate starts only on <code>dev → test</code> promotion.
-5. Verify the relevant functionality in the browser if the change affects the UI, generated code or runtime behaviour. Server-side MCP tests are not a replacement for visual acceptance testing.
+5. For UI, generated-code or runtime changes, add/update scoped automated regression coverage and the relevant browser-test source/fixtures in the topic PR. Do not run formal manual/browser/runtime acceptance after each Engineering issue and do not block the COD issue or the next dev task on that acceptance. Queue it in CODQA and execute it against the integrated `test` branch only after the relevant changes for the candidate have arrived there.
 
 ### MCP integration tests
 
@@ -410,7 +410,7 @@ This defers the **full-suite run**, not the development of E2E coverage. When a 
 
 The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
 
-For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`) and the task-start/review/acceptance checklist, follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). In particular, `In Review` means implementation is finished but evidence or acceptance is still pending; `Done` requires all applicable criteria to be verified.
+For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`), follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). COD statuses describe Engineering delivery: `In Review` means code review/required CI checks are pending; `Done` means implementation criteria, scoped automated tests, CI Fast and PR evidence are complete. Functional/manual/browser/runtime acceptance belongs to separate top-level CODQA issues and is not a prerequisite for closing or advancing Engineering work.
 ### Linear teams and issue ownership
 
 Linear work is split by responsibility across two teams in the shared **Codogma Engine** project:
@@ -420,7 +420,7 @@ Linear work is split by responsibility across two teams in the shared **Codogma 
 | **Codogma-engine (COD)** | **COD-N** | Engineering delivery: implementation, fixes, architecture, automated tests and CI/tooling. |
 | **Codogma QA (CODQA)** | **CODQA-N** | Functional acceptance of editor/game workflows and release-candidate acceptance. |
 
-Create Engineering issues in COD and QA/acceptance issues in CODQA. Keep cross-team parent/sub-issue or related links so an acceptance task points to the Engineering work it verifies. A defect discovered during QA becomes a separate Engineering/Bug issue in COD; do not move implementation work into the QA team.
+Create Engineering issues in COD and QA/acceptance issues in CODQA. **Never create CODQA issues as children/sub-issues of Engineering issues.** Keep each QA task as a top-level issue on QA Kanban and link it to relevant COD implementation scope only with the neutral `relatedTo` relation; do not use `blocks`/`blockedBy` across the teams. A defect discovered during QA becomes a separate Engineering/Bug issue in COD; do not move implementation work into the QA team.
 
 Both teams belong to the same [Codogma Engine Linear project](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63), whose lead team remains COD. Use the [Development Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/development-kanban-4db756f5f1c6) for engineering work and [QA Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/qa-kanban-918c848c9880) for QA work. Detailed ownership, Work type labels, acceptance evidence and state semantics are defined in [docs/engineering-workflow.md](docs/engineering-workflow.md). Team landing guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
 
@@ -490,7 +490,7 @@ Before opening **`dev → test`**, verify all of the following:
 - Every change intended for this candidate is merged into `dev`; there are no known release-blocking defects in the candidate.
 - The editor build and server smoke checks pass.
 - The MCP integration check is expected to run on this PR and must pass.
-- Any affected UI, scene-authoring, generated-code or live-editor workflow has also been manually checked in the browser. The default MCP integration suite is not a substitute for UI acceptance testing.
+- The full automated E2E gate passes on the promotion candidate. **Formal manual/browser/runtime acceptance is not a prerequisite to opening this PR or to continuing Engineering work.** After the `dev → test` PR is merged, CODQA executes applicable functional acceptance against the integrated `test` SHA and records evidence on QA Kanban. The default MCP integration suite is not a substitute for UI acceptance testing.
 - Relevant tests, setup notes and user/developer documentation are updated.
 - The PR description states the candidate scope, acceptance evidence, and any known limitations.
 
@@ -528,9 +528,10 @@ Then run checks relevant to the change. The full automated E2E suites are not pa
 | Code/build changes | Run `npm run build` before requesting merge; CI runs it as well |
 | Dependencies | Run `npm audit --audit-level=low` in every affected package scope. CI audits scopes whose manifest/lockfile changed, or all scopes when `.npmrc` changes; manual dispatch runs all audits. |
 | Server, bridge or MCP tools | Run `npm run test:security` and the isolated MCP package contract tests. The full MCP E2E suite runs only in promotion CI from `dev → test`. |
-| Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
+| Editor UI, scene authoring, generated code or play mode | Run the relevant scoped typecheck/build/unit/domain/contract regression checks and update browser-test sources/fixtures when the workflow changes. Do not require formal manual/browser/runtime acceptance on each topic PR; CODQA performs it against an integrated `test` candidate. |
 | Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |
-| Release candidate (`dev → test` or `test → main`) | Require the complete promotion E2E gate (MCP + Host browser acceptance); document manual acceptance for affected UI/runtime paths |
+| Release candidate (`dev → test`) | Require the complete automated promotion E2E gate (MCP + Host browser suite). After merge to `test`, run the applicable CODQA browser/runtime/manual checks on the exact integrated SHA. |
+| Release candidate (`test → main`) | Require the complete promotion E2E gate and completed Release acceptance/evidence for the candidate SHA. |
 
 The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` (PowerShell: `$env:MCP_E2E_WITH_EDITOR = "1"` before running `npm run test:e2e`). They require the editor UI to be running and connected. The default CI E2E job does **not** enable that mode.
 
