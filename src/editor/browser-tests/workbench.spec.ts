@@ -1265,3 +1265,41 @@ test("undocking a transient narrow Bottom panel keeps it visible until the side 
   expect(persisted.hierarchyZone).toBe("left");
   expect(persisted.bottomTab).toBe("Project");
 });
+
+
+test("short desktop viewports keep the Scene, Bottom Dock and status row inside the window", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 350 });
+  await page.goto("/");
+
+  const workbench = page.getByTestId("workbench");
+  const workspaceRow = page.locator(".workspace-row");
+  const bottomDock = page.getByTestId("bottom-dock");
+  const bottomSplitter = page.getByTestId("splitter-bottom");
+
+  await expect(bottomSplitter).toHaveAttribute("aria-valuemin", "149");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuemax", "149");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "149");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 149);
+  await expect(workspaceRow).toHaveJSProperty("offsetHeight", 72);
+
+  const geometry = await workbench.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const footer = element.querySelector(".status-bar");
+    return {
+      height: bounds.height,
+      scrollHeight: element.scrollHeight,
+      footerBottom: footer?.getBoundingClientRect().bottom ?? Number.NaN,
+    };
+  });
+  expect(geometry.height).toBe(350);
+  expect(geometry.scrollHeight).toBeLessThanOrEqual(350);
+  expect(geometry.footerBottom).toBeLessThanOrEqual(350);
+
+  await bottomSplitter.focus();
+  await page.keyboard.press("Home");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "149");
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.bottomHeight).toBe(286);
+});

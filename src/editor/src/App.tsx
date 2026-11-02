@@ -1452,18 +1452,27 @@ function App() {
     return Math.min(requestedWidth, getMaximumSidePanelWidth(kind));
   }
 
+  function getMinimumBottomHeight(): number {
+    const headerHeight = compactWorkbench() ? 88 : 95;
+    // Below the normal workspace minimum, allow Bottom to shrink only as far
+    // as its tabs and the minimum detached Console can physically fit.
+    const availableHeight =
+      viewportHeight() - headerHeight - 72 - 4 - 30;
+    return Math.max(89, Math.min(150, availableHeight));
+  }
+
   function getMinimumCenterHeight(): number {
     const headerHeight = compactWorkbench() ? 88 : 95;
     const preferredMinimum = narrowWorkbench() ? 260 : 220;
     const availableHeight =
-      viewportHeight() - headerHeight - 4 - 150 - 30;
-    return Math.max(120, Math.min(preferredMinimum, availableHeight));
+      viewportHeight() - headerHeight - getMinimumBottomHeight() - 4 - 30;
+    return Math.max(72, Math.min(preferredMinimum, availableHeight));
   }
 
   function getMaximumBottomHeight(): number {
     const headerHeight = compactWorkbench() ? 88 : 95;
     return Math.max(
-      150,
+      getMinimumBottomHeight(),
       Math.min(
         420,
         viewportHeight() - headerHeight - getMinimumCenterHeight() - 4 - 30,
@@ -1534,7 +1543,7 @@ function App() {
       const minimum =
         kind === "left" ? 170 :
         kind === "right" ? 210 :
-        kind === "bottom" ? 150 : 56;
+        kind === "bottom" ? getMinimumBottomHeight() : 56;
       const maximum =
         kind === "left" || kind === "right"
           ? getMaximumSidePanelWidth(kind)
@@ -1584,7 +1593,7 @@ function App() {
       setLayout((current) => {
         const bottomHeight = Math.min(
           getMaximumBottomHeight(),
-          Math.max(150, initialValue + startY - event.clientY),
+          Math.max(getMinimumBottomHeight(), initialValue + startY - event.clientY),
         );
         if (bottomHeight === getDisplayedBottomHeight(current)) return current;
         return { ...current, bottomHeight, bottomHeightCustomized: true };
@@ -3408,7 +3417,7 @@ function App() {
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize bottom dock"
-        aria-valuemin={150}
+        aria-valuemin={getMinimumBottomHeight()}
         aria-valuemax={getMaximumBottomHeight()}
         aria-valuenow={getDisplayedBottomHeight()}
         tabIndex={0}
