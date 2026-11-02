@@ -290,12 +290,17 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   expect(canvasHandle).not.toBeNull();
   if (!canvasHandle) throw new Error("Scene canvas is unavailable.");
 
-  await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  const inspectorTab = rightTabs.getByRole("tab", { name: "Inspector" });
+  await page.locator(".hierarchy-panel .panel-header").dragTo(inspectorTab);
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
-  await expect(rightTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+  await expect(inspectorTab).toBeVisible();
+  const nativeDropOrder = await rightTabs.locator("[data-dock-tab]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-dock-tab")),
+  );
+  expect(nativeDropOrder.indexOf("Hierarchy")).toBeGreaterThan(nativeDropOrder.indexOf("Inspector"));
 
-  await rightTabs.getByRole("tab", { name: "Inspector" }).click();
+  await inspectorTab.click();
   await expect(page.getByTestId("inspector-panel")).toBeVisible();
   await expect(page.getByTestId("hierarchy-panel")).not.toBeVisible();
 
@@ -324,6 +329,44 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   expect(persisted.schemaVersion).toBe(1);
   expect(persisted.hierarchyZone).toBe("right");
   expect(persisted.inspectorZone).toBe("right");
+});
+
+test("pointer dragging a Bottom tab into a side group preserves the drop target order", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  const sourceTab = bottomTabs.getByRole("tab", { name: "Hierarchy" });
+  await expect(sourceTab).toBeVisible();
+
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  const targetTab = rightTabs.getByRole("tab", { name: "Inspector" });
+  const sourceBounds = await sourceTab.boundingBox();
+  const targetBounds = await targetTab.boundingBox();
+  if (!sourceBounds || !targetBounds) throw new Error("Dock tab geometry is unavailable.");
+
+  const sourcePoint = {
+    x: sourceBounds.x + sourceBounds.width / 2,
+    y: sourceBounds.y + sourceBounds.height / 2,
+  };
+  const targetPoint = {
+    x: targetBounds.x + targetBounds.width / 2,
+    y: targetBounds.y + targetBounds.height / 2,
+  };
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 10, sourcePoint.y, { steps: 2 });
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 10 });
+  await page.mouse.up();
+
+  await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+  const tabOrder = await rightTabs.locator("[data-dock-tab]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-dock-tab")),
+  );
+  expect(tabOrder.indexOf("Hierarchy")).toBeGreaterThan(tabOrder.indexOf("Inspector"));
 });
 
 test("narrow viewport presents saved side panels in Bottom and restores their zones when widened", async ({ page }) => {

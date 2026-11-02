@@ -58,6 +58,31 @@ Browser acceptance конфигурируется через `src/editor/playwri
 
 Статусы migrated / in progress / not started / deferred / retired выставляются только по фактическому Host workflow и нужному evidence. Наличие старой панели, backend endpoint, завершённой legacy issue или успешной сборки не означает, что функция перенесена. COD-16 — migration inventory; COD-82 — coordination owner.
 
+## COD-83. Версионированный workspace layout
+
+**Единый owner:** SolidJS `layout` signal внутри `App.tsx`. Чистая доменная модель и все переходы состояния находятся в `src/editor/src/domain/workspace-layout.ts`; UI не хранит вторую копию docking state. Состояние сохраняется отдельно от Project Model под ключом `localStorage["codogma.editor.layout"]`.
+
+Schema v1:
+
+| Поле | Тип | Назначение |
+|---|---|---|
+| `schemaVersion` | literal `1` | Версия persisted contract |
+| `leftWidth`, `rightWidth`, `bottomHeight`, `consoleHeight` | number | Размеры dock-зон/Console |
+| `hierarchyVisible`, `inspectorVisible` | boolean | Видимость панели независимо от её dock-зоны |
+| `hierarchyZone`, `inspectorZone` | `left, right, bottom` | Постоянное положение каждой панели |
+| `leftActivePanel`, `rightActivePanel` | `Hierarchy, Inspector, null` | Активная вкладка боковой группы |
+| `bottomTab` | tab ID | Активная вкладка Bottom |
+| `bottomTabOrder` | array of tab IDs | Общий стабильный порядок; каждая зона показывает его отфильтрованную последовательность |
+| `consoleDocked` | boolean | Перемещена ли Console в Bottom на обычном viewport |
+
+Размеры валидируются и ограничиваются диапазонами: Left `170–360 px`, Right `210–420 px`, Bottom `150–420 px`, Console `56–180 px`. Wide defaults: `228 / 280 / 286 / 96 px`; compact defaults: `194 / 250 / 207 / 60 px`. Compact/narrow presentation передаётся в `restoreWorkspaceLayoutContent` и `serializeWorkspaceLayout` из текущего viewport, но не заменяет постоянное `hierarchyZone`/`inspectorZone`. При width до 780 px боковые панели временно отображаются как вкладки Bottom; при возврате к wide viewport они возвращаются в сохранённые зоны.
+
+**Миграция и fallback:** unversioned COD-80 state (`dockedPanels`) трактуется как schema v0: панели из `dockedPanels` переходят в Bottom, остальные возвращаются в home-zones. Schema v1 не сериализует `dockedPanels`. Неизвестная будущая версия, невалидный JSON, неизвестные panel IDs и некорректные значения получают детерминированные defaults; неизвестные tabs отбрасываются, известные панели сохраняются. Project data и файлы проекта не меняются.
+
+**Lifecycle:** dock/undock меняет parent DOM node уже существующей панели; компонент не создаётся повторно. Scene/Game viewport остаётся в центре, его Phaser Canvas не переносится. При unmount Host снимает `keydown`/`resize` listeners и освобождает MCP bridge/preview lifecycle. Текущий Host не содержит in-app project-switch workflow, поэтому очистка именно при переключении между двумя project sessions пока не проверяется и остаётся отдельным lifecycle gap; это не следует трактовать как принятую project-switch acceptance.
+
+**Границы:** три закреплённые зоны Left/Right/Bottom, фиксированные типы панелей и tab groups. Floating windows, произвольное split tree, перенос Scene/Game viewport и новая docking dependency не входят в COD-83.
+
 ## 1. Цель
 
 Довести самостоятельный browser Editor Host на SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4 до полноценной production-ready 2D authoring среды, ориентированной на основные Unity Editor workflows. COD-80 уже создал первую работающую IDE-оболочку и Scene vertical slice; следующие capabilities реализуются отдельными slices, а не новым bootstrap или framework PoC.
