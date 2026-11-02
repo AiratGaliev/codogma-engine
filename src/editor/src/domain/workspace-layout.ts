@@ -35,8 +35,6 @@ const ALL_BOTTOM_TABS: readonly BottomTab[] = [
   "Inspector",
 ];
 
-const SIDE_PANELS: readonly SidePanelId[] = ["Hierarchy", "Inspector"];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

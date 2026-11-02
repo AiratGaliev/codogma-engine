@@ -2631,7 +2631,9 @@ function App() {
               trailing={sceneObjects().length ? String(sceneObjects().length) : "—"}
               onDragStart={(event) => handlePanelDragStart(event, "Hierarchy")}
               onDragEnd={handlePanelDragEnd}
-              onUndock={getStoredPanelZone("Hierarchy") !== getSidePanelHomeZone("Hierarchy") ? () => undockSidePanel("Hierarchy") : undefined}
+              {...(getStoredPanelZone("Hierarchy") !== getSidePanelHomeZone("Hierarchy")
+                ? { onUndock: () => undockSidePanel("Hierarchy") }
+                : {})}
               onClose={() => closeSidePanel("Hierarchy")}
             />
             <div class="panel-toolbar">
@@ -2937,7 +2939,9 @@ function App() {
               trailing={selectedObject() ? selectedObject()!.type : "—"}
               onDragStart={(event) => handlePanelDragStart(event, "Inspector")}
               onDragEnd={handlePanelDragEnd}
-              onUndock={getStoredPanelZone("Inspector") !== getSidePanelHomeZone("Inspector") ? () => undockSidePanel("Inspector") : undefined}
+              {...(getStoredPanelZone("Inspector") !== getSidePanelHomeZone("Inspector")
+                ? { onUndock: () => undockSidePanel("Inspector") }
+                : {})}
               onClose={() => closeSidePanel("Inspector")}
             />
             <Show when={selectedObject()} fallback={<div class="inspector-empty"><Icon theme={theme()} name="node-2d" size={24} /><strong>No object selected</strong><span>Select an object in Hierarchy or Scene.</span></div>}>

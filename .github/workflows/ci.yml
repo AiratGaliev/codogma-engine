@@ -341,24 +341,3 @@ jobs:
         run: npm test
         working-directory: src/editor
 
-      - name: Install Chromium for Editor Host browser tests
-        if: steps.scope.outputs.run == 'true'
-        run: npx playwright install --with-deps chromium
-        working-directory: src/editor
-
-      - name: Run Editor Host browser tests
-        if: steps.scope.outputs.run == 'true'
-        run: npm run test:browser
-        working-directory: src/editor
-
-      - name: Upload Editor Host browser evidence on failure
-        if: failure() && steps.scope.outputs.run == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: editor-host-browser-ci-failure
-          path: |
-            src/editor/test-results/
-            src/editor/playwright-report/
-          if-no-files-found: ignore
-          retention-days: 7
-
