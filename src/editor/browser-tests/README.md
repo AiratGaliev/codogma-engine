@@ -18,7 +18,7 @@ scene open/edit/save/reopen, Undo/Redo, Phaser iframe lifecycle, theme persisten
 command routing, Inspector state and splitter interaction.
 
 Workspace-layout acceptance covers cross-zone panel grouping, pointer and native
-panel-header drops into empty side zones, close/reopen, versioned localStorage migration,
+panel-header drops into empty side zones, canceled pointer gestures, close/reopen, versioned localStorage migration,
 restoration after reload, keyboard-driven tab navigation and splitter resizing,
 compact/wide user-size round trips, short-viewport constraints, Console selection across
 compact/wide transitions, and narrow-screen Undock behavior while the Bottom

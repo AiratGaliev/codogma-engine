@@ -1303,3 +1303,43 @@ test("short desktop viewports keep the Scene, Bottom Dock and status row inside 
   );
   expect(persisted.bottomHeight).toBe(286);
 });
+
+
+test("pointercancel clears the drag target and does not swallow a following tab click", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  const source = bottomTabs.getByRole("tab", { name: "Animation" });
+  const pointerIdPromise = source.evaluate((element) => new Promise<number>((resolve) => {
+    element.addEventListener("pointerdown", (event) => resolve(event.pointerId), { once: true });
+  }));
+
+  const bounds = await source.boundingBox();
+  if (!bounds) throw new Error("Animation tab geometry is unavailable.");
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  const pointerId = await pointerIdPromise;
+  await page.mouse.move(x + 12, y, { steps: 3 });
+  await expect(page.getByTestId("dock-zone-left")).toBeVisible();
+
+  await source.evaluate((element, id) => {
+    element.dispatchEvent(new PointerEvent("pointercancel", {
+      bubbles: true,
+      pointerId: id,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    }));
+  }, pointerId);
+  await expect(page.getByTestId("dock-zone-left")).not.toBeVisible();
+  await expect(page.locator(".dock-drop-target")).toHaveCount(0);
+  await page.mouse.up();
+
+  await bottomTabs.getByRole("tab", { name: "Project" }).click();
+  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
+  await expect(source).toHaveAttribute("aria-selected", "false");
+});

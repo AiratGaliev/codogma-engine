@@ -1911,6 +1911,7 @@ function App() {
   function cancelBottomTabPointerDrag(event: PointerEvent) {
     if (!bottomTabPointerDrag || bottomTabPointerDrag.pointerId !== event.pointerId) return;
     bottomTabPointerDrag = undefined;
+    suppressDockTabClick = false;
     handlePanelDragEnd();
   }
 
