@@ -213,6 +213,20 @@ test("reorders tabs only within their current dock group", () => {
   assert.equal(invalid, layout);
 });
 
+test("compact bottom tab reordering includes temporarily presented side panels", () => {
+  const layout = createDefaultWorkspaceLayout(true);
+  const reordered = reorderDockTab(layout, "Project", "Hierarchy", "bottom", true, true);
+  assert.ok(reordered.bottomTabOrder.indexOf("Project") > reordered.bottomTabOrder.indexOf("Hierarchy"));
+  assert.equal(reordered.hierarchyZone, "left");
+  assert.equal(reordered.bottomTab, "Project");
+});
+
+test("closing a bottom side panel on wide viewport never selects hidden Console", () => {
+  const layout = moveDockablePanel(createDefaultWorkspaceLayout(false), "Hierarchy", "bottom");
+  const closed = setSidePanelVisibility(layout, "Hierarchy", false, false);
+  assert.equal(closed.bottomTab, "Project");
+});
+
 test("serializes only the validated versioned workspace contract", () => {
   const layout = moveDockablePanel(
     createDefaultWorkspaceLayout(false),

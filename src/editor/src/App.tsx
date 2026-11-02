@@ -1588,6 +1588,33 @@ function App() {
     setLayout((current) => selectSidePanel(current, panel));
   }
 
+  function handleDockTabKeyDown(
+    event: KeyboardEvent & { currentTarget: HTMLButtonElement },
+    zone: DockZone,
+  ) {
+    const tabs = Array.from(
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=\"tab\"]") ?? [],
+    );
+    const index = tabs.indexOf(event.currentTarget);
+    if (index < 0 || tabs.length === 0) return;
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    if (!nextTab) return;
+    nextTab.focus({ preventScroll: true });
+    const nextValue = nextTab.dataset.dockTab;
+    if (zone === "bottom") {
+      if (nextValue === "Project" || nextValue === "Animation" || nextValue === "Components" || nextValue === "Console" || nextValue === "Hierarchy" || nextValue === "Inspector") activateBottomTab(nextValue);
+    } else if (nextValue === "Hierarchy" || nextValue === "Inspector") {
+      activateSidePanel(nextValue);
+    }
+  }
+
   function activateBottomTab(tab: BottomTab) {
     setLayout((current) => {
       if (
@@ -1623,14 +1650,14 @@ function App() {
     announce = true,
   ) {
     if (!movePanelElementToZone(panel, zone)) {
-      log("error", \`Cannot dock \${panel}: its panel mount or target zone is unavailable.\`);
+      log("error", `Cannot dock ${panel}: its panel mount or target zone is unavailable.`);
       return;
     }
 
     setLayout((current) => moveDockablePanel(current, panel, zone));
     if (announce) {
       const zoneLabel = zone === "left" ? "Left" : zone === "right" ? "Right" : "Bottom";
-      log("success", \`\${panel} docked in the \${zoneLabel} workspace\`);
+      log("success", `${panel} docked in the ${zoneLabel} workspace`);
     }
   }
 
@@ -1638,12 +1665,39 @@ function App() {
     const home = getSidePanelHomeZone(panel);
     if (getStoredPanelZone(panel) === home) return;
     dockSidePanel(panel, home, false);
-    log("info", \`\${panel} returned to its default dock\`);
+    log("info", `${panel} returned to its default dock`);
   }
 
   function closeSidePanel(panel: SidePanelId) {
-    setLayout((current) => setSidePanelVisibility(current, panel, false));
-    log("info", \`\${panel} panel closed\`);
+    const zone = getStoredPanelZone(panel);
+    const next = setSidePanelVisibility(layout(), panel, false, compactWorkbench());
+    setLayout(next);
+    const fallback = zone === "left"
+      ? next.leftActivePanel
+      : zone === "right"
+        ? next.rightActivePanel
+        : next.bottomTab;
+    queueMicrotask(() => {
+      const target = fallback
+        ? document.querySelector<HTMLButtonElement>(
+            `[data-dock-zone="${zone}"] [data-dock-tab="${fallback}"], [data-testid="bottom-tabs"] [data-dock-tab="${fallback}"]`,
+          )
+        : null;
+      (target ?? document.querySelector<HTMLButtonElement>(
+        "[data-testid=\"bottom-tabs\"] [data-dock-tab=\"Project\"]",
+      ))?.focus({ preventScroll: true });
+    });
+    log("info", panel + " panel closed");
+  }
+
+  function focusWorkspacePanel(panel: SidePanelId) {
+    queueMicrotask(() => {
+      const zone = getEffectivePanelZone(panel);
+      const target = document.querySelector<HTMLButtonElement>(
+        `[data-dock-zone="${zone}"] [data-dock-tab="${panel}"], [data-testid="bottom-tabs"] [data-dock-tab="${panel}"]`,
+      );
+      target?.focus({ preventScroll: true });
+    });
   }
 
   function toggleSidePanel(panel: SidePanelId) {
@@ -1651,10 +1705,11 @@ function App() {
       ? layout().hierarchyVisible
       : layout().inspectorVisible;
     setLayout((current) => {
-      const next = setSidePanelVisibility(current, panel, !isVisible);
+      const next = setSidePanelVisibility(current, panel, !isVisible, compactWorkbench());
       if (!isVisible && narrowWorkbench()) next.bottomTab = panel;
       return next;
     });
+    if (!isVisible) focusWorkspacePanel(panel);
   }
 
   function resetWorkbenchLayout() {
@@ -1683,7 +1738,7 @@ function App() {
 
   function reorderDockPanelTab(source: BottomTab, target: BottomTab, zone: DockZone) {
     setLayout((current) =>
-      reorderWorkspaceDockTab(current, source, target, zone, narrowWorkbench()),
+      reorderWorkspaceDockTab(current, source, target, zone, compactWorkbench(), narrowWorkbench()),
     );
   }
 
@@ -2533,6 +2588,7 @@ function App() {
                   role="tab"
                   data-dock-tab={panel}
                   aria-selected={layout().leftActivePanel === panel}
+                  onKeyDown={(event) => handleDockTabKeyDown(event, "left")}
                   draggable={true}
                   onDragStart={(event) => handlePanelDragStart(event, panel)}
                   onDragEnd={handlePanelDragEnd}
@@ -2838,6 +2894,7 @@ function App() {
                   role="tab"
                   data-dock-tab={panel}
                   aria-selected={layout().rightActivePanel === panel}
+                  onKeyDown={(event) => handleDockTabKeyDown(event, "right")}
                   draggable={true}
                   onDragStart={(event) => handlePanelDragStart(event, panel)}
                   onDragEnd={handlePanelDragEnd}
@@ -3174,6 +3231,7 @@ function App() {
                     if (suppressDockTabClick) { suppressDockTabClick = false; return; }
                     activateBottomTab(tab);
                   }}
+                  onKeyDown={(event) => handleDockTabKeyDown(event, "bottom")}
                   title={`Drag to reorder ${tab}`}
                 >
                   <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
@@ -3572,8 +3630,8 @@ function App() {
             style={{
               display:
                 (bottomTab() === "Hierarchy" || bottomTab() === "Inspector") &&
-                getEffectivePanelZone(bottomTab()) === "bottom" &&
-                isDockPanelActive(bottomTab())
+                isDockPanelActive(bottomTab() as SidePanelId) &&
+                getEffectivePanelZone(bottomTab() as SidePanelId) === "bottom"
                   ? "flex"
                   : "none",
             }}
@@ -3588,7 +3646,12 @@ function App() {
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize Console panel"
+          aria-valuemin={56}
+          aria-valuemax={180}
+          aria-valuenow={layout().consoleHeight}
+          tabIndex={0}
           onPointerDown={(event) => startResize("console", event)}
+          onKeyDown={(event) => handleSplitterKeyDown("console", event)}
         />
         <ConsolePanel
           className="desktop-console-panel"
