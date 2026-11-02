@@ -774,3 +774,81 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
   expect(unsupportedContainerInputWarnings).toEqual([]);
   expect(gradientAlphaWarnings).toEqual([]);
 });
+
+
+test("responsive Bottom Dock sizing follows its splitter and constrains the detached Console", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/");
+
+  const bottomDock = page.getByTestId("bottom-dock");
+  const bottomSplitter = page.getByTestId("splitter-bottom");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 207);
+
+  await bottomSplitter.focus();
+  await page.keyboard.press("End");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "420");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 420);
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 420);
+  await bottomSplitter.focus();
+  await page.keyboard.press("Home");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "150");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 150);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const consoleSplitter = page.getByTestId("splitter-console");
+  const consolePanel = page.getByTestId("console-panel");
+  await expect(consoleSplitter).toHaveAttribute("aria-valuemax", "61");
+  await expect(consolePanel).toHaveJSProperty("offsetHeight", 60);
+  await consoleSplitter.focus();
+  await page.keyboard.press("End");
+  await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "61");
+  await expect(consolePanel).toHaveJSProperty("offsetHeight", 61);
+
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.bottomHeight).toBe(150);
+  expect(persisted.consoleHeight).toBe(61);
+});
+
+test("side dock tabs support pointer docking and reordering into Bottom", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  await page.locator(".hierarchy-panel .panel-header").dragTo(
+    rightTabs.getByRole("tab", { name: "Inspector" }),
+  );
+
+  const sourceTab = rightTabs.getByRole("tab", { name: "Hierarchy" });
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  const targetTab = bottomTabs.getByRole("tab", { name: "Project" });
+  const sourceBounds = await sourceTab.boundingBox();
+  const targetBounds = await targetTab.boundingBox();
+  if (!sourceBounds || !targetBounds) throw new Error("Dock tab geometry is unavailable.");
+
+  const sourcePoint = {
+    x: sourceBounds.x + sourceBounds.width / 2,
+    y: sourceBounds.y + sourceBounds.height / 2,
+  };
+  const targetPoint = {
+    x: targetBounds.x + targetBounds.width / 2,
+    y: targetBounds.y + targetBounds.height / 2,
+  };
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 10, sourcePoint.y, { steps: 2 });
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 10 });
+  await page.mouse.up();
+
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+  const order = await bottomTabs.locator("[data-dock-tab]").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-dock-tab")),
+  );
+  expect(order.indexOf("Hierarchy")).toBeGreaterThan(order.indexOf("Project"));
+});

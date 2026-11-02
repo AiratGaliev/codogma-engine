@@ -77,6 +77,7 @@ import {
 } from "./domain/fx-model.ts";
 import {
   createDefaultWorkspaceLayout,
+  getMaximumConsoleHeight,
   getSidePanelHomeZone,
   getVisibleBottomTabs,
   getVisibleSidePanels,
@@ -377,7 +378,7 @@ function App() {
   const [gameLoaded, setGameLoaded] = createSignal(false);
   const [consoleLevel, setConsoleLevel] = createSignal("all");
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
-  const [dockTargetActive, setDockTargetActive] = createSignal(false);
+  const [dockTargetZone, setDockTargetZone] = createSignal<DockZone | null>(null);
   const [draggedDockPanel, setDraggedDockPanel] = createSignal<BottomTab | null>(null);
   const [hiddenObjects, setHiddenObjects] = createSignal(new Set<string>());
   const [lockedObjects, setLockedObjects] = createSignal(new Set<string>());
@@ -1484,14 +1485,22 @@ function App() {
       const maximum =
         kind === "left" ? 360 :
         kind === "right" ? 420 :
-        kind === "bottom" ? 420 : 180;
+        kind === "bottom" ? 420 :
+        getMaximumConsoleHeight(current.bottomHeight);
       const value = current[keyName];
       const next = key === "Home"
         ? minimum
         : key === "End"
           ? maximum
           : Math.min(maximum, Math.max(minimum, value + direction * step));
-      return { ...current, [keyName]: next };
+      const updated = { ...current, [keyName]: next };
+      if (kind === "bottom" && !compactWorkbench() && !current.consoleDocked) {
+        updated.consoleHeight = Math.min(
+          current.consoleHeight,
+          getMaximumConsoleHeight(updated.bottomHeight),
+        );
+      }
+      return updated;
     });
   }
 
@@ -1509,14 +1518,27 @@ function App() {
         rightWidth: Math.min(420, Math.max(210, initialValue + startX - event.clientX)),
       }));
     } else if (kind === "bottom") {
-      setLayout((current) => ({
-        ...current,
-        bottomHeight: Math.min(420, Math.max(150, initialValue + startY - event.clientY)),
-      }));
+      setLayout((current) => {
+        const bottomHeight = Math.min(
+          420,
+          Math.max(150, initialValue + startY - event.clientY),
+        );
+        const updated = { ...current, bottomHeight };
+        if (!compactWorkbench() && !current.consoleDocked) {
+          updated.consoleHeight = Math.min(
+            current.consoleHeight,
+            getMaximumConsoleHeight(bottomHeight),
+          );
+        }
+        return updated;
+      });
     } else {
       setLayout((current) => ({
         ...current,
-        consoleHeight: Math.min(180, Math.max(56, initialValue + startY - event.clientY)),
+        consoleHeight: Math.min(
+          getMaximumConsoleHeight(current.bottomHeight),
+          Math.max(56, initialValue + startY - event.clientY),
+        ),
       }));
     }
   }
@@ -1636,7 +1658,7 @@ function App() {
 
   function handlePanelDragEnd() {
     setDraggedDockPanel(null);
-    setDockTargetActive(false);
+    setDockTargetZone(null);
   }
 
   function handleConsoleDragStart(event: DragEvent) {
@@ -1734,6 +1756,7 @@ function App() {
   function startBottomTabPointerDrag(event: PointerEvent & { currentTarget: HTMLButtonElement }, tab: BottomTab) {
     if (event.button !== 0) return;
     bottomTabPointerDrag = { panel: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+    setDockTargetZone(null);
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
@@ -1743,7 +1766,17 @@ function App() {
     if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 6) {
       drag.active = true;
       setDraggedDockPanel(drag.panel);
-      setDockTargetActive(true);
+    }
+    if (drag.active) {
+      const targetZoneElement = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>("[data-dock-zone]");
+      const targetZone = targetZoneElement?.dataset.dockZone as DockZone | undefined;
+      setDockTargetZone(
+        targetZone && isDockTargetAllowed(drag.panel, targetZone)
+          ? targetZone
+          : null,
+      );
     }
   }
 
@@ -1758,21 +1791,22 @@ function App() {
     if (!drag || drag.pointerId !== event.pointerId) return;
     bottomTabPointerDrag = undefined;
     if (drag.active) {
-      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-dock-tab]");
-      const targetTab = target?.dataset.dockTab as BottomTab | undefined;
-      const targetZone = target?.closest<HTMLElement>("[data-dock-zone]")?.dataset.dockZone as DockZone | undefined;
-      if (targetTab && targetZone) {
-        if (
-          (drag.panel === "Hierarchy" || drag.panel === "Inspector") &&
-          targetZone !== getStoredPanelZone(drag.panel)
-        ) {
-          dockSidePanel(drag.panel, targetZone);
-          reorderDockPanelTab(drag.panel, targetTab, targetZone);
-        } else if (
-          targetZone === "bottom" ||
-          targetZone === "left" ||
-          targetZone === "right"
-        ) {
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const targetTabElement = target?.closest<HTMLElement>("[data-dock-tab]");
+      const targetZoneElement = target?.closest<HTMLElement>("[data-dock-zone]");
+      const targetTab = targetTabElement?.dataset.dockTab as BottomTab | undefined;
+      const targetZone = targetZoneElement?.dataset.dockZone as DockZone | undefined;
+      if (targetZone && isDockTargetAllowed(drag.panel, targetZone)) {
+        if (drag.panel === "Hierarchy" || drag.panel === "Inspector") {
+          if (targetZone !== getStoredPanelZone(drag.panel)) {
+            dockSidePanel(drag.panel, targetZone);
+          }
+          if (targetTab) {
+            reorderDockPanelTab(drag.panel, targetTab, targetZone);
+          } else if (targetZone === getStoredPanelZone(drag.panel)) {
+            activateSidePanel(drag.panel);
+          }
+        } else if (targetZone === "bottom" && targetTab) {
           reorderDockPanelTab(drag.panel, targetTab, targetZone);
         }
       }
@@ -1788,6 +1822,12 @@ function App() {
     handlePanelDragEnd();
   }
 
+  function isDockTargetAllowed(panel: BottomTab, zone: DockZone): boolean {
+    return panel === "Hierarchy" || panel === "Inspector"
+      ? true
+      : zone === "bottom";
+  }
+
   function handleDockDragOver(event: DragEvent, explicitZone?: DockZone) {
     const panel = draggedDockPanel();
     const targetZoneElement = event.target instanceof Element
@@ -1798,24 +1838,21 @@ function App() {
       (targetZoneElement?.dataset.dockZone as DockZone | undefined) ??
       "bottom";
 
-    if (!panel) return;
-    if (panel === "Console" && targetZone !== "bottom") return;
-    if (
-      panel !== "Console" &&
-      panel !== "Hierarchy" &&
-      panel !== "Inspector" &&
-      targetZone !== "bottom"
-    ) return;
+    if (!panel || !isDockTargetAllowed(panel, targetZone)) {
+      setDockTargetZone(null);
+      return;
+    }
 
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    setDockTargetActive(true);
+    setDockTargetZone(targetZone);
   }
 
   function handleDockDragLeave(event: DragEvent & { currentTarget: HTMLElement }) {
     const nextTarget = event.relatedTarget;
     if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-    setDockTargetActive(false);
+    const zone = event.currentTarget.dataset.dockZone as DockZone | undefined;
+    if (zone && dockTargetZone() === zone) setDockTargetZone(null);
   }
 
   function handleDockDrop(event: DragEvent, explicitZone?: DockZone) {
@@ -1852,7 +1889,7 @@ function App() {
     }
 
     event.preventDefault();
-    setDockTargetActive(false);
+    setDockTargetZone(null);
     setDraggedDockPanel(null);
 
     if (panel === "Hierarchy" || panel === "Inspector") {
@@ -1877,7 +1914,15 @@ function App() {
   }
 
   function undockConsole() {
-    setLayout((current) => ({ ...current, consoleDocked: false, bottomTab: "Project" }));
+    setLayout((current) => ({
+      ...current,
+      consoleDocked: false,
+      bottomTab: "Project",
+      consoleHeight: Math.min(
+        current.consoleHeight,
+        getMaximumConsoleHeight(current.bottomHeight),
+      ),
+    }));
     log("info", "Console moved back to its own dock");
   }
 
@@ -2024,7 +2069,7 @@ function App() {
       setLayout((current) => {
         const previousDefaults = createDefaultWorkspaceLayout(previousCompact);
         const nextDefaults = createDefaultWorkspaceLayout(nextCompact);
-        return {
+        const nextLayout = {
           ...current,
           leftWidth: current.leftWidth === previousDefaults.leftWidth ? nextDefaults.leftWidth : current.leftWidth,
           rightWidth: current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
@@ -2032,6 +2077,13 @@ function App() {
           consoleHeight: current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
           bottomTab: !nextCompact && current.bottomTab === "Console" ? "Project" : current.bottomTab,
         };
+        if (!nextCompact && !nextLayout.consoleDocked) {
+          nextLayout.consoleHeight = Math.min(
+            nextLayout.consoleHeight,
+            getMaximumConsoleHeight(nextLayout.bottomHeight),
+          );
+        }
+        return nextLayout;
       });
     }
 
@@ -2602,13 +2654,20 @@ function App() {
           class="side-dock-zone left-side-dock"
           data-testid="dock-zone-left"
           data-dock-zone="left"
-          classList={{ "dock-drop-target": dockTargetActive() }}
+          classList={{ "dock-drop-target": dockTargetZone() === "left" }}
           style={{ display: leftDockPanels().length > 0 ? "flex" : "none" }}
           onDragOver={(event) => handleDockDragOver(event, "left")}
           onDragLeave={handleDockDragLeave}
           onDrop={(event) => handleDockDrop(event, "left")}
         >
-          <div class="side-dock-tabs" role="tablist" aria-label="Left dock panels">
+          <div
+            class="side-dock-tabs"
+            role="tablist"
+            aria-label="Left dock panels"
+            onPointerMove={moveBottomTabPointerDrag}
+            onPointerUp={endBottomTabPointerDrag}
+            onPointerCancel={cancelBottomTabPointerDrag}
+          >
             <For each={leftDockPanels()}>
               {(panel) => (
                 <button
@@ -2621,6 +2680,7 @@ function App() {
                   draggable={true}
                   onDragStart={(event) => handlePanelDragStart(event, panel)}
                   onDragEnd={handlePanelDragEnd}
+                  onPointerDown={(event) => startBottomTabPointerDrag(event, panel)}
                   onClick={() => activateSidePanel(panel)}
                 >
                   {panel}
@@ -2910,13 +2970,20 @@ function App() {
           class="side-dock-zone right-side-dock"
           data-testid="dock-zone-right"
           data-dock-zone="right"
-          classList={{ "dock-drop-target": dockTargetActive() }}
+          classList={{ "dock-drop-target": dockTargetZone() === "right" }}
           style={{ display: rightDockPanels().length > 0 ? "flex" : "none" }}
           onDragOver={(event) => handleDockDragOver(event, "right")}
           onDragLeave={handleDockDragLeave}
           onDrop={(event) => handleDockDrop(event, "right")}
         >
-          <div class="side-dock-tabs" role="tablist" aria-label="Right dock panels">
+          <div
+            class="side-dock-tabs"
+            role="tablist"
+            aria-label="Right dock panels"
+            onPointerMove={moveBottomTabPointerDrag}
+            onPointerUp={endBottomTabPointerDrag}
+            onPointerCancel={cancelBottomTabPointerDrag}
+          >
             <For each={rightDockPanels()}>
               {(panel) => (
                 <button
@@ -2929,6 +2996,7 @@ function App() {
                   draggable={true}
                   onDragStart={(event) => handlePanelDragStart(event, panel)}
                   onDragEnd={handlePanelDragEnd}
+                  onPointerDown={(event) => startBottomTabPointerDrag(event, panel)}
                   onClick={() => activateSidePanel(panel)}
                 >
                   {panel}
@@ -3240,7 +3308,7 @@ function App() {
             aria-label="Bottom workspace"
             data-testid="bottom-tabs"
             data-dock-zone="bottom"
-            classList={{ "dock-drop-target": dockTargetActive() }}
+            classList={{ "dock-drop-target": dockTargetZone() === "bottom" }}
             onDragOver={handleDockDragOver}
             onDragLeave={handleDockDragLeave}
             onDrop={handleDockDrop}
@@ -3680,7 +3748,7 @@ function App() {
           aria-orientation="horizontal"
           aria-label="Resize Console panel"
           aria-valuemin={56}
-          aria-valuemax={180}
+          aria-valuemax={getMaximumConsoleHeight(layout().bottomHeight)}
           aria-valuenow={layout().consoleHeight}
           tabIndex={0}
           onPointerDown={(event) => startResize("console", event)}

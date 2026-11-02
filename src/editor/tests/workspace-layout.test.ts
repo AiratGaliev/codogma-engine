@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   createDefaultWorkspaceLayout,
+  getMaximumConsoleHeight,
   getSidePanelHomeZone,
   getVisibleBottomTabs,
   getVisibleSidePanels,
@@ -322,4 +323,55 @@ test("serializes only the validated versioned workspace contract", () => {
   assert.equal(parsed.schemaVersion, 1);
   assert.equal(parsed.hierarchyZone, "bottom");
   assert.equal("dockedPanels" in parsed, false);
+});
+
+
+test("adapts untouched Console defaults and keeps customized heights", () => {
+  const wideDefaults = createDefaultWorkspaceLayout(false);
+  const compactDefaults = restoreWorkspaceLayout(wideDefaults, true);
+
+  assert.equal(wideDefaults.consoleHeight, 96);
+  assert.equal(compactDefaults.consoleHeight, 60);
+
+  const customized = restoreWorkspaceLayout({
+    ...wideDefaults,
+    consoleHeight: 125,
+  }, true);
+
+  assert.equal(customized.consoleHeight, 125);
+});
+
+test("limits the detached Console to the space available inside Bottom Dock", () => {
+  assert.equal(getMaximumConsoleHeight(150), 61);
+  assert.equal(getMaximumConsoleHeight(200), 111);
+  assert.equal(getMaximumConsoleHeight(286), 180);
+  assert.equal(getMaximumConsoleHeight(420), 180);
+  assert.equal(getMaximumConsoleHeight(Number.NaN), 180);
+
+  const impossibleWideLayout = restoreWorkspaceLayout({
+    ...createDefaultWorkspaceLayout(false),
+    bottomHeight: 150,
+    consoleHeight: 180,
+    consoleDocked: false,
+  });
+
+  assert.equal(impossibleWideLayout.bottomHeight, 150);
+  assert.equal(impossibleWideLayout.consoleHeight, 61);
+
+  const dockedConsoleLayout = restoreWorkspaceLayout({
+    ...createDefaultWorkspaceLayout(false),
+    bottomHeight: 150,
+    consoleHeight: 180,
+    consoleDocked: true,
+  });
+
+  assert.equal(dockedConsoleLayout.consoleHeight, 180);
+
+  const compactLayout = restoreWorkspaceLayout({
+    ...createDefaultWorkspaceLayout(false),
+    bottomHeight: 150,
+    consoleHeight: 180,
+  }, true);
+
+  assert.equal(compactLayout.consoleHeight, 180);
 });

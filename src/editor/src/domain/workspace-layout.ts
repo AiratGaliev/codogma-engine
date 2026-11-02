@@ -119,7 +119,17 @@ function getActiveSidePanel(
   return getVisibleSidePanels(layout, zone)[0] ?? null;
 }
 
-export function createDefaultWorkspaceLayout(
+export /**
+ * Максимальная высота отдельной Console с учётом места, необходимого Bottom Dock.
+ * Резерв включает строку вкладок (28 px), содержимое панели (56 px),
+ * splitter (4 px) и верхнюю границу dock-зоны (1 px).
+ */
+export function getMaximumConsoleHeight(bottomHeight: number): number {
+  if (!Number.isFinite(bottomHeight)) return 180;
+  return Math.max(56, Math.min(180, bottomHeight - 89));
+}
+
+function createDefaultWorkspaceLayout(
   compact = false,
 ): WorkspaceLayout {
   return {
@@ -197,7 +207,7 @@ export function restoreWorkspaceLayout(
 
   const consoleDocked = value.consoleDocked === true;
   // Preserve COD-80 behavior when a workspace is reopened at a compact width:
-  // only untouched wide defaults adapt; explicit user sizing is kept.
+  // only untouched defaults adapt; explicit user sizing is kept.
   const leftWidth =
     compact && value.leftWidth === wideDefaults.leftWidth
       ? defaults.leftWidth
@@ -210,22 +220,31 @@ export function restoreWorkspaceLayout(
     compact && value.bottomHeight === wideDefaults.bottomHeight
       ? defaults.bottomHeight
       : value.bottomHeight;
+  const consoleHeight =
+    compact && value.consoleHeight === wideDefaults.consoleHeight
+      ? defaults.consoleHeight
+      : value.consoleHeight;
+  const restoredBottomHeight = clampNumber(
+    bottomHeight,
+    defaults.bottomHeight,
+    150,
+    420,
+  );
+  const maximumConsoleHeight =
+    compact || consoleDocked
+      ? 180
+      : getMaximumConsoleHeight(restoredBottomHeight);
 
   const restored: WorkspaceLayout = {
     schemaVersion: WORKSPACE_LAYOUT_SCHEMA_VERSION,
     leftWidth: clampNumber(leftWidth, defaults.leftWidth, 170, 360),
     rightWidth: clampNumber(rightWidth, defaults.rightWidth, 210, 420),
-    bottomHeight: clampNumber(
-      bottomHeight,
-      defaults.bottomHeight,
-      150,
-      420,
-    ),
+    bottomHeight: restoredBottomHeight,
     consoleHeight: clampNumber(
-      value.consoleHeight,
+      consoleHeight,
       defaults.consoleHeight,
       56,
-      180,
+      maximumConsoleHeight,
     ),
     hierarchyVisible:
       typeof value.hierarchyVisible === "boolean"

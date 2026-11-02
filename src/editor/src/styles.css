@@ -2000,7 +2000,7 @@ textarea::placeholder {
 
 @media (max-width: 920px) {
   .workbench {
-    grid-template-rows: 88px minmax(220px, 1fr) 4px 207px 30px;
+    grid-template-rows: 88px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
     --left-panel: 194px;
     --right-panel: 250px;
     --console-height: 60px;
@@ -2025,7 +2025,7 @@ textarea::placeholder {
 
 @media (max-width: 780px) {
   .workbench {
-    grid-template-rows: 88px minmax(260px, 1fr) 4px 190px 30px;
+    grid-template-rows: 88px minmax(260px, 1fr) 4px var(--bottom-panel) 30px;
     --console-height: 56px;
   }
 
