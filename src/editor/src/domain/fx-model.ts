@@ -59,7 +59,15 @@ export interface FxEntry {
 }
 
 const FX_TYPES = new Set<FxType>(["Circle", "Bloom", "Gradient", "Shine"]);
-const COLOR_FIELDS = new Set(["color", "backgroundColor", "color1", "color2"]);
+const DEFAULT_INTERNAL_FX_PARENT_TYPES = new Set([
+  "Sprite", "Image", "Text", "TileSprite", "RenderTexture", "Video",
+]);
+const COLOR_FIELDS_BY_TYPE: Record<FxType, ReadonlySet<string>> = {
+  Circle: new Set(["color", "backgroundColor"]),
+  Bloom: new Set(),
+  Gradient: new Set(["color1", "color2"]),
+  Shine: new Set(),
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -111,17 +119,17 @@ function createId(): string {
     `codogma-fx-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function createFxObject(type: FxType, id = createId()): FxObject {
+export function createFxObject(type: FxType, id = createId(), preFX = true): FxObject {
   if (!isFxType(type)) throw new TypeError(`Unsupported FX type "${String(type)}".`);
   switch (type) {
     case "Circle":
-      return { id, type, label: type, preFX: true, thickness: 8, color: "#ff33b2", backgroundColor: "#ff0000", scale: 1, feather: 0.005 };
+      return { id, type, label: type, preFX, thickness: 8, color: "#ff33b2", backgroundColor: "#ff0000", scale: 1, feather: 0.005 };
     case "Bloom":
-      return { id, type, label: type, preFX: true, threshold: 0.5, blurRadius: 2, blurSteps: 4, blurQuality: 0, blendAmount: 1 };
+      return { id, type, label: type, preFX, threshold: 0.5, blurRadius: 2, blurSteps: 4, blurQuality: 0, blendAmount: 1 };
     case "Gradient":
-      return { id, type, label: type, preFX: true, color1: "#ff0000", color2: "#00ff00", alpha: 0.2, fromX: 0, fromY: 0, toX: 0, toY: 1, size: 0 };
+      return { id, type, label: type, preFX, color1: "#ff0000", color2: "#00ff00", alpha: 0.2, fromX: 0, fromY: 0, toX: 0, toY: 1, size: 0 };
     case "Shine":
-      return { id, type, label: type, preFX: true, radius: 0.5, direction: 0.5, scale: 2, duration: 2000, reveal: false, yoyo: false };
+      return { id, type, label: type, preFX, radius: 0.5, direction: 0.5, scale: 2, duration: 2000, reveal: false, yoyo: false };
   }
 }
 
@@ -173,10 +181,14 @@ function assertFinite(field: string, value: unknown, min?: number, max?: number,
 function validatePatch(source: FxObject, patch: Partial<FxObject>): void {
   for (const [field, value] of Object.entries(patch)) {
     if (field === "id" || field === "type") throw new TypeError(`FX property "${field}" cannot be changed.`);
-    if (COLOR_FIELDS.has(field)) {
-      if (!((typeof value === "string" && value.trim().length > 0) ||
-        (typeof value === "number" && Number.isFinite(value) && value >= 0))) {
-        throw new TypeError(`FX property "${field}" must be a non-empty color string or non-negative color number.`);
+    if (COLOR_FIELDS_BY_TYPE[source.type].has(field)) {
+      const normalized = typeof value === "string" ? value.trim() : "";
+      const validHex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalized) ||
+        /^0x[0-9a-f]{1,8}$/i.test(normalized);
+      const validInteger = typeof value === "number" &&
+        Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
+      if (!validHex && !validInteger) {
+        throw new TypeError(`FX property "${field}" must be a Phaser-compatible HEX color or 32-bit unsigned integer.`);
       }
       continue;
     }
@@ -221,7 +233,9 @@ export function addSceneObjectFx(scene: SceneDocument, parentId: string, type: F
   if (!isFxType(type)) throw new TypeError(`Unsupported FX type "${String(type)}".`);
   return updateSceneParent(scene, parentId, (parent) => {
     const list = Array.isArray(parent.list) ? parent.list : [];
-    return { ...parent, list: [...list, createFxObject(type)] };
+    // Keep the legacy Phaser Editor default: only these display objects default to internal filters.
+    const preFX = typeof parent.type === "string" && DEFAULT_INTERNAL_FX_PARENT_TYPES.has(parent.type);
+    return { ...parent, list: [...list, createFxObject(type, undefined, preFX)] };
   });
 }
 

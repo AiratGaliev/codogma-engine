@@ -47,6 +47,37 @@ test("creates legacy-compatible defaults for each supported 2D FX type", () => {
   assert.equal(createFxObject("Shine", "shine").duration, 2000);
 });
 
+
+test("uses the legacy internal-filter default only for supported parent Game Objects", () => {
+  const scene: SceneDocument = {
+    id: "fx-stage-defaults",
+    displayList: [
+      { id: "image", type: "Image" },
+      { id: "text", type: "Text" },
+      { id: "sprite", type: "Sprite" },
+      { id: "tile", type: "TileSprite" },
+      { id: "render-texture", type: "RenderTexture" },
+      { id: "video", type: "Video" },
+      { id: "container", type: "Container" },
+      { id: "layer", type: "Layer" },
+    ],
+  };
+
+  const stageFor = (parentId: string) => {
+    const updated = addSceneObjectFx(scene, parentId, "Bloom");
+    const parent = getSceneObjects(updated).find((entry) => entry.id === parentId);
+    assert.ok(parent);
+    return getSceneObjectEffects(parent.source)[0]?.source.preFX;
+  };
+
+  for (const parentId of ["image", "text", "sprite", "tile", "render-texture", "video"]) {
+    assert.equal(stageFor(parentId), true, `${parentId} must default to internal filters`);
+  }
+  for (const parentId of ["container", "layer"]) {
+    assert.equal(stageFor(parentId), false, `${parentId} must default to external filters`);
+  }
+});
+
 test("discovers nested scene nodes without exposing FX helper nodes as scene objects", () => {
   assert.deepEqual(getSceneObjects(sceneFixture).map(({ id, parentId, depth }) => [id, parentId, depth]), [
     ["root-container", null, 0],
@@ -119,6 +150,58 @@ test("validates alpha, normalized Gradient coordinates, Shine timing and color r
   assert.ok(updatedParent);
   assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.preFX, false);
   assert.equal(getSceneObjectEffects(updatedParent.source)[0]?.source.direction, -2);
+});
+
+
+test("validates type-specific Phaser color fields and accepted color representations", () => {
+  const scene: SceneDocument = {
+    id: "fx-color-validation",
+    displayList: [
+      { id: "circle-parent", type: "Image", list: [createFxObject("Circle", "circle")] },
+      { id: "bloom-parent", type: "Image", list: [createFxObject("Bloom", "bloom")] },
+      { id: "gradient-parent", type: "Image", list: [createFxObject("Gradient", "gradient")] },
+    ],
+  };
+
+  const withShortHex = updateSceneObjectFx(scene, "circle-parent", "circle", { color: "#AbC" });
+  const circle = getSceneObjects(withShortHex).find((entry) => entry.id === "circle-parent");
+  assert.ok(circle);
+  assert.equal(getSceneObjectEffects(circle.source)[0]?.source.type, "Circle");
+  assert.equal(getSceneObjectEffects(circle.source)[0]?.source.color, "#AbC");
+
+  const withNumericHex = updateSceneObjectFx(withShortHex, "circle-parent", "circle", {
+    color: 0xff00aa,
+    backgroundColor: "0x112233",
+  });
+  const updatedCircle = getSceneObjects(withNumericHex).find((entry) => entry.id === "circle-parent");
+  assert.ok(updatedCircle);
+  assert.equal(getSceneObjectEffects(updatedCircle.source)[0]?.source.color, 0xff00aa);
+  assert.equal(getSceneObjectEffects(updatedCircle.source)[0]?.source.backgroundColor, "0x112233");
+
+  const withGradientHex = updateSceneObjectFx(scene, "gradient-parent", "gradient", {
+    color1: "#ff00aa",
+    color2: 0x123456,
+  });
+  const gradient = getSceneObjects(withGradientHex).find((entry) => entry.id === "gradient-parent");
+  assert.ok(gradient);
+  assert.equal(getSceneObjectEffects(gradient.source)[0]?.source.type, "Gradient");
+
+  assert.throws(
+    () => updateSceneObjectFx(scene, "circle-parent", "circle", { color: "red" }),
+    /Phaser-compatible HEX color/,
+  );
+  assert.throws(
+    () => updateSceneObjectFx(scene, "circle-parent", "circle", { color: "#gggggg" }),
+    /Phaser-compatible HEX color/,
+  );
+  assert.throws(
+    () => updateSceneObjectFx(scene, "circle-parent", "circle", { color: 1.5 }),
+    /Phaser-compatible HEX color/,
+  );
+  assert.throws(
+    () => updateSceneObjectFx(scene, "bloom-parent", "bloom", { color: "#ffffff" }),
+    /Unsupported Bloom property "color"/,
+  );
 });
 
 test("scene JSON round-trips FX settings and unrelated metadata without schema migration", () => {
