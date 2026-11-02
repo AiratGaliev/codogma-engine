@@ -72,6 +72,7 @@ Apply the following principles:
 - Add or update tests for changed behavior and important regressions. Prefer tests that verify externally observable behavior and meaningful failure cases over tests coupled to implementation details.
 - Do not weaken tests, type checks, security controls or CI gates merely to obtain a passing result. Change an expectation only when the intended contract has changed, and explain why.
 - Respect the repository's separation of routine engineering checks, independent QA, release validation and promotion gates. Do not block normal implementation on a later-stage gate unless the task or documented workflow requires it.
+- An instruction file guides agent behavior; it does not enforce permissions or guarantee execution. Encode critical invariants in tests, linters, hooks, CI, branch protection and tool permissions wherever practical; never treat AGENTS.md as the sole security boundary.
 - A check that was not run is not a passing check. Report whether each relevant check passed, failed, was skipped, was unavailable or is still running. Distinguish local results from CI results and automated checks from manual acceptance.
 - Review the final diff for correctness, omissions, unintended files, accidental generated-file churn, secrets, license/attribution issues and documentation drift.
 
