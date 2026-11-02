@@ -16,9 +16,18 @@ test("generated Gradient sibling synchronizes its alpha with the parent GameObje
   );
 
   assert.ok(gradientBuilder, "SceneCodeDOMBuilder must retain the Gradient codegen branch");
+  const syncCodeStart = gradientBuilder[1].indexOf("const syncCode = [");
+  const syncCodeEnd = gradientBuilder[1].indexOf("].join(", syncCodeStart);
+  assert.ok(syncCodeStart >= 0 && syncCodeEnd > syncCodeStart, "Gradient sync code must be emitted as an update callback");
+  const syncCode = gradientBuilder[1].slice(syncCodeStart, syncCodeEnd);
+  assert.match(
+    syncCode,
+    /\.setAlpha\(" \+ parent \+ "\.alpha \?\? 1\);/,
+    "the live Gradient sync callback must copy the parent alpha",
+  );
   assert.match(
     gradientBuilder[1],
-    /\.setAlpha\(" \+ parent \+ "\.alpha \?\? 1\);/,
-    "generated Gradient update code must copy the live parent alpha",
+    /events\.on\('update', " \+ syncName \+ "\);/,
+    "the generated scene must invoke Gradient synchronization on scene updates",
   );
 });

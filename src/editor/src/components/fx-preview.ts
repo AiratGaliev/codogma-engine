@@ -346,7 +346,7 @@ function createGradientPreview(
     scene.events.off("update", sync);
     parent.off?.("destroy", parentDestroyed);
     gradient.off?.("destroy", gradientDestroyed);
-    if (gradient.active !== false) gradient.destroy?.();
+    try { gradient.destroy?.(); } catch { /* Ignore a Gradient already released by Phaser. */ }
   }
 
   sync();

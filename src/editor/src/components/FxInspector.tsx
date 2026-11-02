@@ -1,5 +1,6 @@
 import { For, Index, Show, createSignal } from "solid-js";
 import type { FxEntry, FxObject, FxType } from "../domain/fx-model.ts";
+import { colorPreview } from "./fx-color.ts";
 
 interface NumericField {
   key: string;
@@ -99,12 +100,6 @@ function isTextField(field: FxField): field is TextField {
 
 function isInternalFx(effect: FxObject): boolean {
   return effect.preFX === true;
-}
-
-function colorPreview(value: unknown): string {
-  if (typeof value === "number" && Number.isFinite(value)) return `#${Math.max(0, Math.floor(value)).toString(16).slice(-6).padStart(6, "0")}`;
-  if (typeof value === "string" && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value)) return value;
-  return "transparent";
 }
 
 function EffectFields(props: { effect: () => FxObject; onUpdate: Props["onUpdate"]; onError: Props["onError"] }) {

@@ -372,6 +372,7 @@ test("Gradient converts numeric colors and tracks parent transforms, bounds and 
   expect(gradient?.depth).toBeCloseTo(12.001);
   expect(gradient?.alpha).toBeCloseTo(0.4);
 
+  if (gradient) gradient.active = false;
   result.dispose();
   expect(env.sceneEvents.count("update")).toBe(0);
   expect(gradient?.destroyCalls).toBe(1);
