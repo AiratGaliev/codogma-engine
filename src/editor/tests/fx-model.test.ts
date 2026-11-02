@@ -216,7 +216,7 @@ test("edits and removes legacy FX without an id without inserting synthetic iden
     displayList: [{
       id: "parent",
       type: "Image",
-      list: [{ type: "Circle", thickness: 5, color: 0x123456, customLegacyFlag: "keep" }],
+      list: [{ type: "Circle", thickness: 5, color: "legacy-color-token", customLegacyFlag: "keep" }],
     }],
   };
   const parent = getSceneObjects(legacyScene)[0];
@@ -231,7 +231,7 @@ test("edits and removes legacy FX without an id without inserting synthetic iden
   const raw = updatedParent.source.list?.[0] as Record<string, unknown>;
   assert.equal(raw.id, undefined);
   assert.equal(raw.thickness, 9);
-  assert.equal(raw.color, 0x123456);
+  assert.equal(raw.color, "legacy-color-token");
   assert.equal(raw.customLegacyFlag, "keep");
 
   const removed = removeSceneObjectFx(updated, "parent", effect.id);

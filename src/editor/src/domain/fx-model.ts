@@ -233,7 +233,7 @@ export function addSceneObjectFx(scene: SceneDocument, parentId: string, type: F
   if (!isFxType(type)) throw new TypeError(`Unsupported FX type "${String(type)}".`);
   return updateSceneParent(scene, parentId, (parent) => {
     const list = Array.isArray(parent.list) ? parent.list : [];
-    // Keep the legacy Phaser Editor default: only these display objects default to internal filters.
+    // Сохраняем правило legacy Phaser Editor: только эти типы по умолчанию используют internal filters.
     const preFX = typeof parent.type === "string" && DEFAULT_INTERNAL_FX_PARENT_TYPES.has(parent.type);
     return { ...parent, list: [...list, createFxObject(type, undefined, preFX)] };
   });
