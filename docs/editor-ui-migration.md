@@ -4,7 +4,7 @@
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.  
 **Решение:** [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).  
 **Нормативные требования:** [Техническое задание](technical-specification.md).  
-**Продуктовые UX-reference и инженерные источники:** [Стандарт reference для 2D Editor Host](editor-reference-standard.md). Unity 6.6 остаётся главным UX-reference, Cocos Creator 4.0 LTS — дополнительным 2D workflow reference; открытый Godot Editor source используется отдельно как implementation reference, а не как третий продуктовый UX-эталон.
+**Продуктовые UX-reference и инженерные источники:** [Стандарт reference для 2D Editor Host](editor-reference-standard.md) и [Editor Engineering References](editor-engineering-references.md). Unity 6.6 остаётся главным UX-reference, Cocos Creator 4.0 LTS — дополнительным 2D workflow reference; Godot и другие открытые редакторы используются отдельно как task-specific implementation references, а не как дополнительные продуктовые UX-эталоны.
 
 ## Текущий результат COD-80 — первый Host и Scene slice
 

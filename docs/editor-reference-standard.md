@@ -16,6 +16,8 @@
 
 **Отдельный инженерный reference — исходный код Godot Editor.** Godot не становится третьим продуктовым UX-reference и не меняет приоритет Unity/Cocos. Его открытая реализация используется для изучения внутренних решений редакторских подсистем: docking/workspace, Inspector/property editors, Scene Tree, 2D Canvas tools, resource/import workflow, Animation, TileMap, preview/debugger и extension points. Это implementation reference, а не требование повторить интерфейс, архитектуру или feature set Godot.
 
+**Другие открытые инженерные reference.** Godot не должен становиться единственным источником implementation ideas. Для конкретной задачи можно выбирать Defold, Fyrox, o2, GDevelop, ezEngine, Stride и специализированные проекты из [каталога Editor Engineering References](editor-engineering-references.md). Каталог разделяет полноценные интегрированные редакторы, 2D-focused и исторические tools, фиксирует revisions/licensing и связывает решения с COD issues. Он не меняет UX-priority Unity → Cocos и не расширяет продуктовый scope.
+
 **Версионное уточнение:** официальный Unity Manual для 6000.6 на дату проверки маркирует Unity 6.6 как **Beta**, а не как stable release. Поэтому Unity 6.6 — основной UX/product reference по запросу проекта, но beta-only APIs/features нельзя принимать за стабильный технический baseline или автоматически включать в Codogma. Для утверждений о стабильности и доступности сверять релизные/LTS материалы Unity отдельно. Cocos Creator 4.0 User Manual обозначен как **4.0 LTS**. Не смешивать его с Cocos Creator 3.x docs или с отдельным репозиторием исходников cocos/cocos4.
 
 ## 2. Жёсткая граница: 2D, не 2D/3D
@@ -42,6 +44,8 @@ Codogma Editor — **2D-only editor**. Не проектировать пере�
 | Extensions | Extension UX and user-facing custom panels only when needed | Editor Extension and Panel extension guide | [EditorPlugin API](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/plugins/editor_plugin.h>), [EditorPlugin implementation](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/plugins/editor_plugin.cpp>) | COD-53 |
 
 Эта таблица — индекс для исследования, а не обещание реализовать каждую возможность продуктов. Каждая задача владеет собственным scope и runtime capability.
+
+Для инженерных вопросов, которые выходят за пределы Godot source (transactional project graph, resource sync, UID assets, nested prototypes, editor extensions, GUI-independent CLI и browser-first IDE), используй [Editor Engineering References](editor-engineering-references.md). Выбирай один-три источника по конкретной проблеме; не добавляй весь список в каждую задачу и не переноси паттерн без проверки Codogma contracts.
 
 ### 3.1. Правила использования исходников Godot
 
@@ -78,7 +82,7 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 
 1. Прочитать эту страницу и относящиеся к задаче разделы ТЗ, плана миграции, capability matrix и каталога источников.
 2. Открыть конкретные разделы Unity 6.6 и Cocos Creator 4.0, относящиеся к workflow. Не ограничиваться скриншотами или общей страницей продукта.
-3. Изучить релевантные исходники Godot по закреплённому commit, если для задачи существует соответствующая редакторская подсистема. Зафиксировать, какие технические паттерны полезны, какие завязаны на C++/native UI и почему они адаптируются или отклоняются.
+3. Изучить релевантные исходники Godot по закреплённому commit и, если это помогает ответить на отдельный инженерный вопрос, выбрать один-два дополнительных проекта из [Editor Engineering References](editor-engineering-references.md). Не смешивать UX benchmark, implementation evidence и исторический пример. Зафиксировать, какие технические паттерны полезны, какие завязаны на конкретный язык/host/runtime/license и почему они адаптируются или отклоняются.
 4. Выписать для задачи: пользовательскую цель, 2D interaction pattern, состояния/ошибки, selection/focus/keyboard поведения, data/runtime contract и browser acceptance.
 5. Явно решить, какие паттерны **adopt / adapt / reject**. В PR/Linear issue обновлении указать ссылки на рассмотренные страницы и причины отклонения важных паттернов.
 6. Сопоставить Colibri только по workflow/data/runtime evidence. Не использовать старый интерфейс как визуальную спецификацию или доказательство корректной архитектуры.

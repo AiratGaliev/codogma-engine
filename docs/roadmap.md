@@ -83,9 +83,11 @@ Unity 6.6 (6000.6, Beta на дату проверки) — основной UX-
 
 - [Техническое задание](technical-specification.md) — нормативный контракт продукта, архитектуры и acceptance criteria.
 - [Architecture risk register](architecture-risk-register.md) — Web-first risks, trade-offs reference engines и обязательные release checks.
-- [Каталог источников](REFERENCE-SOURCES.md) — официальные руководства/исходники, версии, кандидаты библиотек и замечания по лицензиям. Ссылка в каталоге является reference, а не утверждением о выборе зависимости.
+- [Каталог источников](REFERENCE-SOURCES.md) — официальные руководства/API, версии и кандидаты библиотек.
+- [Editor Engineering References](editor-engineering-references.md) — полноценные открытые редакторы, зафиксированные upstream revisions, изучаемые subsystem patterns, license/platform caveats и mapping к задачам Editor migration. Это engineering context, а не новые UX targets или обязательные dependencies.
 - [README](../README.md) — подтверждённые команды локальной разработки, правила веток/PR и действующие CI checks.
 - Для API/runtime decisions в первую очередь сверять [Phaser docs](https://docs.phaser.io/phaser/getting-started/what-is-phaser), [EVA.js repository](https://github.com/eva-engine/eva.js), [Cocos Creator 4.0 manual](https://docs.cocos.com/creator/4.0/manual/en/) и [Unity 6.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d). Cocos Creator manual и исходный репозиторий Cocos 4 — разные источники; Unity/Cocos описывают поведение своих продуктов, но не заменяют проектные решения Codogma.
+- Для Editor architecture research выбирать конкретные источники по задаче из [Editor Engineering References](editor-engineering-references.md): например, Defold для transactional resource graph, o2 для 2D/prototype/animation, Fyrox для docking/UI toolkit, ezEngine для plugin/asset pipeline и CocosBuilder для document/export separation. Не требовать изучения всего каталога для каждой issue.
 - Для нового кода обязательны TypeScript strict profile и автоматические quality checks из раздела 12.1 ТЗ. Toolchain candidates: [ESLint/typescript-eslint](https://typescript-eslint.io/getting-started/), [Prettier](https://prettier.io/docs/install.html), [Knip](https://knip.dev/), [dependency-cruiser](https://github.com/sverweij/dependency-cruiser). Не указывать команды как доступные, пока они не реализованы.
 
 ### Definition of Ready для каждой задачи
