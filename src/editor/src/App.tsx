@@ -2170,7 +2170,10 @@ function App() {
           rightWidth: !current.rightWidthCustomized && current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
           bottomHeight: !current.bottomHeightCustomized && current.bottomHeight === previousDefaults.bottomHeight ? nextDefaults.bottomHeight : current.bottomHeight,
           consoleHeight: !current.consoleHeightCustomized && current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
-          bottomTab: !nextCompact && current.bottomTab === "Console" ? "Project" : current.bottomTab,
+          bottomTab:
+            !nextCompact && !current.consoleDocked && current.bottomTab === "Console"
+              ? "Project"
+              : current.bottomTab,
         };
         return nextLayout;
       });

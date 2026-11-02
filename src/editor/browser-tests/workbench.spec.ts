@@ -45,6 +45,33 @@ async function dragDockTabToEmptyZone(page: Page, source: Locator, targetZone: L
   await page.mouse.up();
 }
 
+async function dragNativePanelHeaderToEmptyZone(
+  page: Page,
+  source: Locator,
+  targetZone: Locator,
+) {
+  const sourceBounds = await source.boundingBox();
+  if (!sourceBounds) throw new Error("Source panel header geometry is unavailable.");
+  const sourcePoint = {
+    x: sourceBounds.x + sourceBounds.width / 2,
+    y: sourceBounds.y + sourceBounds.height / 2,
+  };
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 12, sourcePoint.y, { steps: 3 });
+  await expect(targetZone).toBeVisible();
+
+  const targetBounds = await targetZone.boundingBox();
+  if (!targetBounds) throw new Error("Native drag target geometry is unavailable.");
+  await page.mouse.move(
+    targetBounds.x + targetBounds.width / 2,
+    targetBounds.y + targetBounds.height / 2,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+}
+
 async function saveSceneWithShortcut(page: Page) {
   const responsePromise = page.waitForResponse((response) => {
     if (response.url() !== "http://127.0.0.1:5173/editor/api" || response.request().method() !== "POST") return false;
@@ -1132,4 +1159,75 @@ test("exact user-selected default dimensions survive compact restore and wide re
   expect(persisted.rightWidth).toBe(280);
   expect(persisted.bottomHeight).toBe(286);
   expect(persisted.consoleHeight).toBe(96);
+});
+
+
+test("native panel-header drag can return a Bottom panel to an empty side dock", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await page.locator(".inspector-panel .panel-header").dragTo(bottomTabs);
+
+  await expect(page.getByTestId("dock-zone-left")).not.toBeVisible();
+  await expect(page.getByTestId("dock-zone-right")).not.toBeVisible();
+
+  await bottomTabs.getByRole("tab", { name: "Hierarchy" }).click();
+  await dragNativePanelHeaderToEmptyZone(
+    page,
+    page.locator(".hierarchy-panel .panel-header"),
+    page.getByTestId("dock-zone-left"),
+  );
+
+  const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
+  const hierarchyTab = leftTabs.getByRole("tab", { name: "Hierarchy" });
+  await expect(hierarchyTab).toBeVisible();
+  await expect(hierarchyTab).toBeFocused();
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.hierarchyZone).toBe("left");
+});
+
+
+test("compact Console selection resets only when it is not explicitly docked", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/");
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  const consoleTab = bottomTabs.getByRole("tab", { name: "Console" });
+  await consoleTab.click();
+  await expect(consoleTab).toHaveAttribute("aria-selected", "true");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
+  await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+
+  await page.evaluate(() => {
+    const key = "codogma.editor.layout";
+    const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+    localStorage.setItem(key, JSON.stringify({
+      ...current,
+      consoleDocked: true,
+      bottomTab: "Console",
+    }));
+  });
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const compactConsoleTab = page.getByRole("tablist", { name: "Bottom workspace" })
+    .getByRole("tab", { name: "Console" });
+  await expect(compactConsoleTab).toHaveAttribute("aria-selected", "true");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const restoredConsoleTab = page.getByRole("tablist", { name: "Bottom workspace" })
+    .getByRole("tab", { name: "Console" });
+  await expect(restoredConsoleTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undock Console" })).toBeVisible();
 });
