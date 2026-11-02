@@ -1,4 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+
+async function saveSceneWithShortcut(page: Page) {
+  const responsePromise = page.waitForResponse((response) => {
+    if (response.url() !== "http://127.0.0.1:5173/editor/api" || response.request().method() !== "POST") return false;
+    try {
+      return response.request().postDataJSON()?.method === "SetFileString";
+    } catch {
+      return false;
+    }
+  });
+  await page.keyboard.press("Control+s");
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  await expect(page.getByTestId("save-scene")).toBeDisabled();
+}
+
+async function readSavedScene(page: Page) {
+  const response = await page.request.get("http://127.0.0.1:5173/editor/project/scenes/Level.scene");
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +29,10 @@ const browserTestDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(browserTestDirectory, "../../..");
 const baselineScene = await readFile(
   resolve(repositoryRoot, "tests/workspace/test-typescript/scenes/Level.scene"),
+  "utf8",
+);
+const fxAcceptanceScene = await readFile(
+  resolve(repositoryRoot, "tests/workspace/test-typescript/scenes/fx-acceptance.scene"),
   "utf8",
 );
 
@@ -43,7 +69,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
   await page.getByTestId("redo").click();
   await expect(page.getByLabel("Position X")).toHaveValue("465");
 
-  await page.getByTestId("save-scene").click();
+  await saveSceneWithShortcut(page);
   await expect(page.getByTestId("save-scene")).toBeDisabled();
   const savedX = await page.evaluate(async () => {
     const response = await fetch("/editor/project/scenes/Level.scene", { cache: "no-store" });
@@ -359,4 +385,200 @@ test("Animation workspace previews and persists a Phaser JSONAnimations timeline
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("100");
   await page.getByTestId("animation-timeline-frame-1").click();
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("160");
+});
+
+test("FX preview reports unsupported parent objects instead of applying filters to Scene View placeholders", async ({ page }) => {
+  const scene = JSON.parse(fxAcceptanceScene) as { displayList: Array<Record<string, unknown>> };
+  scene.displayList.push({
+    type: "Sprite",
+    id: "fx-placeholder-sprite",
+    label: "fxPlaceholderSprite",
+    texture: { key: "dino" },
+    x: 650,
+    y: 470,
+    list: [{
+      type: "Bloom",
+      id: "fx-placeholder-bloom",
+      label: "placeholderBloom",
+      preFX: false,
+      threshold: 0.45,
+      blurRadius: 3,
+      blurSteps: 4,
+      blurQuality: 1,
+      blendAmount: 1,
+    }],
+  });
+
+  const writeResponse = await page.request.post("http://127.0.0.1:3000/editor/api", {
+    data: {
+      method: "SetFileString",
+      body: { path: "scenes/Level.scene", content: JSON.stringify(scene) },
+    },
+  });
+  expect(writeResponse.ok()).toBeTruthy();
+
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-fxplaceholdersprite")).toBeVisible();
+  await page.getByTestId("hierarchy-item-fxplaceholdersprite").click();
+  await expect(page.getByTestId("fx-card-fx-placeholder-bloom")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Console" }).click();
+  await expect(
+    page.getByRole("log", { name: "Editor console" }).getByText(
+      /FX preview "Bloom" is unavailable for parent type "Sprite".*placeholder/,
+    ),
+  ).toBeVisible();
+
+  const saved = await readSavedScene(page);
+  const sprite = saved.displayList.find((item: { id?: string }) => item.id === "fx-placeholder-sprite");
+  expect(sprite?.list?.[0]).toMatchObject({
+    type: "Bloom",
+    id: "fx-placeholder-bloom",
+    threshold: 0.45,
+    preFX: false,
+  });
+});
+
+test("FX Inspector edits legacy effects and creates and restores a new Shine effect", async ({ page }) => {
+  // This end-to-end flow covers edit, save, scene reload and FX preview restoration.
+  test.setTimeout(90_000);
+
+  const pageErrors: string[] = [];
+  const unsupportedContainerInputWarnings: string[] = [];
+  const gradientAlphaWarnings: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() !== "warning") return;
+    if (message.text().includes("Container.setInteractive")) {
+      unsupportedContainerInputWarnings.push(message.text());
+    }
+    if (message.text().includes("Gradient is rendered as a sibling Game Object")) {
+      gradientAlphaWarnings.push(message.text());
+    }
+  });
+
+  const writeResponse = await page.request.post("http://127.0.0.1:3000/editor/api", {
+    data: {
+      method: "SetFileString",
+      body: { path: "scenes/Level.scene", content: fxAcceptanceScene },
+    },
+  });
+  expect(writeResponse.ok()).toBeTruthy();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible();
+  await expect(page.getByTestId("hierarchy-item-paneldino")).toBeVisible();
+  await expect(page.getByTestId("hierarchy-item-circlefx")).toHaveCount(0);
+
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByTestId("fx-inspector")).toBeVisible();
+  await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toBeVisible();
+  await expect(page.getByTestId("fx-card-64b0a02a-3983-4f7f-91f7-679622bb6c38")).toBeVisible();
+  await expect(page.getByLabel("Circle Thickness")).toHaveValue("6");
+  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
+  await expect(page.getByLabel("Bloom filter stage")).toHaveValue("external");
+
+  const circleThickness = page.getByLabel("Circle Thickness");
+  await circleThickness.fill("10");
+
+  // Keep fields below the Inspector viewport actionable without changing selection.
+  const bloomThreshold = page.getByLabel("Bloom Threshold");
+  await bloomThreshold.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  await expect(bloomThreshold).toBeVisible();
+  await bloomThreshold.fill("0.45");
+  await bloomThreshold.press("Tab");
+  await expect(bloomThreshold).toHaveValue("0.45");
+
+  const bloomBlurQuality = page.getByLabel("Bloom Blur Quality");
+  await bloomBlurQuality.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  await expect(bloomBlurQuality).toBeVisible();
+  await bloomBlurQuality.fill("2");
+  await bloomBlurQuality.press("Tab");
+  await expect(bloomBlurQuality).toHaveValue("2");
+  await saveSceneWithShortcut(page);
+  let saved = await readSavedScene(page);
+  let circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  expect(circleTarget.list[0].thickness).toBe(10);
+  expect(circleTarget.list[1].threshold).toBe(0.45);
+  expect(circleTarget.list[1].blurQuality).toBe(2);
+  expect(circleTarget.list[1].preFX).toBe(false);
+
+  await page.getByTestId("hierarchy-item-paneldino").press("Enter");
+  await expect(page.getByTestId("hierarchy-item-paneldino")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("1500");
+  const shineCard = page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9");
+  await shineCard.getByText("Reveal", { exact: true }).click();
+  await expect(page.getByLabel("Shine Reveal")).toBeChecked();
+
+  await page.getByTestId("hierarchy-item-gradienttarget").click();
+  await expect(page.getByTestId("fx-card-d7548c09-2f26-450a-85f4-f7aa2c7475b0")).toBeVisible();
+  await expect(page.getByLabel("Gradient Alpha")).toHaveValue("0.45");
+  await page.getByLabel("Gradient Alpha").fill("0.6");
+  await saveSceneWithShortcut(page);
+  saved = await readSavedScene(page);
+  const panel = saved.displayList.find((item: { id?: string }) => item.id === "317de9d0-d961-417f-bb05-b182fa41c107");
+  const shine = panel.list.find((item: { id?: string }) => item.id === "0ecf0bc5-f543-4b6d-87ca-a53e5399321e").list[0];
+  const gradientTarget = saved.displayList.find((item: { id?: string }) => item.id === "8f836a97-d201-49da-b69f-012575bf98f5");
+  expect(shine.reveal).toBe(true);
+  expect(gradientTarget.alpha).toBe(0.5);
+  expect(gradientTarget.list[0].alpha).toBe(0.6);
+  expect(gradientAlphaWarnings).toEqual([]);
+
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await page.getByRole("button", { name: "Remove Circle effect" }).click();
+  await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toHaveCount(0);
+  await page.getByLabel("New FX type").selectOption("Circle");
+  await page.getByTestId("add-fx").click();
+  await expect(page.getByLabel("Circle Ring Color")).toHaveValue("#ff33b2");
+  await page.getByLabel("Circle Ring Color").fill("0xA1B2C3");
+  await page.getByLabel("Circle Thickness").fill("8");
+  await saveSceneWithShortcut(page);
+  saved = await readSavedScene(page);
+  circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Bloom", "Circle"]);
+  expect(circleTarget.list[1]).toMatchObject({ type: "Circle", color: "0xA1B2C3", thickness: 8 });
+  expect(saved.displayList.find((item: { id?: string }) => item.id === "8f836a97-d201-49da-b69f-012575bf98f5").alpha).toBe(0.5);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByLabel("Circle Ring Color")).toHaveValue("0xA1B2C3");
+  await expect(page.getByLabel("Circle Thickness")).toHaveValue("8");
+  await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toHaveCount(0);
+  expect(gradientAlphaWarnings).toEqual([]);
+
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await page.getByRole("button", { name: "Remove Bloom effect" }).click();
+  await saveSceneWithShortcut(page);
+  saved = await readSavedScene(page);
+  circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle"]);
+
+  // Create the new preview after the legacy-effect edit/round-trip checks.
+  await page.getByTestId("hierarchy-item-aftersibling").click();
+  await page.locator(".inspector-scroll").evaluate((element) => element.scrollTo({ top: 0, behavior: "instant" }));
+  await expect(page.getByLabel("New FX type")).toBeVisible();
+  await page.getByLabel("New FX type").selectOption("Shine");
+  await page.getByTestId("add-fx").click();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+  await saveSceneWithShortcut(page);
+
+  saved = await readSavedScene(page);
+  const afterSibling = saved.displayList.find((item: { label?: string }) => item.label === "afterSibling");
+  const addedShine = afterSibling.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
+  expect(addedShine).toMatchObject({ type: "Shine", duration: 2000, reveal: false, yoyo: false });
+  expect(typeof addedShine.id).toBe("string");
+  const addedShineId = addedShine.id as string;
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  // loadProject() opens scenes/Level.scene by default; its loaded hierarchy is the readiness signal.
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("hierarchy-item-aftersibling").click();
+  await expect(page.getByTestId(`fx-card-${addedShineId}`)).toBeVisible();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+  expect(pageErrors).toEqual([]);
+  expect(unsupportedContainerInputWarnings).toEqual([]);
+  expect(gradientAlphaWarnings).toEqual([]);
 });

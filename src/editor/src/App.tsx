@@ -66,6 +66,16 @@ import {
   connectEditorMcpBridge,
   type EditorMcpHandler,
 } from "./services/editor-mcp-bridge";
+import {
+  addSceneObjectFx,
+  getSceneObjectEffects,
+  getUnsupportedSceneObjectEffects,
+  removeSceneObjectFx,
+  updateSceneObjectFx,
+  type FxObject,
+  type FxType,
+} from "./domain/fx-model.ts";
+import FxInspector from "./components/FxInspector";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
@@ -498,6 +508,16 @@ function App() {
   const selectedObject = createMemo<SceneObjectEntry | undefined>(() => {
     const id = selectedId();
     return id ? sceneObjects().find((item) => item.id === id) : undefined;
+  });
+
+  const selectedFxEffects = createMemo(() => {
+    const selected = selectedObject();
+    return selected ? getSceneObjectEffects(selected.source) : [];
+  });
+
+  const selectedUnsupportedFxTypes = createMemo(() => {
+    const selected = selectedObject();
+    return selected ? getUnsupportedSceneObjectEffects(selected.source) : [];
   });
 
   const visibleSceneObjects = createMemo(() => {
@@ -1386,6 +1406,41 @@ function App() {
     }
   }
 
+  function addFxToSelected(type: FxType) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(addSceneObjectFx(current, selected.id, type), selected.id);
+      log("info", `Added ${type} effect to ${selected.name}`);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function updateSelectedFx(id: string, patch: Partial<FxObject>) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(updateSceneObjectFx(current, selected.id, id, patch), selected.id);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function removeSelectedFx(id: string) {
+    const current = scene();
+    const selected = selectedObject();
+    if (!current || !selected) return;
+    try {
+      applySceneChange(removeSceneObjectFx(current, selected.id, id), selected.id);
+      log("info", `Removed FX ${id}`);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function updateSelectedNumber(key: string, event: Event & { currentTarget: HTMLInputElement }) {
     const value = Number(event.currentTarget.value);
     if (!Number.isFinite(value)) return;
@@ -1686,6 +1741,9 @@ function App() {
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "s") {
       event.preventDefault();
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
       void saveActiveDocument();
       return;
     }
@@ -2365,6 +2423,7 @@ function App() {
                         role="treeitem"
                         data-testid={`hierarchy-item-${entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
                         aria-selected={selectedId() === entry.id}
+                        aria-level={entry.depth + 1}
                         classList={{ selected: selectedId() === entry.id, locked: lockedObjects().has(entry.id) }}
                         onClick={() => setSelectedId(entry.id)}
                         onDblClick={() => {
@@ -2372,7 +2431,7 @@ function App() {
                           if (nextName?.trim()) updateSelectedProperty("label", nextName.trim());
                         }}
                       >
-                        <span class="hierarchy-indent" />
+                        <span class="hierarchy-indent" style={{ width: `${8 + entry.depth * 14}px` }} />
                         <Icon
                           theme={theme()}
                           name={
@@ -2520,6 +2579,7 @@ function App() {
                 {(currentScene) => (
                   <PhaserSceneViewport
                     scene={currentScene()}
+                    scenePath={scenePath()}
                     selectedId={selectedId()}
                     projectTree={projectTree()}
                     theme={theme()}
@@ -2658,6 +2718,17 @@ function App() {
                       />
                     </label>
                   </section>
+                </Show>
+
+                <Show when={selectedObject() && selectedObject()?.type !== "Prefab"}>
+                  <FxInspector
+                    effects={selectedFxEffects()}
+                    unsupportedTypes={selectedUnsupportedFxTypes()}
+                    onAdd={addFxToSelected}
+                    onUpdate={updateSelectedFx}
+                    onRemove={removeSelectedFx}
+                    onError={(message) => log("warning", message)}
+                  />
                 </Show>
 
                 <section class="inspector-section" data-testid="attached-components">

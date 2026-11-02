@@ -13,6 +13,16 @@ import {
   readProjectFile,
   type ProjectEntry,
 } from "../services/editor-api";
+import { getSceneObjectEffects, type FxObject } from "../domain/fx-model.ts";
+import type { SceneObject } from "../domain/scene-model.ts";
+import {
+  createFxPreview,
+  isFxPreviewParentSupported,
+  type FxDisplayObject,
+  type FxPhaserAdapter,
+  type FxPreviewResult,
+  type FxSceneAdapter,
+} from "./fx-preview.ts";
 
 interface PhaserGameObject {
   x: number;
@@ -21,6 +31,7 @@ interface PhaserGameObject {
   height?: number;
   displayWidth?: number;
   displayHeight?: number;
+  rotation?: number;
   setOrigin?(x: number, y: number): PhaserGameObject;
   setPosition?(x: number, y: number): PhaserGameObject;
   setScale?(x: number, y?: number): PhaserGameObject;
@@ -35,7 +46,18 @@ interface PhaserGameObject {
   setFillStyle?(color: number, alpha?: number): PhaserGameObject;
   setStrokeStyle?(width: number, color: number, alpha?: number): PhaserGameObject;
   setDepth?(depth: number): PhaserGameObject;
+  getBounds?(): { x: number; y: number; width: number; height: number };
   destroy?(): void;
+  add?(child: PhaserGameObject): PhaserGameObject;
+  once?(event: string, listener: (...args: unknown[]) => void): PhaserGameObject;
+  off?(event: string, listener?: (...args: unknown[]) => void): PhaserGameObject;
+  listeners?(event: string): Array<(...args: unknown[]) => void>;
+  filters?: { internal: { remove(filter: unknown): void } };
+  parentContainer?: {
+    add(child: PhaserGameObject): PhaserGameObject;
+    addAt(child: PhaserGameObject, index: number): unknown;
+    getIndex(child: PhaserGameObject): number;
+  } | null;
 }
 
 interface PhaserPointer {
@@ -47,6 +69,11 @@ interface PhaserPointer {
 interface PhaserSceneApi {
   input: {
     on(event: string, listener: (pointer: PhaserPointer) => void): void;
+  };
+  events: {
+    on(event: "update", listener: () => void): void;
+    once(event: "shutdown", listener: () => void): void;
+    off(event: "update", listener: () => void): void;
   };
   cameras?: {
     main?: {
@@ -72,6 +99,10 @@ interface PhaserSceneApi {
       color?: number,
       alpha?: number,
     ): PhaserGameObject;
+    container(x: number, y: number): PhaserGameObject;
+    graphics(): PhaserGameObject;
+    existing(object: PhaserGameObject): PhaserGameObject;
+    gradient(config: Record<string, unknown>, x: number, y: number, width: number, height: number): PhaserGameObject;
   };
 }
 
@@ -115,6 +146,19 @@ interface PhaserNamespace {
     };
   }) => PhaserGameApi;
   Scene: PhaserSceneConstructor;
+  Actions: {
+    AddMaskShape(parent: PhaserGameObject, config: Record<string, unknown>): unknown[];
+    AddEffectBloom(parent: PhaserGameObject, config: Record<string, unknown>): Array<{ parallelFilters?: { destroy(): void } }>;
+    AddEffectShine(parent: PhaserGameObject, config: Record<string, unknown>): Array<{
+      parallelFilters?: { destroy(): void };
+      blendFilter?: { destroy(): void };
+      tween?: { destroy(): void };
+      dynamicTexture?: { destroy(): void };
+    }>;
+  };
+  Geom: {
+    Rectangle: new (x: number, y: number, width: number, height: number) => unknown;
+  };
 }
 
 declare global {
@@ -132,6 +176,7 @@ type TransformTool = "select" | "move" | "rotate" | "scale";
 
 interface Props {
   scene: SceneDocument | null;
+  scenePath: string | null;
   selectedId: string | null;
   projectTree: ProjectEntry | null;
   theme: "dark" | "light";
@@ -148,6 +193,7 @@ interface Props {
 interface SceneEntry {
   id: string;
   type: string;
+  parentId: string | null;
   source: Record<string, unknown>;
 }
 
@@ -300,7 +346,15 @@ function PhaserSceneViewport(props: Props) {
   let resizeObserver: ResizeObserver | undefined;
   let sceneReady = false;
   let selectionFrame: PhaserGameObject | undefined;
+  let activeScenePath: string | null | undefined;
+  let activeProjectTree: ProjectEntry | null | undefined;
+  let phaserApi: PhaserNamespace | undefined;
+  let webGlRenderer = false;
+  let canvasFxWarningShown = false;
   const gameObjects = new Map<string, PhaserGameObject>();
+  const fxPreviewResources = new Map<string, { fingerprint: string; result: FxPreviewResult }>();
+  const failedFxPreviews = new Map<string, string>();
+  const reportedFxDiagnostics = new Map<string, Set<string>>();
   const [runtimeState, setRuntimeState] = createSignal<"loading" | "ready" | "error">("loading");
   const [runtimeError, setRuntimeError] = createSignal("");
   const [gameReady, setGameReady] = createSignal(false);
@@ -325,9 +379,15 @@ function PhaserSceneViewport(props: Props) {
     if (drag && Object.keys(drag.patch).length > 0) props.onTransform(drag.id, drag.patch);
   }
 
-  function createEntry(entry: SceneEntry, runtime: PhaserSceneApi, imageKeys: Set<string>): PhaserGameObject {
+  function createEntry(
+    entry: SceneEntry,
+    runtime: PhaserSceneApi,
+    imageKeys: Set<string>,
+  ): PhaserGameObject {
     const x = numeric(entry.source.x, RUNTIME_WIDTH / 2);
     const y = numeric(entry.source.y, RUNTIME_HEIGHT / 2);
+
+    if (entry.type === "Container") return runtime.add.container(x, y);
 
     if (entry.type === "Image") {
       const texture = entry.source.texture;
@@ -335,9 +395,7 @@ function PhaserSceneViewport(props: Props) {
         texture && typeof texture === "object"
           ? String((texture as Record<string, unknown>).key ?? "")
           : "";
-      if (key && imageKeys.has(key)) {
-        return runtime.add.image(x, y, key);
-      }
+      if (key && imageKeys.has(key)) return runtime.add.image(x, y, key);
       props.onStatus("warning", `Texture "${key || "(empty)"}" was not found in the project's Asset Packs.`);
     }
 
@@ -363,13 +421,147 @@ function PhaserSceneViewport(props: Props) {
     return placeholder;
   }
 
+  function clearFxPreviews(): void {
+    for (const resource of fxPreviewResources.values()) resource.result.dispose();
+    fxPreviewResources.clear();
+    failedFxPreviews.clear();
+    reportedFxDiagnostics.clear();
+  }
+
+  function syncFxPreviews(entries: SceneEntry[], imageKeys: ReadonlySet<string>): void {
+    if (!sceneRuntime || !phaserApi) return;
+    const desired = new Map<string, {
+      parentId: string;
+      parentType: string;
+      effect: FxObject;
+      fingerprint: string;
+      renderOrderOffset: number;
+      previewSupported: boolean;
+    }>();
+
+    for (const entry of entries) {
+      if (!gameObjects.has(entry.id)) continue;
+      const texture = entry.source.texture;
+      const textureKey = texture && typeof texture === "object"
+        ? String((texture as Record<string, unknown>).key ?? "")
+        : "";
+      const previewSupported = isFxPreviewParentSupported(entry.type, textureKey, imageKeys);
+      let renderOrderOffset = 0;
+      for (const effect of getSceneObjectEffects(entry.source as SceneObject)) {
+        const key = `${entry.id}:${effect.id}`;
+        desired.set(key, {
+          parentId: entry.id,
+          parentType: entry.type,
+          effect: effect.source,
+          fingerprint: JSON.stringify({
+            effect: effect.source,
+            parentType: entry.type,
+            previewSupported,
+          }),
+          renderOrderOffset,
+          previewSupported,
+        });
+        if (effect.source.type === "Circle" || effect.source.type === "Gradient") {
+          renderOrderOffset += 1;
+        }
+      }
+    }
+
+    for (const [key, resource] of fxPreviewResources) {
+      const next = desired.get(key);
+      if (!next || !next.previewSupported || next.fingerprint !== resource.fingerprint) {
+        resource.result.dispose();
+        fxPreviewResources.delete(key);
+        reportedFxDiagnostics.delete(key);
+      }
+    }
+    for (const [key, fingerprint] of failedFxPreviews) {
+      if (desired.get(key)?.fingerprint !== fingerprint) {
+        failedFxPreviews.delete(key);
+      }
+    }
+
+    if (desired.size === 0) {
+      canvasFxWarningShown = false;
+      return;
+    }
+    if (!webGlRenderer) {
+      if (!canvasFxWarningShown) {
+        props.onStatus("warning", "FX settings are saved, but Scene View preview requires WebGL. Canvas renderer does not support Phaser FX filters.");
+        canvasFxWarningShown = true;
+      }
+      return;
+    }
+    canvasFxWarningShown = false;
+
+    for (const [key, item] of desired) {
+      if (!item.previewSupported) {
+        if (failedFxPreviews.get(key) !== item.fingerprint) {
+          failedFxPreviews.set(key, item.fingerprint);
+          props.onStatus(
+            "warning",
+            `FX preview "${item.effect.type}" is unavailable for parent type "${item.parentType}": Scene View currently renders this type as a placeholder. FX settings remain editable and are preserved for generated Phaser code.`,
+          );
+        }
+        continue;
+      }
+      if (fxPreviewResources.has(key) || failedFxPreviews.get(key) === item.fingerprint) continue;
+      const parent = gameObjects.get(item.parentId);
+      if (!parent) continue;
+      try {
+        const result = createFxPreview(
+          sceneRuntime as unknown as FxSceneAdapter,
+          phaserApi as unknown as FxPhaserAdapter,
+          parent as unknown as FxDisplayObject,
+          item.effect,
+          item.renderOrderOffset,
+        );
+        fxPreviewResources.set(key, { fingerprint: item.fingerprint, result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failedFxPreviews.set(key, item.fingerprint);
+        props.onStatus("warning", `FX preview "${item.effect.type}" is unavailable: ${message}`);
+      }
+    }
+
+    // Gradient limitations depend on the live parent alpha, not only the FX data.
+    for (const [key, resource] of fxPreviewResources) {
+      const currentDiagnostics = new Set(resource.result.diagnostics);
+      const reported = reportedFxDiagnostics.get(key) ?? new Set<string>();
+      for (const diagnostic of currentDiagnostics) {
+        if (!reported.has(diagnostic)) props.onStatus("warning", diagnostic);
+      }
+      for (const diagnostic of [...reported]) {
+        if (!currentDiagnostics.has(diagnostic)) reported.delete(diagnostic);
+      }
+      for (const diagnostic of currentDiagnostics) reported.add(diagnostic);
+      if (reported.size > 0) reportedFxDiagnostics.set(key, reported);
+      else reportedFxDiagnostics.delete(key);
+    }
+  }
+
   function syncScene() {
     if (!sceneReady || !sceneRuntime) return;
+
+    if (activeScenePath !== props.scenePath || activeProjectTree !== props.projectTree) {
+      clearFxPreviews();
+      for (const object of [...gameObjects.values()].reverse()) object.destroy?.();
+      gameObjects.clear();
+      selectionFrame?.destroy?.();
+      selectionFrame = sceneRuntime.add.rectangle(0, 0, 1, 1, 0x000000, 0);
+      selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
+      selectionFrame.setDepth?.(1000);
+      selectionFrame.setAlpha?.(0);
+      activeScenePath = props.scenePath;
+      activeProjectTree = props.projectTree;
+    }
+
     const current = props.scene;
     const entries = current
       ? getSceneObjects(current).map((entry) => ({
           id: entry.id,
           type: entry.type,
+          parentId: entry.parentId,
           source: entry.source as Record<string, unknown>,
         }))
       : [];
@@ -380,8 +572,9 @@ function PhaserSceneViewport(props: Props) {
       let object = gameObjects.get(entry.id);
       if (!object) {
         const createdObject = createEntry(entry, sceneRuntime, assets);
+        const parentObject = entry.parentId ? gameObjects.get(entry.parentId) : undefined;
+        if (parentObject?.add) parentObject.add(createdObject);
         object = createdObject;
-        createdObject.setInteractive?.();
         createdObject.on?.("pointerdown", (pointer) => {
           if (props.hiddenIds().has(entry.id) || props.lockedIds().has(entry.id)) return;
           props.onSelect(entry.id);
@@ -428,12 +621,20 @@ function PhaserSceneViewport(props: Props) {
       const isHidden = props.hiddenIds().has(entry.id);
       const isLocked = props.lockedIds().has(entry.id);
       object.setVisible?.(!isHidden);
-      if (isHidden || isLocked) object.disableInteractive?.();
-      else object.setInteractive?.();
+      // Phaser Container не создаёт hit-area автоматически. Не вызываем
+      // setInteractive() без геометрии: такие попытки генерируют warning и
+      // оставляют объект фактически неинтерактивным.
+      if (entry.type === "Container" || isHidden || isLocked) {
+        object.disableInteractive?.();
+      } else {
+        object.setInteractive?.();
+      }
       if (entry.type === "Text") {
         object.setText?.(String(entry.source.text ?? entry.source.label ?? ""));
       }
     }
+
+    syncFxPreviews(entries, assets);
 
     for (const [id, object] of gameObjects) {
       if (!activeIds.has(id)) {
@@ -446,10 +647,39 @@ function PhaserSceneViewport(props: Props) {
       ? gameObjects.get(props.selectedId)
       : undefined;
     if (selected && selectionFrame) {
-      const width = Math.max(12, numeric(selected.displayWidth, numeric(selected.width, 38)));
-      const height = Math.max(12, numeric(selected.displayHeight, numeric(selected.height, 28)));
-      selectionFrame.setPosition?.(selected.x, selected.y);
-      selectionFrame.setSize?.(width + 10, height + 10);
+      // Selection frame is a scene-level overlay. Reparenting it into a nested
+      // Container mutates the edited scene graph and can break Phaser's child
+      // list lifecycle. getBounds() already includes all parent transforms.
+      if (selectionFrame.parentContainer) {
+        sceneRuntime?.add.existing(selectionFrame);
+      }
+
+      const bounds = selected.getBounds?.();
+      if (
+        bounds &&
+        Number.isFinite(bounds.x) &&
+        Number.isFinite(bounds.y) &&
+        Number.isFinite(bounds.width) &&
+        Number.isFinite(bounds.height) &&
+        bounds.width > 0 &&
+        bounds.height > 0
+      ) {
+        selectionFrame.setPosition?.(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2,
+        );
+        selectionFrame.setRotation?.(0);
+        selectionFrame.setSize?.(
+          Math.max(12, bounds.width) + 10,
+          Math.max(12, bounds.height) + 10,
+        );
+      } else {
+        const width = Math.max(12, numeric(selected.displayWidth, numeric(selected.width, 38)));
+        const height = Math.max(12, numeric(selected.displayHeight, numeric(selected.height, 28)));
+        selectionFrame.setPosition?.(selected.x, selected.y);
+        selectionFrame.setRotation?.(numeric(selected.rotation, 0));
+        selectionFrame.setSize?.(width + 10, height + 10);
+      }
       selectionFrame.setFillStyle?.(0x000000, 0);
       selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
       selectionFrame.setAlpha?.(1);
@@ -510,6 +740,16 @@ function PhaserSceneViewport(props: Props) {
 
           create() {
             sceneRuntime = this;
+            this.events.once("shutdown", () => {
+              clearFxPreviews();
+              gameObjects.clear();
+              failedFxPreviews.clear();
+              selectionFrame = undefined;
+              sceneRuntime = undefined;
+              activeScenePath = undefined;
+              activeProjectTree = undefined;
+              sceneReady = false;
+            });
             this.cameras?.main?.setBackgroundColor(props.theme === "dark" ? "#202a37" : "#f2f5f9");
             this.input.on("pointermove", (pointer) => {
               const drag = transformDrag;
@@ -548,6 +788,8 @@ function PhaserSceneViewport(props: Props) {
             const activeGame = sceneGame ?? game;
             const canvas = activeGame?.canvas;
             const rendererName = activeGame?.renderer?.constructor?.name ?? "none";
+            webGlRenderer = /webgl/i.test(rendererName);
+            phaserApi = phaser;
             const renderType = activeGame?.config?.renderType ?? "unknown";
             if (canvas && mount && canvas.parentElement !== mount) {
               mount.append(canvas);
@@ -599,12 +841,15 @@ function PhaserSceneViewport(props: Props) {
     onCleanup(() => {
       disposed = true;
       resizeObserver?.disconnect();
+      clearFxPreviews();
       game?.destroy(true);
       props.onCanvasReady?.(null);
       transformDrag = undefined;
       game = undefined;
       setGameReady(false);
       sceneRuntime = undefined;
+      phaserApi = undefined;
+      webGlRenderer = false;
       sceneReady = false;
       selectionFrame = undefined;
       gameObjects.clear();

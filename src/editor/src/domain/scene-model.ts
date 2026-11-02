@@ -13,6 +13,7 @@ export interface SceneObject {
   alpha?: number;
   texture?: { key?: string; [key: string]: unknown };
   components?: string[];
+  list?: unknown[];
   [key: string]: unknown;
 }
 
@@ -32,6 +33,8 @@ export interface SceneObjectEntry {
   type: string;
   collection: "displayList" | "plainObjects";
   index: number;
+  parentId: string | null;
+  depth: number;
   source: SceneObject;
 }
 
@@ -65,10 +68,21 @@ function assertScene(scene: unknown): asserts scene is SceneDocument {
   }
 }
 
-function getSceneObjectId(source: unknown, collection: SceneCollection, index: number): string {
+function getSceneObjectId(source: unknown, collection: SceneCollection, path: string): string {
   return isRecord(source) && typeof source.id === "string" && source.id.length > 0
     ? source.id
-    : `${collection}-${index}`;
+    : `${collection}-${path}`;
+}
+
+function isFxHelperNode(source: unknown): boolean {
+  if (!isRecord(source) || typeof source.type !== "string") return false;
+  return [
+    "Circle", "Bloom", "Gradient", "Shine", "Barrel", "Blend", "Blocky", "Blur",
+    "Bokeh", "ColorMatrix", "CombineColorMatrix", "Displacement", "Glow",
+    "GradientMap", "ImageLight", "Key", "NormalTools", "ObjectMask",
+    "PanoramaBlur", "ParallelFilters", "Pixelate", "Quantize", "Sampler",
+    "Shadow", "Threshold", "TextureMask", "Vignette", "Wipe",
+  ].includes(source.type) || source.type.startsWith("FX");
 }
 
 /**
@@ -102,12 +116,19 @@ export function getSceneObjects(scene: SceneDocument): SceneObjectEntry[] {
   assertScene(scene);
   const objects: SceneObjectEntry[] = [];
 
-  for (const collection of ["displayList", "plainObjects"] as const) {
-    const nodes = scene[collection] ?? [];
+  function visit(
+    nodes: unknown[],
+    collection: SceneCollection,
+    pathPrefix: string,
+    parentId: string | null,
+    depth: number,
+  ): void {
     nodes.forEach((source, index) => {
-      if (!isRecord(source)) return;
+      if (!isRecord(source) || isFxHelperNode(source)) return;
+      const path = `${pathPrefix}${index}`;
+      const id = getSceneObjectId(source, collection, path);
       objects.push({
-        id: getSceneObjectId(source, collection, index),
+        id,
         name:
           typeof source.label === "string" && source.label.length > 0
             ? source.label
@@ -124,11 +145,19 @@ export function getSceneObjects(scene: SceneDocument): SceneObjectEntry[] {
               : "Object",
         collection,
         index,
+        parentId,
+        depth,
         source: source as SceneObject,
       });
+      if (Array.isArray(source.list)) {
+        visit(source.list, collection, `${path}-list-`, id, depth + 1);
+      }
     });
   }
 
+  for (const collection of ["displayList", "plainObjects"] as const) {
+    visit(scene[collection] ?? [], collection, "", null, 0);
+  }
   return objects;
 }
 
@@ -153,38 +182,75 @@ export function updateSceneObject(
     }
   }
 
-  for (const collection of ["displayList", "plainObjects"] as const) {
-    const source = scene[collection] ?? [];
-    const index = source.findIndex((item, itemIndex) =>
-      getSceneObjectId(item, collection, itemIndex) === id,
-    );
-    if (index === -1) continue;
-
-    const next = source.slice();
-    next[index] = { ...next[index], ...patch };
-    return { ...scene, [collection]: next };
+  function updateNodes(
+    nodes: unknown[],
+    prefix: string,
+    collection: SceneCollection,
+  ): { nodes: unknown[]; changed: boolean } {
+    let changed = false;
+    const next = nodes.map((item, index) => {
+      if (!isRecord(item) || isFxHelperNode(item)) return item;
+      const path = `${prefix}${index}`;
+      const itemId = getSceneObjectId(item, collection, path);
+      if (itemId === id) {
+        changed = true;
+        return { ...item, ...patch };
+      }
+      if (!Array.isArray(item.list)) return item;
+      const nested = updateNodes(item.list, `${path}-list-`, collection);
+      if (!nested.changed) return item;
+      changed = true;
+      return { ...item, list: nested.nodes };
+    });
+    return { nodes: changed ? next : nodes, changed };
   }
 
+  for (const collection of ["displayList", "plainObjects"] as const) {
+    const updated = updateNodes(scene[collection] ?? [], "", collection);
+    if (updated.changed) return { ...scene, [collection]: updated.nodes };
+  }
   throw new Error(`Scene object "${id}" was not found.`);
 }
 
 export function removeSceneObject(scene: SceneDocument, id: string): SceneDocument {
   assertScene(scene);
-  let found = false;
-  const next: SceneDocument = { ...scene };
 
-  for (const collection of ["displayList", "plainObjects"] as const) {
-    const source = scene[collection] ?? [];
-    if (source.some((item, index) => getSceneObjectId(item, collection, index) === id)) {
-      next[collection] = source.filter((item, index) =>
-        getSceneObjectId(item, collection, index) !== id,
-      );
-      found = true;
-    }
+  function removeNodes(
+    nodes: unknown[],
+    prefix: string,
+    collection: SceneCollection,
+  ): { nodes: unknown[]; changed: boolean } {
+    let changed = false;
+    const next: unknown[] = [];
+    nodes.forEach((item, index) => {
+      if (!isRecord(item) || isFxHelperNode(item)) {
+        next.push(item);
+        return;
+      }
+      const path = `${prefix}${index}`;
+      const itemId = getSceneObjectId(item, collection, path);
+      if (itemId === id) {
+        changed = true;
+        return;
+      }
+      if (Array.isArray(item.list)) {
+        const nested = removeNodes(item.list, `${path}-list-`, collection);
+        if (nested.changed) {
+          changed = true;
+          next.push({ ...item, list: nested.nodes });
+          return;
+        }
+      }
+      next.push(item);
+    });
+    return { nodes: changed ? next : nodes, changed };
   }
 
-  if (!found) throw new Error(`Scene object "${id}" was not found.`);
-  return next;
+  for (const collection of ["displayList", "plainObjects"] as const) {
+    const removed = removeNodes(scene[collection] ?? [], "", collection);
+    if (removed.changed) return { ...scene, [collection]: removed.nodes };
+  }
+  throw new Error(`Scene object "${id}" was not found.`);
 }
 
 export function createSceneObject(scene: SceneDocument, kind: SceneObjectKind): SceneDocument {
