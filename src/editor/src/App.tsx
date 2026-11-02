@@ -358,6 +358,7 @@ function App() {
       return restoreWorkspaceLayoutContent(
         window.localStorage.getItem("codogma.editor.layout"),
         compact,
+        window.innerWidth <= 780,
       );
     } catch {
       return createDefaultWorkspaceLayout(compact);
@@ -648,7 +649,7 @@ function App() {
     try {
       window.localStorage.setItem(
         "codogma.editor.layout",
-        serializeWorkspaceLayout(current),
+        serializeWorkspaceLayout(current, narrowWorkbench()),
       );
     } catch (error) {
       log(
@@ -1669,8 +1670,14 @@ function App() {
   }
 
   function closeSidePanel(panel: SidePanelId) {
-    const zone = getStoredPanelZone(panel);
-    const next = setSidePanelVisibility(layout(), panel, false, compactWorkbench());
+    const zone = getEffectivePanelZone(panel);
+    const next = setSidePanelVisibility(
+      layout(),
+      panel,
+      false,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
     setLayout(next);
     const fallback = zone === "left"
       ? next.leftActivePanel
@@ -1705,7 +1712,13 @@ function App() {
       ? layout().hierarchyVisible
       : layout().inspectorVisible;
     setLayout((current) => {
-      const next = setSidePanelVisibility(current, panel, !isVisible, compactWorkbench());
+      const next = setSidePanelVisibility(
+        current,
+        panel,
+        !isVisible,
+        compactWorkbench(),
+        narrowWorkbench(),
+      );
       if (!isVisible && narrowWorkbench()) next.bottomTab = panel;
       return next;
     });
@@ -2018,6 +2031,16 @@ function App() {
 
     if (previousNarrow !== nextNarrow) {
       setNarrowWorkbench(nextNarrow);
+      if (!nextNarrow) {
+        setLayout((current) => {
+          const selectedTransientSidePanel =
+            (current.bottomTab === "Hierarchy" && current.hierarchyZone !== "bottom") ||
+            (current.bottomTab === "Inspector" && current.inspectorZone !== "bottom");
+          return selectedTransientSidePanel
+            ? { ...current, bottomTab: "Project" }
+            : current;
+        });
+      }
       queueMicrotask(syncDockPanelElements);
     }
   }

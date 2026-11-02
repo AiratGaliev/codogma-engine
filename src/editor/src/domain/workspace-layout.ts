@@ -97,8 +97,9 @@ function getVisibleBottomTab(
   layout: WorkspaceLayout,
   compact: boolean,
   preferred: unknown,
+  forceSidePanelsToBottom = false,
 ): BottomTab {
-  const visible = getVisibleBottomTabs(layout, compact);
+  const visible = getVisibleBottomTabs(layout, compact, forceSidePanelsToBottom);
   return visible.includes(preferred as BottomTab)
     ? (preferred as BottomTab)
     : (visible[0] ?? "Project");
@@ -151,6 +152,7 @@ export function createDefaultWorkspaceLayout(
 export function restoreWorkspaceLayout(
   value: unknown,
   compact = false,
+  forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   const defaults = createDefaultWorkspaceLayout(compact);
   if (!isRecord(value)) return defaults;
@@ -246,6 +248,7 @@ export function restoreWorkspaceLayout(
     restored,
     compact,
     requestedBottomTab,
+    forceSidePanelsToBottom,
   );
 
   return restored;
@@ -254,22 +257,34 @@ export function restoreWorkspaceLayout(
 export function restoreWorkspaceLayoutContent(
   content: string | null,
   compact = false,
+  forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   if (content === null || content.trim().length === 0) {
     return createDefaultWorkspaceLayout(compact);
   }
 
   try {
-    return restoreWorkspaceLayout(JSON.parse(content) as unknown, compact);
+    return restoreWorkspaceLayout(
+      JSON.parse(content) as unknown,
+      compact,
+      forceSidePanelsToBottom,
+    );
   } catch {
     return createDefaultWorkspaceLayout(compact);
   }
 }
 
-export function serializeWorkspaceLayout(layout: WorkspaceLayout): string {
-  // Compact mode may legitimately keep Console selected without setting
-  // consoleDocked, so allow that tab while normalizing the persisted contract.
-  const normalized = restoreWorkspaceLayout(layout, true);
+export function serializeWorkspaceLayout(
+  layout: WorkspaceLayout,
+  forceSidePanelsToBottom = false,
+): string {
+  // Console may be selected on compact screens without being persistently docked.
+  // Side-panel tabs may also be temporarily presented in Bottom on narrow screens.
+  const normalized = restoreWorkspaceLayout(
+    layout,
+    true,
+    forceSidePanelsToBottom,
+  );
   return JSON.stringify(normalized);
 }
 
@@ -384,6 +399,7 @@ export function setSidePanelVisibility(
   panel: SidePanelId,
   visible: boolean,
   compact = false,
+  forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   const next: WorkspaceLayout = {
     ...layout,
@@ -413,6 +429,7 @@ export function setSidePanelVisibility(
       next,
       compact,
       next.bottomTab === panel ? "Project" : next.bottomTab,
+      forceSidePanelsToBottom,
     );
   }
 
@@ -423,12 +440,14 @@ export function toggleSidePanelVisibility(
   layout: WorkspaceLayout,
   panel: SidePanelId,
   compact = false,
+  forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   return setSidePanelVisibility(
     layout,
     panel,
     !isVisible(layout, panel),
     compact,
+    forceSidePanelsToBottom,
   );
 }
 

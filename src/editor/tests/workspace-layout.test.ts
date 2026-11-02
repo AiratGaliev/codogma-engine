@@ -123,6 +123,32 @@ test("compact Console selection survives persistence and restores in compact mod
   assert.equal(restored.bottomTab, "Console");
 });
 
+test("narrow responsive presentation persists the selected side panel without changing its saved zone", () => {
+  const layout = {
+    ...createDefaultWorkspaceLayout(true),
+    bottomTab: "Hierarchy" as const,
+  };
+  const serialized = serializeWorkspaceLayout(layout, true);
+  const restored = restoreWorkspaceLayoutContent(serialized, true, true);
+
+  assert.equal(restored.bottomTab, "Hierarchy");
+  assert.equal(restored.hierarchyZone, "left");
+});
+
+test("narrow close selects the other visible side panel instead of a hidden Console tab", () => {
+  const layout = {
+    ...createDefaultWorkspaceLayout(true),
+    hierarchyZone: "right" as const,
+    inspectorZone: "right" as const,
+    rightActivePanel: "Hierarchy" as const,
+    bottomTab: "Hierarchy" as const,
+  };
+  const closed = setSidePanelVisibility(layout, "Hierarchy", false, true, true);
+
+  assert.equal(closed.bottomTab, "Inspector");
+  assert.equal(closed.inspectorVisible, true);
+});
+
 test("ignores unknown and duplicate panel ids and restores missing panels", () => {
   const layout = restoreWorkspaceLayout({
     schemaVersion: 1,

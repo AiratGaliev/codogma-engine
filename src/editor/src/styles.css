@@ -1968,8 +1968,8 @@ textarea::placeholder {
     display: none !important;
   }
 
-  .bottom-docked-content .hierarchy-panel,
-  .bottom-docked-content .inspector-panel {
+  .bottom-docked-content .hierarchy-panel:not(.dock-panel-inactive),
+  .bottom-docked-content .inspector-panel:not(.dock-panel-inactive) {
     display: flex !important;
   }
 
