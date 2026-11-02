@@ -1344,3 +1344,54 @@ test("pointercancel clears the drag target and does not swallow a following tab 
   await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
   await expect(source).toHaveAttribute("aria-selected", "false");
 });
+
+
+test("splitter resize ignores unrelated pointer events and stops on lost capture", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const workbench = page.getByTestId("workbench");
+  const splitter = page.getByTestId("splitter-hierarchy");
+  const initialWidth = Number(await splitter.getAttribute("aria-valuenow"));
+  const bounds = await splitter.boundingBox();
+  if (!bounds) throw new Error("Hierarchy splitter geometry is unavailable.");
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  const pointerIdPromise = splitter.evaluate((element) => new Promise<number>((resolve) => {
+    element.addEventListener("pointerdown", (event) => resolve(event.pointerId), { once: true });
+  }));
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  const pointerId = await pointerIdPromise;
+
+  await workbench.dispatchEvent("pointermove", {
+    pointerId: pointerId + 1000,
+    pointerType: "touch",
+    buttons: 1,
+    clientX: x + 80,
+    clientY: y,
+  });
+  await expect(splitter).toHaveAttribute("aria-valuenow", String(initialWidth));
+
+  await workbench.dispatchEvent("pointerup", {
+    pointerId: pointerId + 1000,
+    pointerType: "touch",
+    button: 0,
+    buttons: 0,
+    clientX: x + 80,
+    clientY: y,
+  });
+  await page.mouse.move(x + 16, y);
+  await expect(splitter).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
+
+  await splitter.dispatchEvent("lostpointercapture", {
+    pointerId,
+    pointerType: "mouse",
+    button: 0,
+    buttons: 0,
+  });
+  await page.mouse.move(x + 32, y);
+  await expect(splitter).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
+  await page.mouse.up();
+});

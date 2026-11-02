@@ -406,6 +406,7 @@ function App() {
   let resizeState:
     | {
         kind: "left" | "right" | "bottom" | "console";
+        pointerId: number;
         startX: number;
         startY: number;
         initialValue: number;
@@ -1495,10 +1496,12 @@ function App() {
     kind: "left" | "right" | "bottom" | "console",
     event: PointerEvent & { currentTarget: HTMLDivElement },
   ) {
+    if (resizeState) return;
     event.preventDefault();
     const current = layout();
     resizeState = {
       kind,
+      pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       initialValue:
@@ -1569,7 +1572,11 @@ function App() {
   }
 
   function moveResize(event: PointerEvent) {
-    if (!resizeState || (event.buttons !== 1 && event.pointerType !== "touch")) return;
+    if (
+      !resizeState ||
+      resizeState.pointerId !== event.pointerId ||
+      (event.buttons !== 1 && event.pointerType !== "touch")
+    ) return;
     const { kind, startX, startY, initialValue } = resizeState;
     if (kind === "left") {
       setLayout((current) => {
@@ -1610,7 +1617,8 @@ function App() {
     }
   }
 
-  function endResize() {
+  function endResize(event: PointerEvent) {
+    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
     resizeState = undefined;
   }
 
@@ -2617,6 +2625,7 @@ function App() {
       onPointerMove={moveResize}
       onPointerUp={endResize}
       onPointerCancel={endResize}
+      onLostPointerCapture={endResize}
       onFocusIn={handleFocusIn}
       onPointerDown={handleContextPointerDown}
     >
@@ -2787,6 +2796,7 @@ function App() {
             onPointerMove={moveBottomTabPointerDrag}
             onPointerUp={endBottomTabPointerDrag}
             onPointerCancel={cancelBottomTabPointerDrag}
+            onLostPointerCapture={cancelBottomTabPointerDrag}
           >
             <For each={leftDockPanels()}>
               {(panel) => (
@@ -3108,6 +3118,7 @@ function App() {
             onPointerMove={moveBottomTabPointerDrag}
             onPointerUp={endBottomTabPointerDrag}
             onPointerCancel={cancelBottomTabPointerDrag}
+            onLostPointerCapture={cancelBottomTabPointerDrag}
           >
             <For each={rightDockPanels()}>
               {(panel) => (
@@ -3445,6 +3456,7 @@ function App() {
             onPointerMove={moveBottomTabPointerDrag}
             onPointerUp={endBottomTabPointerDrag}
             onPointerCancel={cancelBottomTabPointerDrag}
+            onLostPointerCapture={cancelBottomTabPointerDrag}
           >
             <For each={visibleBottomTabs()}>
               {(tab) => (
