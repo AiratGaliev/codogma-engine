@@ -387,6 +387,58 @@ test("Animation workspace previews and persists a Phaser JSONAnimations timeline
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("160");
 });
 
+test("FX preview reports unsupported parent objects instead of applying filters to Scene View placeholders", async ({ page }) => {
+  const scene = JSON.parse(fxAcceptanceScene) as { displayList: Array<Record<string, unknown>> };
+  scene.displayList.push({
+    type: "Sprite",
+    id: "fx-placeholder-sprite",
+    label: "fxPlaceholderSprite",
+    texture: { key: "dino" },
+    x: 650,
+    y: 470,
+    list: [{
+      type: "Bloom",
+      id: "fx-placeholder-bloom",
+      label: "placeholderBloom",
+      preFX: false,
+      threshold: 0.45,
+      blurRadius: 3,
+      blurSteps: 4,
+      blurQuality: 1,
+      blendAmount: 1,
+    }],
+  });
+
+  const writeResponse = await page.request.post("http://127.0.0.1:3000/editor/api", {
+    data: {
+      method: "SetFileString",
+      body: { path: "scenes/Level.scene", content: JSON.stringify(scene) },
+    },
+  });
+  expect(writeResponse.ok()).toBeTruthy();
+
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-fxplaceholdersprite")).toBeVisible();
+  await page.getByTestId("hierarchy-item-fxplaceholdersprite").click();
+  await expect(page.getByTestId("fx-card-fx-placeholder-bloom")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Console" }).click();
+  await expect(
+    page.getByRole("log", { name: "Editor console" }).getByText(
+      /FX preview "Bloom" is unavailable for parent type "Sprite".*placeholder/,
+    ),
+  ).toBeVisible();
+
+  const saved = await readSavedScene(page);
+  const sprite = saved.displayList.find((item: { id?: string }) => item.id === "fx-placeholder-sprite");
+  expect(sprite?.list?.[0]).toMatchObject({
+    type: "Bloom",
+    id: "fx-placeholder-bloom",
+    threshold: 0.45,
+    preFX: false,
+  });
+});
+
 test("FX Inspector edits legacy effects and creates and restores a new Shine effect", async ({ page }) => {
   // This end-to-end flow covers edit, save, scene reload and FX preview restoration.
   test.setTimeout(90_000);

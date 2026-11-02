@@ -17,6 +17,7 @@ import { getSceneObjectEffects, type FxObject } from "../domain/fx-model.ts";
 import type { SceneObject } from "../domain/scene-model.ts";
 import {
   createFxPreview,
+  isFxPreviewParentSupported,
   type FxDisplayObject,
   type FxPhaserAdapter,
   type FxPreviewResult,
@@ -353,6 +354,7 @@ function PhaserSceneViewport(props: Props) {
   const gameObjects = new Map<string, PhaserGameObject>();
   const fxPreviewResources = new Map<string, { fingerprint: string; result: FxPreviewResult }>();
   const failedFxPreviews = new Map<string, string>();
+  const reportedFxDiagnostics = new Map<string, Set<string>>();
   const [runtimeState, setRuntimeState] = createSignal<"loading" | "ready" | "error">("loading");
   const [runtimeError, setRuntimeError] = createSignal("");
   const [gameReady, setGameReady] = createSignal(false);
@@ -423,22 +425,41 @@ function PhaserSceneViewport(props: Props) {
     for (const resource of fxPreviewResources.values()) resource.result.dispose();
     fxPreviewResources.clear();
     failedFxPreviews.clear();
+    reportedFxDiagnostics.clear();
   }
 
-  function syncFxPreviews(entries: SceneEntry[]): void {
+  function syncFxPreviews(entries: SceneEntry[], imageKeys: ReadonlySet<string>): void {
     if (!sceneRuntime || !phaserApi) return;
-    const desired = new Map<string, { parentId: string; effect: FxObject; fingerprint: string; renderOrderOffset: number }>();
+    const desired = new Map<string, {
+      parentId: string;
+      parentType: string;
+      effect: FxObject;
+      fingerprint: string;
+      renderOrderOffset: number;
+      previewSupported: boolean;
+    }>();
 
     for (const entry of entries) {
       if (!gameObjects.has(entry.id)) continue;
+      const texture = entry.source.texture;
+      const textureKey = texture && typeof texture === "object"
+        ? String((texture as Record<string, unknown>).key ?? "")
+        : "";
+      const previewSupported = isFxPreviewParentSupported(entry.type, textureKey, imageKeys);
       let renderOrderOffset = 0;
       for (const effect of getSceneObjectEffects(entry.source as SceneObject)) {
         const key = `${entry.id}:${effect.id}`;
         desired.set(key, {
           parentId: entry.id,
+          parentType: entry.type,
           effect: effect.source,
-          fingerprint: JSON.stringify(effect.source),
+          fingerprint: JSON.stringify({
+            effect: effect.source,
+            parentType: entry.type,
+            previewSupported,
+          }),
           renderOrderOffset,
+          previewSupported,
         });
         if (effect.source.type === "Circle" || effect.source.type === "Gradient") {
           renderOrderOffset += 1;
@@ -448,13 +469,16 @@ function PhaserSceneViewport(props: Props) {
 
     for (const [key, resource] of fxPreviewResources) {
       const next = desired.get(key);
-      if (!next || next.fingerprint !== resource.fingerprint) {
+      if (!next || !next.previewSupported || next.fingerprint !== resource.fingerprint) {
         resource.result.dispose();
         fxPreviewResources.delete(key);
+        reportedFxDiagnostics.delete(key);
       }
     }
     for (const [key, fingerprint] of failedFxPreviews) {
-      if (desired.get(key)?.fingerprint !== fingerprint) failedFxPreviews.delete(key);
+      if (desired.get(key)?.fingerprint !== fingerprint) {
+        failedFxPreviews.delete(key);
+      }
     }
 
     if (desired.size === 0) {
@@ -471,6 +495,16 @@ function PhaserSceneViewport(props: Props) {
     canvasFxWarningShown = false;
 
     for (const [key, item] of desired) {
+      if (!item.previewSupported) {
+        if (failedFxPreviews.get(key) !== item.fingerprint) {
+          failedFxPreviews.set(key, item.fingerprint);
+          props.onStatus(
+            "warning",
+            `FX preview "${item.effect.type}" is unavailable for parent type "${item.parentType}": Scene View currently renders this type as a placeholder. FX settings remain editable and are preserved for generated Phaser code.`,
+          );
+        }
+        continue;
+      }
       if (fxPreviewResources.has(key) || failedFxPreviews.get(key) === item.fingerprint) continue;
       const parent = gameObjects.get(item.parentId);
       if (!parent) continue;
@@ -483,12 +517,26 @@ function PhaserSceneViewport(props: Props) {
           item.renderOrderOffset,
         );
         fxPreviewResources.set(key, { fingerprint: item.fingerprint, result });
-        for (const diagnostic of result.diagnostics) props.onStatus("warning", diagnostic);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         failedFxPreviews.set(key, item.fingerprint);
         props.onStatus("warning", `FX preview "${item.effect.type}" is unavailable: ${message}`);
       }
+    }
+
+    // Gradient limitations depend on the live parent alpha, not only the FX data.
+    for (const [key, resource] of fxPreviewResources) {
+      const currentDiagnostics = new Set(resource.result.diagnostics);
+      const reported = reportedFxDiagnostics.get(key) ?? new Set<string>();
+      for (const diagnostic of currentDiagnostics) {
+        if (!reported.has(diagnostic)) props.onStatus("warning", diagnostic);
+      }
+      for (const diagnostic of [...reported]) {
+        if (!currentDiagnostics.has(diagnostic)) reported.delete(diagnostic);
+      }
+      for (const diagnostic of currentDiagnostics) reported.add(diagnostic);
+      if (reported.size > 0) reportedFxDiagnostics.set(key, reported);
+      else reportedFxDiagnostics.delete(key);
     }
   }
 
@@ -586,7 +634,7 @@ function PhaserSceneViewport(props: Props) {
       }
     }
 
-    syncFxPreviews(entries);
+    syncFxPreviews(entries, assets);
 
     for (const [id, object] of gameObjects) {
       if (!activeIds.has(id)) {

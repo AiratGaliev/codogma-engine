@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { createFxObject } from "../src/domain/fx-model.ts";
 import {
   createFxPreview,
+  isFxPreviewParentSupported,
   type FxContainerAdapter,
   type FxDisplayObject,
   type FxPhaserAdapter,
@@ -220,6 +221,20 @@ function previewEnvironment() {
     get shineTexture() { return shineTexture; },
   };
 }
+test("Scene View creates FX previews only for parent types it materializes as Phaser objects", () => {
+  const imageKeys = new Set(["dino"]);
+
+  expect(isFxPreviewParentSupported("Image", "dino", imageKeys)).toBe(true);
+  expect(isFxPreviewParentSupported("Text", "", imageKeys)).toBe(true);
+  expect(isFxPreviewParentSupported("Container", "", imageKeys)).toBe(true);
+
+  expect(isFxPreviewParentSupported("Image", "missing", imageKeys)).toBe(false);
+  expect(isFxPreviewParentSupported("Image", "", imageKeys)).toBe(false);
+  expect(isFxPreviewParentSupported("Sprite", "dino", imageKeys)).toBe(false);
+  expect(isFxPreviewParentSupported("TileSprite", "dino", imageKeys)).toBe(false);
+  expect(isFxPreviewParentSupported("Video", "video-key", imageKeys)).toBe(false);
+});
+
 test("Circle creates a Phaser mask and keeps helper objects in sync, then disposes them", () => {
   const env = previewEnvironment();
   const result = createFxPreview(
@@ -350,6 +365,30 @@ test("Gradient converts numeric colors and tracks parent transforms, bounds and 
   result.dispose();
   expect(env.sceneEvents.count("update")).toBe(0);
   expect(gradient?.destroyCalls).toBe(1);
+});
+
+test("Gradient alpha limitation diagnostics follow the live parent alpha", () => {
+  const env = previewEnvironment();
+  env.parent.alpha = 1;
+  const result = createFxPreview(
+    env.scene as unknown as FxSceneAdapter,
+    env.phaser as unknown as FxPhaserAdapter,
+    env.parent as unknown as FxDisplayObject,
+    createFxObject("Gradient", "gradient"),
+  );
+
+  expect(result.diagnostics).toHaveLength(0);
+
+  env.parent.alpha = 0.5;
+  env.sceneEvents.emit("update");
+  expect(result.diagnostics).toHaveLength(1);
+  expect(result.diagnostics[0]).toContain("does not inherit the parent object's alpha");
+
+  env.parent.alpha = 1;
+  env.sceneEvents.emit("update");
+  expect(result.diagnostics).toHaveLength(0);
+
+  result.dispose();
 });
 
 test("Shine removes ParallelFilters and nested Blend, action listeners, tween and DynamicTexture", () => {

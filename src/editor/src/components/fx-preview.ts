@@ -95,6 +95,19 @@ export interface FxPreviewResult {
   diagnostics: string[];
 }
 
+/**
+ * Whether the current SolidJS Scene View creates the real Phaser parent object.
+ * Applying an effect to a fallback rectangle would present a false preview.
+ */
+export function isFxPreviewParentSupported(
+  parentType: string,
+  textureKey: string,
+  imageKeys: ReadonlySet<string>,
+): boolean {
+  if (parentType === "Container" || parentType === "Text") return true;
+  return parentType === "Image" && textureKey.length > 0 && imageKeys.has(textureKey);
+}
+
 function number(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -335,10 +348,14 @@ function createGradientPreview(
   }
 
   sync();
-  const diagnostics = number(parent.alpha, 1) < 1
-    ? ["Gradient is rendered as a sibling Game Object; the legacy Phaser codegen does not inherit the parent object's alpha."]
-    : [];
-  return { dispose, diagnostics };
+  const alphaInheritanceDiagnostic =
+    "Gradient is rendered as a sibling Game Object and does not inherit the parent object's alpha in the Scene View or legacy generated output.";
+  return {
+    dispose,
+    get diagnostics(): string[] {
+      return number(parent.alpha, 1) < 1 ? [alphaInheritanceDiagnostic] : [];
+    },
+  };
 }
 
 function filterListFor(parent: FxDisplayObject, internal: boolean): FxFilterList {
