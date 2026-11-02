@@ -890,7 +890,7 @@ test("narrow viewport tab reordering preserves the permanent side dock zones", a
 
 
 test("constrained side docks fit the 781–920px viewport without losing wide preferences", async ({ page }) => {
-  await page.setViewportSize({ width: 900, height: 900 });
+  await page.setViewportSize({ width: 781, height: 900 });
   await page.goto("/");
   await page.evaluate(() => {
     const key = "codogma.editor.layout";
@@ -906,8 +906,9 @@ test("constrained side docks fit the 781–920px viewport without losing wide pr
   const workbench = page.getByTestId("workbench");
   const hierarchy = page.getByTestId("hierarchy-panel");
   const inspector = page.getByTestId("inspector-panel");
-  const leftSplitter = page.getByTestId("splitter-left");
-  const rightSplitter = page.getByTestId("splitter-right");
+  const workspaceRow = page.locator(".workspace-row");
+  const leftSplitter = page.getByTestId("splitter-hierarchy");
+  const rightSplitter = page.getByTestId("splitter-inspector");
 
   await expect(workbench).toHaveAttribute("data-layout", "compact");
   await expect(hierarchy).toHaveJSProperty("offsetWidth", 194);
@@ -916,6 +917,12 @@ test("constrained side docks fit the 781–920px viewport without losing wide pr
   await expect(leftSplitter).toHaveAttribute("aria-valuenow", "194");
   await expect(rightSplitter).toHaveAttribute("aria-valuemax", "250");
   await expect(rightSplitter).toHaveAttribute("aria-valuenow", "250");
+
+  const centerTrackWidth = await workspaceRow.evaluate((element) => {
+    const tracks = getComputedStyle(element).gridTemplateColumns.split(" ");
+    return Number.parseFloat(tracks[2] ?? "0");
+  });
+  expect(centerTrackWidth).toBeGreaterThanOrEqual(320);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(workbench).toHaveAttribute("data-layout", "wide");
