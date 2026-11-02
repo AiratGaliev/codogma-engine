@@ -58612,7 +58612,7 @@
           "x": 390,
           "y": 148,
           "width": 660,
-          "height": 650,
+          "height": 710,
           "fill": "$surface-panel",
           "layout": "none",
           "children": [
@@ -60017,7 +60017,7 @@
           "x": 370,
           "y": 140,
           "width": 700,
-          "height": 660,
+          "height": 720,
           "fill": "$surface-panel",
           "layout": "none",
           "children": [
