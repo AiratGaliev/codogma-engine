@@ -39,6 +39,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 | Prefab | Базовые модели/операции COD-80; full nested Prefab overrides не закрыты | **Partial**; COD-8; QA CODQA-11 |
 | User Components/TypeScript authoring | Базовая Components surface COD-80; Core/schema contracts in COD-26/COD-27 | **Partial surface; full authoring missing**; COD-91, QA CODQA-21 |
 | Asset Browser/Pack/Sprite | COD-39 реализует domain metadata/slicing/reimport contract; UI пока legacy | **Not migrated**; COD-86, QA CODQA-10 |
+| Package Manager | Existing ADR-0003 defines package architecture and Node-side service; no Package Manager workflow in new Host yet | **Not designed/implemented**; COD-92 UX/UI design → COD-94 Host implementation; COD-51/52/53/60/93 provide contracts and services |
 | Camera/coordinates/sorting | Контракт описан в ТЗ; Host authoring/gizmos не закрыты | **Not migrated**; COD-41 |
 | 2D UI authoring | Game UI runtime requirements в ТЗ; legacy authoring controls не перенесены | **Not migrated**; COD-43, QA CODQA-12 |
 | Animation | COD-80 basic clip/frame operations | **Partial**; COD-84, QA CODQA-4 |
