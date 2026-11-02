@@ -413,10 +413,14 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
   await expect(page.getByLabel("Bloom filter stage")).toHaveValue("external");
 
-  // Add a new effect while the Inspector is still at the top of its scroll area.
+  // Keep the new Shine preview independent from the existing Circle + Bloom stack.
+  await page.getByTestId("hierarchy-item-aftersibling").click();
   await page.getByLabel("New FX type").selectOption("Shine");
   await page.getByTestId("add-fx").click();
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByLabel("Circle Thickness")).toHaveValue("6");
+  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
 
   await page.getByLabel("Circle Thickness").fill("10");
   await page.getByLabel("Bloom Threshold").fill("0.45");
@@ -433,7 +437,8 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].blurQuality).toBe(2);
   expect(circleTarget.list[1].preFX).toBe(false);
 
-  const addedShine = circleTarget.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
+  let afterSibling = saved.displayList.find((item: { label?: string }) => item.label === "afterSibling");
+  const addedShine = afterSibling.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
   expect(addedShine).toMatchObject({ type: "Shine", duration: 2000, reveal: false, yoyo: false });
   expect(typeof addedShine.id).toBe("string");
   const addedShineId = addedShine.id as string;
@@ -444,8 +449,10 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByTestId("fx-inspector")).toBeVisible();
   await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
+  await page.getByTestId("hierarchy-item-aftersibling").click();
   await expect(page.getByTestId(`fx-card-${addedShineId}`)).toBeVisible();
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+  await page.getByTestId("hierarchy-item-circletarget").click();
 
   await page.getByTestId("hierarchy-item-paneldino").press("Enter");
   await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
@@ -471,8 +478,9 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await saveSceneWithShortcut(page);
   saved = await readSavedScene(page);
   circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
-  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle", "Shine"]);
-  expect(circleTarget.list.find((item: { id?: string }) => item.id === addedShineId)).toMatchObject({
+  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle"]);
+  afterSibling = saved.displayList.find((item: { label?: string }) => item.label === "afterSibling");
+  expect(afterSibling.list.find((item: { id?: string }) => item.id === addedShineId)).toMatchObject({
     type: "Shine",
     duration: 2000,
     reveal: false,
