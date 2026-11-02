@@ -797,10 +797,18 @@ test("responsive Bottom Dock sizing follows its splitter and constrains the deta
   await expect(bottomDock).toHaveJSProperty("offsetHeight", 150);
 
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => {
+    const key = "codogma.editor.layout";
+    const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+    localStorage.setItem(key, JSON.stringify({ ...current, consoleHeight: 56 }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+
   const consoleSplitter = page.getByTestId("splitter-console");
   const consolePanel = page.getByTestId("console-panel");
   await expect(consoleSplitter).toHaveAttribute("aria-valuemax", "61");
-  await expect(consolePanel).toHaveJSProperty("offsetHeight", 60);
+  await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "56");
+  await expect(consolePanel).toHaveJSProperty("offsetHeight", 56);
   await consoleSplitter.focus();
   await page.keyboard.press("End");
   await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "61");
