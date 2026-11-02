@@ -48,7 +48,13 @@ test.beforeEach(async ({ page }) => {
 
 test("Workbench opens the real project, edits a scene and persists the layout", async ({ page }) => {
   const pageErrors: string[] = [];
+  const unsupportedContainerInputWarnings: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "warning" && message.text().includes("Container.setInteractive")) {
+      unsupportedContainerInputWarnings.push(message.text());
+    }
+  });
 
   await page.goto("/");
   await expect(page.getByTestId("workbench")).toBeVisible();
@@ -138,6 +144,7 @@ test("Workbench opens the real project, edits a scene and persists the layout", 
 
   await page.screenshot({ path: "test-results/workbench-1280x720.png", fullPage: true });
   expect(pageErrors).toEqual([]);
+  expect(unsupportedContainerInputWarnings).toEqual([]);
 });
 
 test("Hierarchy selection and object creation are reflected in the Inspector", async ({ page }) => {
@@ -439,6 +446,7 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
   expect(circleTarget.list[1].preFX).toBe(false);
 
   await page.getByTestId("hierarchy-item-paneldino").press("Enter");
+  await expect(page.getByTestId("hierarchy-item-paneldino")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("1500");
   const shineCard = page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9");

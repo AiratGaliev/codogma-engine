@@ -45,6 +45,7 @@ interface PhaserGameObject {
   setFillStyle?(color: number, alpha?: number): PhaserGameObject;
   setStrokeStyle?(width: number, color: number, alpha?: number): PhaserGameObject;
   setDepth?(depth: number): PhaserGameObject;
+  getBounds?(): { x: number; y: number; width: number; height: number };
   destroy?(): void;
   add?(child: PhaserGameObject): PhaserGameObject;
   once?(event: string, listener: (...args: unknown[]) => void): PhaserGameObject;
@@ -526,7 +527,6 @@ function PhaserSceneViewport(props: Props) {
         const parentObject = entry.parentId ? gameObjects.get(entry.parentId) : undefined;
         if (parentObject?.add) parentObject.add(createdObject);
         object = createdObject;
-        createdObject.setInteractive?.();
         createdObject.on?.("pointerdown", (pointer) => {
           if (props.hiddenIds().has(entry.id) || props.lockedIds().has(entry.id)) return;
           props.onSelect(entry.id);
@@ -573,8 +573,14 @@ function PhaserSceneViewport(props: Props) {
       const isHidden = props.hiddenIds().has(entry.id);
       const isLocked = props.lockedIds().has(entry.id);
       object.setVisible?.(!isHidden);
-      if (isHidden || isLocked) object.disableInteractive?.();
-      else object.setInteractive?.();
+      // Phaser Container не создаёт hit-area автоматически. Не вызываем
+      // setInteractive() без геометрии: такие попытки генерируют warning и
+      // оставляют объект фактически неинтерактивным.
+      if (entry.type === "Container" || isHidden || isLocked) {
+        object.disableInteractive?.();
+      } else {
+        object.setInteractive?.();
+      }
       if (entry.type === "Text") {
         object.setText?.(String(entry.source.text ?? entry.source.label ?? ""));
       }
@@ -593,20 +599,39 @@ function PhaserSceneViewport(props: Props) {
       ? gameObjects.get(props.selectedId)
       : undefined;
     if (selected && selectionFrame) {
-      const container = selected.parentContainer;
-      if (container) {
-        if (selectionFrame.parentContainer !== container) container.add(selectionFrame);
-        const selectedIndex = container.getIndex(selected);
-        container.addAt(selectionFrame, Math.max(0, selectedIndex + 1));
-      } else if (selectionFrame.parentContainer) {
+      // Selection frame is a scene-level overlay. Reparenting it into a nested
+      // Container mutates the edited scene graph and can break Phaser's child
+      // list lifecycle. getBounds() already includes all parent transforms.
+      if (selectionFrame.parentContainer) {
         sceneRuntime?.add.existing(selectionFrame);
       }
 
-      const width = Math.max(12, numeric(selected.displayWidth, numeric(selected.width, 38)));
-      const height = Math.max(12, numeric(selected.displayHeight, numeric(selected.height, 28)));
-      selectionFrame.setPosition?.(selected.x, selected.y);
-      selectionFrame.setRotation?.(numeric(selected.rotation, 0));
-      selectionFrame.setSize?.(width + 10, height + 10);
+      const bounds = selected.getBounds?.();
+      if (
+        bounds &&
+        Number.isFinite(bounds.x) &&
+        Number.isFinite(bounds.y) &&
+        Number.isFinite(bounds.width) &&
+        Number.isFinite(bounds.height) &&
+        bounds.width > 0 &&
+        bounds.height > 0
+      ) {
+        selectionFrame.setPosition?.(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2,
+        );
+        selectionFrame.setRotation?.(0);
+        selectionFrame.setSize?.(
+          Math.max(12, bounds.width) + 10,
+          Math.max(12, bounds.height) + 10,
+        );
+      } else {
+        const width = Math.max(12, numeric(selected.displayWidth, numeric(selected.width, 38)));
+        const height = Math.max(12, numeric(selected.displayHeight, numeric(selected.height, 28)));
+        selectionFrame.setPosition?.(selected.x, selected.y);
+        selectionFrame.setRotation?.(numeric(selected.rotation, 0));
+        selectionFrame.setSize?.(width + 10, height + 10);
+      }
       selectionFrame.setFillStyle?.(0x000000, 0);
       selectionFrame.setStrokeStyle?.(1, 0x9298ff, 1);
       selectionFrame.setAlpha?.(1);
