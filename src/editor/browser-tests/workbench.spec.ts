@@ -388,6 +388,9 @@ test("Animation workspace previews and persists a Phaser JSONAnimations timeline
 });
 
 test("FX Inspector edits legacy effects and creates and restores a new Shine effect", async ({ page }) => {
+  // This end-to-end flow covers edit, save, scene reload and FX preview restoration.
+  test.setTimeout(60_000);
+
   const pageErrors: string[] = [];
   const unsupportedContainerInputWarnings: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
