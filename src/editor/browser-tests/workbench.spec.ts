@@ -302,6 +302,7 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   await page.getByRole("menuitem", { name: "Show Hierarchy" }).click();
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  expect(await canvasHandle.evaluate((element) => element.isConnected)).toBe(true);
 
   await page.reload();
   const restoredRightTabs = page.getByRole("tablist", { name: "Right dock panels" });
@@ -310,7 +311,6 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
   await expect(page.getByTestId("hierarchy-panel")).toHaveCount(1);
   await expect(page.getByTestId("inspector-panel")).toHaveCount(1);
-  expect(await canvasHandle.evaluate((element) => element.isConnected)).toBe(false);
   await expect(page.getByTestId("scene-stage").locator("canvas")).toHaveCount(1);
 
   const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
@@ -374,6 +374,8 @@ test("dock tabs and splitters support keyboard navigation and focusable resizing
 
 test("legacy and unknown layout data restore deterministic, versioned workspaces", async ({ page }) => {
   await page.addInitScript(() => {
+    if (sessionStorage.getItem("codogma-test-layout-seeded") !== null) return;
+    sessionStorage.setItem("codogma-test-layout-seeded", "yes");
     localStorage.setItem("codogma.editor.layout", JSON.stringify({
       leftWidth: 255,
       rightWidth: 305,

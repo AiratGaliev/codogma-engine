@@ -136,7 +136,7 @@ test("narrow responsive presentation persists the selected side panel without ch
   assert.equal(restored.hierarchyZone, "left");
 });
 
-test("narrow close selects the other visible side panel instead of a hidden Console tab", () => {
+test("narrow close keeps a valid Bottom tab selected instead of a hidden side panel", () => {
   const layout = {
     ...createDefaultWorkspaceLayout(true),
     hierarchyZone: "right" as const,
