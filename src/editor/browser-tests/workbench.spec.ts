@@ -429,9 +429,11 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].preFX).toBe(false);
 
   await page.reload({ waitUntil: "domcontentloaded" });
+  // The Host restores the preferred scene asynchronously after loading project files.
+  // Wait for its hierarchy before interacting with the Project tree.
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Level.scene SCENE", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Level.scene SCENE", exact: true }).click();
-  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible();
   await page.getByTestId("hierarchy-item-circletarget").click();
   await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
