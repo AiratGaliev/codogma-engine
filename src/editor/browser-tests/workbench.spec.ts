@@ -413,6 +413,11 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
   await expect(page.getByLabel("Bloom filter stage")).toHaveValue("external");
 
+  // Add a new effect while the Inspector is still at the top of its scroll area.
+  await page.getByLabel("New FX type").selectOption("Shine");
+  await page.getByTestId("add-fx").click();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+
   await page.getByLabel("Circle Thickness").fill("10");
   await page.getByLabel("Bloom Threshold").fill("0.45");
   await page.getByLabel("Bloom Threshold").press("Tab");
@@ -428,14 +433,6 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].blurQuality).toBe(2);
   expect(circleTarget.list[1].preFX).toBe(false);
 
-  // Exercise the Host authoring path, not only its domain helper.
-  await page.getByLabel("New FX type").selectOption("Shine");
-  await page.getByTestId("add-fx").click();
-  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
-  await saveSceneWithShortcut(page);
-
-  saved = await readSavedScene(page);
-  circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
   const addedShine = circleTarget.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
   expect(addedShine).toMatchObject({ type: "Shine", duration: 2000, reveal: false, yoyo: false });
   expect(typeof addedShine.id).toBe("string");
