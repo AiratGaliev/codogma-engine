@@ -945,6 +945,20 @@ Tool schemas и протоколы должны быть versioned, иметь �
 - npm installation не является доказательством безопасности. Политика lifecycle scripts, источников, лицензий, известных уязвимостей и provenance должна быть явной. Сам package kind не создаёт sandbox и не ограничивает права кода.
 - Package Manager UI — часть Editor Host, но сам npm resolver и dependency graph остаются ответственностью npm.
 
+#### Package discovery and curated catalogue
+
+Package discovery является read-only частью package management domain и отделяется от установки/разрешения зависимостей.
+
+- Discovery adapter обращается к npm-compatible registry/scoped registries, читает поиск, packument и manifests конкретных версий. Он возвращает типизированные сведения о package ID, версиях/dist-tags, tarball/integrity, standard npm metadata и namespaced Codogma metadata.
+- Данные нужно разделять на package manifest (npm package.json), registry packument/version metadata, project manifest + package-lock.json и optional curated catalogue record. Каталог может добавлять displayName, описание, темы, иконку/media, docs/changelog, maintainer/source links и отдельно проверенную compatibility; без catalogue record валидный npm-пакет всё равно должен быть доступен через registry search.
+- Curated metadata не заменяет package manifest, registry data, npm resolver или Feature Registry. Package identity учитывает registry + package name; одноимённые пакеты из разных registries не объединяются без явной политики.
+- Search/detail/compatibility validation не запускают package code или lifecycle scripts и не изменяют project manifests. Package Manager Service остаётся единственной точкой package install/update/remove и владельцем process lifecycle; npm остаётся единственным resolver и владельцем package-lock.json.
+- OpenUPM используется как implementation/metadata reference для отдельного catalogue record, CI validation и разделения catalogue data от package source. OpenUPM распространяет Unity UPM packages, поэтому не является готовым registry adapter или dependency Codogma. Собственный hosted catalogue/registry не является требованием MVP.
+- Package Manager UI проектируется как отдельное окно SolidJS Host с навигационными контекстами, search/sort/filter, package list, details tabs (overview/versions/dependencies/compatibility/features/changelog/license/source), project actions, registry settings, progress and diagnostics. Asset Browser остаётся отдельным workflow для игровых ресурсов.
+- Установка editor extension не означает её автоматическую активацию. Metadata не создаёт sandbox; extension activation выполняется только отдельным trust/compatibility workflow через Extension API.
+
+Normative detail: [docs/package-management-reference.md](package-management-reference.md). Tasks: COD-51 (metadata contracts), COD-52 (Node-side service), COD-53 (extension lifecycle), COD-60 (registry sources), COD-92 (UX/UI design), COD-93 (discovery/catalogue), COD-94 (Host UI).
+
 #### Что сознательно откладывается
 
 Самостоятельный dependency resolver и lockfile, собственный публичный package registry/catalogue и сложная система подписи не входят в фундамент. **Feature/Capability Registry и интеграция его контрактов с выборочной сборкой относятся к целевой архитектуре**, а не к отложенным curated feature sets. Curated feature sets допустимы позднее как группы рекомендованных функций/пакетов, но не как альтернативный resolver. Публикация пакетов начинается после готовности API, CI, лицензирования, semver/backward-compatibility policy и release process.
