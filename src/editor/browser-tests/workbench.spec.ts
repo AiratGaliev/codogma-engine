@@ -422,12 +422,21 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByLabel("Circle Thickness")).toHaveValue("6");
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
 
-  await page.getByLabel("Circle Thickness").fill("10");
-  await page.getByLabel("Bloom Threshold").fill("0.45");
-  await page.getByLabel("Bloom Threshold").press("Tab");
-  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
-  await page.getByLabel("Bloom Blur Quality").fill("2");
-  await page.getByLabel("Bloom Blur Quality").press("Tab");
+  const circleThickness = page.getByLabel("Circle Thickness");
+  await circleThickness.scrollIntoViewIfNeeded();
+  await circleThickness.fill("10");
+
+  // The Inspector retains its scroll offset when the selected object changes.
+  const bloomThreshold = page.getByLabel("Bloom Threshold");
+  await bloomThreshold.scrollIntoViewIfNeeded();
+  await bloomThreshold.fill("0.45");
+  await bloomThreshold.press("Tab");
+  await expect(bloomThreshold).toHaveValue("0.45");
+
+  const bloomBlurQuality = page.getByLabel("Bloom Blur Quality");
+  await bloomBlurQuality.scrollIntoViewIfNeeded();
+  await bloomBlurQuality.fill("2");
+  await bloomBlurQuality.press("Tab");
   await expect(page.getByLabel("Bloom Blur Quality")).toHaveValue("2");
   await saveSceneWithShortcut(page);
   let saved = await readSavedScene(page);
