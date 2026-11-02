@@ -269,6 +269,146 @@ test("Bottom Dock tabs can be reordered and scene shortcuts respect the focused 
 });
 
 
+
+
+test("side panels can be grouped in another dock zone, closed and reopened without recreating the Scene canvas", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(page.getByTestId("inspector-panel")).toBeVisible();
+
+  const canvas = page.getByTestId("scene-stage").locator("canvas");
+  await expect(canvas).toBeVisible({ timeout: 20_000 });
+  const canvasHandle = await canvas.elementHandle();
+  expect(canvasHandle).not.toBeNull();
+  if (!canvasHandle) throw new Error("Scene canvas is unavailable.");
+
+  await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(rightTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+
+  await rightTabs.getByRole("tab", { name: "Inspector" }).click();
+  await expect(page.getByTestId("inspector-panel")).toBeVisible();
+  await expect(page.getByTestId("hierarchy-panel")).not.toBeVisible();
+
+  await rightTabs.getByRole("tab", { name: "Hierarchy" }).click();
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await page.getByRole("button", { name: "Close Hierarchy" }).click();
+  await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+  await expect(page.getByTestId("hierarchy-panel")).not.toBeVisible();
+
+  await page.getByRole("menuitem", { name: "View" }).click();
+  await page.getByRole("menuitem", { name: "Show Hierarchy" }).click();
+  await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+
+  await page.reload();
+  const restoredRightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  await expect(restoredRightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(restoredRightTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(page.getByTestId("hierarchy-panel")).toHaveCount(1);
+  await expect(page.getByTestId("inspector-panel")).toHaveCount(1);
+  expect(await canvasHandle.evaluate((element) => element.isConnected)).toBe(false);
+  await expect(page.getByTestId("scene-stage").locator("canvas")).toHaveCount(1);
+
+  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(persisted.schemaVersion).toBe(1);
+  expect(persisted.hierarchyZone).toBe("right");
+  expect(persisted.inspectorZone).toBe("right");
+});
+
+test("narrow viewport presents saved side panels in Bottom and restores their zones when widened", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+
+  await page.setViewportSize({ width: 700, height: 760 });
+  await expect(page.getByTestId("workbench")).toHaveAttribute("data-layout", "compact");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+  await expect(page.getByTestId("dock-zone-right")).not.toBeVisible();
+
+  await bottomTabs.getByRole("tab", { name: "Hierarchy" }).click();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+  const narrowState = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(narrowState.schemaVersion).toBe(1);
+  expect(narrowState.bottomTab).toBe("Hierarchy");
+  expect(narrowState.hierarchyZone).toBe("right");
+
+  await page.reload();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toHaveAttribute("aria-selected", "true");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.getByTestId("dock-zone-right")).toBeVisible();
+  const restoredTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  await expect(restoredTabs.getByRole("tab", { name: "Hierarchy" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Bottom workspace" }).getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+});
+
+test("dock tabs and splitters support keyboard navigation and focusable resizing", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const splitter = page.getByTestId("splitter-hierarchy");
+  const initialWidth = Number(await splitter.getAttribute("aria-valuenow"));
+  await splitter.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(splitter).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
+  await page.keyboard.press("Home");
+  await expect(splitter).toHaveAttribute("aria-valuenow", "170");
+
+  await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  const hierarchyTab = rightTabs.getByRole("tab", { name: "Hierarchy" });
+  await hierarchyTab.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(rightTabs.getByRole("tab", { name: "Inspector" })).toHaveAttribute("aria-selected", "true");
+  await expect(rightTabs.getByRole("tab", { name: "Inspector" })).toBeFocused();
+});
+
+test("legacy and unknown layout data restore deterministic, versioned workspaces", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("codogma.editor.layout", JSON.stringify({
+      leftWidth: 255,
+      rightWidth: 305,
+      bottomHeight: 330,
+      consoleHeight: 110,
+      hierarchyVisible: true,
+      inspectorVisible: true,
+      bottomTab: "Hierarchy",
+      bottomTabOrder: ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"],
+      dockedPanels: ["Hierarchy"],
+      consoleDocked: false
+    }));
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByRole("tablist", { name: "Bottom workspace" }).getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  let saved = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(saved.schemaVersion).toBe(1);
+  expect(saved.hierarchyZone).toBe("bottom");
+  expect(saved.leftWidth).toBe(255);
+
+  await page.evaluate(() => localStorage.setItem("codogma.editor.layout", JSON.stringify({
+    schemaVersion: 999,
+    leftWidth: 9999,
+    hierarchyZone: "floating",
+    bottomTab: "Unknown"
+  })));
+  await page.reload();
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  saved = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(saved.schemaVersion).toBe(1);
+  expect(saved.hierarchyZone).toBe("left");
+  expect(saved.leftWidth).toBe(228);
+});
+
 test("SolidJS Host owns an MCP bridge session and serves scene commands", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");

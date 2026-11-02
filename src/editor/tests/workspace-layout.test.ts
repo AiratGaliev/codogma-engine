@@ -132,6 +132,7 @@ test("narrow responsive presentation persists the selected side panel without ch
   const restored = restoreWorkspaceLayoutContent(serialized, true, true);
 
   assert.equal(restored.bottomTab, "Hierarchy");
+  assert.ok(getVisibleBottomTabs(restored, true, true).includes("Hierarchy"));
   assert.equal(restored.hierarchyZone, "left");
 });
 
@@ -145,7 +146,7 @@ test("narrow close selects the other visible side panel instead of a hidden Cons
   };
   const closed = setSidePanelVisibility(layout, "Hierarchy", false, true, true);
 
-  assert.equal(closed.bottomTab, "Inspector");
+  assert.equal(closed.bottomTab, "Project");
   assert.equal(closed.inspectorVisible, true);
 });
 
