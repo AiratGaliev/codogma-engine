@@ -443,6 +443,10 @@ test("dock tabs and splitters support keyboard navigation and focusable resizing
   await expect(splitter).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
   await page.keyboard.press("Home");
   await expect(splitter).toHaveAttribute("aria-valuenow", "170");
+  const resizedLayout = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(resizedLayout.leftWidthCustomized).toBe(true);
 
   await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
@@ -1074,4 +1078,58 @@ test("intermediate desktop widths progressively constrain side docks without cli
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(hierarchy).toHaveJSProperty("offsetWidth", 360);
   await expect(inspector).toHaveJSProperty("offsetWidth", 420);
+});
+
+
+test("exact user-selected default dimensions survive compact restore and wide return", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("codogma.editor.layout", JSON.stringify({
+      schemaVersion: 1,
+      leftWidth: 228,
+      rightWidth: 280,
+      bottomHeight: 286,
+      consoleHeight: 96,
+      leftWidthCustomized: true,
+      rightWidthCustomized: true,
+      bottomHeightCustomized: true,
+      consoleHeightCustomized: true,
+      hierarchyVisible: true,
+      inspectorVisible: true,
+      hierarchyZone: "left",
+      inspectorZone: "right",
+      leftActivePanel: "Hierarchy",
+      rightActivePanel: "Inspector",
+      bottomTab: "Project",
+      bottomTabOrder: ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"],
+      consoleDocked: false,
+    }));
+  });
+
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-panel")).toHaveJSProperty("offsetWidth", 194);
+  await expect(page.getByTestId("inspector-panel")).toHaveJSProperty("offsetWidth", 250);
+
+  let persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.leftWidth).toBe(228);
+  expect(persisted.rightWidth).toBe(280);
+  expect(persisted.bottomHeight).toBe(286);
+  expect(persisted.consoleHeight).toBe(96);
+  expect(persisted.leftWidthCustomized).toBe(true);
+  expect(persisted.rightWidthCustomized).toBe(true);
+  expect(persisted.bottomHeightCustomized).toBe(true);
+  expect(persisted.consoleHeightCustomized).toBe(true);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.getByTestId("hierarchy-panel")).toHaveJSProperty("offsetWidth", 228);
+  await expect(page.getByTestId("inspector-panel")).toHaveJSProperty("offsetWidth", 280);
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.leftWidth).toBe(228);
+  expect(persisted.rightWidth).toBe(280);
+  expect(persisted.bottomHeight).toBe(286);
+  expect(persisted.consoleHeight).toBe(96);
 });

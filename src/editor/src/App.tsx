@@ -1527,6 +1527,10 @@ function App() {
         kind === "left" ? "leftWidth" :
         kind === "right" ? "rightWidth" :
         kind === "bottom" ? "bottomHeight" : "consoleHeight";
+      const customizedKey =
+        kind === "left" ? "leftWidthCustomized" :
+        kind === "right" ? "rightWidthCustomized" :
+        kind === "bottom" ? "bottomHeightCustomized" : "consoleHeightCustomized";
       const minimum =
         kind === "left" ? 170 :
         kind === "right" ? 210 :
@@ -1551,7 +1555,7 @@ function App() {
       // A no-op at a responsive limit must not overwrite the persisted
       // preference that is temporarily larger than the current viewport.
       if (next === value) return current;
-      return { ...current, [keyName]: next };
+      return { ...current, [keyName]: next, [customizedKey]: true };
     });
   }
 
@@ -1559,31 +1563,41 @@ function App() {
     if (!resizeState || (event.buttons !== 1 && event.pointerType !== "touch")) return;
     const { kind, startX, startY, initialValue } = resizeState;
     if (kind === "left") {
-      setLayout((current) => ({
-        ...current,
-        leftWidth: Math.min(getMaximumSidePanelWidth("left"), Math.max(170, initialValue + event.clientX - startX)),
-      }));
+      setLayout((current) => {
+        const leftWidth = Math.min(
+          getMaximumSidePanelWidth("left"),
+          Math.max(170, initialValue + event.clientX - startX),
+        );
+        if (leftWidth === getDisplayedSidePanelWidth("left", current)) return current;
+        return { ...current, leftWidth, leftWidthCustomized: true };
+      });
     } else if (kind === "right") {
-      setLayout((current) => ({
-        ...current,
-        rightWidth: Math.min(getMaximumSidePanelWidth("right"), Math.max(210, initialValue + startX - event.clientX)),
-      }));
+      setLayout((current) => {
+        const rightWidth = Math.min(
+          getMaximumSidePanelWidth("right"),
+          Math.max(210, initialValue + startX - event.clientX),
+        );
+        if (rightWidth === getDisplayedSidePanelWidth("right", current)) return current;
+        return { ...current, rightWidth, rightWidthCustomized: true };
+      });
     } else if (kind === "bottom") {
       setLayout((current) => {
         const bottomHeight = Math.min(
           getMaximumBottomHeight(),
           Math.max(150, initialValue + startY - event.clientY),
         );
-        return { ...current, bottomHeight };
+        if (bottomHeight === getDisplayedBottomHeight(current)) return current;
+        return { ...current, bottomHeight, bottomHeightCustomized: true };
       });
     } else {
-      setLayout((current) => ({
-        ...current,
-        consoleHeight: Math.min(
+      setLayout((current) => {
+        const consoleHeight = Math.min(
           getMaximumConsoleHeight(getDisplayedBottomHeight(current)),
           Math.max(56, initialValue + startY - event.clientY),
-        ),
-      }));
+        );
+        if (consoleHeight === getDisplayedConsoleHeight(current)) return current;
+        return { ...current, consoleHeight, consoleHeightCustomized: true };
+      });
     }
   }
 
@@ -2152,10 +2166,10 @@ function App() {
         const nextDefaults = createDefaultWorkspaceLayout(nextCompact);
         const nextLayout = {
           ...current,
-          leftWidth: current.leftWidth === previousDefaults.leftWidth ? nextDefaults.leftWidth : current.leftWidth,
-          rightWidth: current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
-          bottomHeight: current.bottomHeight === previousDefaults.bottomHeight ? nextDefaults.bottomHeight : current.bottomHeight,
-          consoleHeight: current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
+          leftWidth: !current.leftWidthCustomized && current.leftWidth === previousDefaults.leftWidth ? nextDefaults.leftWidth : current.leftWidth,
+          rightWidth: !current.rightWidthCustomized && current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
+          bottomHeight: !current.bottomHeightCustomized && current.bottomHeight === previousDefaults.bottomHeight ? nextDefaults.bottomHeight : current.bottomHeight,
+          consoleHeight: !current.consoleHeightCustomized && current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
           bottomTab: !nextCompact && current.bottomTab === "Console" ? "Project" : current.bottomTab,
         };
         return nextLayout;

@@ -17,10 +17,11 @@ directory and starts the Vite Host at `127.0.0.1:5173`. The browser tests exerci
 scene open/edit/save/reopen, Undo/Redo, Phaser iframe lifecycle, theme persistence,
 command routing, Inspector state and splitter interaction.
 
-Workspace-layout acceptance covers cross-zone panel grouping, close/reopen, versioned
-localStorage migration, restoration after reload, keyboard-driven tab navigation and
-splitter resizing, and the temporary narrow-screen Bottom presentation. The tests also
-check that docking does not create duplicate panel or Scene Canvas nodes.
+Workspace-layout acceptance covers cross-zone panel grouping, empty side-zone drop
+targets, close/reopen, versioned localStorage migration, restoration after reload,
+keyboard-driven tab navigation and splitter resizing, compact/wide user-size round trips,
+short-viewport constraints, and the temporary narrow-screen Bottom presentation. The
+tests also check that docking does not create duplicate panel or Scene Canvas nodes.
 
 The test fixture is the repository's canonical `tests/workspace/test-typescript`
 project. The tests never point the backend at a developer's project directory.

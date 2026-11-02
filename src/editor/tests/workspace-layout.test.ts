@@ -387,3 +387,40 @@ test("preserves the preferred Console height while clamping only its visible hei
 
   assert.equal(compactLayout.consoleHeight, 180);
 });
+
+
+test("preserves explicitly customized dimensions even when they equal wide defaults", () => {
+  const defaults = createDefaultWorkspaceLayout(false);
+  const customized = {
+    ...defaults,
+    leftWidthCustomized: true,
+    rightWidthCustomized: true,
+    bottomHeightCustomized: true,
+    consoleHeightCustomized: true,
+  };
+
+  const compact = restoreWorkspaceLayout(customized, true);
+  assert.equal(compact.leftWidth, 228);
+  assert.equal(compact.rightWidth, 280);
+  assert.equal(compact.bottomHeight, 286);
+  assert.equal(compact.consoleHeight, 96);
+  assert.equal(compact.leftWidthCustomized, true);
+  assert.equal(compact.rightWidthCustomized, true);
+  assert.equal(compact.bottomHeightCustomized, true);
+  assert.equal(compact.consoleHeightCustomized, true);
+
+  const roundTripped = restoreWorkspaceLayoutContent(
+    serializeWorkspaceLayout(compact, true),
+    true,
+  );
+  assert.equal(roundTripped.leftWidth, 228);
+  assert.equal(roundTripped.rightWidth, 280);
+  assert.equal(roundTripped.bottomHeight, 286);
+  assert.equal(roundTripped.consoleHeight, 96);
+
+  const untouched = restoreWorkspaceLayout(defaults, true);
+  assert.equal(untouched.leftWidth, 194);
+  assert.equal(untouched.rightWidth, 250);
+  assert.equal(untouched.bottomHeight, 207);
+  assert.equal(untouched.consoleHeight, 60);
+});

@@ -15,6 +15,10 @@ export interface WorkspaceLayout {
   rightWidth: number;
   bottomHeight: number;
   consoleHeight: number;
+  leftWidthCustomized: boolean;
+  rightWidthCustomized: boolean;
+  bottomHeightCustomized: boolean;
+  consoleHeightCustomized: boolean;
   hierarchyVisible: boolean;
   inspectorVisible: boolean;
   hierarchyZone: DockZone;
@@ -138,6 +142,10 @@ export function createDefaultWorkspaceLayout(
     rightWidth: compact ? 250 : 280,
     bottomHeight: compact ? 207 : 286,
     consoleHeight: compact ? 60 : 96,
+    leftWidthCustomized: false,
+    rightWidthCustomized: false,
+    bottomHeightCustomized: false,
+    consoleHeightCustomized: false,
     hierarchyVisible: true,
     inspectorVisible: true,
     hierarchyZone: "left",
@@ -208,20 +216,24 @@ export function restoreWorkspaceLayout(
   const consoleDocked = value.consoleDocked === true;
   // Preserve COD-80 behavior when a workspace is reopened at a compact width:
   // only untouched defaults adapt; explicit user sizing is kept.
+  const leftWidthCustomized = value.leftWidthCustomized === true;
+  const rightWidthCustomized = value.rightWidthCustomized === true;
+  const bottomHeightCustomized = value.bottomHeightCustomized === true;
+  const consoleHeightCustomized = value.consoleHeightCustomized === true;
   const leftWidth =
-    compact && value.leftWidth === wideDefaults.leftWidth
+    compact && !leftWidthCustomized && value.leftWidth === wideDefaults.leftWidth
       ? defaults.leftWidth
       : value.leftWidth;
   const rightWidth =
-    compact && value.rightWidth === wideDefaults.rightWidth
+    compact && !rightWidthCustomized && value.rightWidth === wideDefaults.rightWidth
       ? defaults.rightWidth
       : value.rightWidth;
   const bottomHeight =
-    compact && value.bottomHeight === wideDefaults.bottomHeight
+    compact && !bottomHeightCustomized && value.bottomHeight === wideDefaults.bottomHeight
       ? defaults.bottomHeight
       : value.bottomHeight;
   const consoleHeight =
-    compact && value.consoleHeight === wideDefaults.consoleHeight
+    compact && !consoleHeightCustomized && value.consoleHeight === wideDefaults.consoleHeight
       ? defaults.consoleHeight
       : value.consoleHeight;
   const restoredBottomHeight = clampNumber(
@@ -243,6 +255,10 @@ export function restoreWorkspaceLayout(
       56,
       180,
     ),
+    leftWidthCustomized,
+    rightWidthCustomized,
+    bottomHeightCustomized,
+    consoleHeightCustomized,
     hierarchyVisible:
       typeof value.hierarchyVisible === "boolean"
         ? value.hierarchyVisible
