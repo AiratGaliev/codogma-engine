@@ -214,6 +214,7 @@ Loading/refreshing, initial/empty project, empty registry, no search results, un
 | [COD-92](https://linear.app/codogma-engine/issue/COD-92/sproektirovat-package-manager-uxui-dlya-solidjs-editor-host) | Package Manager UX/UI design | Pencil, flows, states и visual review |
 | [COD-93](https://linear.app/codogma-engine/issue/COD-93/realizovat-package-discovery-i-otdelnuyu-curated-catalogue-metadata) | Package discovery и catalogue metadata | Search, packument, metadata aggregation |
 | [COD-94](https://linear.app/codogma-engine/issue/COD-94/realizovat-package-manager-v-solidjs-editor-host) | Package Manager Host UI | Интеграция UI + services + extension lifecycle |
+| [COD-95](https://linear.app/codogma-engine/issue/COD-95/realizovat-build-profiles-workflow-v-solidjs-editor-host) | Build Profiles / Build Settings UI | Отдельная поверхность управления build profiles; project/target settings не смешиваются с package dependencies |
 
 COD-92 может идти параллельно с контрактами и сервисом. COD-94 зависит от metadata/API contracts, service, supported sources, discovery API и принятого UX. Рутинная разработка на dev проверяется адресными tests/CI; независимая browser/runtime acceptance остаётся отдельным QA/promotion gate и не должна задерживать независимые engineering slices.
 
