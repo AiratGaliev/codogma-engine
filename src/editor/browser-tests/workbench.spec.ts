@@ -1313,7 +1313,7 @@ test("pointercancel clears the drag target and does not swallow a following tab 
   const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
   const source = leftTabs.getByRole("tab", { name: "Hierarchy" });
   const pointerIdPromise = source.evaluate((element) => new Promise<number>((resolve) => {
-    element.addEventListener("pointerdown", (event) => resolve(event.pointerId), { once: true });
+    element.addEventListener("pointerdown", (event: PointerEvent) => resolve(event.pointerId), { once: true });
   }));
 
   const bounds = await source.boundingBox();
@@ -1358,7 +1358,7 @@ test("splitter resize ignores unrelated pointer events and stops on lost capture
   const x = bounds.x + bounds.width / 2;
   const y = bounds.y + bounds.height / 2;
   const pointerIdPromise = splitter.evaluate((element) => new Promise<number>((resolve) => {
-    element.addEventListener("pointerdown", (event) => resolve(event.pointerId), { once: true });
+    element.addEventListener("pointerdown", (event: PointerEvent) => resolve(event.pointerId), { once: true });
   }));
 
   await page.mouse.move(x, y);
