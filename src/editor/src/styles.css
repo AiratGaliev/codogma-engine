@@ -813,6 +813,7 @@ textarea::placeholder {
 .vertical-splitter {
   width: 4px;
   cursor: col-resize;
+  touch-action: none;
 }
 
 .vertical-splitter::after {
@@ -835,6 +836,7 @@ textarea::placeholder {
 .horizontal-splitter {
   height: 4px;
   cursor: row-resize;
+  touch-action: none;
 }
 
 .center-workspace {
