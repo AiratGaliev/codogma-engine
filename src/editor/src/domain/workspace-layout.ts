@@ -230,21 +230,18 @@ export function restoreWorkspaceLayout(
     150,
     420,
   );
-  const maximumConsoleHeight =
-    compact || consoleDocked
-      ? 180
-      : getMaximumConsoleHeight(restoredBottomHeight);
-
   const restored: WorkspaceLayout = {
     schemaVersion: WORKSPACE_LAYOUT_SCHEMA_VERSION,
     leftWidth: clampNumber(leftWidth, defaults.leftWidth, 170, 360),
     rightWidth: clampNumber(rightWidth, defaults.rightWidth, 210, 420),
     bottomHeight: restoredBottomHeight,
+    // Persist the preferred size independently from the current viewport.
+    // The App derives the visible size from the available Bottom Dock geometry.
     consoleHeight: clampNumber(
       consoleHeight,
       defaults.consoleHeight,
       56,
-      maximumConsoleHeight,
+      180,
     ),
     hierarchyVisible:
       typeof value.hierarchyVisible === "boolean"

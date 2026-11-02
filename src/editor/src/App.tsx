@@ -353,7 +353,8 @@ function App() {
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
   const [compactWorkbench, setCompactWorkbench] = createSignal(window.innerWidth <= 1360);
   const [narrowWorkbench, setNarrowWorkbench] = createSignal(window.innerWidth <= 780);
-  const [constrainedSidePanels, setConstrainedSidePanels] = createSignal(window.innerWidth <= 920);
+  const [viewportWidth, setViewportWidth] = createSignal(window.innerWidth);
+  const [viewportHeight, setViewportHeight] = createSignal(window.innerHeight);
   const [layout, setLayout] = createSignal<WorkspaceLayout>((() => {
     const compact = window.innerWidth <= 1360;
     try {
@@ -1435,8 +1436,12 @@ function App() {
   }
 
   function getMaximumSidePanelWidth(kind: "left" | "right"): number {
-    if (!constrainedSidePanels()) return kind === "left" ? 360 : 420;
-    return kind === "left" ? 194 : 250;
+    const compactMaximum = kind === "left" ? 194 : 250;
+    const wideMaximum = kind === "left" ? 360 : 420;
+    // Keep the established 781–920 px compact widths, then release the
+    // constraint gradually until both wide panels fit alongside a 320 px Scene.
+    const progress = Math.min(1, Math.max(0, (viewportWidth() - 920) / 188));
+    return Math.round(compactMaximum + (wideMaximum - compactMaximum) * progress);
   }
 
   function getDisplayedSidePanelWidth(
@@ -1445,6 +1450,36 @@ function App() {
   ): number {
     const requestedWidth = kind === "left" ? current.leftWidth : current.rightWidth;
     return Math.min(requestedWidth, getMaximumSidePanelWidth(kind));
+  }
+
+  function getMinimumCenterHeight(): number {
+    const headerHeight = compactWorkbench() ? 88 : 95;
+    const preferredMinimum = narrowWorkbench() ? 260 : 220;
+    const availableHeight =
+      viewportHeight() - headerHeight - 4 - 150 - 30;
+    return Math.max(120, Math.min(preferredMinimum, availableHeight));
+  }
+
+  function getMaximumBottomHeight(): number {
+    const headerHeight = compactWorkbench() ? 88 : 95;
+    return Math.max(
+      150,
+      Math.min(
+        420,
+        viewportHeight() - headerHeight - getMinimumCenterHeight() - 4 - 30,
+      ),
+    );
+  }
+
+  function getDisplayedBottomHeight(current: WorkspaceLayout = layout()): number {
+    return Math.min(current.bottomHeight, getMaximumBottomHeight());
+  }
+
+  function getDisplayedConsoleHeight(current: WorkspaceLayout = layout()): number {
+    return Math.min(
+      current.consoleHeight,
+      getMaximumConsoleHeight(getDisplayedBottomHeight(current)),
+    );
   }
 
   function startResize(
@@ -1463,8 +1498,8 @@ function App() {
           : kind === "right"
             ? getDisplayedSidePanelWidth("right", current)
             : kind === "bottom"
-              ? current.bottomHeight
-              : current.consoleHeight,
+              ? getDisplayedBottomHeight(current)
+              : getDisplayedConsoleHeight(current),
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -1500,25 +1535,23 @@ function App() {
         kind === "left" || kind === "right"
           ? getMaximumSidePanelWidth(kind)
           : kind === "bottom"
-            ? 420
-            : getMaximumConsoleHeight(current.bottomHeight);
+            ? getMaximumBottomHeight()
+            : getMaximumConsoleHeight(getDisplayedBottomHeight(current));
       const value =
         kind === "left" || kind === "right"
           ? getDisplayedSidePanelWidth(kind, current)
-          : current[keyName];
+          : kind === "bottom"
+            ? getDisplayedBottomHeight(current)
+            : getDisplayedConsoleHeight(current);
       const next = key === "Home"
         ? minimum
         : key === "End"
           ? maximum
           : Math.min(maximum, Math.max(minimum, value + direction * step));
-      const updated = { ...current, [keyName]: next };
-      if (kind === "bottom" && !compactWorkbench() && !current.consoleDocked) {
-        updated.consoleHeight = Math.min(
-          current.consoleHeight,
-          getMaximumConsoleHeight(updated.bottomHeight),
-        );
-      }
-      return updated;
+      // A no-op at a responsive limit must not overwrite the persisted
+      // preference that is temporarily larger than the current viewport.
+      if (next === value) return current;
+      return { ...current, [keyName]: next };
     });
   }
 
@@ -1538,23 +1571,16 @@ function App() {
     } else if (kind === "bottom") {
       setLayout((current) => {
         const bottomHeight = Math.min(
-          420,
+          getMaximumBottomHeight(),
           Math.max(150, initialValue + startY - event.clientY),
         );
-        const updated = { ...current, bottomHeight };
-        if (!compactWorkbench() && !current.consoleDocked) {
-          updated.consoleHeight = Math.min(
-            current.consoleHeight,
-            getMaximumConsoleHeight(bottomHeight),
-          );
-        }
-        return updated;
+        return { ...current, bottomHeight };
       });
     } else {
       setLayout((current) => ({
         ...current,
         consoleHeight: Math.min(
-          getMaximumConsoleHeight(current.bottomHeight),
+          getMaximumConsoleHeight(getDisplayedBottomHeight(current)),
           Math.max(56, initialValue + startY - event.clientY),
         ),
       }));
@@ -1735,14 +1761,17 @@ function App() {
     log("info", panel + " panel closed");
   }
 
-  function focusWorkspacePanel(panel: SidePanelId) {
+  function focusDockTab(panel: SidePanelId, zone: DockZone) {
     queueMicrotask(() => {
-      const zone = getEffectivePanelZone(panel);
-      const target = document.querySelector<HTMLButtonElement>(
-        `[data-dock-zone="${zone}"] [data-dock-tab="${panel}"], [data-testid="bottom-tabs"] [data-dock-tab="${panel}"]`,
-      );
-      target?.focus({ preventScroll: true });
+      const selector = zone === "bottom"
+        ? `[data-testid="bottom-tabs"] [data-dock-tab="${panel}"]`
+        : `[data-dock-zone="${zone}"] [data-dock-tab="${panel}"]`;
+      document.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
     });
+  }
+
+  function focusWorkspacePanel(panel: SidePanelId) {
+    focusDockTab(panel, getEffectivePanelZone(panel));
   }
 
   function toggleSidePanel(panel: SidePanelId) {
@@ -1828,6 +1857,7 @@ function App() {
           } else if (targetZone === getStoredPanelZone(drag.panel)) {
             activateSidePanel(drag.panel);
           }
+          focusDockTab(drag.panel, targetZone);
         } else if (targetZone === "bottom" && targetTab) {
           reorderDockPanelTab(drag.panel, targetTab, targetZone);
         }
@@ -1851,9 +1881,30 @@ function App() {
   }
 
   function isDockTargetAllowed(panel: BottomTab, zone: DockZone): boolean {
-    return panel === "Hierarchy" || panel === "Inspector"
-      ? true
-      : zone === "bottom";
+    if (panel === "Hierarchy" || panel === "Inspector") {
+      return zone === "bottom" || !narrowWorkbench();
+    }
+    return zone === "bottom";
+  }
+
+  function isSideDockDragActive(): boolean {
+    const panel = draggedDockPanel();
+    return !narrowWorkbench() && (panel === "Hierarchy" || panel === "Inspector");
+  }
+
+  function isLeftDockZoneAvailable(): boolean {
+    return leftDockPanels().length > 0 || isSideDockDragActive();
+  }
+
+  function isRightDockZoneAvailable(): boolean {
+    return rightDockPanels().length > 0 || isSideDockDragActive();
+  }
+
+  function isEmptySideDockDropTarget(zone: "left" | "right"): boolean {
+    if (!isSideDockDragActive()) return false;
+    return zone === "left"
+      ? leftDockPanels().length === 0
+      : rightDockPanels().length === 0;
   }
 
   function handleDockDragOver(event: DragEvent, explicitZone?: DockZone) {
@@ -1909,10 +1960,9 @@ function App() {
       (targetZoneElement?.dataset.dockZone as DockZone | undefined) ??
       "bottom";
 
-    if (
-      (panel === "Console" || panel === "Project" || panel === "Animation" || panel === "Components") &&
-      targetZone !== "bottom"
-    ) {
+    if (!isDockTargetAllowed(panel, targetZone)) {
+      setDockTargetZone(null);
+      setDraggedDockPanel(null);
       return;
     }
 
@@ -1933,6 +1983,7 @@ function App() {
         dockSidePanel(panel, targetZone);
         reorderDockPanelTab(panel, targetTab, targetZone);
       }
+      focusDockTab(panel, targetZone);
       return;
     }
 
@@ -1950,10 +2001,6 @@ function App() {
       ...current,
       consoleDocked: false,
       bottomTab: "Project",
-      consoleHeight: Math.min(
-        current.consoleHeight,
-        getMaximumConsoleHeight(current.bottomHeight),
-      ),
     }));
     log("info", "Console moved back to its own dock");
   }
@@ -2094,7 +2141,8 @@ function App() {
     const previousCompact = compactWorkbench();
     const nextCompact = window.innerWidth <= 1360;
     const previousNarrow = narrowWorkbench();
-    setConstrainedSidePanels(window.innerWidth <= 920);
+    setViewportWidth(window.innerWidth);
+    setViewportHeight(window.innerHeight);
     const nextNarrow = window.innerWidth <= 780;
 
     if (previousCompact !== nextCompact) {
@@ -2110,12 +2158,6 @@ function App() {
           consoleHeight: current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
           bottomTab: !nextCompact && current.bottomTab === "Console" ? "Project" : current.bottomTab,
         };
-        if (!nextCompact && !nextLayout.consoleDocked) {
-          nextLayout.consoleHeight = Math.min(
-            nextLayout.consoleHeight,
-            getMaximumConsoleHeight(nextLayout.bottomHeight),
-          );
-        }
         return nextLayout;
       });
     }
@@ -2518,14 +2560,15 @@ function App() {
       data-testid="workbench"
       data-layout={compactWorkbench() ? "compact" : "wide"}
       classList={{
-        "hierarchy-hidden": leftDockPanels().length === 0,
-        "inspector-hidden": rightDockPanels().length === 0,
+        "hierarchy-hidden": !isLeftDockZoneAvailable(),
+        "inspector-hidden": !isRightDockZoneAvailable(),
       }}
       style={{
         "--left-panel": `${getDisplayedSidePanelWidth("left")}px`,
         "--right-panel": `${getDisplayedSidePanelWidth("right")}px`,
-        "--bottom-panel": `${layout().bottomHeight}px`,
-        "--console-height": `${layout().consoleHeight}px`,
+        "--bottom-panel": `${getDisplayedBottomHeight()}px`,
+        "--console-height": `${getDisplayedConsoleHeight()}px`,
+        "--center-min-height": `${getMinimumCenterHeight()}px`,
       }}
       onPointerMove={moveResize}
       onPointerUp={endResize}
@@ -2688,7 +2731,7 @@ function App() {
           data-testid="dock-zone-left"
           data-dock-zone="left"
           classList={{ "dock-drop-target": dockTargetZone() === "left" }}
-          style={{ display: leftDockPanels().length > 0 ? "flex" : "none" }}
+          style={{ display: isLeftDockZoneAvailable() ? "flex" : "none" }}
           onDragOver={(event) => handleDockDragOver(event, "left")}
           onDragLeave={handleDockDragLeave}
           onDrop={(event) => handleDockDrop(event, "left")}
@@ -2873,10 +2916,15 @@ function App() {
               <span>Scene tree</span>
             </div>
           </aside>
+            <Show when={isEmptySideDockDropTarget("left")}>
+              <div class="side-dock-empty-drop-hint" data-testid="empty-dock-hint-left">
+                Drop panel here
+              </div>
+            </Show>
           </div>
         </section>
 
-        <Show when={leftDockPanels().length > 0}>
+        <Show when={isLeftDockZoneAvailable()}>
           <div
             class="vertical-splitter"
             data-testid="splitter-hierarchy"
@@ -2984,7 +3032,7 @@ function App() {
           </div>
         </main>
 
-        <Show when={rightDockPanels().length > 0}>
+        <Show when={isRightDockZoneAvailable()}>
           <div
             class="vertical-splitter"
             data-testid="splitter-inspector"
@@ -3004,7 +3052,7 @@ function App() {
           data-testid="dock-zone-right"
           data-dock-zone="right"
           classList={{ "dock-drop-target": dockTargetZone() === "right" }}
-          style={{ display: rightDockPanels().length > 0 ? "flex" : "none" }}
+          style={{ display: isRightDockZoneAvailable() ? "flex" : "none" }}
           onDragOver={(event) => handleDockDragOver(event, "right")}
           onDragLeave={handleDockDragLeave}
           onDrop={(event) => handleDockDrop(event, "right")}
@@ -3311,6 +3359,11 @@ function App() {
               <span>{documentDirty() ? "Modified" : "In sync"}</span>
             </div>
           </aside>
+            <Show when={isEmptySideDockDropTarget("right")}>
+              <div class="side-dock-empty-drop-hint" data-testid="empty-dock-hint-right">
+                Drop panel here
+              </div>
+            </Show>
           </div>
         </section>
       </div>
@@ -3322,8 +3375,8 @@ function App() {
         aria-orientation="horizontal"
         aria-label="Resize bottom dock"
         aria-valuemin={150}
-        aria-valuemax={420}
-        aria-valuenow={layout().bottomHeight}
+        aria-valuemax={getMaximumBottomHeight()}
+        aria-valuenow={getDisplayedBottomHeight()}
         tabIndex={0}
         onPointerDown={(event) => startResize("bottom", event)}
         onKeyDown={(event) => handleSplitterKeyDown("bottom", event)}
@@ -3778,8 +3831,8 @@ function App() {
           aria-orientation="horizontal"
           aria-label="Resize Console panel"
           aria-valuemin={56}
-          aria-valuemax={getMaximumConsoleHeight(layout().bottomHeight)}
-          aria-valuenow={layout().consoleHeight}
+          aria-valuemax={getMaximumConsoleHeight(getDisplayedBottomHeight())}
+          aria-valuenow={getDisplayedConsoleHeight()}
           tabIndex={0}
           onPointerDown={(event) => startResize("console", event)}
           onKeyDown={(event) => handleSplitterKeyDown("console", event)}

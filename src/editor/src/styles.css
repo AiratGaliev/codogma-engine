@@ -125,7 +125,7 @@ textarea::placeholder {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 95px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
+  grid-template-rows: 95px minmax(var(--center-min-height, 220px), 1fr) 4px var(--bottom-panel) 30px;
   background: var(--surface-workspace);
   overflow: hidden;
 }
@@ -494,6 +494,7 @@ textarea::placeholder {
 
 .side-dock-tab {
   display: inline-flex;
+  cursor: grab;
   min-width: 0;
   min-height: 28px;
   flex: 1 0 auto;
@@ -505,6 +506,23 @@ textarea::placeholder {
   color: var(--text-secondary);
   font-size: 10px;
   white-space: nowrap;
+}
+
+.side-dock-tab:active {
+  cursor: grabbing;
+}
+
+.side-dock-empty-drop-hint {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-control);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  pointer-events: none;
 }
 
 .side-dock-tab:hover {
@@ -1974,7 +1992,7 @@ textarea::placeholder {
 
 @media (max-width: 1360px) {
   .workbench {
-    grid-template-rows: 88px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
+    grid-template-rows: 88px minmax(var(--center-min-height, 220px), 1fr) 4px var(--bottom-panel) 30px;
   }
 
   .app-header {
@@ -2000,7 +2018,7 @@ textarea::placeholder {
 
 @media (max-width: 920px) {
   .workbench {
-    grid-template-rows: 88px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
+    grid-template-rows: 88px minmax(var(--center-min-height, 220px), 1fr) 4px var(--bottom-panel) 30px;
     --left-panel: 194px;
     --right-panel: 250px;
     --console-height: 60px;
@@ -2025,7 +2043,7 @@ textarea::placeholder {
 
 @media (max-width: 780px) {
   .workbench {
-    grid-template-rows: 88px minmax(260px, 1fr) 4px var(--bottom-panel) 30px;
+    grid-template-rows: 88px minmax(var(--center-min-height, 260px), 1fr) 4px var(--bottom-panel) 30px;
     --console-height: 56px;
   }
 

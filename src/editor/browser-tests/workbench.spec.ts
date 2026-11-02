@@ -22,6 +22,29 @@ async function dragDockTabWithPointer(page: Page, source: Locator, target: Locat
   await page.mouse.up();
 }
 
+async function dragDockTabToEmptyZone(page: Page, source: Locator, targetZone: Locator) {
+  const sourceBounds = await source.boundingBox();
+  if (!sourceBounds) throw new Error("Source dock tab geometry is unavailable.");
+  const sourcePoint = {
+    x: sourceBounds.x + sourceBounds.width / 2,
+    y: sourceBounds.y + sourceBounds.height / 2,
+  };
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 10, sourcePoint.y, { steps: 2 });
+  await expect(targetZone).toBeVisible();
+
+  const targetBounds = await targetZone.boundingBox();
+  if (!targetBounds) throw new Error("Empty dock target geometry is unavailable.");
+  await page.mouse.move(
+    targetBounds.x + targetBounds.width / 2,
+    targetBounds.y + targetBounds.height / 2,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+}
+
 async function saveSceneWithShortcut(page: Page) {
   const responsePromise = page.waitForResponse((response) => {
     if (response.url() !== "http://127.0.0.1:5173/editor/api" || response.request().method() !== "POST") return false;
@@ -808,25 +831,39 @@ test("responsive Bottom Dock sizing follows its splitter and constrains the deta
   await page.evaluate(() => {
     const key = "codogma.editor.layout";
     const current = JSON.parse(localStorage.getItem(key) ?? "{}");
-    localStorage.setItem(key, JSON.stringify({ ...current, consoleHeight: 56 }));
+    localStorage.setItem(key, JSON.stringify({ ...current, consoleHeight: 125 }));
   });
   await page.reload({ waitUntil: "domcontentloaded" });
 
   const consoleSplitter = page.getByTestId("splitter-console");
   const consolePanel = page.getByTestId("console-panel");
   await expect(consoleSplitter).toHaveAttribute("aria-valuemax", "61");
-  await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "56");
-  await expect(consolePanel).toHaveJSProperty("offsetHeight", 56);
+  await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "61");
+  await expect(consolePanel).toHaveJSProperty("offsetHeight", 61);
   await consoleSplitter.focus();
   await page.keyboard.press("End");
   await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "61");
   await expect(consolePanel).toHaveJSProperty("offsetHeight", 61);
 
-  const persisted = await page.evaluate(() =>
+  let persisted = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
   );
   expect(persisted.bottomHeight).toBe(150);
-  expect(persisted.consoleHeight).toBe(61);
+  expect(persisted.consoleHeight).toBe(125);
+
+  await bottomSplitter.focus();
+  await page.keyboard.press("End");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "420");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 420);
+  await expect(consoleSplitter).toHaveAttribute("aria-valuemax", "180");
+  await expect(consoleSplitter).toHaveAttribute("aria-valuenow", "125");
+  await expect(consolePanel).toHaveJSProperty("offsetHeight", 125);
+
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.bottomHeight).toBe(420);
+  expect(persisted.consoleHeight).toBe(125);
 });
 
 test("side dock tabs support pointer docking and reordering into Bottom", async ({ page }) => {
@@ -930,4 +967,111 @@ test("constrained side docks fit the 781–920px viewport without losing wide pr
   await expect(inspector).toHaveJSProperty("offsetWidth", 420);
   await expect(leftSplitter).toHaveAttribute("aria-valuemax", "360");
   await expect(rightSplitter).toHaveAttribute("aria-valuemax", "420");
+});
+
+
+test("empty side dock zones remain valid pointer drop targets and restore tab focus", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+
+  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await page.locator(".inspector-panel .panel-header").dragTo(bottomTabs);
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+  await expect(page.getByTestId("dock-zone-left")).not.toBeVisible();
+  await expect(page.getByTestId("dock-zone-right")).not.toBeVisible();
+
+  await dragDockTabToEmptyZone(
+    page,
+    bottomTabs.getByRole("tab", { name: "Hierarchy" }),
+    page.getByTestId("dock-zone-left"),
+  );
+
+  const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
+  const hierarchyTab = leftTabs.getByRole("tab", { name: "Hierarchy" });
+  await expect(hierarchyTab).toBeVisible();
+  await expect(hierarchyTab).toBeFocused();
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+
+  await dragDockTabToEmptyZone(
+    page,
+    bottomTabs.getByRole("tab", { name: "Inspector" }),
+    page.getByTestId("dock-zone-right"),
+  );
+
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  const inspectorTab = rightTabs.getByRole("tab", { name: "Inspector" });
+  await expect(inspectorTab).toBeVisible();
+  await expect(inspectorTab).toBeFocused();
+  await expect(page.getByTestId("inspector-panel")).toBeVisible();
+
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.hierarchyZone).toBe("left");
+  expect(persisted.inspectorZone).toBe("right");
+});
+
+
+test("Bottom Dock preserves its preferred height when the browser viewport becomes shorter", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 600 });
+  await page.goto("/");
+
+  const bottomDock = page.getByTestId("bottom-dock");
+  const bottomSplitter = page.getByTestId("splitter-bottom");
+  const workbench = page.getByTestId("workbench");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuemax", "251");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "251");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 251);
+
+  const persistedAtShortHeight = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persistedAtShortHeight.bottomHeight).toBe(286);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(bottomSplitter).toHaveAttribute("aria-valuemax", "420");
+  await expect(bottomSplitter).toHaveAttribute("aria-valuenow", "286");
+  await expect(bottomDock).toHaveJSProperty("offsetHeight", 286);
+  await expect(workbench.getByTestId("hierarchy-panel")).toBeVisible();
+});
+
+
+test("intermediate desktop widths progressively constrain side docks without clipping the Scene", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    const key = "codogma.editor.layout";
+    const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+    localStorage.setItem(key, JSON.stringify({
+      ...current,
+      leftWidth: 360,
+      rightWidth: 420,
+    }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const workspaceRow = page.locator(".workspace-row");
+  const leftSplitter = page.getByTestId("splitter-hierarchy");
+  const rightSplitter = page.getByTestId("splitter-inspector");
+  const hierarchy = page.getByTestId("hierarchy-panel");
+  const inspector = page.getByTestId("inspector-panel");
+
+  await expect(leftSplitter).toHaveAttribute("aria-valuemax", "265");
+  await expect(leftSplitter).toHaveAttribute("aria-valuenow", "265");
+  await expect(rightSplitter).toHaveAttribute("aria-valuemax", "322");
+  await expect(rightSplitter).toHaveAttribute("aria-valuenow", "322");
+  await expect(hierarchy).toHaveJSProperty("offsetWidth", 265);
+  await expect(inspector).toHaveJSProperty("offsetWidth", 322);
+
+  const centerTrackWidth = await workspaceRow.evaluate((element) => {
+    const tracks = getComputedStyle(element).gridTemplateColumns.split(" ");
+    return Number.parseFloat(tracks[2] ?? "0");
+  });
+  expect(centerTrackWidth).toBeGreaterThanOrEqual(320);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(hierarchy).toHaveJSProperty("offsetWidth", 360);
+  await expect(inspector).toHaveJSProperty("offsetWidth", 420);
 });

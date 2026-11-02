@@ -341,7 +341,7 @@ test("adapts untouched Console defaults and keeps customized heights", () => {
   assert.equal(customized.consoleHeight, 125);
 });
 
-test("limits the detached Console to the space available inside Bottom Dock", () => {
+test("preserves the preferred Console height while clamping only its visible height", () => {
   assert.equal(getMaximumConsoleHeight(150), 61);
   assert.equal(getMaximumConsoleHeight(200), 111);
   assert.equal(getMaximumConsoleHeight(286), 180);
@@ -356,7 +356,19 @@ test("limits the detached Console to the space available inside Bottom Dock", ()
   });
 
   assert.equal(impossibleWideLayout.bottomHeight, 150);
-  assert.equal(impossibleWideLayout.consoleHeight, 61);
+  assert.equal(impossibleWideLayout.consoleHeight, 180);
+  assert.equal(getMaximumConsoleHeight(impossibleWideLayout.bottomHeight), 61);
+
+  const serialized = restoreWorkspaceLayoutContent(
+    serializeWorkspaceLayout(impossibleWideLayout, false),
+    false,
+  );
+  assert.equal(serialized.consoleHeight, 180);
+  assert.equal(getMaximumConsoleHeight(serialized.bottomHeight), 61);
+
+  const expanded = { ...serialized, bottomHeight: 286 };
+  assert.equal(expanded.consoleHeight, 180);
+  assert.equal(getMaximumConsoleHeight(expanded.bottomHeight), 180);
 
   const dockedConsoleLayout = restoreWorkspaceLayout({
     ...createDefaultWorkspaceLayout(false),
