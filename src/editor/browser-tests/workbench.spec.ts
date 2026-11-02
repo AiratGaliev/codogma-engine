@@ -423,18 +423,19 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
 
   const circleThickness = page.getByLabel("Circle Thickness");
-  await circleThickness.scrollIntoViewIfNeeded();
   await circleThickness.fill("10");
 
   // The Inspector retains its scroll offset when the selected object changes.
   const bloomThreshold = page.getByLabel("Bloom Threshold");
-  await bloomThreshold.scrollIntoViewIfNeeded();
+  await bloomThreshold.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  await expect(bloomThreshold).toBeVisible();
   await bloomThreshold.fill("0.45");
   await bloomThreshold.press("Tab");
   await expect(bloomThreshold).toHaveValue("0.45");
 
   const bloomBlurQuality = page.getByLabel("Bloom Blur Quality");
-  await bloomBlurQuality.scrollIntoViewIfNeeded();
+  await bloomBlurQuality.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  await expect(bloomBlurQuality).toBeVisible();
   await bloomBlurQuality.fill("2");
   await bloomBlurQuality.press("Tab");
   await expect(page.getByLabel("Bloom Blur Quality")).toHaveValue("2");
