@@ -49,6 +49,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 | Spine authoring/preview | Legacy Spine serialization/MCP tool; no new Host UI or session routing | **Not migrated**; COD-90, COD-85, QA CODQA-20 + CODQA-8 |
 | Audio groups/Particle Preview | Existing runtime contracts; new Host UI absent | **Not migrated**; COD-61, QA CODQA-13 |
 | Preview/diagnostics | COD-80 Game View loads existing generated index.html in iframe; no complete Preview Host/live identity/common EditorLogger | **Partial/missing**; COD-30/31/32/47/58 |
+| Build Profiles / Build Settings | COD-35 defines reproducible Development/Release profiles and target/browser matrix; no dedicated profile authoring workflow is tracked for the new Host | **Not designed/implemented**; COD-95, depends on COD-34 feature selection and COD-35 build contracts; COD-16 tracks capability/evidence matrix |
 | MCP live bridge | HTTP registry + stdio package exist; current SSE bridge broadcasts to connected clients | **Blocked for new Host until session-aware routing**; COD-85, QA CODQA-8 |
 | Production route / Colibri | Server still defaults to legacy /editor/ during transition | **Not cut over**; COD-87 then COD-88 |
 
