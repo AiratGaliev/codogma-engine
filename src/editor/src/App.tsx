@@ -353,6 +353,7 @@ function App() {
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
   const [compactWorkbench, setCompactWorkbench] = createSignal(window.innerWidth <= 1360);
   const [narrowWorkbench, setNarrowWorkbench] = createSignal(window.innerWidth <= 780);
+  const [constrainedSidePanels, setConstrainedSidePanels] = createSignal(window.innerWidth <= 920);
   const [layout, setLayout] = createSignal<WorkspaceLayout>((() => {
     const compact = window.innerWidth <= 1360;
     try {
@@ -1433,6 +1434,19 @@ function App() {
     log("info", `Removed ${selected.name}`);
   }
 
+  function getMaximumSidePanelWidth(kind: "left" | "right"): number {
+    if (!constrainedSidePanels()) return kind === "left" ? 360 : 420;
+    return kind === "left" ? 194 : 250;
+  }
+
+  function getDisplayedSidePanelWidth(
+    kind: "left" | "right",
+    current: WorkspaceLayout = layout(),
+  ): number {
+    const requestedWidth = kind === "left" ? current.leftWidth : current.rightWidth;
+    return Math.min(requestedWidth, getMaximumSidePanelWidth(kind));
+  }
+
   function startResize(
     kind: "left" | "right" | "bottom" | "console",
     event: PointerEvent & { currentTarget: HTMLDivElement },
@@ -1445,9 +1459,9 @@ function App() {
       startY: event.clientY,
       initialValue:
         kind === "left"
-          ? current.leftWidth
+          ? getDisplayedSidePanelWidth("left", current)
           : kind === "right"
-            ? current.rightWidth
+            ? getDisplayedSidePanelWidth("right", current)
             : kind === "bottom"
               ? current.bottomHeight
               : current.consoleHeight,
@@ -1483,11 +1497,15 @@ function App() {
         kind === "right" ? 210 :
         kind === "bottom" ? 150 : 56;
       const maximum =
-        kind === "left" ? 360 :
-        kind === "right" ? 420 :
-        kind === "bottom" ? 420 :
-        getMaximumConsoleHeight(current.bottomHeight);
-      const value = current[keyName];
+        kind === "left" || kind === "right"
+          ? getMaximumSidePanelWidth(kind)
+          : kind === "bottom"
+            ? 420
+            : getMaximumConsoleHeight(current.bottomHeight);
+      const value =
+        kind === "left" || kind === "right"
+          ? getDisplayedSidePanelWidth(kind, current)
+          : current[keyName];
       const next = key === "Home"
         ? minimum
         : key === "End"
@@ -1510,12 +1528,12 @@ function App() {
     if (kind === "left") {
       setLayout((current) => ({
         ...current,
-        leftWidth: Math.min(360, Math.max(170, initialValue + event.clientX - startX)),
+        leftWidth: Math.min(getMaximumSidePanelWidth("left"), Math.max(170, initialValue + event.clientX - startX)),
       }));
     } else if (kind === "right") {
       setLayout((current) => ({
         ...current,
-        rightWidth: Math.min(420, Math.max(210, initialValue + startX - event.clientX)),
+        rightWidth: Math.min(getMaximumSidePanelWidth("right"), Math.max(210, initialValue + startX - event.clientX)),
       }));
     } else if (kind === "bottom") {
       setLayout((current) => {
@@ -2076,6 +2094,7 @@ function App() {
     const previousCompact = compactWorkbench();
     const nextCompact = window.innerWidth <= 1360;
     const previousNarrow = narrowWorkbench();
+    setConstrainedSidePanels(window.innerWidth <= 920);
     const nextNarrow = window.innerWidth <= 780;
 
     if (previousCompact !== nextCompact) {
@@ -2503,8 +2522,8 @@ function App() {
         "inspector-hidden": rightDockPanels().length === 0,
       }}
       style={{
-        "--left-panel": `${layout().leftWidth}px`,
-        "--right-panel": `${layout().rightWidth}px`,
+        "--left-panel": `${getDisplayedSidePanelWidth("left")}px`,
+        "--right-panel": `${getDisplayedSidePanelWidth("right")}px`,
         "--bottom-panel": `${layout().bottomHeight}px`,
         "--console-height": `${layout().consoleHeight}px`,
       }}
@@ -2865,8 +2884,8 @@ function App() {
             aria-orientation="vertical"
             aria-label="Resize left dock"
             aria-valuemin={170}
-            aria-valuemax={360}
-            aria-valuenow={layout().leftWidth}
+            aria-valuemax={getMaximumSidePanelWidth("left")}
+            aria-valuenow={getDisplayedSidePanelWidth("left")}
             tabIndex={0}
             onPointerDown={(event) => startResize("left", event)}
             onKeyDown={(event) => handleSplitterKeyDown("left", event)}
@@ -2973,8 +2992,8 @@ function App() {
             aria-orientation="vertical"
             aria-label="Resize right dock"
             aria-valuemin={210}
-            aria-valuemax={420}
-            aria-valuenow={layout().rightWidth}
+            aria-valuemax={getMaximumSidePanelWidth("right")}
+            aria-valuenow={getDisplayedSidePanelWidth("right")}
             tabIndex={0}
             onPointerDown={(event) => startResize("right", event)}
             onKeyDown={(event) => handleSplitterKeyDown("right", event)}

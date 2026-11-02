@@ -887,3 +887,40 @@ test("narrow viewport tab reordering preserves the permanent side dock zones", a
   expect(persisted.hierarchyZone).toBe("left");
   expect(persisted.inspectorZone).toBe("right");
 });
+
+
+test("constrained side docks fit the 781–920px viewport without losing wide preferences", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    const key = "codogma.editor.layout";
+    const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+    localStorage.setItem(key, JSON.stringify({
+      ...current,
+      leftWidth: 360,
+      rightWidth: 420,
+    }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  const workbench = page.getByTestId("workbench");
+  const hierarchy = page.getByTestId("hierarchy-panel");
+  const inspector = page.getByTestId("inspector-panel");
+  const leftSplitter = page.getByTestId("splitter-left");
+  const rightSplitter = page.getByTestId("splitter-right");
+
+  await expect(workbench).toHaveAttribute("data-layout", "compact");
+  await expect(hierarchy).toHaveJSProperty("offsetWidth", 194);
+  await expect(inspector).toHaveJSProperty("offsetWidth", 250);
+  await expect(leftSplitter).toHaveAttribute("aria-valuemax", "194");
+  await expect(leftSplitter).toHaveAttribute("aria-valuenow", "194");
+  await expect(rightSplitter).toHaveAttribute("aria-valuemax", "250");
+  await expect(rightSplitter).toHaveAttribute("aria-valuenow", "250");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(workbench).toHaveAttribute("data-layout", "wide");
+  await expect(hierarchy).toHaveJSProperty("offsetWidth", 360);
+  await expect(inspector).toHaveJSProperty("offsetWidth", 420);
+  await expect(leftSplitter).toHaveAttribute("aria-valuemax", "360");
+  await expect(rightSplitter).toHaveAttribute("aria-valuemax", "420");
+});
