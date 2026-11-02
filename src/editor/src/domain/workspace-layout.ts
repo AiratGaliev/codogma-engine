@@ -119,7 +119,7 @@ function getActiveSidePanel(
   return getVisibleSidePanels(layout, zone)[0] ?? null;
 }
 
-export /**
+/**
  * Максимальная высота отдельной Console с учётом места, необходимого Bottom Dock.
  * Резерв включает строку вкладок (28 px), содержимое панели (56 px),
  * splitter (4 px) и верхнюю границу dock-зоны (1 px).
@@ -129,7 +129,7 @@ export function getMaximumConsoleHeight(bottomHeight: number): number {
   return Math.max(56, Math.min(180, bottomHeight - 89));
 }
 
-function createDefaultWorkspaceLayout(
+export function createDefaultWorkspaceLayout(
   compact = false,
 ): WorkspaceLayout {
   return {
