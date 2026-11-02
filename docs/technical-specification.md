@@ -331,6 +331,23 @@ EVA.js следует изучать как архитектурный reference
 - UI input и gameplay input разделяются правилами routing/priority: взаимодействие с кнопкой/полем ввода не должно случайно запускать действие игрового персонажа под ним.
 - Тесты покрывают mouse, keyboard, touch, UI hit testing, смену вкладки, resize и преобразования координат; браузерные ограничения документируются вместо обещания одинакового поведения во всех окружениях.
 
+### 6.5.1. Input Actions model и Editor authoring
+
+Runtime Input API различает **физические device inputs** и **логические игровые actions**. Game code по возможности подписывается на стабильные action IDs/имена, а не на конкретные клавиши или пути устройств.
+
+- **Action Asset / Project Input Configuration** содержит versioned Action Maps, logical Actions и physical Bindings. Action Map группирует actions по context (например Gameplay или UI) и может включаться/отключаться как целое.
+- **Action** объявляет stable ID, имя, semantic type/value type (Button/Scalar/Vector2 — только при поддержке runtime), описание и применимую policy. Конкретная клавиша/устройство не является частью логической identity action.
+- **Binding** связывает action с физическим control path/device input. Один action может иметь несколько bindings; device groups/control schemes ограничивают набор доступных bindings только для действительно поддерживаемых устройств.
+- **2D composites** позволяют агрегировать directional bindings (например WASD/Arrow Keys) в Vector2 с отдельными positive/negative parts, детерминированным normalization и проверяемой конфликтной семантикой.
+- **Binding diagnostics** выявляют дубли, несовместимые типы, неизвестные/неподдерживаемые device paths, неверные composite parts и конфликты в одновременно активных maps. Overlap между взаимоисключающими contexts не должен считаться конфликтом без учёта activation policy.
+- **Runtime rebinding overrides** пользователя (например, переназначение Jump с Space на другую клавишу) хранятся отдельно от project defaults и tracked Action Asset. Reset возвращает project defaults, не меняя общий project configuration.
+- **Input Actions Editor** в SolidJS Host управляет Action Maps/Actions/Bindings, properties, validation/conflict diagnostics и test/listen mode. Это отдельный authoring workflow; Project Settings предоставляет ссылку/выбор project-wide asset, но не дублирует Action editor. Editor hotkeys принадлежат Editor Preferences, а не game input.
+- Начальный browser/2D scope — keyboard, mouse/pointer и touch. Gamepad или иные device types доступны только после capability-based adapter и проверенной acceptance. VR, sensor-specific и 3D input workflows не добавлять.
+- Test/listen mode — read-only диагностический поток action state; он не запускает gameplay, не создаёт второй input dispatcher и должен завершать listeners/captures при stop, закрытии окна, смене проекта и потере сессии.
+- Исполняемый runtime contract и lifecycle остаются в COD-29. Versioned schema/IDs/references/migrations — в COD-25. SolidJS authoring — COD-98/COD-99. Project Settings/Input entry point — COD-96/COD-97.
+
+**Задачи:** [COD-98 — Input Actions Editor UX/UI](https://linear.app/codogma-engine/issue/COD-98/sproektirovat-input-actions-editor-uxui-dlya-solidjs-host), [COD-99 — Input Actions authoring implementation](https://linear.app/codogma-engine/issue/COD-99/realizovat-input-actions-authoring-workflow-v-solidjs-host).
+
 ### 6.6. Scene management и жизненный цикл уровня
 
 - Runtime API должен поддерживать загрузку, активацию, деактивацию и выгрузку сцен с определённым порядком lifecycle callbacks; в целевом Core сцена строится из Project Model и реестра компонентов, а не требует отдельного генерируемого класса уровня.
