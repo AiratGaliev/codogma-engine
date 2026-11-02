@@ -46316,7 +46316,7 @@
           "y": 208,
           "width": 32,
           "height": 32,
-          "fill": "#34375E",
+          "fill": "$surface-selected",
           "cornerRadius": 6,
           "stroke": "$border-subtle",
           "strokeWidth": 1
@@ -50838,7 +50838,7 @@
           "y": 208,
           "width": 32,
           "height": 32,
-          "fill": "#34375E",
+          "fill": "$surface-selected",
           "cornerRadius": 6,
           "stroke": "$border-subtle",
           "strokeWidth": 1
