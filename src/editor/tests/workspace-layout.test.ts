@@ -26,6 +26,26 @@ test("creates the stable default three-zone workspace", () => {
   assert.equal(layout.bottomHeight, 286);
 });
 
+test("restores compact defaults after reopening a wide workspace and preserves custom sizing", () => {
+  const wideDefaults = createDefaultWorkspaceLayout(false);
+  const compactDefaults = restoreWorkspaceLayout(wideDefaults, true);
+
+  assert.equal(compactDefaults.leftWidth, 194);
+  assert.equal(compactDefaults.rightWidth, 250);
+  assert.equal(compactDefaults.bottomHeight, 207);
+
+  const customized = restoreWorkspaceLayout({
+    ...wideDefaults,
+    leftWidth: 260,
+    rightWidth: 320,
+    bottomHeight: 340,
+  }, true);
+
+  assert.equal(customized.leftWidth, 260);
+  assert.equal(customized.rightWidth, 320);
+  assert.equal(customized.bottomHeight, 340);
+});
+
 test("migrates the legacy COD-80 layout and preserves its user choices", () => {
   const layout = restoreWorkspaceLayout({
     leftWidth: 260,

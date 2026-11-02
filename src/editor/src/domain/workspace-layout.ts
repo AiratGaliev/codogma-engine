@@ -153,6 +153,7 @@ export function restoreWorkspaceLayout(
   forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   const defaults = createDefaultWorkspaceLayout(compact);
+  const wideDefaults = createDefaultWorkspaceLayout(false);
   if (!isRecord(value)) return defaults;
 
   const rawVersion = value.schemaVersion;
@@ -195,12 +196,27 @@ export function restoreWorkspaceLayout(
   ]);
 
   const consoleDocked = value.consoleDocked === true;
+  // Preserve COD-80 behavior when a workspace is reopened at a compact width:
+  // only untouched wide defaults adapt; explicit user sizing is kept.
+  const leftWidth =
+    compact && value.leftWidth === wideDefaults.leftWidth
+      ? defaults.leftWidth
+      : value.leftWidth;
+  const rightWidth =
+    compact && value.rightWidth === wideDefaults.rightWidth
+      ? defaults.rightWidth
+      : value.rightWidth;
+  const bottomHeight =
+    compact && value.bottomHeight === wideDefaults.bottomHeight
+      ? defaults.bottomHeight
+      : value.bottomHeight;
+
   const restored: WorkspaceLayout = {
     schemaVersion: WORKSPACE_LAYOUT_SCHEMA_VERSION,
-    leftWidth: clampNumber(value.leftWidth, defaults.leftWidth, 170, 360),
-    rightWidth: clampNumber(value.rightWidth, defaults.rightWidth, 210, 420),
+    leftWidth: clampNumber(leftWidth, defaults.leftWidth, 170, 360),
+    rightWidth: clampNumber(rightWidth, defaults.rightWidth, 210, 420),
     bottomHeight: clampNumber(
-      value.bottomHeight,
+      bottomHeight,
       defaults.bottomHeight,
       150,
       420,
