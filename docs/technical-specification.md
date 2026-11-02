@@ -465,6 +465,49 @@ Codogma предоставляет единый публичный Physics API �
 - Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
 - Cutover и rollback window выполняются в COD-87; Colibri removal — отдельная COD-88 после cutover, consumer audit, inventory sign-off и license review. Механический перенос source/editor → src/editor отменён (COD-22).
 
+### 9.0.1. Project Settings, Workspace Settings и Editor Preferences
+
+Настройки нового SolidJS Host должны иметь явного владельца данных и scope. Project Settings, локальное workspace state и Editor Preferences — разные категории persistence; одну настройку нельзя сохранять одновременно в нескольких местах без явно заданной precedence policy.
+
+**Scopes и владельцы:**
+
+- **Project Settings** — версия проектной конфигурации, общая для contributors и хранящаяся в Project Model/project configuration. Изменения проходят schema validation, migration и save/reopen round-trip. Такие настройки должны быть доступны в VCS вместе с проектом.
+- **Workspace Settings** — локальные настройки конкретного проекта на конкретной машине/рабочем месте. Они не коммитятся по умолчанию, не являются частью project model и не входят в release build. Это подходящее место для локального workspace choice, если он отличается от shared project intent; фактический docking/panel layout state остаётся у COD-83.
+- **Editor Preferences** — локальные настройки пользователя, применимые ко всем открываемым им проектам на данной машине: тема, UI scale/density, editor-wide confirmation behavior, keyboard preference и прочие user-scoped options. Они хранятся отдельно от project files и не влияют на game build/runtime.
+
+**Build Profiles и precedence:**
+
+- Build Profiles (COD-95) — project/target build configuration и могут задавать только явно объявленные profile overrides для build-relevant Project Settings. Они не являются User Preferences и не должны перезаписывать общую конфигурацию проекта при выборе профиля.
+- Приоритет конфигурации для build должен быть детерминированным и документированным: explicit CI/CLI overrides → выбранный Build Profile → Project Settings defaults. Workspace Settings и Editor Preferences не участвуют в разрешении игровых настроек при сборке.
+- Если значение имеет per-target override, Settings UI показывает его источник (project default/profile override/CLI override, если доступно) и не создаёт скрытую копию одного и того же поля.
+- Переключение профиля или пользовательской темы не должно менять общий project configuration и не должно оставлять скрытые dirty changes.
+
+**Settings Registry и страницы:**
+
+- Editor Host предоставляет typed Settings Registry/descriptor contract: stable setting/page ID, owning domain, scope, type/schema, default, validation, description/help, availability conditions, storage adapter и migration version. Не использовать свободные JSON paths или произвольные UI fields без владельца и schema.
+- Доменные подсистемы регистрируют свои страницы/sections и validators через публичный contract. Settings UI агрегирует descriptors и вызывает domain service; он не становится новым Project Model и не копирует бизнес-логику Input, Physics, Audio, Asset Import или Build.
+- Стороннее editor extension может добавить свою страницу только через явный, проверенный Extension API/lifecycle и после trust/activation policy. Одной декларативной metadata недостаточно для исполнения кода.
+- Страницы должны показывать только доступные и реализованные settings. Если target/capability не поддерживается, поле скрывается либо отображается как недоступное с причиной; нельзя показывать фиктивный control.
+- Project Settings/Preferences используют общую категорийную навигацию и поиск. При необходимости показываются dirty state, Apply/Revert, Reset to defaults, invalid/unsupported state и источник текущего значения. In-context controls могут ссылаться на то же setting descriptor, а не создавать независимые settings copies.
+- Package Manager (COD-92/94) и Build Profiles (COD-95) остаются самостоятельными workflow. Settings pages не дублируют их registry/dependency state, package install actions или build profile editor. Рабочая раскладка/docking остаётся у COD-83.
+
+**Начальные группы — только по готовности domain contracts:**
+
+- Project: General/project metadata; Input (COD-29); 2D Physics (COD-42); Audio (COD-61); Asset Import defaults (COD-86/COD-59); Localization при наличии поддерживаемых project-level policies; 2D rendering/quality settings при наличии typed contract.
+- User/Workspace: Appearance (theme/scale/density), keymap/shortcuts, scene viewport navigation preferences, restore last workspace, editor-wide confirmations. Не дублировать конкретные per-panel layout values, которые принадлежат COD-83.
+- Build: ссылочная интеграция с Build Profiles COD-95; никакого самостоятельного bundler configuration в Preferences.
+- Package ecosystem: переход к COD-92/94; scoped registries и dependencies не должны дублироваться в общем preferences store.
+
+**Изменения и recovery:**
+
+- Save project settings должен сохранять единый versioned configuration document через Project Model service; partial writes и конкурирующие изменения требуют optimistic version/revision check либо другого явного concurrency contract.
+- Invalid setting value не должна silently replace valid project config. Ошибки показываются по setting ID/category с причиной и safe action; reset должен менять только выбранное значение/категорию.
+- Unknown descriptor/page/schema version от extension даёт diagnostic и не приводит к выполнению произвольного кода.
+- Project switching очищает привязанные editor view models, отменяет или адресует незавершённые операции и загружает settings только для нового project context.
+- Defaults остаются deterministic при открытии старого проекта; schema migration должна быть проверяема и сохранять неизвестные данные, если это предписывает соответствующая migration policy.
+
+**Задачи:** [COD-96 — Project Settings / Editor Preferences design](https://linear.app/codogma-engine/issue/COD-96/sproektirovat-project-settings-i-editor-preferences-dlya-solidjs-host), [COD-97 — implementation](https://linear.app/codogma-engine/issue/COD-97/realizovat-project-settings-i-editor-preferences-v-solidjs-host), [COD-25 — Project Model](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema), [COD-83 — workspace layout](https://linear.app/codogma-engine/issue/COD-83/razvit-docking-i-workspace-layout-novogo-solidjs-editor-host).
+
 ### 9.1. Сцены, компоненты и Prefabs
 
 Целевой качественный уровень включает:
