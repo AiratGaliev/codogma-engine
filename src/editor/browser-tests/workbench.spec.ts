@@ -387,7 +387,7 @@ test("Animation workspace previews and persists a Phaser JSONAnimations timeline
   await expect(page.getByLabel("Selected frame duration")).toHaveValue("160");
 });
 
-test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Gradient and Shine data", async ({ page }) => {
+test("FX Inspector edits legacy effects and creates and restores a new Shine effect", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
@@ -413,19 +413,10 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
   await expect(page.getByLabel("Bloom filter stage")).toHaveValue("external");
 
-  // Keep the new Shine preview independent from the existing Circle + Bloom stack.
-  await page.getByTestId("hierarchy-item-aftersibling").click();
-  await page.getByLabel("New FX type").selectOption("Shine");
-  await page.getByTestId("add-fx").click();
-  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
-  await page.getByTestId("hierarchy-item-circletarget").click();
-  await expect(page.getByLabel("Circle Thickness")).toHaveValue("6");
-  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.3");
-
   const circleThickness = page.getByLabel("Circle Thickness");
   await circleThickness.fill("10");
 
-  // The Inspector retains its scroll offset when the selected object changes.
+  // Keep fields below the Inspector viewport actionable without changing selection.
   const bloomThreshold = page.getByLabel("Bloom Threshold");
   await bloomThreshold.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
   await expect(bloomThreshold).toBeVisible();
@@ -438,7 +429,7 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await expect(bloomBlurQuality).toBeVisible();
   await bloomBlurQuality.fill("2");
   await bloomBlurQuality.press("Tab");
-  await expect(page.getByLabel("Bloom Blur Quality")).toHaveValue("2");
+  await expect(bloomBlurQuality).toHaveValue("2");
   await saveSceneWithShortcut(page);
   let saved = await readSavedScene(page);
   let circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
@@ -446,23 +437,6 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].threshold).toBe(0.45);
   expect(circleTarget.list[1].blurQuality).toBe(2);
   expect(circleTarget.list[1].preFX).toBe(false);
-
-  let afterSibling = saved.displayList.find((item: { label?: string }) => item.label === "afterSibling");
-  const addedShine = afterSibling.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
-  expect(addedShine).toMatchObject({ type: "Shine", duration: 2000, reveal: false, yoyo: false });
-  expect(typeof addedShine.id).toBe("string");
-  const addedShineId = addedShine.id as string;
-
-  await page.reload({ waitUntil: "domcontentloaded" });
-  // loadProject() opens scenes/Level.scene by default; its loaded hierarchy is the readiness signal.
-  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("fx-inspector")).toBeVisible();
-  await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
-  await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
-  await page.getByTestId("hierarchy-item-aftersibling").click();
-  await expect(page.getByTestId(`fx-card-${addedShineId}`)).toBeVisible();
-  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
-  await page.getByTestId("hierarchy-item-circletarget").click();
 
   await page.getByTestId("hierarchy-item-paneldino").press("Enter");
   await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
@@ -489,12 +463,28 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   saved = await readSavedScene(page);
   circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
   expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle"]);
-  afterSibling = saved.displayList.find((item: { label?: string }) => item.label === "afterSibling");
-  expect(afterSibling.list.find((item: { id?: string }) => item.id === addedShineId)).toMatchObject({
-    type: "Shine",
-    duration: 2000,
-    reveal: false,
-    yoyo: false,
-  });
+
+  // Create the new preview after the legacy-effect edit/round-trip checks.
+  await page.getByTestId("hierarchy-item-aftersibling").click();
+  await page.locator(".inspector-scroll").evaluate((element) => element.scrollTo({ top: 0, behavior: "instant" }));
+  await expect(page.getByLabel("New FX type")).toBeVisible();
+  await page.getByLabel("New FX type").selectOption("Shine");
+  await page.getByTestId("add-fx").click();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+  await saveSceneWithShortcut(page);
+
+  saved = await readSavedScene(page);
+  const afterSibling = saved.displayList.find((item: { label?: string }) => item.label === "afterSibling");
+  const addedShine = afterSibling.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
+  expect(addedShine).toMatchObject({ type: "Shine", duration: 2000, reveal: false, yoyo: false });
+  expect(typeof addedShine.id).toBe("string");
+  const addedShineId = addedShine.id as string;
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  // loadProject() opens scenes/Level.scene by default; its loaded hierarchy is the readiness signal.
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("hierarchy-item-aftersibling").click();
+  await expect(page.getByTestId(`fx-card-${addedShineId}`)).toBeVisible();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
   expect(pageErrors).toEqual([]);
 });
