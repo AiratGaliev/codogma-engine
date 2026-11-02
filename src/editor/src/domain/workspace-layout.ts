@@ -290,13 +290,14 @@ export function restoreWorkspaceLayoutContent(
 
 export function serializeWorkspaceLayout(
   layout: WorkspaceLayout,
+  compact = false,
   forceSidePanelsToBottom = false,
 ): string {
-  // Console may be selected on compact screens without being persistently docked.
-  // Side-panel tabs may also be temporarily presented in Bottom on narrow screens.
+  // Use the current viewport mode during normalization. Compact-only Console
+  // and narrow Bottom tabs must not alter saved dimensions on a wide viewport.
   const normalized = restoreWorkspaceLayout(
     layout,
-    true,
+    compact,
     forceSidePanelsToBottom,
   );
   return JSON.stringify(normalized);
@@ -481,7 +482,10 @@ export function reorderDockTab(
   if (sourceIndex < 0 || targetIndex < 0) return layout;
 
   order.splice(sourceIndex, 1);
-  order.splice(targetIndex, 0, source);
+  const targetIndexAfterRemoval = order.indexOf(target);
+  if (targetIndexAfterRemoval < 0) return layout;
+  // Dropping on a tab consistently inserts the dragged tab immediately after it.
+  order.splice(targetIndexAfterRemoval + 1, 0, source);
 
   const next: WorkspaceLayout = { ...layout, bottomTabOrder: order };
   if (zone === "bottom") next.bottomTab = source;

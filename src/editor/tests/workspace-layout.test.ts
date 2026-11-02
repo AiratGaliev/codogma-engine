@@ -136,7 +136,7 @@ test("compact Console selection survives persistence and restores in compact mod
     bottomTab: "Console" as const,
   };
   const restored = restoreWorkspaceLayoutContent(
-    serializeWorkspaceLayout(layout),
+    serializeWorkspaceLayout(layout, true),
     true,
   );
 
@@ -148,7 +148,7 @@ test("narrow responsive presentation persists the selected side panel without ch
     ...createDefaultWorkspaceLayout(true),
     bottomTab: "Hierarchy" as const,
   };
-  const serialized = serializeWorkspaceLayout(layout, true);
+  const serialized = serializeWorkspaceLayout(layout, true, true);
   const restored = restoreWorkspaceLayoutContent(serialized, true, true);
 
   assert.equal(restored.bottomTab, "Hierarchy");
@@ -256,6 +256,12 @@ test("reorders tabs only within their current dock group", () => {
   );
   assert.equal(reordered.bottomTab, "Project");
 
+  const reverse = reorderDockTab(layout, "Animation", "Project", "bottom");
+  assert.ok(
+    reverse.bottomTabOrder.indexOf("Animation") >
+      reverse.bottomTabOrder.indexOf("Project"),
+  );
+
   const invalid = reorderDockTab(layout, "Hierarchy", "Inspector", "left");
   assert.equal(invalid, layout);
 });
@@ -272,6 +278,33 @@ test("closing a bottom side panel on wide viewport never selects hidden Console"
   const layout = moveDockablePanel(createDefaultWorkspaceLayout(false), "Hierarchy", "bottom");
   const closed = setSidePanelVisibility(layout, "Hierarchy", false, false);
   assert.equal(closed.bottomTab, "Project");
+});
+
+test("wide workspace serialization preserves wide defaults and user dimensions", () => {
+  const defaults = createDefaultWorkspaceLayout(false);
+  const restoredDefaults = restoreWorkspaceLayoutContent(
+    serializeWorkspaceLayout(defaults, false),
+    false,
+  );
+
+  assert.equal(restoredDefaults.leftWidth, 228);
+  assert.equal(restoredDefaults.rightWidth, 280);
+  assert.equal(restoredDefaults.bottomHeight, 286);
+
+  const custom = {
+    ...defaults,
+    leftWidth: 264,
+    rightWidth: 340,
+    bottomHeight: 360,
+  };
+  const restoredCustom = restoreWorkspaceLayoutContent(
+    serializeWorkspaceLayout(custom, false),
+    false,
+  );
+
+  assert.equal(restoredCustom.leftWidth, 264);
+  assert.equal(restoredCustom.rightWidth, 340);
+  assert.equal(restoredCustom.bottomHeight, 360);
 });
 
 test("serializes only the validated versioned workspace contract", () => {

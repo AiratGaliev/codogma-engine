@@ -649,7 +649,7 @@ function App() {
     try {
       window.localStorage.setItem(
         "codogma.editor.layout",
-        serializeWorkspaceLayout(current, narrowWorkbench()),
+        serializeWorkspaceLayout(current, compactWorkbench(), narrowWorkbench()),
       );
     } catch (error) {
       log(

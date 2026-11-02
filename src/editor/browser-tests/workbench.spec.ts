@@ -277,6 +277,13 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
   await expect(page.getByTestId("inspector-panel")).toBeVisible();
 
+  const initialLayout = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(initialLayout.leftWidth).toBe(228);
+  expect(initialLayout.rightWidth).toBe(280);
+  expect(initialLayout.bottomHeight).toBe(286);
+
   const canvas = page.getByTestId("scene-stage").locator("canvas");
   await expect(canvas).toBeVisible({ timeout: 20_000 });
   const canvasHandle = await canvas.elementHandle();
