@@ -428,15 +428,27 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   expect(circleTarget.list[1].blurQuality).toBe(2);
   expect(circleTarget.list[1].preFX).toBe(false);
 
+  // Exercise the Host authoring path, not only its domain helper.
+  await page.getByLabel("New FX type").selectOption("Shine");
+  await page.getByTestId("add-fx").click();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
+  await saveSceneWithShortcut(page);
+
+  saved = await readSavedScene(page);
+  circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  const addedShine = circleTarget.list.find((item: { type?: string; id?: string; duration?: number }) => item.type === "Shine");
+  expect(addedShine).toMatchObject({ type: "Shine", duration: 2000, reveal: false, yoyo: false });
+  expect(typeof addedShine.id).toBe("string");
+  const addedShineId = addedShine.id as string;
+
   await page.reload({ waitUntil: "domcontentloaded" });
-  // The Host restores the preferred scene asynchronously after loading project files.
-  // Wait for its hierarchy before interacting with the Project tree.
+  // loadProject() opens scenes/Level.scene by default; its loaded hierarchy is the readiness signal.
   await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("button", { name: "Level.scene SCENE", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Level.scene SCENE", exact: true }).click();
-  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByTestId("fx-inspector")).toBeVisible();
   await expect(page.getByLabel("Circle Thickness")).toHaveValue("10");
   await expect(page.getByLabel("Bloom Threshold")).toHaveValue("0.45");
+  await expect(page.getByTestId(`fx-card-${addedShineId}`)).toBeVisible();
+  await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
 
   await page.getByTestId("hierarchy-item-paneldino").press("Enter");
   await expect(page.getByTestId("fx-card-a464e782-c9d8-4b07-9456-b550f7383ed9")).toBeVisible();
@@ -462,6 +474,12 @@ test("FX Inspector edits, previews, saves and reopens legacy Circle, Bloom, Grad
   await saveSceneWithShortcut(page);
   saved = await readSavedScene(page);
   circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
-  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle"]);
+  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Circle", "Shine"]);
+  expect(circleTarget.list.find((item: { id?: string }) => item.id === addedShineId)).toMatchObject({
+    type: "Shine",
+    duration: 2000,
+    reveal: false,
+    yoyo: false,
+  });
   expect(pageErrors).toEqual([]);
 });
