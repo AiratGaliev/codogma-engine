@@ -74,7 +74,7 @@
 
 ### 3.3. o2: 2D authoring, prototypes и reflection-driven animation
 
-Источники: [repository](https://github.com/o2-engine/o2/tree/485bac1642b2bdeef1720c9b0fa2aa43f8176871), [Docs](https://github.com/o2-engine/o2/tree/485bac1642b2bdeef1720c9b0fa2aa43f8176871/Docs), [Editor](https://github.com/o2-engine/o2/tree/485bac1642b2bdeef1720c9bfa2aa43f8176871/Editor).
+Источники: [repository](https://github.com/o2-engine/o2/tree/485bac1642b2bdeef1720c9b0fa2aa43f8176871), [Docs](https://github.com/o2-engine/o2/tree/485bac1642b2bdeef1720c9b0fa2aa43f8176871/Docs), [Editor](https://github.com/o2-engine/o2/tree/485bac1642b2bdeef1720c9b0fa2aa43f8176871/Editor).
 
 README описывает all-in-one editor с dockable windows для scene, hierarchy, properties, assets, animation/state graph, Game View и memory analyzer; собственный UI framework используется в Editor и игре. Особенно интересны:
 
@@ -153,7 +153,7 @@ README описывает модульную модель, где большие
 | [Wicked Engine](https://github.com/turanszkij/WickedEngine) | MIT, открытый самостоятельный Editor и engine; полезен для scene tooling и runtime/debug workflows. | В README позиционируется как 3D engine; 2D path не является основной областью. |
 | [Feather Engine](https://github.com/feather-game-engine/feather) | Исследовательский C++ editor/runtime source; MIT. | Небольшой проект с давней активностью (последняя проверенная активность репозитория — декабрь 2023); только exploratory reference. |
 | [UPBGE](https://github.com/UPBGE/upbge) и [Armory3D](https://github.com/armory3d/armory) | Blender-integrated workflows, visual scripting, scene/asset authoring и extension concepts. | Blender является центральной authoring средой; это не самостоятельный Web-first 2D Workbench. В первую очередь 3D-проекты. |
-| [jMonkeyEngine SDK](https://github.com/jMonkeyEngine/jmonkeyengine) | Java code-first IDE/SDK и scene tooling вокруг NetBeans ecosystem. | Другой класс developer workflow: полезно для Java tooling, но не основной reference 2D scene editor. |
+| [jMonkeyEngine SDK](https://github.com/jMonkeyEngine/sdk) | Отдельный Java/NetBeans-based SDK repository; SceneExplorer и другие authoring tools вокруг jMonkeyEngine; BSD-3-Clause. | Community SDK и преимущественно 3D/code-first workflow; полезен как пример отдельной IDE/tooling distribution, но не основной reference 2D scene editor. |
 
 ## 6. Карта применения источников к задачам Codogma
 
