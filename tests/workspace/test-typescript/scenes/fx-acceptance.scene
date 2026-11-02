@@ -124,7 +124,8 @@
                     "toY": 1,
                     "size": 1
                 }
-            ]
+            ],
+            "alpha": 0.5
         }
     ],
     "plainObjects": [],

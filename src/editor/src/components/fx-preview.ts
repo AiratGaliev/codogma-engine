@@ -77,6 +77,7 @@ interface FxController {
   blendFilter?: FxFilterController;
   tween?: FxFilterController;
   dynamicTexture?: FxFilterController;
+  gradient?: FxDisplayObject;
 }
 
 export interface FxPhaserAdapter {
@@ -327,6 +328,7 @@ function createGradientPreview(
     gradient.setOrigin?.(number(parent.originX, 0.5), number(parent.originY, 0.5));
     gradient.setRotation?.(number(parent.rotation, 0));
     gradient.setScale?.(number(parent.scaleX, 1), number(parent.scaleY, 1));
+    gradient.setAlpha?.(number(parent.alpha, 1));
     gradient.setVisible?.(parent.active !== false && parent.visible !== false);
     gradient.setScrollFactor?.(number(parent.scrollFactorX, 1), number(parent.scrollFactorY, 1));
     gradient.setDepth?.(number(parent.depth, 0) + 0.001);
@@ -348,14 +350,7 @@ function createGradientPreview(
   }
 
   sync();
-  const alphaInheritanceDiagnostic =
-    "Gradient is rendered as a sibling Game Object and does not inherit the parent object's alpha in the Scene View or legacy generated output.";
-  return {
-    dispose,
-    get diagnostics(): string[] {
-      return number(parent.alpha, 1) < 1 ? [alphaInheritanceDiagnostic] : [];
-    },
-  };
+  return { dispose, diagnostics: [] };
 }
 
 function filterListFor(parent: FxDisplayObject, internal: boolean): FxFilterList {
@@ -454,6 +449,9 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
     try { directBlend?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
     try { createdEffect.tween?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
     try { createdEffect.dynamicTexture?.destroy(); } catch { /* Ignore partial Phaser setup. */ }
+    try {
+      createdEffect.gradient?.destroy?.();
+    } catch { /* Ignore partial Phaser setup. */ }
     throw error;
   }
 
@@ -478,6 +476,12 @@ function createShinePreview(phaser: FxPhaserAdapter, parent: FxDisplayObject, fx
       try { createdEffect.tween?.destroy(); } catch { /* Ignore an already stopped tween. */ }
       try { createdEffect.dynamicTexture?.destroy(); } catch { /* Ignore an already released texture. */ }
     }
+
+    // Phaser 4.2.1 AddEffectShine creates a detached Gradient as the tween target.
+    // Tween.destroy() does not destroy its target, so release the Gradient explicitly.
+    try {
+      createdEffect.gradient?.destroy?.();
+    } catch { /* Ignore a Gradient already released during scene shutdown. */ }
   }
 
   const parentDestroyed: DestroyListener = () => dispose(true);

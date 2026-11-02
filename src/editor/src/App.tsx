@@ -1741,6 +1741,9 @@ function App() {
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "s") {
       event.preventDefault();
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
       void saveActiveDocument();
       return;
     }

@@ -148,6 +148,7 @@ function previewEnvironment() {
   let shineBlend: FakeFilterController | undefined;
   let shineTween: FakeFilterController | undefined;
   let shineTexture: FakeFilterController | undefined;
+  let shineGradient: ReturnType<typeof displayObject> | undefined;
 
   const scene = {
     events: sceneEvents,
@@ -190,9 +191,15 @@ function previewEnvironment() {
         const filterList = filterLists[config.useExternal === true ? "external" : "internal"];
         shineTween = new FakeFilterController();
         shineTexture = new FakeFilterController();
+        shineGradient = displayObject();
         if (config.reveal === true) {
           shineBlend = filterList.add(new FakeFilterController());
-          return [{ blendFilter: shineBlend, tween: shineTween, dynamicTexture: shineTexture }];
+          return [{
+            blendFilter: shineBlend,
+            tween: shineTween,
+            dynamicTexture: shineTexture,
+            gradient: shineGradient,
+          }];
         }
         shineParallel = filterList.add(new FakeParallelFilters());
         shineBlend = shineParallel.top.add(new FakeFilterController());
@@ -201,6 +208,7 @@ function previewEnvironment() {
           blendFilter: shineBlend,
           tween: shineTween,
           dynamicTexture: shineTexture,
+          gradient: shineGradient,
         }];
       },
     },
@@ -219,6 +227,7 @@ function previewEnvironment() {
     get shineBlend() { return shineBlend; },
     get shineTween() { return shineTween; },
     get shineTexture() { return shineTexture; },
+    get shineGradient() { return shineGradient; },
   };
 }
 test("Scene View creates FX previews only for parent types it materializes as Phaser objects", () => {
@@ -337,13 +346,13 @@ test("Gradient converts numeric colors and tracks parent transforms, bounds and 
   expect(band?.colorStart).toEqual([1, 0, 0, 0.45]);
   expect(band?.colorEnd).toEqual([32 / 255, 32 / 255, 1, 0.45]);
   expect(band?.size).toBe(1);
-  expect(result.diagnostics[0]).toContain("does not inherit the parent object's alpha");
+  expect(result.diagnostics).toEqual([]);
 
   Object.assign(env.parent, {
     x: 220, y: 140, width: 80, height: 60,
     originX: 0.25, originY: 0.75,
     rotation: 0.3, scaleX: 1.5, scaleY: 0.5,
-    scrollFactorX: 0.4, scrollFactorY: 0.8,
+    scrollFactorX: 0.4, scrollFactorY: 0.8, alpha: 0.4,
     depth: 12, active: true, visible: true,
   });
   env.sceneEvents.emit("update");
@@ -361,13 +370,14 @@ test("Gradient converts numeric colors and tracks parent transforms, bounds and 
   expect(gradient?.scrollFactorX).toBe(0.4);
   expect(gradient?.scrollFactorY).toBe(0.8);
   expect(gradient?.depth).toBeCloseTo(12.001);
+  expect(gradient?.alpha).toBeCloseTo(0.4);
 
   result.dispose();
   expect(env.sceneEvents.count("update")).toBe(0);
   expect(gradient?.destroyCalls).toBe(1);
 });
 
-test("Gradient alpha limitation diagnostics follow the live parent alpha", () => {
+test("Gradient inherits live parent alpha without preview diagnostics", () => {
   const env = previewEnvironment();
   env.parent.alpha = 1;
   const result = createFxPreview(
@@ -376,17 +386,19 @@ test("Gradient alpha limitation diagnostics follow the live parent alpha", () =>
     env.parent as unknown as FxDisplayObject,
     createFxObject("Gradient", "gradient"),
   );
+  const gradient = env.created[0];
 
-  expect(result.diagnostics).toHaveLength(0);
+  expect(gradient?.alpha).toBe(1);
+  expect(result.diagnostics).toEqual([]);
 
   env.parent.alpha = 0.5;
   env.sceneEvents.emit("update");
-  expect(result.diagnostics).toHaveLength(1);
-  expect(result.diagnostics[0]).toContain("does not inherit the parent object's alpha");
+  expect(gradient?.alpha).toBe(0.5);
+  expect(result.diagnostics).toEqual([]);
 
-  env.parent.alpha = 1;
+  env.parent.alpha = 0.25;
   env.sceneEvents.emit("update");
-  expect(result.diagnostics).toHaveLength(0);
+  expect(gradient?.alpha).toBe(0.25);
 
   result.dispose();
 });
@@ -416,6 +428,7 @@ test("Shine removes ParallelFilters and nested Blend, action listeners, tween an
   expect(parallel?.destroyCalls).toBe(1);
   expect(env.shineTween?.destroyCalls).toBe(1);
   expect(env.shineTexture?.destroyCalls).toBe(1);
+  expect(env.shineGradient?.destroyCalls).toBe(1);
 });
 
 test("Shine reveal removes the direct Blend filter from the selected external FilterList", () => {
@@ -432,12 +445,14 @@ test("Shine reveal removes the direct Blend filter from the selected external Fi
   const blend = env.shineBlend;
 
   expect(env.filterLists.external.list).toEqual([blend]);
+  if (env.shineGradient) env.shineGradient.active = false;
   result.dispose();
 
   expect(env.filterLists.external.list).toHaveLength(0);
   expect(blend?.destroyCalls).toBe(1);
   expect(env.shineTween?.destroyCalls).toBe(1);
   expect(env.shineTexture?.destroyCalls).toBe(1);
+  expect(env.shineGradient?.destroyCalls).toBe(1);
 });
 
 test("Shine parent destruction keeps Phaser action cleanup single-shot and releases nested filters", () => {
@@ -459,6 +474,7 @@ test("Shine parent destruction keeps Phaser action cleanup single-shot and relea
   expect(parallel?.bottom.list).toHaveLength(0);
   expect(env.shineTween?.destroyCalls).toBe(1);
   expect(env.shineTexture?.destroyCalls).toBe(1);
+  expect(env.shineGradient?.destroyCalls).toBe(1);
 });
 
 test("Circle and Gradient helpers keep their order adjacent to a nested Container sibling", () => {

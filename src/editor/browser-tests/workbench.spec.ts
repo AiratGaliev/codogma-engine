@@ -445,10 +445,15 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
 
   const pageErrors: string[] = [];
   const unsupportedContainerInputWarnings: string[] = [];
+  const gradientAlphaWarnings: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "warning" && message.text().includes("Container.setInteractive")) {
+    if (message.type() !== "warning") return;
+    if (message.text().includes("Container.setInteractive")) {
       unsupportedContainerInputWarnings.push(message.text());
+    }
+    if (message.text().includes("Gradient is rendered as a sibling Game Object")) {
+      gradientAlphaWarnings.push(message.text());
     }
   });
 
@@ -517,7 +522,32 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
   const shine = panel.list.find((item: { id?: string }) => item.id === "0ecf0bc5-f543-4b6d-87ca-a53e5399321e").list[0];
   const gradientTarget = saved.displayList.find((item: { id?: string }) => item.id === "8f836a97-d201-49da-b69f-012575bf98f5");
   expect(shine.reveal).toBe(true);
+  expect(gradientTarget.alpha).toBe(0.5);
   expect(gradientTarget.list[0].alpha).toBe(0.6);
+  expect(gradientAlphaWarnings).toEqual([]);
+
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await page.getByRole("button", { name: "Remove Circle effect" }).click();
+  await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toHaveCount(0);
+  await page.getByLabel("New FX type").selectOption("Circle");
+  await page.getByTestId("add-fx").click();
+  await expect(page.getByLabel("Circle Ring Color")).toHaveValue("#ff33b2");
+  await page.getByLabel("Circle Ring Color").fill("0xA1B2C3");
+  await page.getByLabel("Circle Thickness").fill("8");
+  await saveSceneWithShortcut(page);
+  saved = await readSavedScene(page);
+  circleTarget = saved.displayList.find((item: { id?: string }) => item.id === "54a69896-9542-4238-8dfe-943635a5df30");
+  expect(circleTarget.list.map((item: { type: string }) => item.type)).toEqual(["Bloom", "Circle"]);
+  expect(circleTarget.list[1]).toMatchObject({ type: "Circle", color: "0xA1B2C3", thickness: 8 });
+  expect(saved.displayList.find((item: { id?: string }) => item.id === "8f836a97-d201-49da-b69f-012575bf98f5").alpha).toBe(0.5);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("hierarchy-item-circletarget")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("hierarchy-item-circletarget").click();
+  await expect(page.getByLabel("Circle Ring Color")).toHaveValue("0xA1B2C3");
+  await expect(page.getByLabel("Circle Thickness")).toHaveValue("8");
+  await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toHaveCount(0);
+  expect(gradientAlphaWarnings).toEqual([]);
 
   await page.getByTestId("hierarchy-item-circletarget").click();
   await page.getByRole("button", { name: "Remove Bloom effect" }).click();
@@ -550,4 +580,5 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
   expect(pageErrors).toEqual([]);
   expect(unsupportedContainerInputWarnings).toEqual([]);
+  expect(gradientAlphaWarnings).toEqual([]);
 });
