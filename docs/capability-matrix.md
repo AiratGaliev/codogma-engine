@@ -2,7 +2,7 @@
 
 **Baseline:** legacy implementation baseline — `dev` commit `8cd494e0634d4b679fab62ca8379c39487395dd9` (30.10.2026). Новый Host evidence — `feat/cod-80-solidjs-editor-host-20261101`, PR #30 (открыт, не смержен), CI Fast #453; проверенный HEAD `6abf5cf272d7fb29648bbbe4732a7e3bc309a180`.  
 **Метод:** статический аудит структуры/исходников и сопоставление с README, ТЗ, roadmap, CI и описанием PR #30. Это не построчная проверка всех legacy-файлов и не runtime/browser acceptance.  
-**Product/UX baseline:** все новые Editor UI/authoring workflows сопоставляются с Unity 6.6 (основной UX-reference; 6000.6 Beta) и Cocos Creator 4.0 LTS (дополнительный 2D workflow reference) по [стандарту reference для 2D Editor Host](editor-reference-standard.md). Матрица описывает строго 2D scope. Colibri — только legacy workflow/data/runtime evidence, не UX/architecture blueprint.
+**Product/UX + implementation-reference baseline:** новые Editor UI/authoring workflows сверяются с Unity 6.6 (основной UX-reference; 6000.6 Beta) и Cocos Creator 4.0 LTS (дополнительный 2D workflow reference); Godot Editor source используется отдельно как implementation reference по релевантным открытым подсистемам, не как UX benchmark и не как критерий feature parity. См. [стандарт reference для 2D Editor Host](editor-reference-standard.md). Матрица описывает строго 2D scope. Colibri — только legacy workflow/data/runtime evidence, не UX/architecture blueprint.
 
 ## Как читать статус
 
