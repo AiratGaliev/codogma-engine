@@ -88,8 +88,9 @@ test("restores a versioned layout and clamps invalid dimensions", () => {
   assert.equal(layout.bottomHeight, 286);
   assert.equal(layout.consoleHeight, 72);
   assert.deepEqual(getVisibleSidePanels(layout, "right"), [
-    "Project" as never,
-  ].filter((value) => value === "Project"));
+    "Inspector",
+    "Hierarchy",
+  ]);
   assert.equal(layout.leftActivePanel, null);
   assert.equal(layout.rightActivePanel, "Hierarchy");
   assert.equal(layout.bottomTab, "Project");
@@ -97,6 +98,29 @@ test("restores a versioned layout and clamps invalid dimensions", () => {
     layout.bottomTabOrder.filter((tab) => tab === "Inspector").length,
     1,
   );
+});
+
+test("compact viewport exposes side panels in Bottom without mutating their saved zones", () => {
+  const layout = createDefaultWorkspaceLayout(true);
+  const tabs = getVisibleBottomTabs(layout, true, true);
+
+  assert.ok(tabs.includes("Hierarchy"));
+  assert.ok(tabs.includes("Inspector"));
+  assert.equal(layout.hierarchyZone, "left");
+  assert.equal(layout.inspectorZone, "right");
+});
+
+test("compact Console selection survives persistence and restores in compact mode", () => {
+  const layout = {
+    ...createDefaultWorkspaceLayout(true),
+    bottomTab: "Console" as const,
+  };
+  const restored = restoreWorkspaceLayoutContent(
+    serializeWorkspaceLayout(layout),
+    true,
+  );
+
+  assert.equal(restored.bottomTab, "Console");
 });
 
 test("ignores unknown and duplicate panel ids and restores missing panels", () => {

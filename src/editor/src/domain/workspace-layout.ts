@@ -267,9 +267,9 @@ export function restoreWorkspaceLayoutContent(
 }
 
 export function serializeWorkspaceLayout(layout: WorkspaceLayout): string {
-  // Persist a fresh normalized object so callers cannot accidentally store
-  // reactive proxies or transient DOM state with the workspace layout.
-  const normalized = restoreWorkspaceLayout(layout);
+  // Compact mode may legitimately keep Console selected without setting
+  // consoleDocked, so allow that tab while normalizing the persisted contract.
+  const normalized = restoreWorkspaceLayout(layout, true);
   return JSON.stringify(normalized);
 }
 
@@ -286,6 +286,7 @@ export function getVisibleSidePanels(
 export function getVisibleBottomTabs(
   layout: WorkspaceLayout,
   compact: boolean,
+  forceSidePanelsToBottom = false,
 ): BottomTab[] {
   return layout.bottomTabOrder.filter((panel) => {
     if (
@@ -298,7 +299,8 @@ export function getVisibleBottomTabs(
     if (panel === "Console") return compact || layout.consoleDocked;
 
     return (
-      getPanelZone(layout, panel) === "bottom" && isVisible(layout, panel)
+      (forceSidePanelsToBottom || getPanelZone(layout, panel) === "bottom") &&
+      isVisible(layout, panel)
     );
   });
 }
