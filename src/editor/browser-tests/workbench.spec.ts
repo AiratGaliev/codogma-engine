@@ -1310,20 +1310,21 @@ test("pointercancel clears the drag target and does not swallow a following tab 
   await page.goto("/");
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
-  const source = bottomTabs.getByRole("tab", { name: "Animation" });
+  const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
+  const source = leftTabs.getByRole("tab", { name: "Hierarchy" });
   const pointerIdPromise = source.evaluate((element) => new Promise<number>((resolve) => {
     element.addEventListener("pointerdown", (event) => resolve(event.pointerId), { once: true });
   }));
 
   const bounds = await source.boundingBox();
-  if (!bounds) throw new Error("Animation tab geometry is unavailable.");
+  if (!bounds) throw new Error("Hierarchy tab geometry is unavailable.");
   const x = bounds.x + bounds.width / 2;
   const y = bounds.y + bounds.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
   const pointerId = await pointerIdPromise;
   await page.mouse.move(x + 12, y, { steps: 3 });
-  await expect(page.getByTestId("dock-zone-left")).toBeVisible();
+  await expect(page.getByTestId("dock-zone-right")).toBeVisible();
 
   await source.evaluate((element, id) => {
     element.dispatchEvent(new PointerEvent("pointercancel", {
@@ -1335,7 +1336,7 @@ test("pointercancel clears the drag target and does not swallow a following tab 
       clientY: 0,
     }));
   }, pointerId);
-  await expect(page.getByTestId("dock-zone-left")).not.toBeVisible();
+  await expect(page.getByTestId("dock-zone-right")).not.toBeVisible();
   await expect(page.locator(".dock-drop-target")).toHaveCount(0);
   await page.mouse.up();
 
