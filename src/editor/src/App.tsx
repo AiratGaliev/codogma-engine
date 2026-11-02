@@ -1799,11 +1799,14 @@ function App() {
       const targetZone = targetZoneElement?.dataset.dockZone as DockZone | undefined;
       if (targetZone && isDockTargetAllowed(drag.panel, targetZone)) {
         if (drag.panel === "Hierarchy" || drag.panel === "Inspector") {
-          if (targetZone !== getStoredPanelZone(drag.panel)) {
+          const transientNarrowBottom = narrowWorkbench() && targetZone === "bottom";
+          if (!transientNarrowBottom && targetZone !== getStoredPanelZone(drag.panel)) {
             dockSidePanel(drag.panel, targetZone);
           }
           if (targetTab) {
             reorderDockPanelTab(drag.panel, targetTab, targetZone);
+          } else if (transientNarrowBottom) {
+            activateBottomTab(drag.panel);
           } else if (targetZone === getStoredPanelZone(drag.panel)) {
             activateSidePanel(drag.panel);
           }
@@ -1900,7 +1903,11 @@ function App() {
     setDraggedDockPanel(null);
 
     if (panel === "Hierarchy" || panel === "Inspector") {
-      if (!targetTab) {
+      const transientNarrowBottom = narrowWorkbench() && targetZone === "bottom";
+      if (transientNarrowBottom) {
+        if (targetTab) reorderDockPanelTab(panel, targetTab, targetZone);
+        else activateBottomTab(panel);
+      } else if (!targetTab) {
         dockSidePanel(panel, targetZone);
       } else if (targetZone === getStoredPanelZone(panel)) {
         reorderDockPanelTab(panel, targetTab, targetZone);

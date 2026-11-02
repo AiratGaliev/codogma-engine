@@ -851,3 +851,39 @@ test("side dock tabs support pointer docking and reordering into Bottom", async 
   );
   expect(order.indexOf("Hierarchy")).toBeGreaterThan(order.indexOf("Project"));
 });
+
+
+test("narrow viewport tab reordering preserves the permanent side dock zones", async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 900 });
+  await page.goto("/");
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+
+  await dragDockTabWithPointer(
+    page,
+    bottomTabs.getByRole("tab", { name: "Hierarchy" }),
+    bottomTabs.getByRole("tab", { name: "Project" }),
+  );
+
+  let persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.hierarchyZone).toBe("left");
+  expect(persisted.inspectorZone).toBe("right");
+  expect(persisted.bottomTab).toBe("Hierarchy");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
+  const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
+  await expect(leftTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+  await expect(rightTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.hierarchyZone).toBe("left");
+  expect(persisted.inspectorZone).toBe("right");
+});
