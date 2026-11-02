@@ -1496,7 +1496,10 @@ function App() {
     kind: "left" | "right" | "bottom" | "console",
     event: PointerEvent & { currentTarget: HTMLDivElement },
   ) {
-    if (resizeState) return;
+    if (resizeState) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const current = layout();
     resizeState = {
@@ -1850,6 +1853,10 @@ function App() {
 
   function startBottomTabPointerDrag(event: PointerEvent & { currentTarget: HTMLButtonElement }, tab: BottomTab) {
     if (event.button !== 0) return;
+    if (bottomTabPointerDrag) {
+      event.preventDefault();
+      return;
+    }
     suppressDockTabClick = false;
     bottomTabPointerDrag = { panel: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
     setDockTargetZone(null);
