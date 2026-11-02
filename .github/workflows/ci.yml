@@ -341,23 +341,3 @@ jobs:
         run: npm test
         working-directory: src/editor
 
-      - name: Install Chromium for browser acceptance
-        if: steps.scope.outputs.run == 'true'
-        run: npx playwright install --with-deps chromium
-        working-directory: src/editor
-
-      - name: Run browser acceptance against an isolated project copy
-        if: steps.scope.outputs.run == 'true'
-        run: npm run test:browser
-        working-directory: src/editor
-
-      - name: Upload browser evidence on failure
-        if: failure() && steps.scope.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: editor-host-browser-failure
-          path: |
-            src/editor/test-results/
-            src/editor/playwright-report/
-          if-no-files-found: ignore
-          retention-days: 7

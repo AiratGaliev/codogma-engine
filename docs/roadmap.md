@@ -497,7 +497,7 @@ Legacy Colibri используется как источник требован
 - [ ] Добавить memory/CPU measurements только там, где платформа даёт корректную метрику; не подменять измерение оценкой без маркировки.
 - [ ] Ввести воспроизводимые performance fixtures и regression baselines.
 - [ ] Добавить unit/integration tests для Core, schema, serialization, runtime adapters и project validation.
-- [ ] Добавлять browser E2E для ключевых workflows редактора и production build без запуска полного тяжелого UI E2E на каждый рутинный PR, если это не нужно текущему слою.
+- [ ] Добавлять browser E2E для ключевых workflows редактора и production build. Все E2E suites выполняются только на promotion PR `dev → test` и последующих release promotions; на обычных topic PR в `dev` E2E не запускается ни по одному исключению.
 - [ ] Для release candidate обязать соответствующие integration/build checks и browser/manual acceptance для затронутых UI/runtime сценариев.
 - [ ] Сделать отчет о целевом браузере/платформе, результатах проверок и известных ограничениях частью release checklist.
 
@@ -585,7 +585,7 @@ Legacy Colibri используется как источник требован
 - [ ] Привязывать screenshots, video/trace, console/network/runtime logs и event snapshots к конкретному run/step.
 - [ ] Разделять PASS, FAIL, SKIP и UNVERIFIED; отсутствие диагностики или потеря событий не означает PASS.
 - [ ] Обеспечить retention/cleanup, size limits, secret redaction и повторное получение артефактов по ID.
-- [ ] Встроить быстрые contract/unit/security checks в обычный CI; адресные browser smoke запускать по затронутому слою, полный gameplay/cross-browser acceptance — on-demand или на release/test promotion. Не добавлять тяжёлую браузерную матрицу в каждый обычный dev/pre-PR прогон.
+- [ ] Встроить быстрые build/typecheck, contract/unit/security checks в обычный CI. Все E2E suites без исключений — Playwright/browser, MCP integration и будущие gameplay/cross-browser — запускать только начиная с PR `dev → test`, затем на последующих release-promotion PR. Запрещено запускать E2E на feature/fix PR в `dev`, в том числе адресные browser smoke по path-based условиям.
 - [ ] Зафиксировать реальные browser/device/host evidence; headless SwiftShader не считать доказательством GPU/performance на физическом устройстве.
 
 ### Сквозной acceptance fixture

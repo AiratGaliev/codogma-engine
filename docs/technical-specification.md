@@ -61,7 +61,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
 | Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
 | AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует исходные tool schemas/calls без второго реестра. Отдельно остаётся legacy WebSocket bridge для старых editor-side workflows; AI Chat service необязателен |
-| CI | `fast-checks` проверяет маршрутизацию PR, сборку редактора и server smoke test; `mcp-integration` выполняет MCP E2E при продвижении в `test` и `main` |
+| CI | `fast-checks` выполняет быстрые build/typecheck, unit/contract/security и server-smoke проверки для обычных PR; все E2E suites (MCP, Playwright/browser и последующие gameplay E2E) запускаются только в promotion workflow начиная с PR `dev → test`, затем на последующих release-promotion PR |
 | TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
@@ -821,7 +821,7 @@ codogma-engine/
 - **Knip** — анализ неиспользуемых файлов, exports/types, dependencies/devDependencies, binaries и scripts. Настроить корректные entry points для существующего plugin registry, dynamic imports, generated code, command-line tools, test fixtures и editor plugins: динамически загружаемый плагин нельзя удалять только потому, что его import не виден статически. Первый отчёт служит baseline; после исправления конфигурации ошибки вводятся как гейт по новым/изменяемым областям, затем расширяются на репозиторий.
 - **dependency-cruiser** — кандидат для контроля архитектурных границ, циклических импортов и запрещённых зависимостей. Требуемые правила: Core не импортирует editor/desktop UI; runtime game build не импортирует editor/MCP/server/test modules; editor/build-only dependencies не попадают в game runtime; новые запрещённые циклы не появляются. Конкретные правила задаются после фиксации реальной структуры репозитория.
 - **TypeScript compiler / project references** — сохранить tsc -b для существующей сборки там, где это нужно, плюс явная typecheck-команда для нового Core/API. Build success и typecheck должны возвращать ненулевой exit code при ошибке.
-- **Vitest** — кандидат для быстрых unit/integration тестов Core, schemas, serializers, services и adapters. Browser/UI acceptance сохраняет Playwright или подходящий существующий runner; MCP E2E не заменяет unit/typecheck/lint и не запускается как обязательный медленный гейт на каждый обычный PR в dev.
+- **Vitest** — кандидат для быстрых unit/integration тестов Core, schemas, serializers, services и adapters. Browser/UI acceptance сохраняет Playwright или подходящий существующий runner. Все E2E suites (Playwright/browser, MCP и будущие gameplay/cross-browser scenarios) запускаются только начиная с promotion PR `dev → test`; на feature/fix PR в `dev` не запускается ни один E2E suite, без исключений по изменённому слою.
 - **TypeDoc** — генерация документации из TSDoc/JSDoc комментариев для публичного SDK после стабилизации входных точек.
 - **API Extractor** — рассмотреть позже, когда появятся публикуемые TypeScript packages и стабильный API surface: API report/rollup declarations помогают замечать непреднамеренные изменения публичных контрактов. Не добавлять его ради внутренних модулей до появления соответствующей задачи.
 - **tsd** или эквивалентный type-test инструмент — рассмотреть для compile-time tests публичных типов, когда API начнёт использоваться внешними проектами.
@@ -978,7 +978,7 @@ Profiler должен сначала собирать воспроизводим
 - Web production: target browser smoke, startup-size/report validation, source map diagnostics for development builds and assertion that editor-only code is absent from release output. Acceptance также покрывает visibility/focus, blocked audio before user activation, WebGL context loss/restore, interrupted asset load, mobile memory pressure, resize/orientation/DPR, storage quota failure, hosting headers/MIME и embedded host. Desktop Chromium happy-path недостаточен.
 - Desktop: сборка, установка и smoke/acceptance на каждой заявленной ОС.
 
-CI Fast сейчас не выполняет весь перечисленный набор: E2E MCP запускается на PR в `test` и `main`, а browser UI acceptance пока требует отдельного сценария. Новые проверки добавляются по мере появления соответствующих подсистем, а не описываются в документации как уже существующие.
+CI Fast намеренно не выполняет E2E: обычные PR в `dev` ограничены build/typecheck, unit/contract/security и быстрыми smoke-проверками. Полный автоматизированный E2E набор, включая MCP integration и Playwright/browser acceptance, выполняется единым promotion gate начиная с PR `dev → test` и далее на release-promotion PR. Новые E2E suites подключаются только к этому gate, а не к CI Fast.
 
 ### 13.3. Правила миграции
 
@@ -1162,7 +1162,7 @@ MCP surface группируется по операциям: browser/session li
 - [ ] Повторный запуск сценария не оставляет процессов, вкладок, event listeners, timers, bridge subscriptions и временных ресурсов.
 - [ ] Один и тот же declarative scenario можно запустить через MCP и CI runner без создания агентом одноразового driver script и без изменения игрового исходника ради инфраструктурного подключения.
 - [ ] Release build не содержит QA bridge, CDP/browser-control endpoints, тестовых секретов и test-only modules; это подтверждается output-level inspection.
-- [ ] CI разделяет быстрые проверки контракта и unit/security coverage, адресные browser smoke и полный on-demand/release gameplay acceptance.
+- [ ] CI разделяет быстрые build/typecheck, contract/unit/security checks на обычных PR и полный E2E gate только на promotion PR `dev → test` и последующих release promotions; E2E suites не запускаются на topic PR в `dev` ни по одному path-based исключению.
 - [ ] Browser/device evidence фиксирует фактический browser, version, OS/host, viewport/DPR и renderer context; headless/software-rendered результаты не выдаются за проверку реального устройства.
 - [ ] Документация capability matrix и roadmap обновляется вместе с реализацией; функция не получает статус «реализовано» до выполнения соответствующего runtime/browser acceptance.
 

@@ -4,7 +4,6 @@ on:
   pull_request:
     branches: [test, main]
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,9 +15,9 @@ concurrency:
 jobs:
   mcp-e2e:
     name: mcp-integration
-    if: ${{ github.event_name != 'pull_request' || (github.base_ref == 'test' && github.head_ref == 'dev') || (github.base_ref == 'main' && (github.head_ref == 'test' || startsWith(github.head_ref, 'hotfix/'))) }}
+    if: ${{ (github.base_ref == 'test' && github.head_ref == 'dev') || (github.base_ref == 'main' && (github.head_ref == 'test' || startsWith(github.head_ref, 'hotfix/'))) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -32,6 +31,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             packages/editor-mcp-server/package-lock.json
+            src/editor/package-lock.json
 
       - name: Install locked dependencies
         run: npm ci
@@ -39,6 +39,26 @@ jobs:
       - name: Install and build standalone MCP package
         run: npm ci
         working-directory: packages/editor-mcp-server
+
+      - name: Install Editor Host dependencies
+        run: npm ci
+        working-directory: src/editor
+
+      - name: Build and typecheck SolidJS Host
+        run: npm run build
+        working-directory: src/editor
+
+      - name: Run Editor Host domain tests
+        run: npm test
+        working-directory: src/editor
+
+      - name: Install Chromium for Editor Host browser E2E
+        run: npx playwright install --with-deps chromium
+        working-directory: src/editor
+
+      - name: Run Editor Host browser E2E
+        run: npm run test:browser
+        working-directory: src/editor
 
       - name: Start server and run MCP integration tests
         shell: bash
@@ -77,6 +97,17 @@ jobs:
           fi
 
           npm run test:e2e
+
+      - name: Upload Editor Host browser evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: editor-host-browser-e2e-failure
+          path: |
+            src/editor/test-results/
+            src/editor/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload MCP diagnostics
         if: failure()
