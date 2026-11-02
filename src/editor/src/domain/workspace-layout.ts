@@ -434,21 +434,6 @@ export function setSidePanelVisibility(
   return next;
 }
 
-export function toggleSidePanelVisibility(
-  layout: WorkspaceLayout,
-  panel: SidePanelId,
-  compact = false,
-  forceSidePanelsToBottom = false,
-): WorkspaceLayout {
-  return setSidePanelVisibility(
-    layout,
-    panel,
-    !isVisible(layout, panel),
-    compact,
-    forceSidePanelsToBottom,
-  );
-}
-
 export function reorderDockTab(
   layout: WorkspaceLayout,
   source: BottomTab,

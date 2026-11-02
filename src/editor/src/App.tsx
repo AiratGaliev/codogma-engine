@@ -1568,8 +1568,6 @@ function App() {
         : null;
 
     if (node.parentElement !== target) target.appendChild(node);
-    node.classList.add("dock-zone-panel");
-
     if (activeElement) {
       queueMicrotask(() => {
         if (activeElement.isConnected) {
@@ -1853,10 +1851,13 @@ function App() {
     setDraggedDockPanel(null);
 
     if (panel === "Hierarchy" || panel === "Inspector") {
-      if (targetTab && targetZone === getStoredPanelZone(panel)) {
+      if (!targetTab) {
+        dockSidePanel(panel, targetZone);
+      } else if (targetZone === getStoredPanelZone(panel)) {
         reorderDockPanelTab(panel, targetTab, targetZone);
       } else {
         dockSidePanel(panel, targetZone);
+        reorderDockPanelTab(panel, targetTab, targetZone);
       }
       return;
     }
@@ -2783,7 +2784,7 @@ function App() {
             data-testid="splitter-hierarchy"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize Hierarchy panel"
+            aria-label="Resize left dock"
             aria-valuemin={170}
             aria-valuemax={360}
             aria-valuenow={layout().leftWidth}
@@ -2891,7 +2892,7 @@ function App() {
             data-testid="splitter-inspector"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize Inspector panel"
+            aria-label="Resize right dock"
             aria-valuemin={210}
             aria-valuemax={420}
             aria-valuenow={layout().rightWidth}
