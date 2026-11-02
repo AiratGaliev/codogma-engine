@@ -4,7 +4,7 @@
 **Baseline:** `dev` на 30.10.2026; legacy client находится в `source/editor/`.  
 **Решение:** [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).  
 **Нормативные требования:** [Техническое задание](technical-specification.md).  
-**Продуктовые UX-reference:** [Стандарт reference для 2D Editor Host](editor-reference-standard.md).
+**Продуктовые UX-reference и инженерные источники:** [Стандарт reference для 2D Editor Host](editor-reference-standard.md). Unity 6.6 остаётся главным UX-reference, Cocos Creator 4.0 LTS — дополнительным 2D workflow reference; открытый Godot Editor source используется отдельно как implementation reference, а не как третий продуктовый UX-эталон.
 
 ## Текущий результат COD-80 — первый Host и Scene slice
 
@@ -30,7 +30,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 
 ## 0. Правила переноса и реестр пользовательских workflows
 
-Главный принцип: **переносим поведение и полезные contracts, а не наследуем архитектуру старого UI**. Целевые UX-reference — Unity 6.6 (основной, 6000.6 Beta на дату проверки) и Cocos Creator 4.0 LTS (дополнительный), только для 2D-игр. Colibri может подсказать, какие операции ожидает пользователь, какие edge cases встречались, какие форматы/поля/команды уже поддерживаются и где лежат regression fixtures; он не является третьим UX-reference. Каждый SolidJS workflow проектируется заново с собственными state owners, typed services, lifecycle, focus/accessibility и tests. Не переносить Colibri Workbench/Parts/controls/registry/globals/private imports или скрытые UI coupling. Для каждой возможности решить retain/redesign/defer/retire с причиной; применять [стандарт reference для 2D Editor Host](editor-reference-standard.md).
+Главный принцип: **переносим поведение и полезные contracts, а не наследуем архитектуру старого UI**. Целевые продуктовые UX-reference — Unity 6.6 (основной, 6000.6 Beta на дату проверки) и Cocos Creator 4.0 LTS (дополнительный), только для 2D-игр. Godot Engine source на закреплённом commit используется как отдельный инженерный reference по реализации editor-подсистем (Workbench/docking, Inspector, Scene Tree/Canvas, assets/import, Animation, TileMap, debugger и extension hooks), но не становится третьим UX-reference или критерием feature parity. Его C++/native UI архитектура не переносится напрямую: Codogma остаётся SolidJS + TypeScript/TSX + Phaser 4.2.1 и Web-first. Colibri может подсказать, какие операции ожидает пользователь, какие edge cases встречались, какие форматы/поля/команды уже поддерживаются и где лежат regression fixtures; он не является UX-reference. Каждый SolidJS workflow проектируется заново с собственными state owners, typed services, lifecycle, focus/accessibility и tests. Не переносить Colibri Workbench/Parts/controls/registry/globals/private imports или скрытые UI coupling. Для каждой возможности решить retain/redesign/defer/retire с причиной; применять [стандарт reference для 2D Editor Host](editor-reference-standard.md).
 
 | Capability | Что уже подтверждено | SolidJS Host status / owner |
 |---|---|---|
