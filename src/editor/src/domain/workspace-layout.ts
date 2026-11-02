@@ -356,7 +356,7 @@ export function moveDockablePanel(
   ) {
     next.bottomTab = "Project";
   }
-  next.bottomTab = getVisibleBottomTab(next, true, next.bottomTab);
+  next.bottomTab = getVisibleBottomTab(next, false, next.bottomTab);
 
   return next;
 }
@@ -383,6 +383,7 @@ export function setSidePanelVisibility(
   layout: WorkspaceLayout,
   panel: SidePanelId,
   visible: boolean,
+  compact = false,
 ): WorkspaceLayout {
   const next: WorkspaceLayout = {
     ...layout,
@@ -410,7 +411,7 @@ export function setSidePanelVisibility(
     );
     next.bottomTab = getVisibleBottomTab(
       next,
-      true,
+      compact,
       next.bottomTab === panel ? "Project" : next.bottomTab,
     );
   }
@@ -421,8 +422,14 @@ export function setSidePanelVisibility(
 export function toggleSidePanelVisibility(
   layout: WorkspaceLayout,
   panel: SidePanelId,
+  compact = false,
 ): WorkspaceLayout {
-  return setSidePanelVisibility(layout, panel, !isVisible(layout, panel));
+  return setSidePanelVisibility(
+    layout,
+    panel,
+    !isVisible(layout, panel),
+    compact,
+  );
 }
 
 export function reorderDockTab(
@@ -430,6 +437,8 @@ export function reorderDockTab(
   source: BottomTab,
   target: BottomTab,
   zone: DockZone,
+  compact = false,
+  forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   if (source === target) return layout;
 
@@ -438,9 +447,12 @@ export function reorderDockTab(
       return zone === "bottom";
     }
     if (panel === "Console") {
-      return zone === "bottom" && layout.consoleDocked;
+      return zone === "bottom" && (compact || layout.consoleDocked);
     }
-    return getPanelZone(layout, panel) === zone && isVisible(layout, panel);
+    return (
+      (forceSidePanelsToBottom || getPanelZone(layout, panel) === zone) &&
+      isVisible(layout, panel)
+    );
   };
 
   if (!isInZone(source) || !isInZone(target)) return layout;
