@@ -1763,11 +1763,16 @@ function App() {
       const targetZone = target?.closest<HTMLElement>("[data-dock-zone]")?.dataset.dockZone as DockZone | undefined;
       if (targetTab && targetZone) {
         if (
-          targetZone !== "bottom" &&
-          (drag.panel === "Hierarchy" || drag.panel === "Inspector")
+          (drag.panel === "Hierarchy" || drag.panel === "Inspector") &&
+          targetZone !== getStoredPanelZone(drag.panel)
         ) {
           dockSidePanel(drag.panel, targetZone);
-        } else if (targetZone === "bottom" || targetZone === "left" || targetZone === "right") {
+          reorderDockPanelTab(drag.panel, targetTab, targetZone);
+        } else if (
+          targetZone === "bottom" ||
+          targetZone === "left" ||
+          targetZone === "right"
+        ) {
           reorderDockPanelTab(drag.panel, targetTab, targetZone);
         }
       }
