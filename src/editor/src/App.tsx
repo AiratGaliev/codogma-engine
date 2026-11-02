@@ -1755,6 +1755,7 @@ function App() {
 
   function startBottomTabPointerDrag(event: PointerEvent & { currentTarget: HTMLButtonElement }, tab: BottomTab) {
     if (event.button !== 0) return;
+    suppressDockTabClick = false;
     bottomTabPointerDrag = { panel: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
     setDockTargetZone(null);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1820,6 +1821,12 @@ function App() {
     if (!bottomTabPointerDrag || bottomTabPointerDrag.pointerId !== event.pointerId) return;
     bottomTabPointerDrag = undefined;
     handlePanelDragEnd();
+  }
+
+  function shouldIgnoreDockTabClick(event: MouseEvent): boolean {
+    if (!suppressDockTabClick) return false;
+    suppressDockTabClick = false;
+    return event.detail > 0;
   }
 
   function isDockTargetAllowed(panel: BottomTab, zone: DockZone): boolean {
@@ -2677,11 +2684,11 @@ function App() {
                   data-dock-tab={panel}
                   aria-selected={layout().leftActivePanel === panel}
                   onKeyDown={(event) => handleDockTabKeyDown(event, "left")}
-                  draggable={true}
-                  onDragStart={(event) => handlePanelDragStart(event, panel)}
-                  onDragEnd={handlePanelDragEnd}
                   onPointerDown={(event) => startBottomTabPointerDrag(event, panel)}
-                  onClick={() => activateSidePanel(panel)}
+                  onClick={(event) => {
+                    if (shouldIgnoreDockTabClick(event)) return;
+                    activateSidePanel(panel);
+                  }}
                 >
                   {panel}
                 </button>
@@ -2993,11 +3000,11 @@ function App() {
                   data-dock-tab={panel}
                   aria-selected={layout().rightActivePanel === panel}
                   onKeyDown={(event) => handleDockTabKeyDown(event, "right")}
-                  draggable={true}
-                  onDragStart={(event) => handlePanelDragStart(event, panel)}
-                  onDragEnd={handlePanelDragEnd}
                   onPointerDown={(event) => startBottomTabPointerDrag(event, panel)}
-                  onClick={() => activateSidePanel(panel)}
+                  onClick={(event) => {
+                    if (shouldIgnoreDockTabClick(event)) return;
+                    activateSidePanel(panel);
+                  }}
                 >
                   {panel}
                 </button>
@@ -3324,12 +3331,9 @@ function App() {
                   data-dock-tab={tab}
                   aria-selected={bottomTab() === tab}
                   classList={{ active: bottomTab() === tab }}
-                  draggable={true}
-                  onDragStart={(event) => handlePanelDragStart(event, tab)}
-                  onDragEnd={handlePanelDragEnd}
                   onPointerDown={(event) => startBottomTabPointerDrag(event, tab)}
-                  onClick={() => {
-                    if (suppressDockTabClick) { suppressDockTabClick = false; return; }
+                  onClick={(event) => {
+                    if (shouldIgnoreDockTabClick(event)) return;
                     activateBottomTab(tab);
                   }}
                   onKeyDown={(event) => handleDockTabKeyDown(event, "bottom")}

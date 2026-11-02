@@ -1,5 +1,26 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
+
+async function dragDockTabWithPointer(page: Page, source: Locator, target: Locator) {
+  const sourceBounds = await source.boundingBox();
+  const targetBounds = await target.boundingBox();
+  if (!sourceBounds || !targetBounds) throw new Error("Dock tab geometry is unavailable.");
+
+  const sourcePoint = {
+    x: sourceBounds.x + sourceBounds.width / 2,
+    y: sourceBounds.y + sourceBounds.height / 2,
+  };
+  const targetPoint = {
+    x: targetBounds.x + targetBounds.width / 2,
+    y: targetBounds.y + targetBounds.height / 2,
+  };
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 10, sourcePoint.y, { steps: 2 });
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 10 });
+  await page.mouse.up();
+}
 
 async function saveSceneWithShortcut(page: Page) {
   const responsePromise = page.waitForResponse((response) => {
@@ -245,7 +266,11 @@ test("Bottom Dock tabs can be reordered and scene shortcuts respect the focused 
   await page.goto("/");
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
 
-  await bottomTabs.getByRole("tab", { name: "Project" }).dragTo(bottomTabs.getByRole("tab", { name: "Animation" }));
+  await dragDockTabWithPointer(
+    page,
+    bottomTabs.getByRole("tab", { name: "Project" }),
+    bottomTabs.getByRole("tab", { name: "Animation" }),
+  );
   const tabOrder = await bottomTabs.locator("[data-dock-tab]").evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-dock-tab")),
   );
@@ -342,24 +367,7 @@ test("pointer dragging a Bottom tab into a side group preserves the drop target 
 
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
   const targetTab = rightTabs.getByRole("tab", { name: "Inspector" });
-  const sourceBounds = await sourceTab.boundingBox();
-  const targetBounds = await targetTab.boundingBox();
-  if (!sourceBounds || !targetBounds) throw new Error("Dock tab geometry is unavailable.");
-
-  const sourcePoint = {
-    x: sourceBounds.x + sourceBounds.width / 2,
-    y: sourceBounds.y + sourceBounds.height / 2,
-  };
-  const targetPoint = {
-    x: targetBounds.x + targetBounds.width / 2,
-    y: targetBounds.y + targetBounds.height / 2,
-  };
-
-  await page.mouse.move(sourcePoint.x, sourcePoint.y);
-  await page.mouse.down();
-  await page.mouse.move(sourcePoint.x + 10, sourcePoint.y, { steps: 2 });
-  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 10 });
-  await page.mouse.up();
+  await dragDockTabWithPointer(page, sourceTab, targetTab);
 
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
@@ -833,24 +841,7 @@ test("side dock tabs support pointer docking and reordering into Bottom", async 
   const sourceTab = rightTabs.getByRole("tab", { name: "Hierarchy" });
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
   const targetTab = bottomTabs.getByRole("tab", { name: "Project" });
-  const sourceBounds = await sourceTab.boundingBox();
-  const targetBounds = await targetTab.boundingBox();
-  if (!sourceBounds || !targetBounds) throw new Error("Dock tab geometry is unavailable.");
-
-  const sourcePoint = {
-    x: sourceBounds.x + sourceBounds.width / 2,
-    y: sourceBounds.y + sourceBounds.height / 2,
-  };
-  const targetPoint = {
-    x: targetBounds.x + targetBounds.width / 2,
-    y: targetBounds.y + targetBounds.height / 2,
-  };
-
-  await page.mouse.move(sourcePoint.x, sourcePoint.y);
-  await page.mouse.down();
-  await page.mouse.move(sourcePoint.x + 10, sourcePoint.y, { steps: 2 });
-  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 10 });
-  await page.mouse.up();
+  await dragDockTabWithPointer(page, sourceTab, targetTab);
 
   await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
