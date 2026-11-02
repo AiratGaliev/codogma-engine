@@ -410,7 +410,7 @@ This defers the **full-suite run**, not the development of E2E coverage. When a 
 
 The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
 
-For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`), follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). COD statuses describe Engineering delivery: `In Review` means code review/required CI checks are pending; `Done` means implementation criteria, scoped automated tests, CI Fast and PR evidence are complete. Functional/manual/browser/runtime acceptance belongs to separate top-level CODQA issues and is not a prerequisite for closing or advancing Engineering work.
+For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`), follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). COD statuses describe Engineering delivery: `In Review` means code review/required CI checks are pending; `Done` means implementation criteria, scoped automated tests and CI Fast passed, and the reviewed PR is merged into `dev`. Functional/manual/browser/runtime acceptance belongs to separate top-level CODQA issues and is not a prerequisite for closing or advancing Engineering work.
 ### Linear teams and issue ownership
 
 Linear work is split by responsibility across two teams in the shared **Codogma Engine** project:
