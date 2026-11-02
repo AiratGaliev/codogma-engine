@@ -173,12 +173,12 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>mini-services/phaser-editor-mcp/</code> | Legacy HTTP/WebSocket bridge retained for existing editor-side MCP workflows; not used by the new package. |
 | <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and MCP compatibility. |
 | <code>source/editor/</code> | Legacy Colibri-based browser editor client, TypeScript sources, plugins, assets, product metadata and client build configuration; compatibility/reference only until cutover and later removal. |
-| <code>src/editor/</code> | Implemented independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons, domain/browser tests and CI job. It becomes the default client after staged migration and cutover. |
+| <code>src/editor/</code> | Implemented independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons and domain/browser tests. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
 | <code>tests/workspace/test-typescript/</code> | Default fixture project for development and CI. |
 | <code>.github/workflows/ci.yml</code> | Fast pull-request checks and branch-route validation. |
-| <code>.github/workflows/e2e.yml</code> | MCP integration checks for promotion to <code>test</code> and <code>main</code>. |
+| <code>.github/workflows/e2e.yml</code> | Full E2E gate (MCP integration + SolidJS Host Playwright browser acceptance) for promotion PRs to <code>test</code> and <code>main</code>. |
 | <code>.github/workflows/release.yml</code> | Build, smoke-test and ZIP artifact workflow for <code>main</code>. |
 | <code>BUILD.md</code> | Additional build notes. |
 | <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
@@ -206,14 +206,14 @@ Run these commands from the repository root unless noted otherwise.
 | <code>npm run test:editor-host</code> | Run SolidJS Host domain tests. |
 | <code>npm run test:editor-host:browser</code> | Run Chromium browser acceptance for the implemented Host slice. |
 | <code>npm run test:e2e</code> | Run the engine MCP integration test driver. Start the editor server first. |
-| <code>npm run test:all</code> | Run unit, security, mini-service, localization, package, project-diagnostics, localization-runtime acceptance and MCP E2E checks. Install dependencies in each package first and start the editor server for MCP E2E. |
+| <code>npm run test:all</code> | Run the complete local test collection, including MCP E2E. This is not the routine feature-PR gate; automated E2E gating starts at promotion (<code>dev → test</code>). Install dependencies in each package first and start the editor server for MCP E2E. |
 
 For a typical local code change:
 
 1. Start the relevant client: legacy Colibri only for compatibility investigations, or the SolidJS Host at port 5173 for all new UI/authoring work.
 2. Make the change in the target Host or shared server/domain subsystem; do not add new user-facing features to Colibri.
-3. For legacy TypeScript/compiler changes, run the root <code>npm run build</code>; for SolidJS Host changes, run <code>npm run build:editor-host</code> and the relevant Host domain/browser tests.
-4. For MCP work, start the server in one terminal and run <code>npm run test:e2e</code> in a second terminal.
+3. For legacy TypeScript/compiler changes, run the root <code>npm run build</code>; for SolidJS Host changes, run <code>npm run build:editor-host</code> and the relevant Host domain tests.
+4. For MCP work, run the package contract tests and relevant security tests. Full MCP and browser E2E suites are not run on topic-branch PRs; their CI gate starts only on <code>dev → test</code> promotion.
 5. Verify the relevant functionality in the browser if the change affects the UI, generated code or runtime behaviour. Server-side MCP tests are not a replacement for visual acceptance testing.
 
 ### MCP integration tests
@@ -382,12 +382,12 @@ The editor server forwards its AI Chat endpoint to the URL configured by <code>A
 
 ## CI and release workflow
 
-CI is designed to check changes quickly and to run MCP integration tests on promotion branches.
+CI Fast is the routine development gate. **No E2E suite is run on topic-branch PRs into <code>dev</code>. All automated E2E suites start only at the <code>dev → test</code> promotion PR and continue on later release-promotion PRs. There are no path-based or per-subsystem E2E exceptions.
 
 | Workflow / job | Trigger | Main checks |
 |---|---|---|
 | **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Markdown-only PRs run changed-document checks (final newline, LF, fenced blocks and newly added relative links) and skip npm installation/build/runtime tests. PRs with non-Markdown changes run the full fast code checks. Dependency audits run only for package scopes whose manifest/lockfile changed (or when <code>.npmrc</code> changes); manual dispatch audits every scope. |
-| **E2E** — <code>mcp-integration</code> | PR targeting <code>test</code> or <code>main</code>; manual dispatch | Installs/builds the standalone MCP package, starts the engine server and tests the stdio adapter through <code>POST /editor/mcp</code>. UI-dependent acceptance remains separate. |
+| **E2E** — <code>mcp-integration</code> | Promotion PR <code>dev → test</code>, then <code>test → main</code> or allowed emergency <code>hotfix/* → main</code> | Runs the complete existing E2E gate: SolidJS Host Playwright browser acceptance and MCP stdio integration through <code>POST /editor/mcp</code>. No manual dispatch or feature-PR E2E run. |
 | **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client and MCP package, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
 
 The release workflow uploads a GitHub Actions artifact; it does not automatically publish a GitHub Release. The archive contains the server, editor client and selected root metadata/documentation. Check <code>.github/workflows/release.yml</code> before assuming an optional service or development fixture is included in the package.
@@ -402,7 +402,9 @@ Branch Rulesets require these exact status names:
 | <code>test</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 | <code>main</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 
-A successful server-side MCP test, TypeScript build or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. Run and document additional acceptance checks when the change affects those areas. The pending runtime and security follow-ups for the Scene Editor, FX/Box2D code generation, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md); do not treat a green Fast CI run as browser acceptance evidence.
+A successful build, unit/contract test or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. The full automated E2E suite is intentionally deferred until the promotion PR <code>dev → test</code> (and subsequent release promotions); do not add E2E execution to routine feature/fix PRs into <code>dev</code>.
+
+This defers the **full-suite run**, not the development of E2E coverage. When a change affects a cross-layer user workflow or an existing E2E scenario, add or update its scenario, fixture, assertions and cleanup alongside the subsystem change in the same topic PR. The routine PR gate remains fast; the mandatory full-suite run and system-level integration debugging happen on promotion. A small engineering task must not be forced to repair or rerun the entire aggregate suite. The pending runtime and security follow-ups for the Scene Editor, FX/Box2D code generation, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md).
 
 ## Branches, Pull Requests and Mandatory Development Rules
 
@@ -518,17 +520,17 @@ npm run test:mcp-package
 
 Run `npm audit --audit-level=low` in the affected package scope when its `package.json`, `package-lock.json` or applicable `.npmrc` changes. CI Fast applies the same scope selection; manual workflow dispatch runs every configured audit.
 
-Then run checks relevant to the change:
+Then run checks relevant to the change. The full automated E2E suites are not part of a topic PR into <code>dev</code>; they start at the promotion PR <code>dev → test</code>:
 
 | Change type | Required local acceptance |
 |---|---|
 | Documentation-only (`*.md`, `*.mdx`, `*.rst`) | No npm install/build is required. CI checks changed Markdown line endings, fenced blocks and newly added relative links. Run `git diff --check` locally when reviewing the patch. |
 | Code/build changes | Run `npm run build` before requesting merge; CI runs it as well |
 | Dependencies | Run `npm audit --audit-level=low` in every affected package scope. CI audits scopes whose manifest/lockfile changed, or all scopes when `.npmrc` changes; manual dispatch runs all audits. |
-| Server, bridge or MCP tools | Run `npm run test:security`; start the server with `npm start`; in a second terminal run `npm run test:e2e` |
+| Server, bridge or MCP tools | Run `npm run test:security` and the isolated MCP package contract tests. The full MCP E2E suite runs only in promotion CI from `dev → test`. |
 | Editor UI, scene authoring, generated code or play mode | Open `http://localhost:3000/editor/` and manually exercise the affected workflow; check browser console and server output |
 | Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |
-| Release candidate (`dev → test` or `test → main`) | Check the complete candidate in addition to the required CI integration test; document manual acceptance for any affected UI path |
+| Release candidate (`dev → test` or `test → main`) | Require the complete promotion E2E gate (MCP + Host browser acceptance); document manual acceptance for affected UI/runtime paths |
 
 The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` (PowerShell: `$env:MCP_E2E_WITH_EDITOR = "1"` before running `npm run test:e2e`). They require the editor UI to be running and connected. The default CI E2E job does **not** enable that mode.
 
@@ -563,7 +565,7 @@ The required GitHub Actions status names are:
 | `test` | `fast-checks`, `mcp-integration` |
 | `main` | `fast-checks`, `mcp-integration` |
 
-`fast-checks` validates the branch route, installs and audits the locked root/editor/localization dependencies, builds the editor client, runs unit regression and security checks, smoke-tests the server/editor response, and runs localization package tests, project diagnostics and runtime acceptance. `mcp-integration` runs on PRs targeting `test` and `main`; it starts the server and MCP bridge and runs `npm run test:e2e`. Normal PRs into `dev` do not run this slower MCP integration suite as a routine CI gate, so run it locally whenever the change touches MCP/server behaviour and run targeted browser acceptance for UI changes.
+`fast-checks` validates branch routing, build/typecheck, unit/contract regression and security checks, server smoke tests, localization package tests and project diagnostics. It may run on ordinary topic PRs into `dev`, but it never installs Chromium or executes Playwright/MCP E2E. The required `mcp-integration` job runs only on promotion PRs: first `dev → test`, then `test → main` (and the documented emergency hotfix route). It executes both the SolidJS Host browser E2E suite and `npm run test:e2e`; the required status name stays `mcp-integration` so existing branch rules remain valid.
 
 The active Rulesets require PRs and successful checks, but **currently do not require reviewer approval**. That is a repository setting, not permission to bypass the PR, test, documentation or promotion rules in this section.
 
