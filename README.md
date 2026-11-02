@@ -402,7 +402,9 @@ Branch Rulesets require these exact status names:
 | <code>test</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 | <code>main</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
 
-A successful build, unit/contract test or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. The full automated E2E suite is intentionally deferred until the promotion PR <code>dev → test</code> (and subsequent release promotions); do not add E2E execution to routine feature/fix PRs into <code>dev</code>. The pending runtime and security follow-ups for the Scene Editor, FX/Box2D code generation, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md).
+A successful build, unit/contract test or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. The full automated E2E suite is intentionally deferred until the promotion PR <code>dev → test</code> (and subsequent release promotions); do not add E2E execution to routine feature/fix PRs into <code>dev</code>.
+
+This defers the **full-suite run**, not the development of E2E coverage. When a change affects a cross-layer user workflow or an existing E2E scenario, add or update its scenario, fixture, assertions and cleanup alongside the subsystem change in the same topic PR. The routine PR gate remains fast; the mandatory full-suite run and system-level integration debugging happen on promotion. A small engineering task must not be forced to repair or rerun the entire aggregate suite. The pending runtime and security follow-ups for the Scene Editor, FX/Box2D code generation, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md).
 
 ## Branches, Pull Requests and Mandatory Development Rules
 
