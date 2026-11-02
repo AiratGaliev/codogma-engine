@@ -424,3 +424,17 @@ test("preserves explicitly customized dimensions even when they equal wide defau
   assert.equal(untouched.bottomHeight, 207);
   assert.equal(untouched.consoleHeight, 60);
 });
+
+
+test("moving a side panel out of Bottom preserves the selected compact Console tab", () => {
+  const compactLayout = {
+    ...createDefaultWorkspaceLayout(true),
+    hierarchyZone: "bottom" as const,
+    bottomTab: "Console" as const,
+  };
+
+  const moved = moveDockablePanel(compactLayout, "Hierarchy", "left", true);
+  assert.equal(moved.hierarchyZone, "left");
+  assert.equal(moved.bottomTab, "Console");
+  assert.ok(getVisibleBottomTabs(moved, true).includes("Console"));
+});

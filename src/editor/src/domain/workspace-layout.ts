@@ -371,6 +371,7 @@ export function moveDockablePanel(
   layout: WorkspaceLayout,
   panel: SidePanelId,
   zone: DockZone,
+  compact = false,
 ): WorkspaceLayout {
   if (getPanelZone(layout, panel) === zone) {
     return selectSidePanel(layout, panel);
@@ -418,7 +419,7 @@ export function moveDockablePanel(
   ) {
     next.bottomTab = "Project";
   }
-  next.bottomTab = getVisibleBottomTab(next, false, next.bottomTab);
+  next.bottomTab = getVisibleBottomTab(next, compact, next.bottomTab);
 
   return next;
 }

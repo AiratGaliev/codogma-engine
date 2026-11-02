@@ -1231,3 +1231,37 @@ test("compact Console selection resets only when it is not explicitly docked", a
   await expect(page.getByTestId("console-panel")).toBeVisible();
   await expect(page.getByRole("button", { name: "Undock Console" })).toBeVisible();
 });
+
+
+test("undocking a transient narrow Bottom panel keeps it visible until the side docks return", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+
+  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await page.setViewportSize({ width: 700, height: 900 });
+
+  const narrowTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await narrowTabs.getByRole("tab", { name: "Hierarchy" }).click();
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+  await page.getByRole("button", { name: "Undock Hierarchy" }).click();
+
+  await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
+  let persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.hierarchyZone).toBe("left");
+  expect(persisted.bottomTab).toBe("Hierarchy");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
+  await expect(leftTabs.getByRole("tab", { name: "Hierarchy" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+  await expect(narrowTabs.getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
+
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.hierarchyZone).toBe("left");
+  expect(persisted.bottomTab).toBe("Project");
+});

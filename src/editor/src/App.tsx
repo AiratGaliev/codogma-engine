@@ -1707,6 +1707,7 @@ function App() {
   }
 
   function handlePanelDragStart(event: DragEvent, panel: BottomTab) {
+    setDockTargetZone(null);
     setDraggedDockPanel(panel);
     if (event.dataTransfer) {
       event.dataTransfer.setData("text/plain", panel);
@@ -1733,7 +1734,7 @@ function App() {
       return;
     }
 
-    setLayout((current) => moveDockablePanel(current, panel, zone));
+    setLayout((current) => moveDockablePanel(current, panel, zone, compactWorkbench()));
     if (announce) {
       const zoneLabel = zone === "left" ? "Left" : zone === "right" ? "Right" : "Bottom";
       log("success", `${panel} docked in the ${zoneLabel} workspace`);
@@ -1743,7 +1744,23 @@ function App() {
   function undockSidePanel(panel: SidePanelId) {
     const home = getSidePanelHomeZone(panel);
     if (getStoredPanelZone(panel) === home) return;
-    dockSidePanel(panel, home, false);
+
+    if (narrowWorkbench()) {
+      // On narrow screens the panel is still presented inside Bottom. Update
+      // its permanent home zone without moving its DOM node into a hidden dock.
+      if (!movePanelElementToZone(panel, "bottom")) {
+        log("error", `Cannot return ${panel} to its home dock: its Bottom mount is unavailable.`);
+        return;
+      }
+      setLayout((current) => ({
+        ...moveDockablePanel(current, panel, home, compactWorkbench()),
+        bottomTab: panel,
+      }));
+      focusDockTab(panel, "bottom");
+    } else {
+      dockSidePanel(panel, home, false);
+    }
+
     log("info", `${panel} returned to its default dock`);
   }
 

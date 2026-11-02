@@ -21,7 +21,8 @@ Workspace-layout acceptance covers cross-zone panel grouping, pointer and native
 panel-header drops into empty side zones, close/reopen, versioned localStorage migration,
 restoration after reload, keyboard-driven tab navigation and splitter resizing,
 compact/wide user-size round trips, short-viewport constraints, Console selection across
-compact/wide transitions, and the temporary narrow-screen Bottom presentation. The tests
+compact/wide transitions, and narrow-screen Undock behavior while the Bottom
+presentation is transient. The tests
 also check that docking does not create duplicate panel or Scene Canvas nodes.
 
 The test fixture is the repository's canonical `tests/workspace/test-typescript`
