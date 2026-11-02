@@ -38,6 +38,19 @@
 
 Community reports Godot Web упоминают startup size, Safari/mobile, cross-origin headers и export plugins, но эти reports — test hypotheses, не доказательство дефекта актуальной версии. Использовать [официальный Godot 4.5 Web manual](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html), [community thread](https://www.reddit.com/r/godot/comments/1qx4qr8/limitations_of_web_build/), [Defold HTML5 manual](https://defold.com/manuals/html5/) и [Defold size guide](https://defold.com/manuals/optimization-size/) с фиксацией version/device/host.
 
+## Уроки из других полноценных Editor systems
+
+Это инженерные observations из закреплённых upstream snapshots, не утверждение, что весь продукт или каждая его версия устроены одинаково. Подробные ссылки и task mapping — в [Editor Engineering References](editor-engineering-references.md).
+
+| Источник | Подтверждённое решение / интересная модель | Что проверить в Codogma и чего не копировать автоматически |
+|---|---|---|
+| **Defold Editor** | Graph-based project/resource model; small transaction steps; all-or-nothing transactions; global Undo stack; cached outputs с upstream invalidation; resource-type registry и file-system resource-sync. | Развести canonical Project Model и transient UI/workspace state; определить atomic command boundaries, Undo grouping, cache invalidation, resource readiness и round-trip. Не объединять автоматически project data и view nodes в один graph. |
+| **Fyrox** | Собственный UI toolkit отдельно от renderer, widget messages, layout system, drawing command queue и DockingManager. | Изучить docking/layout ownership отдельно от Phaser viewport. Не считать весь engine loosely coupled: upstream architecture document сам указывает на monolithic coupling и work-in-progress. |
+| **o2** | 2D-oriented all-in-one Editor, nested prototypes/overrides, asset UID, reflection-driven animation произвольных полей и общий UI framework для Editor и game UI. | Проверить nested Prefab serialization, stable asset identity, Inspector/animation schema consistency. Не связывать editor-only features и dependencies с production game bundle без осознанного contract. |
+| **GDevelop** | Отдельные Core, TypeScript GDJS runtime, React/Electron IDE и extensible behaviors/extensions. | Использовать как reference browser IDE/runtime boundaries и extensions. Event/no-code authoring не заменяет TypeScript components/scripts Codogma. |
+| **ezEngine** | Большие подсистемы поставляются как replaceable engine/editor plugins; Editor и asset tooling явно присутствуют в source tree. | Проверить plugin capability graph, importer dependencies и headless asset processing. Учитывать Windows-only полнофункциональный editor baseline и experimental Linux editor в проверенном README. |
+| **CocosBuilder** | Editable .ccb document отделён от default .ccbi publication; есть Node property metadata и custom exporters. | Разделить authoring document, editor-only metadata и runtime projection. Не копировать старый plist schema или Cocos2d-specific runtime connections как контракт Codogma. |
+
 ## WebGPU и WebAssembly: стандарты под наблюдением
 
 На 29.10.2026 W3C указывает статус Candidate Recommendation Draft для WebGPU и WGSL; MDN помечает WebGPU как limited availability/non-Baseline и secure-context-only. WebAssembly Core 3.0 также опубликован как Candidate Recommendation Draft 28.10.2026. Это аргумент в пользу заменяемой renderer/runtime boundary, а не обязательной миграции.

@@ -16,7 +16,7 @@ Codogma Engine должен развиться в самостоятельный
 
 Главная UI-цель — **поэтапно заменить Colibri-based client самостоятельным SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4**, сохранив рабочие editor workflows и project data. Это не переписывание Phaser runtime, server API, serializers или code generation с нуля: новый Host создаётся отдельно, существующие domain/API contracts переиспользуются, UI переносится вертикальными slices, а Colibri удаляется только после cutover. Старый и новый UI временно сосуществуют как независимые приложения. Портовая схема, backend proxy, write ownership и MCP SSE ограничения определены в [Editor UI migration plan](editor-ui-migration.md) и [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md).
 
-[Unity 6.6 (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) и [Cocos Creator 4.0 LTS](https://docs.cocos.com/creator/4.0/manual/en/) — два обязательных продуктовых референса нового редактора именно для 2D-игр: Unity — основной UX-reference, Cocos — дополнительный cross-check реальных authoring workflows. Официальный Unity Manual 6000.6 на дату проверки помечен Beta; это не stable technical baseline, и beta-only features нельзя автоматически включать в Codogma. **Цель — сопоставимое качество основных 2D-сценариев и профессиональное ощущение редактора, а не полный feature parity, копирование архитектуры или API.** Codogma остаётся 2D-only (без 2D/3D переключателя), TypeScript-native и Web-first. Подробный обязательный процесс adopt/adapt/reject и правила работы с Colibri закреплены в [стандарте reference нового Editor Host](editor-reference-standard.md).
+[Unity 6.6 (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) и [Cocos Creator 4.0 LTS](https://docs.cocos.com/creator/4.0/manual/en/) — два обязательных продуктовых референса нового редактора именно для 2D-игр: Unity — основной UX-reference, Cocos — дополнительный cross-check реальных authoring workflows. Официальный Unity Manual 6000.6 на дату проверки помечен Beta; это не stable technical baseline, и beta-only features нельзя автоматически включать в Codogma. **Исходный код [Godot Editor (закреплённый commit)](<https://github.com/godotengine/godot/tree/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor>) используется отдельно как implementation/engineering reference для изучения реализации редакторских подсистем; он не является третьим продуктовым UX-reference, не задаёт feature parity и не становится runtime dependency.** **Цель — сопоставимое качество основных 2D-сценариев и профессиональное ощущение редактора, а не полный feature parity, копирование архитектуры или API.** Codogma остаётся 2D-only (без 2D/3D переключателя), TypeScript-native и Web-first. Подробный обязательный процесс adopt/adapt/reject и правила работы с Colibri закреплены в [стандарте reference нового Editor Host](editor-reference-standard.md).
 
 ### 1.1. Приоритет продуктовой ценности
 
@@ -331,6 +331,23 @@ EVA.js следует изучать как архитектурный reference
 - UI input и gameplay input разделяются правилами routing/priority: взаимодействие с кнопкой/полем ввода не должно случайно запускать действие игрового персонажа под ним.
 - Тесты покрывают mouse, keyboard, touch, UI hit testing, смену вкладки, resize и преобразования координат; браузерные ограничения документируются вместо обещания одинакового поведения во всех окружениях.
 
+### 6.5.1. Input Actions model и Editor authoring
+
+Runtime Input API различает **физические device inputs** и **логические игровые actions**. Game code по возможности подписывается на стабильные action IDs/имена, а не на конкретные клавиши или пути устройств.
+
+- **Action Asset / Project Input Configuration** содержит versioned Action Maps, logical Actions и physical Bindings. Action Map группирует actions по context (например Gameplay или UI) и может включаться/отключаться как целое.
+- **Action** объявляет stable ID, имя, semantic type/value type (Button/Scalar/Vector2 — только при поддержке runtime), описание и применимую policy. Конкретная клавиша/устройство не является частью логической identity action.
+- **Binding** связывает action с физическим control path/device input. Один action может иметь несколько bindings; device groups/control schemes ограничивают набор доступных bindings только для действительно поддерживаемых устройств.
+- **2D composites** позволяют агрегировать directional bindings (например WASD/Arrow Keys) в Vector2 с отдельными positive/negative parts, детерминированным normalization и проверяемой конфликтной семантикой.
+- **Binding diagnostics** выявляют дубли, несовместимые типы, неизвестные/неподдерживаемые device paths, неверные composite parts и конфликты в одновременно активных maps. Overlap между взаимоисключающими contexts не должен считаться конфликтом без учёта activation policy.
+- **Runtime rebinding overrides** пользователя (например, переназначение Jump с Space на другую клавишу) хранятся отдельно от project defaults и tracked Action Asset. Reset возвращает project defaults, не меняя общий project configuration.
+- **Input Actions Editor** в SolidJS Host управляет Action Maps/Actions/Bindings, properties, validation/conflict diagnostics и test/listen mode. Это отдельный authoring workflow; Project Settings предоставляет ссылку/выбор project-wide asset, но не дублирует Action editor. Editor hotkeys принадлежат Editor Preferences, а не game input.
+- Начальный browser/2D scope — keyboard, mouse/pointer и touch. Gamepad или иные device types доступны только после capability-based adapter и проверенной acceptance. VR, sensor-specific и 3D input workflows не добавлять.
+- Test/listen mode — read-only диагностический поток action state; он не запускает gameplay, не создаёт второй input dispatcher и должен завершать listeners/captures при stop, закрытии окна, смене проекта и потере сессии.
+- Исполняемый runtime contract и lifecycle остаются в COD-29. Versioned schema/IDs/references/migrations — в COD-25. SolidJS authoring — COD-98/COD-99. Project Settings/Input entry point — COD-96/COD-97.
+
+**Задачи:** [COD-98 — Input Actions Editor UX/UI](https://linear.app/codogma-engine/issue/COD-98/sproektirovat-input-actions-editor-uxui-dlya-solidjs-host), [COD-99 — Input Actions authoring implementation](https://linear.app/codogma-engine/issue/COD-99/realizovat-input-actions-authoring-workflow-v-solidjs-host).
+
 ### 6.6. Scene management и жизненный цикл уровня
 
 - Runtime API должен поддерживать загрузку, активацию, деактивацию и выгрузку сцен с определённым порядком lifecycle callbacks; в целевом Core сцена строится из Project Model и реестра компонентов, а не требует отдельного генерируемого класса уровня.
@@ -456,7 +473,7 @@ Codogma предоставляет единый публичный Physics API �
 
 ### 9.0. Editor Host и правила staged migration
 
-**Product/UX baseline:** каждая задача, меняющая пользовательский интерфейс или 2D authoring workflow, должна использовать [стандарт reference для 2D Editor Host](editor-reference-standard.md): Unity 6.6 как основной UX-reference, Cocos Creator 4.0 LTS как дополнительный 2D workflow reference, Codogma строго 2D-only. Colibri — только источник исторических workflows, данных, runtime/API contracts и regression fixtures; не UI/architecture blueprint. В issue/PR фиксировать конкретные страницы и решения adopt/adapt/reject.
+**Product/UX и implementation baseline:** каждая задача, меняющая пользовательский интерфейс или 2D authoring workflow, должна использовать [стандарт reference для 2D Editor Host](editor-reference-standard.md): Unity 6.6 — основной UX-reference, Cocos Creator 4.0 LTS — дополнительный 2D workflow reference, Godot Editor — отдельный открытый implementation reference по релевантным подсистемам. Godot не определяет продуктовый UX или pass/fail acceptance. Codogma остаётся строго 2D-only. Colibri — только источник исторических workflows, данных, runtime/API contracts и regression fixtures; не UI/architecture blueprint. В issue/PR фиксировать конкретные страницы Unity/Cocos, файлы Godot и решения adopt/adapt/reject.
 
 - Целевой UI — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Первый Workbench + Scene slice COD-80 реализован; PR #30 открыт и пока не смержен в `dev` на дату 01.11.2026.
 - `source/editor/` содержит legacy Colibri client и остаётся доступен только на переходный период. Новые user-facing features, панели, controls и крупный UX-рефакторинг в legacy UI не начинать. Допускаются критические bug/security fixes, release blockers и временные исправления, без которых нельзя безопасно продолжить migration; каждый legacy-only fix должен иметь обоснование.
@@ -464,6 +481,49 @@ Codogma предоставляет единый публичный Physics API �
 - Backend, project/file APIs, serialized project/scene/Prefab formats, Asset Metadata/reimport, codegen semantics и Phaser runtime не переписываются только из-за смены UI. Изменения этих слоёв должны иметь отдельный технический gap и regression/migration fixtures.
 - Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
 - Cutover и rollback window выполняются в COD-87; Colibri removal — отдельная COD-88 после cutover, consumer audit, inventory sign-off и license review. Механический перенос source/editor → src/editor отменён (COD-22).
+
+### 9.0.1. Project Settings, Workspace Settings и Editor Preferences
+
+Настройки нового SolidJS Host должны иметь явного владельца данных и scope. Project Settings, локальное workspace state и Editor Preferences — разные категории persistence; одну настройку нельзя сохранять одновременно в нескольких местах без явно заданной precedence policy.
+
+**Scopes и владельцы:**
+
+- **Project Settings** — версия проектной конфигурации, общая для contributors и хранящаяся в Project Model/project configuration. Изменения проходят schema validation, migration и save/reopen round-trip. Такие настройки должны быть доступны в VCS вместе с проектом.
+- **Workspace Settings** — локальные настройки конкретного проекта на конкретной машине/рабочем месте. Они не коммитятся по умолчанию, не являются частью project model и не входят в release build. Это подходящее место для локального workspace choice, если он отличается от shared project intent; фактический docking/panel layout state остаётся у COD-83.
+- **Editor Preferences** — локальные настройки пользователя, применимые ко всем открываемым им проектам на данной машине: тема, UI scale/density, editor-wide confirmation behavior, keyboard preference и прочие user-scoped options. Они хранятся отдельно от project files и не влияют на game build/runtime.
+
+**Build Profiles и precedence:**
+
+- Build Profiles (COD-95) — project/target build configuration и могут задавать только явно объявленные profile overrides для build-relevant Project Settings. Они не являются User Preferences и не должны перезаписывать общую конфигурацию проекта при выборе профиля.
+- Приоритет конфигурации для build должен быть детерминированным и документированным: explicit CI/CLI overrides → выбранный Build Profile → Project Settings defaults. Workspace Settings и Editor Preferences не участвуют в разрешении игровых настроек при сборке.
+- Если значение имеет per-target override, Settings UI показывает его источник (project default/profile override/CLI override, если доступно) и не создаёт скрытую копию одного и того же поля.
+- Переключение профиля или пользовательской темы не должно менять общий project configuration и не должно оставлять скрытые dirty changes.
+
+**Settings Registry и страницы:**
+
+- Editor Host предоставляет typed Settings Registry/descriptor contract: stable setting/page ID, owning domain, scope, type/schema, default, validation, description/help, availability conditions, storage adapter и migration version. Не использовать свободные JSON paths или произвольные UI fields без владельца и schema.
+- Доменные подсистемы регистрируют свои страницы/sections и validators через публичный contract. Settings UI агрегирует descriptors и вызывает domain service; он не становится новым Project Model и не копирует бизнес-логику Input, Physics, Audio, Asset Import или Build.
+- Стороннее editor extension может добавить свою страницу только через явный, проверенный Extension API/lifecycle и после trust/activation policy. Одной декларативной metadata недостаточно для исполнения кода.
+- Страницы должны показывать только доступные и реализованные settings. Если target/capability не поддерживается, поле скрывается либо отображается как недоступное с причиной; нельзя показывать фиктивный control.
+- Project Settings/Preferences используют общую категорийную навигацию и поиск. При необходимости показываются dirty state, Apply/Revert, Reset to defaults, invalid/unsupported state и источник текущего значения. In-context controls могут ссылаться на то же setting descriptor, а не создавать независимые settings copies.
+- Package Manager (COD-92/94) и Build Profiles (COD-95) остаются самостоятельными workflow. Settings pages не дублируют их registry/dependency state, package install actions или build profile editor. Рабочая раскладка/docking остаётся у COD-83.
+
+**Начальные группы — только по готовности domain contracts:**
+
+- Project: General/project metadata; Input (COD-29); 2D Physics (COD-42); Audio (COD-61); Asset Import defaults (COD-86/COD-59); Localization при наличии поддерживаемых project-level policies; 2D rendering/quality settings при наличии typed contract.
+- User/Workspace: Appearance (theme/scale/density), keymap/shortcuts, scene viewport navigation preferences, restore last workspace, editor-wide confirmations. Не дублировать конкретные per-panel layout values, которые принадлежат COD-83.
+- Build: ссылочная интеграция с Build Profiles COD-95; никакого самостоятельного bundler configuration в Preferences.
+- Package ecosystem: переход к COD-92/94; scoped registries и dependencies не должны дублироваться в общем preferences store.
+
+**Изменения и recovery:**
+
+- Save project settings должен сохранять единый versioned configuration document через Project Model service; partial writes и конкурирующие изменения требуют optimistic version/revision check либо другого явного concurrency contract.
+- Invalid setting value не должна silently replace valid project config. Ошибки показываются по setting ID/category с причиной и safe action; reset должен менять только выбранное значение/категорию.
+- Unknown descriptor/page/schema version от extension даёт diagnostic и не приводит к выполнению произвольного кода.
+- Project switching очищает привязанные editor view models, отменяет или адресует незавершённые операции и загружает settings только для нового project context.
+- Defaults остаются deterministic при открытии старого проекта; schema migration должна быть проверяема и сохранять неизвестные данные, если это предписывает соответствующая migration policy.
+
+**Задачи:** [COD-96 — Project Settings / Editor Preferences design](https://linear.app/codogma-engine/issue/COD-96/sproektirovat-project-settings-i-editor-preferences-dlya-solidjs-host), [COD-97 — implementation](https://linear.app/codogma-engine/issue/COD-97/realizovat-project-settings-i-editor-preferences-v-solidjs-host), [COD-25 — Project Model](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema), [COD-83 — workspace layout](https://linear.app/codogma-engine/issue/COD-83/razvit-docking-i-workspace-layout-novogo-solidjs-editor-host).
 
 ### 9.1. Сцены, компоненты и Prefabs
 
@@ -945,6 +1005,20 @@ Tool schemas и протоколы должны быть versioned, иметь �
 - npm installation не является доказательством безопасности. Политика lifecycle scripts, источников, лицензий, известных уязвимостей и provenance должна быть явной. Сам package kind не создаёт sandbox и не ограничивает права кода.
 - Package Manager UI — часть Editor Host, но сам npm resolver и dependency graph остаются ответственностью npm.
 
+#### Package discovery and curated catalogue
+
+Package discovery является read-only частью package management domain и отделяется от установки/разрешения зависимостей.
+
+- Discovery adapter обращается к npm-compatible registry/scoped registries, читает поиск, packument и manifests конкретных версий. Он возвращает типизированные сведения о package ID, версиях/dist-tags, tarball/integrity, standard npm metadata и namespaced Codogma metadata.
+- Данные нужно разделять на package manifest (npm package.json), registry packument/version metadata, project manifest + package-lock.json и optional curated catalogue record. Каталог может добавлять displayName, описание, темы, иконку/media, docs/changelog, maintainer/source links и отдельно проверенную compatibility; без catalogue record валидный npm-пакет всё равно должен быть доступен через registry search.
+- Curated metadata не заменяет package manifest, registry data, npm resolver или Feature Registry. Package identity учитывает registry + package name; одноимённые пакеты из разных registries не объединяются без явной политики.
+- Search/detail/compatibility validation не запускают package code или lifecycle scripts и не изменяют project manifests. Package Manager Service остаётся единственной точкой package install/update/remove и владельцем process lifecycle; npm остаётся единственным resolver и владельцем package-lock.json.
+- OpenUPM используется как implementation/metadata reference для отдельного catalogue record, CI validation и разделения catalogue data от package source. OpenUPM распространяет Unity UPM packages, поэтому не является готовым registry adapter или dependency Codogma. Собственный hosted catalogue/registry не является требованием MVP.
+- Package Manager UI проектируется как отдельное окно SolidJS Host с навигационными контекстами, search/sort/filter, package list, details tabs (overview/versions/dependencies/compatibility/features/changelog/license/source), project actions, registry settings, progress and diagnostics. Asset Browser остаётся отдельным workflow для игровых ресурсов.
+- Установка editor extension не означает её автоматическую активацию. Metadata не создаёт sandbox; extension activation выполняется только отдельным trust/compatibility workflow через Extension API.
+
+Normative detail: [docs/package-management-reference.md](package-management-reference.md). Tasks: COD-51 (metadata contracts), COD-52 (Node-side service), COD-53 (extension lifecycle), COD-60 (registry sources), COD-92 (UX/UI design), COD-93 (discovery/catalogue), COD-94 (Host UI).
+
 #### Что сознательно откладывается
 
 Самостоятельный dependency resolver и lockfile, собственный публичный package registry/catalogue и сложная система подписи не входят в фундамент. **Feature/Capability Registry и интеграция его контрактов с выборочной сборкой относятся к целевой архитектуре**, а не к отложенным curated feature sets. Curated feature sets допустимы позднее как группы рекомендованных функций/пакетов, но не как альтернативный resolver. Публикация пакетов начинается после готовности API, CI, лицензирования, semver/backward-compatibility policy и release process.
@@ -1215,6 +1289,8 @@ UI-independent logging contract используется legacy Editor в пер
 
 - [Unity 6.6 / 6000.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d) — последовательность действий в Scene Editor, Inspector, Prefabs, Package Manager, отладка и интегрированный рабочий процесс.
 - Cocos Creator 4.0 User Manual ([official manual](https://docs.cocos.com/creator/4.0/manual/en/)) — version-pinned workflow reference for scenes/assets, scripting, Web publishing, 2D sorting/batching, UI, animation, physics, particles, AssetManager, localization and editor extensions. Its landing page labels 4.0 LTS but also calls Creator 3.x the latest version; validate release availability/API before adopting it. Keep it distinct from the separate `cocos/cocos4` source repository. Use [Creator 3.8 LTS](https://docs.cocos.com/creator/3.8/manual/en/) as a separate established 3.x workflow reference. Focused pages: [asset workflow](https://docs.cocos.com/creator/4.0/manual/en/asset/asset-workflow.html), [TiledMap](https://docs.cocos.com/creator/4.0/manual/en/asset/tiledmap.html), [input events](https://docs.cocos.com/creator/4.0/manual/en/engine/event/event-input.html), [2D sorting](https://docs.cocos.com/creator/4.0/manual/en/engine/rendering/sorting-2d.html), [batching guidelines](https://docs.cocos.com/creator/4.0/manual/en/ui-system/components/engine/ui-batch.html), [UI system](https://docs.cocos.com/creator/4.0/manual/en/2d-object/ui-system/index.html), [scripting](https://docs.cocos.com/creator/4.0/manual/en/scripting/index.html), [web publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-web.html), and [command-line publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-in-command-line.html).
+- Godot Engine — [complete Editor source, pinned commit 95c0fa5fe8a019adc29d074c16b64469b04571f7](<https://github.com/godotengine/godot/tree/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor>), [license](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/LICENSE.txt>). Implementation-reference areas: [Editor shell](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/editor_node.cpp>), [docking](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/docks/editor_dock_manager.cpp>), [Inspector](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/inspector/editor_inspector.cpp>), [2D canvas](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/scene/canvas_item_editor_plugin.cpp>), [TileMap](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/modules/tilemap/editor/tile_map_layer_editor.cpp>), [Animation](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/animation/animation_track_editor.cpp>), [extensions](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/plugins/editor_plugin.h>). This is a technical source reference only: C++/native UI patterns must be adapted to Codogma's SolidJS/TypeScript/Web architecture; file-level licenses and third-party notices must be checked before code reuse.
+- [Editor Engineering References](editor-engineering-references.md) — каталог полноценных open-source Editor систем и конкретных архитектурных решений Defold, Fyrox, o2, GDevelop, ezEngine, Stride, Doriax и других проектов. Включает исторический CocosBuilder, отличие Cocos2d-x runtime от integrated Editor, pinned revisions, licensing/platform cautions и mapping к COD issues. Использовать для engineering research, не как список runtime dependencies или новых UX targets.
 - Cocos 4 (upstream: [repository](https://github.com/cocos/cocos4), [branch v4.0.0](https://github.com/cocos/cocos4/tree/v4.0.0)) — reference по разделению core/editor/CLI и подсистемам physics backend selector, 2D batching, Animation Graph, Tiled integration, UI layout, particle lifecycle, AssetManager и display/DPR configuration. Во время исследования 26.10.2026 ветка имела prerelease-версию; рассматривать её как источник архитектурных концепций и проверяемого кода, а не как обязательную runtime-зависимость или доказательство стабильности.
 - Cocos 4 reference files: [physics selector](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/physics-2d/framework/physics-selector.ts), [2D batcher](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/renderer/batcher-2d.ts), [UI static batch component](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/components/ui-static-batch.ts), [2D animation graph](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/animation/marionette), [Tiled map](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/tiledmap), [UI](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/ui), [2D particles](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/particle-2d) and [AssetManager](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/asset/asset-manager/asset-manager.ts).
 - Отдельные performance references: [on-demand Graphics GPU buffer allocation](https://github.com/cocos/cocos4/commit/a803406ef1eb0eb0002f98a50fc0758d8ab4045c) и [Web DPR startup configuration](https://github.com/cocos/cocos4/commit/f570c1f02d20431c7583d2a242233df6676a2b70). Эти решения нельзя считать автоматически подходящими Codogma: нужно проверить реальные измерения, браузерные ограничения и доступность требуемых hooks в текущем Phaser runtime.
@@ -1240,7 +1316,7 @@ UI-independent logging contract используется legacy Editor в пер
 
 ### 15.1. Каталог технических ссылок по подсистемам
 
-Подробный каталог официальных руководств и кандидатов вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md). Web-first risks и уроки из Unity, Cocos Creator, Godot и Defold собраны в [architecture risk register](architecture-risk-register.md). Он включает EVA.js, Phaser/PixiJS, Cocos Creator 4.0 и отдельный репозиторий Cocos 4, Unity 6.6 (6000.6), Tiled, physics backends, animation runtimes, инструменты TypeScript/build/test, Tauri и платформенные SDK.
+Подробный каталог документации и API вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md), а инженерные reference полноценных редакторов и их конкретных архитектурных решений — в [docs/editor-engineering-references.md](editor-engineering-references.md). Web-first и editor-architecture risks собраны в [architecture risk register](architecture-risk-register.md). Ссылки в каталогах не являются обязательными зависимостями или UX targets.
 
 Использовать каталог вместе с этим ТЗ и [дорожной картой](roadmap.md). Перед выбором зависимости перепроверять текущую версию и лицензию; ссылки являются техническими reference, не утверждённым dependency manifest.
 

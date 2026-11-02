@@ -103,24 +103,57 @@ test("all nodes follow Pencil container rules", () => {
     assert.deepEqual(invalid, [], "only frame/group nodes may have a children property")
 })
 
-test("the .pen document keeps all eleven editor and design-system artboards", () => {
-    assert.equal(PEN.children.length, 11)
-    assert.deepEqual(
-        PEN.children.map((node) => node.name),
-        [
-            "00 - Foundations and UI components",
-            "01 - Workbench Dark",
-            "02 - Workbench Light",
-            "03 - Animation workspace and command palette",
-            "04 - Game Preview and diagnostics",
-            "05 - Sprite Authoring and Import",
-            "06 - Future Capability Map",
-            "07 - Additional 2D editor surfaces",
-            "08 - Godot editor icon library",
-            "09 - Design token reference & contrast",
-            "10 - Compact Workbench 1280 × 720",
-        ],
-    )
+test("the .pen document preserves the original eleven artboards and supplemental editor workflows", () => {
+    const originalArtboards = [
+        "00 - Foundations and UI components",
+        "01 - Workbench Dark",
+        "02 - Workbench Light",
+        "03 - Animation workspace and command palette",
+        "04 - Game Preview and diagnostics",
+        "05 - Sprite Authoring and Import",
+        "06 - Future Capability Map",
+        "07 - Additional 2D editor surfaces",
+        "08 - Godot editor icon library",
+        "09 - Design token reference & contrast",
+        "10 - Compact Workbench 1280 × 720",
+    ]
+    const supplementalArtboards = [
+        "11 - Package Manager Dark (Proposed)",
+        "12 - Package Manager Light (Proposed)",
+        "13 - Package Manager Compact (Proposed)",
+        "14 - Package Manager / In Project & Updates Dark",
+        "15 - Package Registries & Scope Routing Dark",
+        "16 - Package Manager / Dependency Conflict & Recovery",
+        "17 - Package Manager / Add Package Dialog",
+        "18 - Package Manager / Extension Activation Review",
+        "19 - Input Actions Editor Dark (Proposed)",
+        "20 - Input Actions Editor Light (Proposed)",
+        "21 - Input Actions Editor Compact (Proposed)",
+        "22 - Input Actions Editor / Conflict Diagnostics",
+    ]
+
+    assert.deepEqual(PEN.children.slice(0, originalArtboards.length).map((node) => node.name), originalArtboards)
+    assert.deepEqual(PEN.children.slice(originalArtboards.length).map((node) => node.name), supplementalArtboards)
+    assert.equal(new Set(PEN.children.map((node) => node.id)).size, PEN.children.length)
+})
+
+test("all editor artboards have valid geometry and do not overlap", () => {
+    for (const board of PEN.children) {
+        for (const key of ["x", "y", "width", "height"]) {
+            assert.ok(Number.isFinite(board[key]), board.name + " must define numeric " + key)
+        }
+        assert.ok(board.width > 0 && board.height > 0, board.name + " must have positive dimensions")
+    }
+
+    for (let left = 0; left < PEN.children.length; left++) {
+        const a = PEN.children[left]
+        for (let right = left + 1; right < PEN.children.length; right++) {
+            const b = PEN.children[right]
+            const overlaps = a.x < b.x + b.width && a.x + a.width > b.x &&
+                a.y < b.y + b.height && a.y + a.height > b.y
+            assert.equal(overlaps, false, a.name + " must not overlap " + b.name)
+        }
+    }
 })
 
 test("compact Workbench preserves minimum panels and collapses secondary docks", () => {
