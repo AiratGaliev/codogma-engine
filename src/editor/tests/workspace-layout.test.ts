@@ -58,8 +58,8 @@ test("migrates the legacy COD-80 layout and preserves its user choices", () => {
   assert.deepEqual(getVisibleSidePanels(layout, "right"), []);
   assert.deepEqual(getVisibleBottomTabs(layout, false), [
     "Project",
-    "Hierarchy",
     "Animation",
+    "Hierarchy",
     "Components",
     "Console",
   ]);
