@@ -48,9 +48,12 @@ import {
   addUserComponentDefinition,
   attachUserComponent,
   createUserComponentDefinition,
+  createUserComponentSchema,
   detachUserComponent,
   formatUserComponentsContent,
   parseUserComponentsContent,
+  validateUserComponentProperties,
+  validateUserComponentPropertyValue,
   removeUserComponentDefinition,
   updateUserComponentDefinition,
   type UserComponentsDocument,
@@ -62,6 +65,10 @@ import {
   createProjectFolder,
   type ProjectEntry,
 } from "./services/editor-api";
+import {
+  checkTypeScriptSource,
+  type TypeScriptSourceDiagnostic,
+} from "./services/typescript-diagnostics.ts";
 import {
   connectEditorMcpBridge,
   type EditorMcpHandler,
@@ -99,7 +106,7 @@ import FxInspector from "./components/FxInspector";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
-type ViewportTab = "Scene" | "Game";
+type ViewportTab = "Scene" | "Game" | "Source";
 type FocusContext = "global" | "scene" | "hierarchy" | "inspector" | "project" | "animation" | "components" | "console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
 
@@ -367,6 +374,12 @@ function App() {
   const [componentDocumentPath, setComponentDocumentPath] = createSignal("");
   const [savedComponentContent, setSavedComponentContent] = createSignal("");
   const [componentSaving, setComponentSaving] = createSignal(false);
+  const [scriptSourcePath, setScriptSourcePath] = createSignal("");
+  const [scriptSource, setScriptSource] = createSignal("");
+  const [savedScriptSource, setSavedScriptSource] = createSignal("");
+  const [scriptSaving, setScriptSaving] = createSignal(false);
+  const [scriptChecking, setScriptChecking] = createSignal(false);
+  const [scriptDiagnostics, setScriptDiagnostics] = createSignal<TypeScriptSourceDiagnostic[]>([]);
   const [newComponentName, setNewComponentName] = createSignal("");
   const [newComponentPropertyName, setNewComponentPropertyName] = createSignal("");
   const [newComponentPropertyType, setNewComponentPropertyType] = createSignal<"number" | "string" | "boolean">("number");
@@ -695,6 +708,7 @@ function App() {
 
   let sceneLoadSequence = 0;
   let documentLoadSequence = 0;
+  let scriptCheckSequence = 0;
 
   async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
