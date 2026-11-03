@@ -15,6 +15,7 @@ import rejectedActionResultFixture from "./fixtures/action-result.rejected.json"
 import {
   MAX_WIRE_MESSAGE_BYTES,
   authorizeRegisteredTestAction,
+  isContractVersion,
   isEventTypeAvailable,
   isKnownEventType,
   negotiateCapabilities,
