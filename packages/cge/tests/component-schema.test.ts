@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   serializeComponentProperties,
+  serializeSceneDocument,
+  parseSceneDocument,
   validateComponentProperties,
   validateComponentTypeSchema,
   type ComponentTypeSchemaV1,
@@ -74,4 +76,62 @@ test("validates resource and node references by stable ids", () => {
   });
   assert.equal(result.valid, false);
   assert.equal(result.diagnostics.filter((item) => item.code === "COMPONENT_INVALID_REFERENCE").length, 2);
+});
+
+test("round-trips Scene component values using the same schema and stable resource references", () => {
+  const assets = new Map([
+    ["image-player", { id: "image-player", path: "assets/player.png", kind: "image" as const }],
+  ]);
+  const context = {
+    assets,
+    componentSchemas: new Map([[schema.typeId, schema]]),
+    registeredComponentTypes: new Set([schema.typeId]),
+  };
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-1",
+    name: "Level",
+    settings: {},
+    rootNodes: [
+      {
+        id: "node-player",
+        name: "Player",
+        active: true,
+        transform: { x: 10, y: 20, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [{
+          id: "component-follow",
+          typeId: schema.typeId,
+          schemaVersion: 1,
+          enabled: true,
+          properties: {
+            speed: 150,
+            mode: "instant",
+            texture: { assetId: "image-player" },
+            target: { nodeId: "node-enemy" },
+          },
+        }],
+        children: [],
+      },
+      {
+        id: "node-enemy",
+        name: "Enemy",
+        active: true,
+        transform: { x: 40, y: 50, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [],
+        children: [],
+      },
+    ],
+  };
+
+  const serialized = serializeSceneDocument(scene, context);
+  const parsed = parseSceneDocument(serialized, context);
+  assert.equal(parsed.value !== undefined, true);
+  const player = parsed.value?.rootNodes[0];
+  assert.deepEqual(player?.components[0]?.properties, {
+    speed: 150,
+    mode: "instant",
+    texture: { assetId: "image-player" },
+    target: { nodeId: "node-enemy" },
+    enabled: true,
+  });
 });
