@@ -1,0 +1,1 @@
+{"id":"events.physics.contact","version":"1.0.0","description":"Physics contact observation is unavailable.","scope":"runtime","status":"unavailable","eventTypes":[],"reason":{"code":"RUNTIME_LIMITATION","message":"The selected adapter cannot guarantee contact event ordering.","retryable":false}}
