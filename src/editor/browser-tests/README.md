@@ -17,9 +17,8 @@ directory and starts the Vite Host at `127.0.0.1:5173`. The browser tests exerci
 scene open/edit/save/reopen, Undo/Redo, Phaser iframe lifecycle, theme persistence,
 command routing, Inspector state and splitter interaction.
 
-Workspace-layout acceptance covers cross-zone panel grouping, pointer and native
-panel-header drops into empty side zones, canceled pointer gestures, close/reopen, versioned localStorage migration,
-restoration after reload, keyboard-driven tab navigation and splitter resizing,
+Workspace-layout acceptance covers cross-zone panel grouping, a unified pointer interaction for panel headers and tabs, translucent group previews, before/after insertion indicators, Escape/pointer cancellation, close/reopen, versioned localStorage migration,
+restoration after reload, keyboard-driven tab navigation, splitter resizing and double-click size reset,
 compact/wide user-size round trips, short-viewport constraints, pointer identity/lost-capture cleanup, Console selection
 across compact/wide transitions, and narrow-screen Undock behavior while the Bottom
 presentation is transient. The tests

@@ -465,6 +465,7 @@ textarea::placeholder {
 }
 
 .side-dock-zone {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -494,6 +495,7 @@ textarea::placeholder {
 
 .side-dock-tab {
   display: inline-flex;
+  touch-action: none;
   cursor: grab;
   min-width: 0;
   min-height: 28px;
@@ -556,9 +558,7 @@ textarea::placeholder {
   display: none !important;
 }
 
-.panel-header-draggable {
-  cursor: grab;
-}
+.panel-header-draggable { cursor: grab; touch-action: none; user-select: none; }
 
 .panel-header-draggable:active {
   cursor: grabbing;
@@ -815,6 +815,10 @@ textarea::placeholder {
   cursor: col-resize;
   touch-action: none;
 }
+.vertical-splitter::before {
+  position: absolute; z-index: 1; top: 0; bottom: 0; left: -4px; width: 12px;
+  background: transparent; content: "";
+}
 
 .vertical-splitter::after {
   position: absolute;
@@ -837,6 +841,10 @@ textarea::placeholder {
   height: 4px;
   cursor: row-resize;
   touch-action: none;
+}
+.horizontal-splitter::before, .console-splitter::before {
+  position: absolute; z-index: 1; top: -4px; right: 0; left: 0; height: 12px;
+  background: transparent; content: "";
 }
 
 .center-workspace {
@@ -1387,16 +1395,39 @@ textarea::placeholder {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.bottom-tabs.dock-drop-target,
-.side-dock-zone.dock-drop-target {
-  outline: 1px dashed var(--accent-selection);
-  outline-offset: -2px;
-  background: var(--surface-panel-header);
-}
+.side-dock-zone.dock-drop-target { outline: 1px solid color-mix(in srgb, var(--accent-selection) 64%, transparent); outline-offset: -2px; }
 
-.console-header-draggable {
-  cursor: grab;
+.dock-drop-preview {
+  position: absolute; z-index: 18; inset: 34px 7px 7px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-selection) 84%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-selection) 15%, var(--surface-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-selection) 20%, transparent);
+  color: var(--text-primary); pointer-events: none; text-align: center;
 }
+.dock-drop-preview strong { font-size: 11px; font-weight: 600; }
+.dock-drop-preview span { color: var(--text-secondary); font-size: 9px; }
+.dock-drag-ghost {
+  position: fixed; z-index: 1000; display: flex; min-width: 112px; height: 30px;
+  align-items: center; gap: 8px; padding: 0 10px;
+  border: 1px solid var(--accent-selection); border-radius: 4px;
+  background: var(--surface-panel-header); box-shadow: 0 8px 26px rgb(0 0 0 / 28%);
+  color: var(--text-primary); font-size: 10px; font-weight: 600;
+  pointer-events: none; user-select: none;
+}
+.workbench.dock-dragging { cursor: grabbing; }
+.side-dock-tab, .dock-tab { position: relative; }
+.dock-drop-insert-before::before, .dock-drop-insert-after::after {
+  position: absolute; z-index: 2; top: 3px; bottom: 3px; width: 2px; border-radius: 2px;
+  background: var(--accent-selection);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-selection) 24%, transparent);
+  content: ""; pointer-events: none;
+}
+.dock-drop-insert-before::before { left: -2px; }
+.dock-drop-insert-after::after { right: -2px; }
+
+.console-header-draggable { cursor: grab; touch-action: none; user-select: none; }
 
 .console-header-draggable:active {
   cursor: grabbing;
@@ -1418,6 +1449,7 @@ textarea::placeholder {
 }
 
 .bottom-upper-panel {
+  position: relative;
   display: grid;
   min-height: 0;
   grid-template-rows: 28px minmax(0, 1fr);
@@ -1433,6 +1465,7 @@ textarea::placeholder {
   min-width: 82px;
   font-size: 10px;
   cursor: grab;
+  touch-action: none;
 }
 
 .dock-tab:active {

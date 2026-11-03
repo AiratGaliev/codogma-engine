@@ -491,6 +491,7 @@ export function reorderDockTab(
   zone: DockZone,
   compact = false,
   forceSidePanelsToBottom = false,
+  insertion: "before" | "after" = "after",
 ): WorkspaceLayout {
   if (source === target) return layout;
 
@@ -517,8 +518,8 @@ export function reorderDockTab(
   order.splice(sourceIndex, 1);
   const targetIndexAfterRemoval = order.indexOf(target);
   if (targetIndexAfterRemoval < 0) return layout;
-  // Dropping on a tab consistently inserts the dragged tab immediately after it.
-  order.splice(targetIndexAfterRemoval + 1, 0, source);
+  const insertionIndex = targetIndexAfterRemoval + (insertion === "after" ? 1 : 0);
+  order.splice(insertionIndex, 0, source);
 
   const next: WorkspaceLayout = { ...layout, bottomTabOrder: order };
   if (zone === "bottom") next.bottomTab = source;

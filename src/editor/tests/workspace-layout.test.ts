@@ -267,6 +267,14 @@ test("reorders tabs only within their current dock group", () => {
   assert.equal(invalid, layout);
 });
 
+test("supports insertion before and after the hovered tab", () => {
+  const layout = createDefaultWorkspaceLayout(false);
+  const before = reorderDockTab(layout, "Components", "Project", "bottom", false, false, "before");
+  assert.ok(before.bottomTabOrder.indexOf("Components") < before.bottomTabOrder.indexOf("Project"));
+  const after = reorderDockTab(layout, "Components", "Project", "bottom", false, false, "after");
+  assert.ok(after.bottomTabOrder.indexOf("Components") > after.bottomTabOrder.indexOf("Project"));
+});
+
 test("compact bottom tab reordering includes temporarily presented side panels", () => {
   const layout = createDefaultWorkspaceLayout(true);
   const reordered = reorderDockTab(layout, "Project", "Hierarchy", "bottom", true, true);

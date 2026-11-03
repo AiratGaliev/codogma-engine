@@ -45,7 +45,7 @@ async function dragDockTabToEmptyZone(page: Page, source: Locator, targetZone: L
   await page.mouse.up();
 }
 
-async function dragNativePanelHeaderToEmptyZone(
+async function dragPanelHeaderWithPointer(
   page: Page,
   source: Locator,
   targetZone: Locator,
@@ -272,7 +272,7 @@ test("Console panel can be dragged into the bottom Dock and undocked again", asy
   await expect(page.getByTestId("console-panel")).toBeVisible();
   await expect(page.getByTestId("splitter-console")).toBeVisible();
 
-  await page.locator(".desktop-console-panel .console-header").dragTo(page.locator(".bottom-tabs"));
+  await dragPanelHeaderWithPointer(page, page.locator(".desktop-console-panel .console-header"), page.locator(".bottom-tabs"));
 
   await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
   await expect(page.getByTestId("console-panel")).toBeVisible();
@@ -293,7 +293,7 @@ test("Hierarchy and Inspector panels dock into Bottom, persist and restore to th
   await expect(page.getByTestId("inspector-panel")).toBeVisible();
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
-  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), bottomTabs);
   await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
   await page.reload();
@@ -303,7 +303,7 @@ test("Hierarchy and Inspector panels dock into Bottom, persist and restore to th
   await expect(page.locator(".workspace-row").getByTestId("hierarchy-panel")).toBeVisible();
   await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toHaveCount(0);
 
-  await page.locator(".inspector-panel .panel-header").dragTo(bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".inspector-panel .panel-header"), bottomTabs);
   await expect(bottomTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
   await expect(page.getByTestId("bottom-docked-content").getByTestId("inspector-panel")).toBeVisible();
   await page.getByRole("button", { name: "Undock Inspector" }).click();
@@ -367,7 +367,7 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
 
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
   const inspectorTab = rightTabs.getByRole("tab", { name: "Inspector" });
-  await page.locator(".hierarchy-panel .panel-header").dragTo(inspectorTab);
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), inspectorTab);
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   await expect(inspectorTab).toBeVisible();
   const nativeDropOrder = await rightTabs.locator("[data-dock-tab]").evaluateAll((elements) =>
@@ -411,7 +411,7 @@ test("pointer dragging a Bottom tab into a side group preserves the drop target 
   await page.goto("/");
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
-  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), bottomTabs);
   const sourceTab = bottomTabs.getByRole("tab", { name: "Hierarchy" });
   await expect(sourceTab).toBeVisible();
 
@@ -430,7 +430,7 @@ test("pointer dragging a Bottom tab into a side group preserves the drop target 
 test("narrow viewport presents saved side panels in Bottom and restores their zones when widened", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), page.getByTestId("dock-zone-right"));
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
 
@@ -460,6 +460,56 @@ test("narrow viewport presents saved side panels in Bottom and restores their zo
   await expect(page.getByRole("tablist", { name: "Bottom workspace" }).getByRole("tab", { name: "Hierarchy" })).toHaveCount(0);
 });
 
+test("panel-header pointer docking preview can be canceled with Escape", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const header = page.locator(".hierarchy-panel .panel-header");
+  const target = page.getByTestId("bottom-tabs");
+  const a = await header.boundingBox(), b = await target.boundingBox();
+  if (!a || !b) throw new Error("Dock drag geometry is unavailable.");
+  await page.mouse.move(a.x+a.width/2,a.y+a.height/2);
+  await page.mouse.down();
+  await page.mouse.move(a.x+a.width/2+12,a.y+a.height/2,{steps:3});
+  await page.mouse.move(b.x+b.width/2,b.y+b.height/2,{steps:8});
+  await expect(page.getByTestId("dock-drop-preview")).toBeVisible();
+  await expect(page.getByTestId("dock-drag-ghost")).toContainText("Hierarchy");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("dock-drop-preview")).toHaveCount(0);
+  await expect(page.getByTestId("dock-drag-ghost")).toHaveCount(0);
+  await page.mouse.up();
+  const layout = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(layout.hierarchyZone).toBe("left");
+  await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
+});
+
+test("tab insertion marker supports dropping before an existing tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const tabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  const sourceTab = tabs.getByRole("tab", { name: "Animation" });
+  const targetTab = tabs.getByRole("tab", { name: "Project" });
+  const a = await sourceTab.boundingBox(), b = await targetTab.boundingBox();
+  if (!a || !b) throw new Error("Tab drag geometry is unavailable.");
+  await page.mouse.move(a.x+a.width/2,a.y+a.height/2);
+  await page.mouse.down();
+  await page.mouse.move(a.x+a.width/2+10,a.y+a.height/2,{steps:2});
+  await page.mouse.move(b.x+3,b.y+b.height/2,{steps:8});
+  await expect(targetTab).toHaveClass(/dock-drop-insert-before/);
+  await page.mouse.up();
+  const order = await tabs.locator("[data-dock-tab]").evaluateAll((elements) => elements.map((el) => el.getAttribute("data-dock-tab")));
+  expect(order.indexOf("Animation")).toBeLessThan(order.indexOf("Project"));
+});
+
+test("splitter double-click restores its adaptive workspace default", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const splitter = page.getByTestId("splitter-hierarchy");
+  await splitter.dblclick();
+  await expect(splitter).toHaveAttribute("aria-valuenow", "228");
+  const layout = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(layout.leftWidthCustomized).toBe(false);
+});
+
 test("dock tabs and splitters support keyboard navigation and focusable resizing", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
@@ -475,7 +525,7 @@ test("dock tabs and splitters support keyboard navigation and focusable resizing
   );
   expect(resizedLayout.leftWidthCustomized).toBe(true);
 
-  await page.locator(".hierarchy-panel .panel-header").dragTo(page.getByTestId("dock-zone-right"));
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), page.getByTestId("dock-zone-right"));
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
   const hierarchyTab = rightTabs.getByRole("tab", { name: "Hierarchy" });
   await hierarchyTab.focus();
@@ -902,7 +952,9 @@ test("side dock tabs support pointer docking and reordering into Bottom", async 
   await page.goto("/");
 
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
-  await page.locator(".hierarchy-panel .panel-header").dragTo(
+  await dragPanelHeaderWithPointer(
+    page,
+    page.locator(".hierarchy-panel .panel-header"),
     rightTabs.getByRole("tab", { name: "Inspector" }),
   );
 
@@ -1006,8 +1058,8 @@ test("empty side dock zones remain valid pointer drop targets and restore tab fo
   await page.goto("/");
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
 
-  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
-  await page.locator(".inspector-panel .panel-header").dragTo(bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".inspector-panel .panel-header"), bottomTabs);
   await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   await expect(bottomTabs.getByRole("tab", { name: "Inspector" })).toBeVisible();
   await expect(page.getByTestId("dock-zone-left")).not.toBeVisible();
@@ -1162,19 +1214,19 @@ test("exact user-selected default dimensions survive compact restore and wide re
 });
 
 
-test("native panel-header drag can return a Bottom panel to an empty side dock", async ({ page }) => {
+test("pointer panel-header drag can return a Bottom panel to an empty side dock", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
-  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
-  await page.locator(".inspector-panel .panel-header").dragTo(bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".inspector-panel .panel-header"), bottomTabs);
 
   await expect(page.getByTestId("dock-zone-left")).not.toBeVisible();
   await expect(page.getByTestId("dock-zone-right")).not.toBeVisible();
 
   await bottomTabs.getByRole("tab", { name: "Hierarchy" }).click();
-  await dragNativePanelHeaderToEmptyZone(
+  await dragPanelHeaderWithPointer(
     page,
     page.locator(".hierarchy-panel .panel-header"),
     page.getByTestId("dock-zone-left"),
@@ -1238,7 +1290,7 @@ test("undocking a transient narrow Bottom panel keeps it visible until the side 
   await page.goto("/");
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
 
-  await page.locator(".hierarchy-panel .panel-header").dragTo(bottomTabs);
+  await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), bottomTabs);
   await page.setViewportSize({ width: 700, height: 900 });
 
   const narrowTabs = page.getByRole("tablist", { name: "Bottom workspace" });

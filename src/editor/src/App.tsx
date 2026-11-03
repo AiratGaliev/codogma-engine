@@ -100,6 +100,21 @@ type ViewportTab = "Scene" | "Game";
 type FocusContext = "global" | "scene" | "hierarchy" | "inspector" | "project" | "animation" | "components" | "console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
 
+type DockDropTarget =
+  | { zone: DockZone; kind: "group" }
+  | { zone: DockZone; kind: "tab"; target: BottomTab; insertion: "before" | "after" };
+
+interface DockPointerDrag {
+  panel: BottomTab;
+  pointerId: number;
+  pointerType: string;
+  startX: number;
+  startY: number;
+  active: boolean;
+  source: "tab" | "header";
+  captureElement: HTMLElement;
+}
+
 interface ConsoleMessage {
   id: number;
   level: ConsoleLevel;
@@ -229,13 +244,12 @@ function PanelHeader(props: {
   icon: string;
   theme: Theme;
   trailing?: string;
-  onDragStart?: (event: DragEvent) => void;
-  onDragEnd?: () => void;
+  onPointerDown?: (event: PointerEvent & { currentTarget: HTMLElement }) => void;
   onUndock?: () => void;
   onClose?: () => void;
 }) {
   return (
-    <div class="panel-header" draggable={Boolean(props.onDragStart)} onDragStart={props.onDragStart} onDragEnd={props.onDragEnd} classList={{ "panel-header-draggable": Boolean(props.onDragStart) }}>
+    <div class="panel-header" onPointerDown={(event) => props.onPointerDown?.(event)} classList={{ "panel-header-draggable": Boolean(props.onPointerDown) }}>
       <Icon theme={props.theme} name={props.icon} size={14} />
       <span>{props.title}</span>
       <Show when={props.trailing}>
@@ -258,8 +272,7 @@ function ConsolePanel(props: {
   onLevelChange: (level: string) => void;
   messages: ConsoleMessage[];
   onClear: () => void;
-  onDragStart?: (event: DragEvent) => void;
-  onDragEnd?: () => void;
+  onPointerDown?: (event: PointerEvent & { currentTarget: HTMLElement }) => void;
   onUndock?: () => void;
 }) {
 
@@ -267,10 +280,8 @@ function ConsolePanel(props: {
     <section class="console-panel" classList={{ [props.className]: true }} data-testid="console-panel" data-focus-context="console">
       <div
         class="console-header"
-        draggable={Boolean(props.onDragStart)}
-        onDragStart={props.onDragStart}
-        onDragEnd={props.onDragEnd}
-        classList={{ "console-header-draggable": Boolean(props.onDragStart) }}
+        onPointerDown={(event) => props.onPointerDown?.(event)}
+        classList={{ "console-header-draggable": Boolean(props.onPointerDown) }}
       >
         <div class="console-title"><Icon theme={props.theme} name="script" size={13} /> Console</div>
         <select aria-label="Console message filter" value={props.level} onChange={(event) => props.onLevelChange(event.currentTarget.value)}>
@@ -380,7 +391,8 @@ function App() {
   const [gameLoaded, setGameLoaded] = createSignal(false);
   const [consoleLevel, setConsoleLevel] = createSignal("all");
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
-  const [dockTargetZone, setDockTargetZone] = createSignal<DockZone | null>(null);
+  const [dockDropTarget, setDockDropTarget] = createSignal<DockDropTarget | null>(null);
+  const [dockDragPosition, setDockDragPosition] = createSignal({ x: 0, y: 0 });
   const [draggedDockPanel, setDraggedDockPanel] = createSignal<BottomTab | null>(null);
   const [hiddenObjects, setHiddenObjects] = createSignal(new Set<string>());
   const [lockedObjects, setLockedObjects] = createSignal(new Set<string>());
@@ -401,7 +413,7 @@ function App() {
   let animationPlaybackRaf = 0;
   let animationPlaybackLastTimestamp = 0;
   let animationPlaybackElapsed = 0;
-  let bottomTabPointerDrag: { panel: BottomTab; pointerId: number; startX: number; startY: number; active: boolean } | undefined;
+  let dockPointerDrag: DockPointerDrag | undefined;
   let suppressDockTabClick = false;
   let resizeState:
     | {
@@ -1625,6 +1637,16 @@ function App() {
     resizeState = undefined;
   }
 
+  function resetSplitter(kind: "left" | "right" | "bottom" | "console") {
+    const defaults = createDefaultWorkspaceLayout(compactWorkbench());
+    setLayout((current) => {
+      if (kind === "left") return { ...current, leftWidth: defaults.leftWidth, leftWidthCustomized: false };
+      if (kind === "right") return { ...current, rightWidth: defaults.rightWidth, rightWidthCustomized: false };
+      if (kind === "bottom") return { ...current, bottomHeight: defaults.bottomHeight, bottomHeightCustomized: false };
+      return { ...current, consoleHeight: defaults.consoleHeight, consoleHeightCustomized: false };
+    });
+  }
+
   function getStoredPanelZone(panel: SidePanelId): DockZone {
     return panel === "Hierarchy" ? layout().hierarchyZone : layout().inspectorZone;
   }
@@ -1724,24 +1746,6 @@ function App() {
       }
       return { ...current, bottomTab: tab };
     });
-  }
-
-  function handlePanelDragStart(event: DragEvent, panel: BottomTab) {
-    setDockTargetZone(null);
-    setDraggedDockPanel(panel);
-    if (event.dataTransfer) {
-      event.dataTransfer.setData("text/plain", panel);
-      event.dataTransfer.effectAllowed = "move";
-    }
-  }
-
-  function handlePanelDragEnd() {
-    setDraggedDockPanel(null);
-    setDockTargetZone(null);
-  }
-
-  function handleConsoleDragStart(event: DragEvent) {
-    handlePanelDragStart(event, "Console");
   }
 
   function dockSidePanel(
@@ -1851,83 +1855,112 @@ function App() {
     log("info", "Workspace layout restored to defaults");
   }
 
-  function startBottomTabPointerDrag(event: PointerEvent & { currentTarget: HTMLButtonElement }, tab: BottomTab) {
-    if (event.button !== 0) return;
-    if (bottomTabPointerDrag) {
-      event.preventDefault();
+  function startDockPointerDrag(
+    event: PointerEvent & { currentTarget: HTMLElement },
+    panel: BottomTab,
+    source: "tab" | "header",
+  ) {
+    if (event.button !== 0 || event.isPrimary === false || dockPointerDrag || resizeState) return;
+    if (source === "header" && event.target instanceof Element &&
+      event.target.closest("button, input, select, textarea, a, [role=\"button\"]")) return;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
       return;
     }
-    suppressDockTabClick = false;
-    bottomTabPointerDrag = { panel: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
-    setDockTargetZone(null);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (source === "tab") suppressDockTabClick = false;
+    dockPointerDrag = {
+      panel, pointerId: event.pointerId, pointerType: event.pointerType,
+      startX: event.clientX, startY: event.clientY, active: false,
+      source, captureElement: event.currentTarget,
+    };
+    setDockDropTarget(null);
   }
 
-  function moveBottomTabPointerDrag(event: PointerEvent) {
-    const drag = bottomTabPointerDrag;
+  function getDockDropTargetAt(clientX: number, clientY: number, source: BottomTab): DockDropTarget | null {
+    const element = document.elementFromPoint(clientX, clientY);
+    if (!(element instanceof Element)) return null;
+    const zoneValue = element.closest<HTMLElement>("[data-dock-zone]")?.dataset.dockZone;
+    if (zoneValue !== "left" && zoneValue !== "right" && zoneValue !== "bottom") return null;
+    const zone: DockZone = zoneValue;
+    if (!isDockTargetAllowed(source, zone)) return null;
+    const tabElement = element.closest<HTMLElement>("[data-dock-tab]");
+    const tabValue = tabElement?.dataset.dockTab;
+    const validTabs: readonly BottomTab[] = ["Project","Animation","Components","Console","Hierarchy","Inspector"];
+    if (tabElement && tabValue && validTabs.includes(tabValue as BottomTab) && tabValue !== source) {
+      const bounds = tabElement.getBoundingClientRect();
+      return { zone, kind: "tab", target: tabValue as BottomTab,
+        insertion: clientX < bounds.left + bounds.width / 2 ? "before" : "after" };
+    }
+    if (tabValue === source) return null;
+    return { zone, kind: "group" };
+  }
+
+  function moveDockPointerDrag(event: PointerEvent) {
+    const drag = dockPointerDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 6) {
+    if (!drag.active) {
+      const threshold = drag.pointerType === "touch" ? 8 : 6;
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < threshold) return;
       drag.active = true;
       setDraggedDockPanel(drag.panel);
     }
-    if (drag.active) {
-      const targetZoneElement = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>("[data-dock-zone]");
-      const targetZone = targetZoneElement?.dataset.dockZone as DockZone | undefined;
-      setDockTargetZone(
-        targetZone && isDockTargetAllowed(drag.panel, targetZone)
-          ? targetZone
-          : null,
-      );
-    }
+    if (event.pointerType !== "touch" && event.buttons !== 1) return;
+    event.preventDefault();
+    setDockDragPosition({ x: event.clientX, y: event.clientY });
+    setDockDropTarget(getDockDropTargetAt(event.clientX, event.clientY, drag.panel));
   }
 
-  function reorderDockPanelTab(source: BottomTab, target: BottomTab, zone: DockZone) {
-    setLayout((current) =>
-      reorderWorkspaceDockTab(current, source, target, zone, compactWorkbench(), narrowWorkbench()),
-    );
+  function reorderDockPanelTab(source: BottomTab, target: BottomTab, zone: DockZone,
+    insertion: "before" | "after" = "after") {
+    setLayout((current) => reorderWorkspaceDockTab(
+      current, source, target, zone, compactWorkbench(), narrowWorkbench(), insertion,
+    ));
   }
 
-  function endBottomTabPointerDrag(event: PointerEvent) {
-    const drag = bottomTabPointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    bottomTabPointerDrag = undefined;
-    if (drag.active) {
-      const target = document.elementFromPoint(event.clientX, event.clientY);
-      const targetTabElement = target?.closest<HTMLElement>("[data-dock-tab]");
-      const targetZoneElement = target?.closest<HTMLElement>("[data-dock-zone]");
-      const targetTab = targetTabElement?.dataset.dockTab as BottomTab | undefined;
-      const targetZone = targetZoneElement?.dataset.dockZone as DockZone | undefined;
-      if (targetZone && isDockTargetAllowed(drag.panel, targetZone)) {
-        if (drag.panel === "Hierarchy" || drag.panel === "Inspector") {
-          const transientNarrowBottom = narrowWorkbench() && targetZone === "bottom";
-          if (!transientNarrowBottom && targetZone !== getStoredPanelZone(drag.panel)) {
-            dockSidePanel(drag.panel, targetZone);
-          }
-          if (targetTab) {
-            reorderDockPanelTab(drag.panel, targetTab, targetZone);
-          } else if (transientNarrowBottom) {
-            activateBottomTab(drag.panel);
-          } else if (targetZone === getStoredPanelZone(drag.panel)) {
-            activateSidePanel(drag.panel);
-          }
-          focusDockTab(drag.panel, targetZone);
-        } else if (targetZone === "bottom" && targetTab) {
-          reorderDockPanelTab(drag.panel, targetTab, targetZone);
-        }
+  function commitDockDrop(panel: BottomTab, target: DockDropTarget) {
+    if (panel === "Hierarchy" || panel === "Inspector") {
+      const transientNarrowBottom = narrowWorkbench() && target.zone === "bottom";
+      if (transientNarrowBottom) {
+        if (target.kind === "tab") reorderDockPanelTab(panel, target.target, target.zone, target.insertion);
+        else activateBottomTab(panel);
+      } else {
+        const currentZone = getStoredPanelZone(panel);
+        if (target.zone !== currentZone) dockSidePanel(panel, target.zone);
+        if (target.kind === "tab") reorderDockPanelTab(panel, target.target, target.zone, target.insertion);
+        else if (target.zone === currentZone) activateSidePanel(panel);
       }
-      suppressDockTabClick = true;
-      event.preventDefault();
+      focusDockTab(panel, target.zone);
+      return;
     }
-    handlePanelDragEnd();
+    if (panel === "Console" && !compactWorkbench() && !layout().consoleDocked) {
+      setLayout((current) => ({ ...current, consoleDocked: true, bottomTab: "Console" }));
+    }
+    if (target.kind === "tab") reorderDockPanelTab(panel, target.target, target.zone, target.insertion);
+    else activateBottomTab(panel);
   }
 
-  function cancelBottomTabPointerDrag(event: PointerEvent) {
-    if (!bottomTabPointerDrag || bottomTabPointerDrag.pointerId !== event.pointerId) return;
-    bottomTabPointerDrag = undefined;
+  function finishDockPointerDrag(event: PointerEvent) {
+    const drag = dockPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const target = drag.active ? getDockDropTargetAt(event.clientX, event.clientY, drag.panel) : null;
+    dockPointerDrag = undefined;
+    setDockDropTarget(null);
+    setDraggedDockPanel(null);
+    if (drag.source === "tab") suppressDockTabClick = drag.active;
+    if (target) commitDockDrop(drag.panel, target);
+  }
+
+  function cancelDockPointerDrag(pointerId?: number, releaseCapture = true) {
+    const drag = dockPointerDrag;
+    if (!drag || (pointerId !== undefined && drag.pointerId !== pointerId)) return;
+    dockPointerDrag = undefined;
+    setDockDropTarget(null);
+    setDraggedDockPanel(null);
     suppressDockTabClick = false;
-    handlePanelDragEnd();
+    if (releaseCapture && drag.captureElement.hasPointerCapture(drag.pointerId)) {
+      drag.captureElement.releasePointerCapture(drag.pointerId);
+    }
   }
 
   function shouldIgnoreDockTabClick(event: MouseEvent): boolean {
@@ -1937,9 +1970,7 @@ function App() {
   }
 
   function isDockTargetAllowed(panel: BottomTab, zone: DockZone): boolean {
-    if (panel === "Hierarchy" || panel === "Inspector") {
-      return zone === "bottom" || !narrowWorkbench();
-    }
+    if (panel === "Hierarchy" || panel === "Inspector") return zone === "bottom" || !narrowWorkbench();
     return zone === "bottom";
   }
 
@@ -1958,98 +1989,37 @@ function App() {
 
   function isEmptySideDockDropTarget(zone: "left" | "right"): boolean {
     if (!isSideDockDragActive()) return false;
-    return zone === "left"
-      ? leftDockPanels().length === 0
-      : rightDockPanels().length === 0;
+    return zone === "left" ? leftDockPanels().length === 0 : rightDockPanels().length === 0;
   }
 
-  function handleDockDragOver(event: DragEvent, explicitZone?: DockZone) {
-    const panel = draggedDockPanel();
-    const targetZoneElement = event.target instanceof Element
-      ? event.target.closest<HTMLElement>("[data-dock-zone]")
-      : null;
-    const targetZone =
-      explicitZone ??
-      (targetZoneElement?.dataset.dockZone as DockZone | undefined) ??
-      "bottom";
-
-    if (!panel || !isDockTargetAllowed(panel, targetZone)) {
-      setDockTargetZone(null);
-      return;
-    }
-
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    setDockTargetZone(targetZone);
+  function isDockGroupPreview(zone: DockZone): boolean {
+    const target = dockDropTarget();
+    return target?.zone === zone && target.kind === "group";
   }
 
-  function handleDockDragLeave(event: DragEvent & { currentTarget: HTMLElement }) {
-    const nextTarget = event.relatedTarget;
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-    const zone = event.currentTarget.dataset.dockZone as DockZone | undefined;
-    if (zone && dockTargetZone() === zone) setDockTargetZone(null);
+  function isDockTabInsertionTarget(tab: BottomTab, insertion: "before" | "after"): boolean {
+    const target = dockDropTarget();
+    return target?.kind === "tab" && target.target === tab && target.insertion === insertion;
   }
 
-  function handleDockDrop(event: DragEvent, explicitZone?: DockZone) {
-    const transferredPanel = event.dataTransfer?.getData("text/plain");
-    const candidate = transferredPanel || draggedDockPanel();
-    const validTabs: BottomTab[] = [
-      "Project",
-      "Animation",
-      "Components",
-      "Console",
-      "Hierarchy",
-      "Inspector",
-    ];
-    if (!candidate || !validTabs.includes(candidate as BottomTab)) return;
+  function handleWorkspacePointerMove(event: PointerEvent) {
+    moveResize(event);
+    moveDockPointerDrag(event);
+  }
 
-    const panel = candidate as BottomTab;
-    const targetElement = event.target instanceof Element
-      ? event.target.closest<HTMLElement>("[data-dock-tab]")
-      : null;
-    const targetZoneElement = event.target instanceof Element
-      ? event.target.closest<HTMLElement>("[data-dock-zone]")
-      : null;
-    const targetTab = targetElement?.dataset.dockTab as BottomTab | undefined;
-    const targetZone =
-      explicitZone ??
-      (targetZoneElement?.dataset.dockZone as DockZone | undefined) ??
-      "bottom";
+  function handleWorkspacePointerUp(event: PointerEvent) {
+    endResize(event);
+    finishDockPointerDrag(event);
+  }
 
-    if (!isDockTargetAllowed(panel, targetZone)) {
-      setDockTargetZone(null);
-      setDraggedDockPanel(null);
-      return;
-    }
+  function handleWorkspacePointerCancel(event: PointerEvent) {
+    endResize(event);
+    cancelDockPointerDrag(event.pointerId, false);
+  }
 
-    event.preventDefault();
-    setDockTargetZone(null);
-    setDraggedDockPanel(null);
-
-    if (panel === "Hierarchy" || panel === "Inspector") {
-      const transientNarrowBottom = narrowWorkbench() && targetZone === "bottom";
-      if (transientNarrowBottom) {
-        if (targetTab) reorderDockPanelTab(panel, targetTab, targetZone);
-        else activateBottomTab(panel);
-      } else if (!targetTab) {
-        dockSidePanel(panel, targetZone);
-      } else if (targetZone === getStoredPanelZone(panel)) {
-        reorderDockPanelTab(panel, targetTab, targetZone);
-      } else {
-        dockSidePanel(panel, targetZone);
-        reorderDockPanelTab(panel, targetTab, targetZone);
-      }
-      focusDockTab(panel, targetZone);
-      return;
-    }
-
-    if (panel === "Console" && !layout().consoleDocked && !compactWorkbench()) {
-      setLayout((current) => ({ ...current, consoleDocked: true, bottomTab: "Console" }));
-      log("success", "Console docked into Bottom workspace");
-      return;
-    }
-
-    if (targetTab) reorderDockPanelTab(panel, targetTab, "bottom");
+  function handleWorkspaceLostPointerCapture(event: PointerEvent) {
+    endResize(event);
+    cancelDockPointerDrag(event.pointerId, false);
   }
 
   function undockConsole() {
@@ -2119,6 +2089,11 @@ function App() {
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
     if (event.key === "Escape") {
+      if (dockPointerDrag) {
+        event.preventDefault();
+        cancelDockPointerDrag();
+        return;
+      }
       if (paletteOpen()) closePalette();
       setActiveMenu("");
       setShowObjectMenu(false);
@@ -2621,6 +2596,7 @@ function App() {
       classList={{
         "hierarchy-hidden": !isLeftDockZoneAvailable(),
         "inspector-hidden": !isRightDockZoneAvailable(),
+        "dock-dragging": draggedDockPanel() !== null,
       }}
       style={{
         "--left-panel": `${getDisplayedSidePanelWidth("left")}px`,
@@ -2629,10 +2605,10 @@ function App() {
         "--console-height": `${getDisplayedConsoleHeight()}px`,
         "--center-min-height": `${getMinimumCenterHeight()}px`,
       }}
-      onPointerMove={moveResize}
-      onPointerUp={endResize}
-      onPointerCancel={endResize}
-      onLostPointerCapture={endResize}
+      onPointerMove={handleWorkspacePointerMove}
+      onPointerUp={handleWorkspacePointerUp}
+      onPointerCancel={handleWorkspacePointerCancel}
+      onLostPointerCapture={handleWorkspaceLostPointerCapture}
       onFocusIn={handleFocusIn}
       onPointerDown={handleContextPointerDown}
     >
@@ -2790,21 +2766,10 @@ function App() {
           class="side-dock-zone left-side-dock"
           data-testid="dock-zone-left"
           data-dock-zone="left"
-          classList={{ "dock-drop-target": dockTargetZone() === "left" }}
+          classList={{ "dock-drop-target": isDockGroupPreview("left") }}
           style={{ display: isLeftDockZoneAvailable() ? "flex" : "none" }}
-          onDragOver={(event) => handleDockDragOver(event, "left")}
-          onDragLeave={handleDockDragLeave}
-          onDrop={(event) => handleDockDrop(event, "left")}
         >
-          <div
-            class="side-dock-tabs"
-            role="tablist"
-            aria-label="Left dock panels"
-            onPointerMove={moveBottomTabPointerDrag}
-            onPointerUp={endBottomTabPointerDrag}
-            onPointerCancel={cancelBottomTabPointerDrag}
-            onLostPointerCapture={cancelBottomTabPointerDrag}
-          >
+          <div class="side-dock-tabs" role="tablist" aria-label="Left dock panels">
             <For each={leftDockPanels()}>
               {(panel) => (
                 <button
@@ -2813,8 +2778,12 @@ function App() {
                   role="tab"
                   data-dock-tab={panel}
                   aria-selected={layout().leftActivePanel === panel}
+                  classList={{
+                    "dock-drop-insert-before": isDockTabInsertionTarget(panel, "before"),
+                    "dock-drop-insert-after": isDockTabInsertionTarget(panel, "after"),
+                  }}
                   onKeyDown={(event) => handleDockTabKeyDown(event, "left")}
-                  onPointerDown={(event) => startBottomTabPointerDrag(event, panel)}
+                  onPointerDown={(event) => startDockPointerDrag(event, panel, "tab")}
                   onClick={(event) => {
                     if (shouldIgnoreDockTabClick(event)) return;
                     activateSidePanel(panel);
@@ -2832,8 +2801,7 @@ function App() {
               icon="file-tree"
               theme={theme()}
               trailing={sceneObjects().length ? String(sceneObjects().length) : "—"}
-              onDragStart={(event) => handlePanelDragStart(event, "Hierarchy")}
-              onDragEnd={handlePanelDragEnd}
+              onPointerDown={(event) => startDockPointerDrag(event, "Hierarchy", "header")}
               {...(getStoredPanelZone("Hierarchy") !== getSidePanelHomeZone("Hierarchy")
                 ? { onUndock: () => undockSidePanel("Hierarchy") }
                 : {})}
@@ -2977,12 +2945,18 @@ function App() {
               <span>Scene tree</span>
             </div>
           </aside>
-            <Show when={isEmptySideDockDropTarget("left")}>
+            <Show when={isEmptySideDockDropTarget("left") && !isDockGroupPreview("left")}>
               <div class="side-dock-empty-drop-hint" data-testid="empty-dock-hint-left">
                 Drop panel here
               </div>
             </Show>
           </div>
+          <Show when={isDockGroupPreview("left")}>
+            <div class="dock-drop-preview" data-testid="dock-drop-preview" aria-hidden="true">
+              <strong>Left dock</strong>
+              <span>Release to move this panel</span>
+            </div>
+          </Show>
         </section>
 
         <Show when={isLeftDockZoneAvailable()}>
@@ -2998,7 +2972,8 @@ function App() {
             tabIndex={0}
             onPointerDown={(event) => startResize("left", event)}
             onKeyDown={(event) => handleSplitterKeyDown("left", event)}
-          />
+          onDblClick={() => resetSplitter("left")}
+            title="Double-click to reset size"/>
         </Show>
 
         <main class="center-workspace">
@@ -3106,27 +3081,17 @@ function App() {
             tabIndex={0}
             onPointerDown={(event) => startResize("right", event)}
             onKeyDown={(event) => handleSplitterKeyDown("right", event)}
-          />
+          onDblClick={() => resetSplitter("right")}
+            title="Double-click to reset size"/>
         </Show>
         <section
           class="side-dock-zone right-side-dock"
           data-testid="dock-zone-right"
           data-dock-zone="right"
-          classList={{ "dock-drop-target": dockTargetZone() === "right" }}
+          classList={{ "dock-drop-target": isDockGroupPreview("right") }}
           style={{ display: isRightDockZoneAvailable() ? "flex" : "none" }}
-          onDragOver={(event) => handleDockDragOver(event, "right")}
-          onDragLeave={handleDockDragLeave}
-          onDrop={(event) => handleDockDrop(event, "right")}
         >
-          <div
-            class="side-dock-tabs"
-            role="tablist"
-            aria-label="Right dock panels"
-            onPointerMove={moveBottomTabPointerDrag}
-            onPointerUp={endBottomTabPointerDrag}
-            onPointerCancel={cancelBottomTabPointerDrag}
-            onLostPointerCapture={cancelBottomTabPointerDrag}
-          >
+          <div class="side-dock-tabs" role="tablist" aria-label="Right dock panels">
             <For each={rightDockPanels()}>
               {(panel) => (
                 <button
@@ -3135,8 +3100,12 @@ function App() {
                   role="tab"
                   data-dock-tab={panel}
                   aria-selected={layout().rightActivePanel === panel}
+                  classList={{
+                    "dock-drop-insert-before": isDockTabInsertionTarget(panel, "before"),
+                    "dock-drop-insert-after": isDockTabInsertionTarget(panel, "after"),
+                  }}
                   onKeyDown={(event) => handleDockTabKeyDown(event, "right")}
-                  onPointerDown={(event) => startBottomTabPointerDrag(event, panel)}
+                  onPointerDown={(event) => startDockPointerDrag(event, panel, "tab")}
                   onClick={(event) => {
                     if (shouldIgnoreDockTabClick(event)) return;
                     activateSidePanel(panel);
@@ -3154,8 +3123,7 @@ function App() {
               icon="editor-inspector"
               theme={theme()}
               trailing={selectedObject() ? selectedObject()!.type : "—"}
-              onDragStart={(event) => handlePanelDragStart(event, "Inspector")}
-              onDragEnd={handlePanelDragEnd}
+              onPointerDown={(event) => startDockPointerDrag(event, "Inspector", "header")}
               {...(getStoredPanelZone("Inspector") !== getSidePanelHomeZone("Inspector")
                 ? { onUndock: () => undockSidePanel("Inspector") }
                 : {})}
@@ -3421,12 +3389,18 @@ function App() {
               <span>{documentDirty() ? "Modified" : "In sync"}</span>
             </div>
           </aside>
-            <Show when={isEmptySideDockDropTarget("right")}>
+            <Show when={isEmptySideDockDropTarget("right") && !isDockGroupPreview("right")}>
               <div class="side-dock-empty-drop-hint" data-testid="empty-dock-hint-right">
                 Drop panel here
               </div>
             </Show>
           </div>
+          <Show when={isDockGroupPreview("right")}>
+            <div class="dock-drop-preview" data-testid="dock-drop-preview" aria-hidden="true">
+              <strong>Right dock</strong>
+              <span>Release to move this panel</span>
+            </div>
+          </Show>
         </section>
       </div>
 
@@ -3442,28 +3416,20 @@ function App() {
         tabIndex={0}
         onPointerDown={(event) => startResize("bottom", event)}
         onKeyDown={(event) => handleSplitterKeyDown("bottom", event)}
-      />
+      onDblClick={() => resetSplitter("bottom")}
+            title="Double-click to reset size"/>
 
       <section
         class="bottom-dock"
         data-testid="bottom-dock"
         classList={{ "console-docked": compactWorkbench() || layout().consoleDocked }}
       >
-        <div class="bottom-upper-panel">
+        <div class="bottom-upper-panel" data-dock-zone="bottom">
           <div
             class="bottom-tabs"
             role="tablist"
             aria-label="Bottom workspace"
             data-testid="bottom-tabs"
-            data-dock-zone="bottom"
-            classList={{ "dock-drop-target": dockTargetZone() === "bottom" }}
-            onDragOver={handleDockDragOver}
-            onDragLeave={handleDockDragLeave}
-            onDrop={handleDockDrop}
-            onPointerMove={moveBottomTabPointerDrag}
-            onPointerUp={endBottomTabPointerDrag}
-            onPointerCancel={cancelBottomTabPointerDrag}
-            onLostPointerCapture={cancelBottomTabPointerDrag}
           >
             <For each={visibleBottomTabs()}>
               {(tab) => (
@@ -3472,14 +3438,18 @@ function App() {
                   role="tab"
                   data-dock-tab={tab}
                   aria-selected={bottomTab() === tab}
-                  classList={{ active: bottomTab() === tab }}
-                  onPointerDown={(event) => startBottomTabPointerDrag(event, tab)}
+                  classList={{
+                    active: bottomTab() === tab,
+                    "dock-drop-insert-before": isDockTabInsertionTarget(tab, "before"),
+                    "dock-drop-insert-after": isDockTabInsertionTarget(tab, "after"),
+                  }}
+                  onPointerDown={(event) => startDockPointerDrag(event, tab, "tab")}
                   onClick={(event) => {
                     if (shouldIgnoreDockTabClick(event)) return;
                     activateBottomTab(tab);
                   }}
                   onKeyDown={(event) => handleDockTabKeyDown(event, "bottom")}
-                  title={`Drag to reorder ${tab}`}
+                  title={`Drag to move or reorder ${tab}`}
                 >
                   <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
                   {tab}
@@ -3491,6 +3461,13 @@ function App() {
               <span>−</span>
             </button>
           </div>
+
+          <Show when={isDockGroupPreview("bottom")}>
+            <div class="dock-drop-preview" data-testid="dock-drop-preview" aria-hidden="true">
+              <strong>Bottom dock</strong>
+              <span>Release to add this panel to the group</span>
+            </div>
+          </Show>
 
           <Show when={bottomTab() === "Project"}>
             <div class="project-browser" data-focus-context="project">
@@ -3899,7 +3876,8 @@ function App() {
           tabIndex={0}
           onPointerDown={(event) => startResize("console", event)}
           onKeyDown={(event) => handleSplitterKeyDown("console", event)}
-        />
+        onDblClick={() => resetSplitter("console")}
+            title="Double-click to reset size"/>
         <ConsolePanel
           className="desktop-console-panel"
           theme={theme()}
@@ -3907,12 +3885,21 @@ function App() {
           onLevelChange={setConsoleLevel}
           messages={visibleConsoleMessages()}
           onClear={() => setConsoleMessages([])}
-          onDragStart={handleConsoleDragStart}
-          onDragEnd={handlePanelDragEnd}
+          onPointerDown={(event) => startDockPointerDrag(event, "Console", "header")}
         />
           </>
         </Show>
       </section>
+
+      <Show when={draggedDockPanel()}>
+        {(panel) => (
+          <div class="dock-drag-ghost" data-testid="dock-drag-ghost" aria-hidden="true"
+            style={{ left: `${dockDragPosition().x + 14}px`, top: `${dockDragPosition().y + 14}px` }}>
+            <Icon theme={theme()} name={panel() === "Hierarchy" ? "file-tree" : panel() === "Inspector" ? "editor-inspector" : "script"} size={13} />
+            <span>{panel()}</span>
+          </div>
+        )}
+      </Show>
 
       <footer class="status-bar">
         <span class="status-bar-left"><span class="status-led" /> {loading() ? "Loading project…" : loadError() ? "Project connection error" : projectName()}</span>

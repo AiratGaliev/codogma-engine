@@ -86,6 +86,10 @@ Persisted bounds: Left `170–360 px`, Right `210–420 px`, Bottom `150–420 p
 
 **Границы:** три закреплённые зоны Left/Right/Bottom, фиксированные типы панелей и tab groups. Floating windows, произвольное split tree, перенос Scene/Game viewport и новая docking dependency не входят в COD-83.
 
+**Уточнение UX-контракта COD-83:** перемещение панелей работает через единый Pointer Events interaction model для заголовков и вкладок. Во время переноса показывается полупрозрачное превью целевой группы и карточка перетаскиваемой панели; при наведении на вкладку отображается индикатор точной вставки до/после неё. Позиция определяется координатой указателя. Escape, pointercancel и потеря capture отменяют действие без изменения layout. Splitter-ы получают увеличенную невидимую hit area; двойной щелчок возвращает адаптивный размер только выбранной зоны. Перемещение меняет dock location уже смонтированной панели и не пересоздаёт Inspector/Hierarchy или Phaser Canvas.
+
+**Reference decision:** адаптированы визуальное превью и индикатор вставки Cocos Creator 4.0 LTS, а также перенос View между группами, сохранение расположения и reset location из VS Code. Поведение ограничено Left/Right/Bottom и существующими типами панелей. Floating windows, произвольное nested split tree, drag Scene/Game viewport и новая docking dependency не входят в COD-83. Внутренние реализации Workbench/Colibri не переносятся.
+
 ## 1. Цель
 
 Довести самостоятельный browser Editor Host на SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4 до полноценной production-ready 2D authoring среды, ориентированной на основные Unity Editor workflows. COD-80 уже создал первую работающую IDE-оболочку и Scene vertical slice; следующие capabilities реализуются отдельными slices, а не новым bootstrap или framework PoC.
