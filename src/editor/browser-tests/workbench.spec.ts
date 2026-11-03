@@ -256,8 +256,8 @@ test("Workbench switches between the wide and compact dock compositions", async 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.getByTestId("workbench")).toHaveAttribute("data-layout", "wide");
-  await expect(page.getByTestId("console-panel")).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Console" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toHaveCount(0);
 
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByTestId("workbench")).toHaveAttribute("data-layout", "compact");
@@ -266,25 +266,65 @@ test("Workbench switches between the wide and compact dock compositions", async 
 });
 
 
-test("Console panel can be dragged into the bottom Dock and undocked again", async ({ page }) => {
+test("Console is docked in the Bottom group by default and supports reversible Undock", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByTestId("console-panel")).toBeVisible();
-  await expect(page.getByTestId("splitter-console")).toBeVisible();
-
-  await dragPanelHeaderWithPointer(page, page.locator(".desktop-console-panel .console-header"), page.locator(".bottom-tabs"));
-
-  await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
-  await expect(page.getByTestId("console-panel")).toBeVisible();
+  const consoleTab = page.getByRole("tab", { name: "Console" });
+  await expect(consoleTab).toBeVisible();
   await expect(page.getByTestId("splitter-console")).toHaveCount(0);
-  await expect(page.getByTestId("bottom-dock")).toHaveClass(/console-docked/);
 
+  await consoleTab.click();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
   await page.getByRole("button", { name: "Undock Console" }).click();
+
   await expect(page.getByRole("tab", { name: "Console" })).toHaveCount(0);
   await expect(page.getByTestId("splitter-console")).toBeVisible();
   await expect(page.getByTestId("console-panel")).toBeVisible();
+
+  await dragPanelHeaderWithPointer(page, page.locator(".desktop-console-panel .console-header"), page.locator(".bottom-tabs"));
+  await expect(page.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toHaveCount(0);
 });
 
+
+test("Main menu and Add Object menu dismiss on pointer interaction outside", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("menuitem", { name: "View" }).click();
+  await expect(page.locator(".menu-popover")).toBeVisible();
+  await page.getByRole("tab", { name: "Scene" }).click();
+  await expect(page.locator(".menu-popover")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Add object" }).click();
+  await expect(page.locator(".add-object-menu")).toBeVisible();
+  await page.getByRole("tab", { name: "Game" }).click();
+  await expect(page.locator(".add-object-menu")).toHaveCount(0);
+});
+
+test("Bottom workspace tabs close independently and the dock collapses when empty", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+
+  for (const panel of ["Project", "Animation", "Components", "Console"]) {
+    const closeButton = page.getByRole("button", { name: "Close " + panel });
+    await expect(closeButton).toBeVisible();
+    await closeButton.click();
+    await expect(bottomTabs.getByRole("tab", { name: panel })).toHaveCount(0);
+  }
+
+  await expect(page.getByTestId("bottom-dock")).toBeHidden();
+  await expect(page.getByTestId("splitter-bottom")).toBeHidden();
+  await expect(page.getByTestId("workbench")).toHaveClass(/bottom-hidden/);
+
+  await page.getByRole("menuitem", { name: "View" }).click();
+  const projectToggle = page.getByRole("menuitemcheckbox", { name: "Project" });
+  await expect(projectToggle).toHaveAttribute("aria-checked", "false");
+  await projectToggle.click();
+  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toBeVisible();
+  await expect(page.getByTestId("bottom-dock")).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
+});
 
 test("Window menu marks the selected Bottom tab with a checkmark", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -307,72 +347,40 @@ test("Window menu marks the selected Bottom tab with a checkmark", async ({ page
   await expect(selectedAnimation).toContainText("✓");
 });
 
-test("Console closes/reopens in standalone and docked modes without losing placement", async ({ page }) => {
+test("Console closes and reopens in Bottom and explicit Undock persists", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await bottomTabs.getByRole("tab", { name: "Console" }).click();
   await expect(page.getByTestId("console-panel")).toBeVisible();
-
-  await page.getByRole("button", { name: "Close Console" }).click();
-  await expect(page.getByTestId("console-panel")).toHaveCount(0);
-  await expect(page.getByTestId("splitter-console")).toHaveCount(0);
-  let persisted = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
-  );
-  expect(persisted.consoleVisible).toBe(false);
-  expect(persisted.consoleDocked).toBe(false);
-
-  await page.getByRole("menuitem", { name: "View" }).click();
-  const standaloneToggle = page.getByRole("menuitemcheckbox", { name: "Console" });
-  await expect(standaloneToggle).toHaveAttribute("aria-checked", "false");
-  await standaloneToggle.click();
-  await expect(page.getByTestId("console-panel")).toBeVisible();
-  await expect(page.getByTestId("splitter-console")).toBeVisible();
-  persisted = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
-  );
-  expect(persisted.consoleVisible).toBe(true);
-  expect(persisted.consoleDocked).toBe(false);
-
-  await dragPanelHeaderWithPointer(
-    page,
-    page.locator(".desktop-console-panel .console-header"),
-    bottomTabs,
-  );
-  await expect(page.getByTestId("console-panel")).toBeVisible();
-  persisted = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
-  );
-  expect(persisted.consoleDocked).toBe(true);
-  expect(persisted.consoleVisible).toBe(true);
 
   await page.getByRole("button", { name: "Close Console" }).click();
   await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
-  await expect(page.getByTestId("console-panel")).toHaveCount(0);
-  persisted = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
-  );
-  expect(persisted.consoleDocked).toBe(true);
+  await expect(page.getByTestId("splitter-console")).toHaveCount(0);
+  let persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
   expect(persisted.consoleVisible).toBe(false);
-  expect(persisted.bottomTab).toBe("Project");
+  expect(persisted.consoleDocked).toBe(true);
 
   await page.getByRole("menuitem", { name: "View" }).click();
   const consoleToggle = page.getByRole("menuitemcheckbox", { name: "Console" });
   await expect(consoleToggle).toHaveAttribute("aria-checked", "false");
   await consoleToggle.click();
   await expect(bottomTabs.getByRole("tab", { name: "Console" })).toBeVisible();
-  await expect(page.getByTestId("console-panel")).toBeVisible();
   await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+
+  await page.getByRole("button", { name: "Undock Console" }).click();
+  await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
+  await expect(page.getByTestId("splitter-console")).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(persisted.consoleDocked).toBe(false);
 
   await page.reload();
-  const restoredTabs = page.getByRole("tablist", { name: "Bottom workspace" });
-  await expect(restoredTabs.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toBeVisible();
   await expect(page.getByTestId("console-panel")).toBeVisible();
-  persisted = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
-  );
-  expect(persisted.consoleDocked).toBe(true);
-  expect(persisted.consoleVisible).toBe(true);
+  persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
+  expect(persisted.consoleDocked).toBe(false);
 });
 
 test("Hierarchy and Inspector panels dock into Bottom, persist and restore to their home slots", async ({ page }) => {
@@ -1012,7 +1020,7 @@ test("responsive Bottom Dock sizing follows its splitter and constrains the deta
   await page.evaluate(() => {
     const key = "codogma.editor.layout";
     const current = JSON.parse(localStorage.getItem(key) ?? "{}");
-    localStorage.setItem(key, JSON.stringify({ ...current, consoleHeight: 125 }));
+    localStorage.setItem(key, JSON.stringify({ ...current, consoleHeight: 125, consoleDocked: false }));
   });
   await page.reload({ waitUntil: "domcontentloaded" });
 
@@ -1349,6 +1357,12 @@ test("pointer panel-header drag can return a Bottom panel to an empty side dock"
 test("compact Console selection resets only when it is not explicitly docked", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto("/");
+  await page.evaluate(() => {
+    const key = "codogma.editor.layout";
+    const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+    localStorage.setItem(key, JSON.stringify({ ...current, consoleDocked: false, bottomTab: "Project" }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
   const consoleTab = bottomTabs.getByRole("tab", { name: "Console" });

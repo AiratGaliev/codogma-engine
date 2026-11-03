@@ -1,7 +1,8 @@
-export const WORKSPACE_LAYOUT_SCHEMA_VERSION = 2;
+export const WORKSPACE_LAYOUT_SCHEMA_VERSION = 3;
 
 export type DockZone = "left" | "right" | "bottom";
 export type SidePanelId = "Hierarchy" | "Inspector";
+export type BottomWorkspacePanel = "Project" | "Animation" | "Components";
 export type BottomTab =
   | "Project"
   | "Animation"
@@ -22,6 +23,9 @@ export interface WorkspaceLayout {
   hierarchyVisible: boolean;
   inspectorVisible: boolean;
   consoleVisible: boolean;
+  projectVisible: boolean;
+  animationVisible: boolean;
+  componentsVisible: boolean;
   hierarchyZone: DockZone;
   inspectorZone: DockZone;
   leftActivePanel: SidePanelId | null;
@@ -150,13 +154,16 @@ export function createDefaultWorkspaceLayout(
     hierarchyVisible: true,
     inspectorVisible: true,
     consoleVisible: true,
+    projectVisible: true,
+    animationVisible: true,
+    componentsVisible: true,
     hierarchyZone: "left",
     inspectorZone: "right",
     leftActivePanel: "Hierarchy",
     rightActivePanel: "Inspector",
     bottomTab: "Project",
     bottomTabOrder: [...ALL_BOTTOM_TABS],
-    consoleDocked: false,
+    consoleDocked: true,
   };
 }
 
@@ -182,7 +189,7 @@ export function restoreWorkspaceLayout(
 
   // Version zero is the pre-COD-83 layout persisted by COD-80.
   // Unknown future schemas must not be interpreted as a current contract.
-  if (version !== 0 && version !== 1 && version !== WORKSPACE_LAYOUT_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== WORKSPACE_LAYOUT_SCHEMA_VERSION) {
     return defaults;
   }
 
@@ -215,7 +222,13 @@ export function restoreWorkspaceLayout(
     ...(inspectorZone === "bottom" ? ["Inspector"] : []),
   ]);
 
-  const consoleDocked = value.consoleDocked === true;
+  // v0-v2 used a separate Console row as the default. Schema v3 moves it into
+  // the Bottom tab group; an explicit schema-v3 Undock preference remains intact.
+  const consoleDocked = version < 3
+    ? true
+    : typeof value.consoleDocked === "boolean"
+      ? value.consoleDocked
+      : defaults.consoleDocked;
   // Preserve COD-80 behavior when a workspace is reopened at a compact width:
   // only untouched defaults adapt; explicit user sizing is kept.
   const leftWidthCustomized = value.leftWidthCustomized === true;
@@ -273,6 +286,12 @@ export function restoreWorkspaceLayout(
       typeof value.consoleVisible === "boolean"
         ? value.consoleVisible
         : defaults.consoleVisible,
+    projectVisible:
+      typeof value.projectVisible === "boolean" ? value.projectVisible : defaults.projectVisible,
+    animationVisible:
+      typeof value.animationVisible === "boolean" ? value.animationVisible : defaults.animationVisible,
+    componentsVisible:
+      typeof value.componentsVisible === "boolean" ? value.componentsVisible : defaults.componentsVisible,
     hierarchyZone,
     inspectorZone,
     leftActivePanel: null,
@@ -357,13 +376,9 @@ export function getVisibleBottomTabs(
   forceSidePanelsToBottom = false,
 ): BottomTab[] {
   return layout.bottomTabOrder.filter((panel) => {
-    if (
-      panel === "Project" ||
-      panel === "Animation" ||
-      panel === "Components"
-    ) {
-      return true;
-    }
+    if (panel === "Project") return layout.projectVisible;
+    if (panel === "Animation") return layout.animationVisible;
+    if (panel === "Components") return layout.componentsVisible;
     if (panel === "Console") return layout.consoleVisible && (compact || layout.consoleDocked);
 
     return (
@@ -483,6 +498,33 @@ export function setSidePanelVisibility(
       next,
       compact,
       next.bottomTab === panel ? "Project" : next.bottomTab,
+      forceSidePanelsToBottom,
+    );
+  }
+
+  return next;
+}
+
+export function setBottomPanelVisibility(
+  layout: WorkspaceLayout,
+  panel: BottomWorkspacePanel,
+  visible: boolean,
+  compact = false,
+  forceSidePanelsToBottom = false,
+): WorkspaceLayout {
+  const next: WorkspaceLayout = { ...layout };
+
+  if (panel === "Project") next.projectVisible = visible;
+  else if (panel === "Animation") next.animationVisible = visible;
+  else next.componentsVisible = visible;
+
+  if (visible) {
+    next.bottomTab = panel;
+  } else if (next.bottomTab === panel) {
+    next.bottomTab = getVisibleBottomTab(
+      next,
+      compact,
+      "Project",
       forceSidePanelsToBottom,
     );
   }

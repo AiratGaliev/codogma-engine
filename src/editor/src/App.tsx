@@ -86,9 +86,11 @@ import {
   restoreWorkspaceLayoutContent,
   selectSidePanel,
   serializeWorkspaceLayout,
+  setBottomPanelVisibility,
   setConsolePanelVisibility,
   setSidePanelVisibility,
   type BottomTab,
+  type BottomWorkspacePanel,
   type DockZone,
   type SidePanelId,
   type WorkspaceLayout,
@@ -585,17 +587,17 @@ function App() {
     {
       id: "project",
       title: "Show Project panel",
-      run: () => setLayout((current) => ({ ...current, bottomTab: "Project" })),
+      run: () => openBottomPanel("Project"),
     },
     {
       id: "animation",
       title: "Show Animation workspace",
-      run: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })),
+      run: () => openBottomPanel("Animation"),
     },
     {
       id: "components",
       title: "Show User Components",
-      run: () => setLayout((current) => ({ ...current, bottomTab: "Components" })),
+      run: () => openBottomPanel("Components"),
     },
     {
       id: "tool-select",
@@ -1832,19 +1834,60 @@ function App() {
     log("info", panel + " panel closed");
   }
 
+  function focusBottomTab(tab: BottomTab) {
+    queueMicrotask(() => {
+      document.querySelector<HTMLButtonElement>(
+        `[data-testid="bottom-tabs"] [data-dock-tab="${tab}"]`,
+      )?.focus({ preventScroll: true });
+    });
+  }
+
   function closeConsole() {
     const next = setConsolePanelVisibility(layout(), false, compactWorkbench());
     setLayout(next);
-
-    queueMicrotask(() => {
-      const target = document.querySelector<HTMLButtonElement>(
-        `[data-testid="bottom-tabs"] [data-dock-tab="${next.bottomTab}"]`,
-      );
-      (target ?? document.querySelector<HTMLButtonElement>(
-        '[data-testid="bottom-tabs"] [data-dock-tab="Project"]',
-      ))?.focus({ preventScroll: true });
-    });
+    focusBottomTab(next.bottomTab);
     log("info", "Console panel closed");
+  }
+
+  function openBottomPanel(panel: BottomWorkspacePanel) {
+    setLayout((current) =>
+      setBottomPanelVisibility(current, panel, true, compactWorkbench(), narrowWorkbench()),
+    );
+    focusBottomTab(panel);
+  }
+
+  function toggleBottomPanel(panel: BottomWorkspacePanel) {
+    const visible = panel === "Project"
+      ? layout().projectVisible
+      : panel === "Animation"
+        ? layout().animationVisible
+        : layout().componentsVisible;
+    setLayout((current) =>
+      setBottomPanelVisibility(current, panel, !visible, compactWorkbench(), narrowWorkbench()),
+    );
+    if (!visible) focusBottomTab(panel);
+  }
+
+  function closeBottomPanel(panel: BottomTab) {
+    if (panel === "Hierarchy" || panel === "Inspector") {
+      closeSidePanel(panel);
+      return;
+    }
+    if (panel === "Console") {
+      closeConsole();
+      return;
+    }
+
+    const next = setBottomPanelVisibility(
+      layout(),
+      panel,
+      false,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
+    setLayout(next);
+    focusBottomTab(next.bottomTab);
+    log("info", panel + " panel closed");
   }
 
   function openConsole() {
@@ -2135,6 +2178,19 @@ function App() {
 
   function handleContextPointerDown(event: PointerEvent) {
     updateFocusContext(event.target);
+    if (!(event.target instanceof Element)) return;
+
+    const openMenuButton = document.querySelector<HTMLButtonElement>(
+      '.menu-button[aria-expanded="true"]',
+    );
+    const openMenuRoot = openMenuButton?.closest(".menu-root");
+    if (activeMenu() && (!openMenuRoot || !openMenuRoot.contains(event.target))) {
+      setActiveMenu("");
+    }
+
+    if (showObjectMenu() && !event.target.closest(".add-object-anchor")) {
+      setShowObjectMenu(false);
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -2627,14 +2683,17 @@ function App() {
     View: [
       { label: "Hierarchy", checkable: "checkbox", checked: layout().hierarchyVisible, action: () => toggleSidePanel("Hierarchy") },
       { label: "Inspector", checkable: "checkbox", checked: layout().inspectorVisible, action: () => toggleSidePanel("Inspector") },
+      { label: "Project", checkable: "checkbox", checked: layout().projectVisible, action: () => toggleBottomPanel("Project") },
+      { label: "Animation", checkable: "checkbox", checked: layout().animationVisible, action: () => toggleBottomPanel("Animation") },
+      { label: "Components", checkable: "checkbox", checked: layout().componentsVisible, action: () => toggleBottomPanel("Components") },
       { label: "Console", checkable: "checkbox", checked: layout().consoleVisible, action: toggleConsoleVisibility },
       { label: "Toggle light / dark theme", action: toggleTheme },
       { label: "Reset workspace layout", action: resetWorkbenchLayout },
     ],
     Window: [
-      { label: "Project", checkable: "radio", checked: layout().bottomTab === "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
-      { label: "Animation", checkable: "radio", checked: layout().bottomTab === "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
-      { label: "Components", checkable: "radio", checked: layout().bottomTab === "Components", action: () => setLayout((current) => ({ ...current, bottomTab: "Components" })) },
+      { label: "Project", checkable: "radio", checked: layout().bottomTab === "Project", action: () => openBottomPanel("Project") },
+      { label: "Animation", checkable: "radio", checked: layout().bottomTab === "Animation", action: () => openBottomPanel("Animation") },
+      { label: "Components", checkable: "radio", checked: layout().bottomTab === "Components", action: () => openBottomPanel("Components") },
       {
         label: "Console",
         ...(compactWorkbench() || layout().consoleDocked ? { checkable: "radio" as const } : {}),
@@ -2655,6 +2714,7 @@ function App() {
       classList={{
         "hierarchy-hidden": !isLeftDockZoneAvailable(),
         "inspector-hidden": !isRightDockZoneAvailable(),
+        "bottom-hidden": visibleBottomTabs().length === 0,
         "dock-dragging": draggedDockPanel() !== null,
       }}
       style={{
@@ -2697,7 +2757,6 @@ function App() {
                   aria-haspopup="menu"
                   aria-expanded={activeMenu() === menu}
                   onClick={() => setActiveMenu((current) => current === menu ? "" : menu)}
-                  onMouseEnter={() => activeMenu() && setActiveMenu(menu)}
                 >
                   {menu}
                 </button>
@@ -3500,27 +3559,44 @@ function App() {
           >
             <For each={visibleBottomTabs()}>
               {(tab) => (
-                <button
-                  class="dock-tab"
-                  role="tab"
-                  data-dock-tab={tab}
-                  aria-selected={bottomTab() === tab}
-                  classList={{
-                    active: bottomTab() === tab,
-                    "dock-drop-insert-before": isDockTabInsertionTarget(tab, "before"),
-                    "dock-drop-insert-after": isDockTabInsertionTarget(tab, "after"),
-                  }}
-                  onPointerDown={(event) => startDockPointerDrag(event, tab, "tab")}
-                  onClick={(event) => {
-                    if (shouldIgnoreDockTabClick(event)) return;
-                    activateBottomTab(tab);
-                  }}
-                  onKeyDown={(event) => handleDockTabKeyDown(event, "bottom")}
-                  title={`Drag to move or reorder ${tab}`}
-                >
-                  <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
-                  {tab}
-                </button>
+                <div class="dock-tab-item" role="presentation">
+                  <button
+                    class="dock-tab"
+                    role="tab"
+                    data-dock-tab={tab}
+                    aria-selected={bottomTab() === tab}
+                    classList={{
+                      active: bottomTab() === tab,
+                      "dock-drop-insert-before": isDockTabInsertionTarget(tab, "before"),
+                      "dock-drop-insert-after": isDockTabInsertionTarget(tab, "after"),
+                    }}
+                    onPointerDown={(event) => startDockPointerDrag(event, tab, "tab")}
+                    onAuxClick={(event) => {
+                      if (event.button === 1) closeBottomPanel(tab);
+                    }}
+                    onClick={(event) => {
+                      if (shouldIgnoreDockTabClick(event)) return;
+                      activateBottomTab(tab);
+                    }}
+                    onKeyDown={(event) => handleDockTabKeyDown(event, "bottom")}
+                    title={"Drag to move or reorder " + tab + " · middle-click to close"}
+                  >
+                    <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
+                    {tab}
+                  </button>
+                  <button
+                    type="button"
+                    class="dock-tab-close"
+                    aria-label={"Close " + tab}
+                    title={"Close " + tab}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeBottomPanel(tab);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
               )}
             </For>
             <div class="dock-tabs-spacer" />

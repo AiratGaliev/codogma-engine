@@ -62,25 +62,25 @@ Browser acceptance конфигурируется через `src/editor/playwri
 
 **Единый owner:** SolidJS `layout` signal внутри `App.tsx`. Чистая доменная модель и все переходы состояния находятся в `src/editor/src/domain/workspace-layout.ts`; UI не хранит вторую копию docking state. Состояние сохраняется отдельно от Project Model под ключом `localStorage["codogma.editor.layout"]`.
 
-Schema v2:
+Schema v3:
 
 | Поле | Тип | Назначение |
 |---|---|---|
-| `schemaVersion` | literal `2` | Версия persisted contract |
+| `schemaVersion` | literal `3` | Версия persisted contract |
 | `leftWidth`, `rightWidth`, `bottomHeight`, `consoleHeight` | number | Предпочтительные размеры dock-зон/Console |
 | `leftWidthCustomized`, `rightWidthCustomized`, `bottomHeightCustomized`, `consoleHeightCustomized` | boolean | Явно изменял ли пользователь соответствующий размер; защищает даже точное совпадение с default от автоматической compact/wide адаптации |
-| `hierarchyVisible`, `inspectorVisible`, `consoleVisible` | boolean | Видимость панели независимо от её dock-зоны/режима Console |
+| `hierarchyVisible`, `inspectorVisible`, `consoleVisible`, `projectVisible`, `animationVisible`, `componentsVisible` | boolean | Видимость каждой панели независимо от её dock-зоны и активной вкладки |
 | `hierarchyZone`, `inspectorZone` | `left, right, bottom` | Постоянное положение каждой панели |
 | `leftActivePanel`, `rightActivePanel` | `Hierarchy, Inspector, null` | Активная вкладка боковой группы |
 | `bottomTab` | tab ID | Активная вкладка Bottom |
 | `bottomTabOrder` | array of tab IDs | Общий стабильный порядок; каждая зона показывает его отфильтрованную последовательность |
-| `consoleDocked` | boolean | Перемещена ли Console в Bottom на обычном viewport |
+| `consoleDocked` | boolean | Размещена ли Console вкладкой Bottom; в schema v3 это default |
 
 Persisted bounds: Left `170–360 px`, Right `210–420 px`, Bottom `150–420 px`, preferred Console height `56–180 px`. The visible Bottom Dock height is additionally clamped to the current viewport height while preserving its saved preference; the central workspace keeps a responsive minimum height. The visible detached Console height is `min(consoleHeight, max(56, min(180, displayedBottomHeight − 89)))`; the persisted Console preference is not reduced when Bottom Dock is temporarily shortened. The 89 px reserve covers 28 px tabs, 56 px panel content, a 4 px splitter and a 1 px dock border. Wide defaults: `228 / 280 / 286 / 96 px`; compact defaults: `194 / 250 / 207 / 60 px`. Each preferred size has a persisted `*Customized` flag set by pointer/keyboard resizing. This prevents a deliberate user choice that happens to equal a wide default (for example, exactly `228 px`) from being mistaken for an untouched default. Old v1 layouts without these flags retain the existing default-value heuristic because the previous format cannot disambiguate that legacy case. An untouched Console default of `96 px` adapts to `60 px` on compact restore; explicitly customized preferences are preserved. Compact/narrow presentation is passed to `restoreWorkspaceLayoutContent` and `serializeWorkspaceLayout` from the current viewport, without replacing permanent `hierarchyZone`/`inspectorZone`. From 781–920 px, displayed Left/Right widths are capped at 194/250 px. Between 921 and 1108 px these limits grow linearly to the full 360/420 px range so the central viewport remains at least 320 px; saved user dimensions are not overwritten by responsive clamping. At unusually short window heights, the Bottom Dock minimum is reduced only as far as necessary to preserve a 72 px Scene viewport and the fixed header/splitter/status rows; the splitter's accessible minimum matches the displayed geometry. At widths up to 920 px and 780 px the Bottom Dock uses the same saved height value, limited only by the current available viewport space. At widths up to 780 px, side panels are temporarily represented as Bottom tabs; drag/reorder within this transient group does not change the permanent panel zones, which are restored when the viewport widens. Empty side zones become available as drop targets while a side panel is being dragged, so a panel can always be moved back from a Bottom-only layout. The Undock command in a narrow viewport changes the permanent home zone but keeps the panel physically in Bottom until the viewport widens; it must not disappear into a hidden side dock. When leaving compact mode, an active Console tab returns to Project only if Console was temporarily shown by compact presentation; a Console explicitly docked in Bottom remains selected.
 
 **Pointer ownership и touch lifecycle:** splitter resize и tab drag принадлежат конкретному `pointerId`. События другого pointer игнорируются; второй одновременный жест не перезаписывает активное состояние. Состояние очищается владельцем на `pointerup`/`pointercancel` и при `lostpointercapture`. Для Left/Right/Bottom/Console splitters задан `touch-action: none`, чтобы браузерный pan не перехватывал touch resize. Потеря capture не оставляет активную drop-zone или resize state.
 
-**Миграция и fallback:** unversioned COD-80 state (`dockedPanels`) трактуется как schema v0: панели из `dockedPanels` переходят в Bottom, остальные возвращаются в home-zones. Schema v1 переносится в v2 с сохранением существующих полей; новое `consoleVisible` при отсутствии поля по умолчанию равно `true`, чтобы старые пользовательские раскладки не теряли Console. Schema v2 не сериализует `dockedPanels`. Неизвестная будущая версия, невалидный JSON, неизвестные panel IDs и некорректные значения получают детерминированные defaults; неизвестные tabs отбрасываются, известные панели сохраняются. Project data и файлы проекта не меняются.
+**Миграция и fallback:** unversioned COD-80 state (`dockedPanels`) трактуется как schema v0: панели из `dockedPanels` переходят в Bottom, остальные возвращаются в home-zones. Schema v1 и v2 переносятся в v3 с сохранением существующих полей; новое `consoleVisible` при отсутствии поля по умолчанию равно `true`, чтобы старые пользовательские раскладки не теряли Console. Schema v2 не сериализует `dockedPanels`. Неизвестная будущая версия, невалидный JSON, неизвестные panel IDs и некорректные значения получают детерминированные defaults; неизвестные tabs отбрасываются, известные панели сохраняются. Project data и файлы проекта не меняются.
 
 **Lifecycle:** dock/undock меняет parent DOM node уже существующей панели; компонент не создаётся повторно. Scene/Game viewport остаётся в центре, его Phaser Canvas не переносится. При unmount Host снимает `keydown`/`resize` listeners и освобождает MCP bridge/preview lifecycle. Текущий Host не содержит in-app project-switch workflow, поэтому очистка именно при переключении между двумя project sessions пока не проверяется и остаётся отдельным lifecycle gap; это не следует трактовать как принятую project-switch acceptance.
 
@@ -204,3 +204,10 @@ Framework choice не требует отдельного PoC или framework c
 - [SolidJS Vite plugin](https://github.com/solidjs/vite-plugin-solid)
 - [Tailwind CSS 4 + Vite](https://tailwindcss.com/docs/installation/using-vite)
 - [Vite server options](https://vite.dev/config/server-options)
+
+
+### Жизненный цикл Bottom Dock (schema v3)
+
+Project, Animation и Components имеют собственные persisted visibility flags. Закрытие вкладки не удаляет данные или состояние документа; восстановление выполняется через View menu или Window command. При закрытии активной вкладки выбирается следующая видимая. При закрытии последней Bottom Dock и его splitter сворачиваются до нулевой высоты, освобождая Scene viewport. Console по умолчанию находится вкладкой внутри Bottom group; отдельный нижний Console row сохраняется только как явно выбранное действие Undock. При миграции schema v0/v1/v2 legacy значение `consoleDocked: false` нормализуется в `true`, чтобы не создавать второй нижний ряд.
+
+Main menu и Add Object menu закрываются при pointer interaction за пределами соответствующего menu root; Escape остаётся дополнительным способом закрытия. Взаимодействие внутри открытого меню не приводит к преждевременному dismiss.

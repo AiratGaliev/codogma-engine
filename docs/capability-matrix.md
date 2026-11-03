@@ -94,3 +94,19 @@
 - Детально проверялись документы/CI/manifests, текущие серверные файловые и MCP-потоки, security smoke, PR #10 и ключевые участки code generation/FX/Box2D/asset preview по заявленным изменениям.
 - Для каждой строки со статусом «не подтверждено» обновлять состояние только после привязанного regression test, runtime fixture либо документированной browser acceptance. Не переводить её в «реализовано» по наличию UI, деклараций TypeScript или успешной компиляции.
 - Матрица — живой документ: изменения возможностей должны обновлять evidence, acceptance checks и соответствующие пункты `docs/roadmap.md`.
+
+
+## Workspace UX audit — 2026-11-03
+
+В SolidJS Host исправлены независимые состояния видимости Bottom views (Project, Animation, Components, Console), collapse пустой Bottom zone, default placement Console в Bottom tab group и outside-pointer dismissal Main menu/Add Object menu. Для этих операций добавлены domain/browser tests COD-83; browser acceptance должна быть выполнена отдельно на promotion candidate.
+
+Оставшиеся docking gaps по отношению к Unity/Cocos/VS Code/Godot/JetBrains:
+- **Generic panel-to-zone contract:** в текущей модели только Hierarchy/Inspector могут менять DockZone; Project/Animation/Components/Console остаются Bottom views.
+- **Center/editor group:** Scene/Game не входят в общий Dock group, поэтому перенос tool views в центральную tab group невозможен.
+- **Split tree:** нет горизонтального/вертикального разветвления одной зоны на несколько групп с независимыми active tabs.
+- **Panel context actions:** отсутствуют Move To, Reset Location, Close Others, Close All, Maximize Group и keyboard Move Focused View.
+- **Named workspace layouts:** доступен только Reset to Default, а не сохранение/переключение профилей (например Default/Animation/Asset Authoring).
+- **Auto-hide/floating windows:** не реализованы; floating windows не являются требованием текущего browser-host slice, пока не доказан отдельный multi-window lifecycle.
+- **Overflow/scroll navigation:** при большом количестве panel tabs нужен явный overflow affordance, а не только горизонтальное сжатие.
+
+Целевое решение для следующих slices — generic dock node/group model с центральной Scene/Game group как специальным view container, пользовательскими зонами `Left/Right/Bottom/Center`, split orientation/ratios и стабильными panel IDs. Не добавлять пустой Center rectangle без tab/group semantics. Floating windows и auto-hide оставить отдельными решениями после появления обоснованного workflow.

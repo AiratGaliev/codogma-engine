@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   createDefaultWorkspaceLayout,
+  setBottomPanelVisibility,
   setConsolePanelVisibility,
   getMaximumConsoleHeight,
   getSidePanelHomeZone,
@@ -17,14 +18,16 @@ import {
 
 test("creates the stable default three-zone workspace", () => {
   const layout = createDefaultWorkspaceLayout(false);
-  assert.equal(layout.schemaVersion, 2);
+  assert.equal(layout.schemaVersion, 3);
   assert.deepEqual(getVisibleSidePanels(layout, "left"), ["Hierarchy"]);
   assert.deepEqual(getVisibleSidePanels(layout, "right"), ["Inspector"]);
   assert.deepEqual(getVisibleBottomTabs(layout, false), [
     "Project",
     "Animation",
     "Components",
+    "Console",
   ]);
+  assert.equal(layout.consoleDocked, true);
   assert.equal(layout.bottomHeight, 286);
 });
 
@@ -69,7 +72,7 @@ test("migrates the legacy COD-80 layout and preserves its user choices", () => {
     consoleDocked: true,
   });
 
-  assert.equal(layout.schemaVersion, 2);
+  assert.equal(layout.schemaVersion, 3);
   assert.equal(layout.leftWidth, 260);
   assert.equal(layout.rightWidth, 310);
   assert.equal(layout.hierarchyZone, "bottom");
@@ -87,7 +90,7 @@ test("migrates the legacy COD-80 layout and preserves its user choices", () => {
   ]);
 });
 
-test("migrates schema v1 and defaults Console visibility to true", () => {
+test("migrates schema v1 and places Console in the Bottom group by default", () => {
   const migrated = restoreWorkspaceLayout({
     schemaVersion: 1,
     hierarchyVisible: false,
@@ -99,12 +102,48 @@ test("migrates schema v1 and defaults Console visibility to true", () => {
     bottomTabOrder: ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"],
   });
 
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, 3);
   assert.equal(migrated.consoleVisible, true);
+  assert.equal(migrated.consoleDocked, true);
   assert.equal(migrated.hierarchyVisible, false);
   assert.equal(migrated.hierarchyZone, "right");
   assert.equal(migrated.inspectorZone, "bottom");
   assert.equal(migrated.bottomTab, "Inspector");
+});
+
+test("Bottom workspace panels close independently and restore a visible fallback", () => {
+  const initial = createDefaultWorkspaceLayout(false);
+  const noProject = setBottomPanelVisibility(initial, "Project", false);
+  assert.equal(noProject.projectVisible, false);
+  assert.equal(noProject.bottomTab, "Animation");
+
+  const noAnimation = setBottomPanelVisibility(noProject, "Animation", false);
+  assert.equal(noAnimation.animationVisible, false);
+  assert.equal(noAnimation.bottomTab, "Components");
+
+  const reopened = setBottomPanelVisibility(noAnimation, "Project", true);
+  assert.equal(reopened.projectVisible, true);
+  assert.equal(reopened.bottomTab, "Project");
+
+  let allClosed = setBottomPanelVisibility(initial, "Project", false);
+  allClosed = setBottomPanelVisibility(allClosed, "Animation", false);
+  allClosed = setBottomPanelVisibility(allClosed, "Components", false);
+  allClosed = setConsolePanelVisibility(allClosed, false);
+  assert.deepEqual(getVisibleBottomTabs(allClosed, false), []);
+});
+
+test("schema v2 migrates the legacy Console row into the Bottom tab group", () => {
+  const migrated = restoreWorkspaceLayout({
+    schemaVersion: 2,
+    consoleDocked: false,
+    bottomTab: "Project",
+  });
+
+  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.consoleDocked, true);
+  assert.equal(migrated.projectVisible, true);
+  assert.equal(migrated.animationVisible, true);
+  assert.equal(migrated.componentsVisible, true);
 });
 
 test("Console visibility is independent from dock placement and survives persistence", () => {
@@ -134,6 +173,7 @@ test("Console visibility is independent from dock placement and survives persist
 test("closing standalone Console leaves the selected Bottom tab unchanged", () => {
   const layout = {
     ...createDefaultWorkspaceLayout(false),
+    consoleDocked: false,
     bottomTab: "Animation" as const,
   };
   const closed = setConsolePanelVisibility(layout, false, false);
@@ -384,7 +424,7 @@ test("serializes only the validated versioned workspace contract", () => {
     dockedPanels?: unknown;
   };
 
-  assert.equal(parsed.schemaVersion, 2);
+  assert.equal(parsed.schemaVersion, 3);
   assert.equal(parsed.hierarchyZone, "bottom");
   assert.equal("dockedPanels" in parsed, false);
 });
