@@ -38,7 +38,7 @@ Asset и node references используют стабильные IDs и про
 
 ### Component lifecycle
 
-`ComponentRegistry` принимает только явно зарегистрированные definitions. `ComponentWorld.update(deltaSeconds)` вызывается внешним владельцем tick; Core не создаёт свой `requestAnimationFrame`. Lifecycle: create → enable → start → update → disable → destroy; структурные attach/detach mutations, запрошенные внутри update, фиксируются на границе tick. Disposal освобождает component/system state.
+`ComponentRegistry` принимает только явно зарегистрированные definitions. `ComponentWorld.update(deltaSeconds)` вызывается внешним владельцем tick; Core не создаёт свой `requestAnimationFrame`. Lifecycle: create → enable → start → update → disable → destroy; структурные attach/detach mutations, запрошенные как внутри update, так и из lifecycle callbacks вне tick, фиксируются на границе текущей операции. Во время dispose новые mutations отклоняются до завершения cleanup; повторный вход и orphan instances не допускаются. Registry сохраняет неизменяемый snapshot schema, а queued attach фиксирует properties на момент запроса. Disposal освобождает component/system state.
 
 ## 3. Host authoring workflow
 
@@ -57,18 +57,18 @@ Compatibility adapter формирует временный `legacy.user-compone
 
 Core package: `packages/cge/`.
 
-- Project v1 required envelope, stable references, duplicate IDs, safe asset paths и unknown JSON data.
+- Project v1 required envelope, stable references, duplicate IDs, safe asset paths, optional sub-resource ID validation и unknown JSON data.
 - In-memory Project v0 → v1 migration; исходный файл автоматически не переписывается.
 - Deterministic serialization/round-trip и parse/unsupported-version diagnostics.
 - Scene duplicate node/component IDs и finite Transform checks.
-- Defaults, required values, enum/numeric constraints, persisted/editorOnly/runtime filtering, asset/node reference validation.
-- Registry duplicate protection, explicit-tick lifecycle, deferred structural mutations, scene world disposal и invalid delta rejection.
+- Defaults, required values, enum/numeric constraints, discriminator-specific schema metadata, non-JSON value rejection, persisted/editorOnly/runtime filtering, asset/node reference validation и точные property diagnostics.
+- Registry duplicate protection/immutable schema snapshot; explicit-tick lifecycle, deferred structural mutations at operation boundaries, disposal reentrancy protection, attach input snapshots, scene world disposal и invalid delta rejection.
 
 SolidJS Host:
 
-- Legacy `.components` → Core schema adapter, default initialization, enum/numeric Inspector validation и unknown namespaced field preservation.
+- Legacy `.components` → Core schema adapter, default initialization, enum/numeric Inspector validation, validation of definition/property edits, safe special property names и unknown namespaced field preservation.
 - TypeScript single-file syntax diagnostics с line/column.
-- Browser regression scenarios подготовлены для enum save/reopen и TypeScript source open/edit/save/reopen; они запускаются как часть независимой acceptance на promotion candidate по CODQA-21.
+- Browser regression scenarios проверяют enum attach/detach/edit/save/reopen и TypeScript source open/edit/save/reopen; они запускаются как часть независимой acceptance на promotion candidate по CODQA-21.
 
 ## 5. Product UX reference: adopt / adapt / reject
 

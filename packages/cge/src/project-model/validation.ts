@@ -76,6 +76,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   input.assets.forEach((asset, index) => {
     if (!isRecord(asset) || !isNonEmptyString(asset.id) ||
         !isSafeProjectPath(asset.path) ||
+        (asset.subResourceId !== undefined && !isNonEmptyString(asset.subResourceId)) ||
         !ASSET_KINDS.includes(asset.kind as (typeof ASSET_KINDS)[number])) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference requires a stable id, safe relative path and supported kind.", "assets[" + index + "]"));
     } else {
