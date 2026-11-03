@@ -44,11 +44,26 @@ const validateTestActionRequestSchema = compile<TestActionRequest>("TestActionRe
 const validateTestActionResultSchema = compile<TestActionResult>("TestActionResult");
 
 function schemaIssues(validator: ValidateFunction): readonly ValidationIssue[] {
-  return (validator.errors ?? []).map((error) => ({
-    code: "SCHEMA_" + error.keyword.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
-    path: error.instancePath || "/",
-    message: error.message ?? "The value does not match the Game Test Bridge schema.",
-  }));
+  return (validator.errors ?? []).map((error) => {
+    const params = error.params as {
+      additionalProperty?: unknown;
+      missingProperty?: unknown;
+    };
+    const property = error.keyword === "additionalProperties"
+      ? params.additionalProperty
+      : error.keyword === "required"
+        ? params.missingProperty
+        : undefined;
+    const path = typeof property === "string"
+      ? error.instancePath + "/" + property.replace(/~/g, "~0").replace(/\//g, "~1")
+      : error.instancePath || "/";
+
+    return {
+      code: "SCHEMA_" + error.keyword.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
+      path,
+      message: error.message ?? "The value does not match the Game Test Bridge schema.",
+    };
+  });
 }
 
 function validateWithSchema<T>(
