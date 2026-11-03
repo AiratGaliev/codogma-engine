@@ -162,6 +162,28 @@ test("validates capability descriptors and gates optional event families", () =>
   const validatedAvailable = validateCapabilityDescriptor(available);
   assert.equal(validatedAvailable.success, true);
   assert.equal(isEventTypeAvailable("physics.contact", [available]), true);
+
+  const partial: CapabilityDescriptor = {
+    ...available,
+    status: "partial",
+    reason: {
+      code: "RUNTIME_LIMITATION",
+      message: "The active physics adapter only reports a subset of contact states.",
+      retryable: false,
+    },
+  };
+  const validatedPartial = validateCapabilityDescriptor(partial);
+  assert.equal(validatedPartial.success, true);
+  if (!validatedPartial.success) return;
+  assert.equal(isEventTypeAvailable("physics.contact", [validatedPartial.value]), true);
+  const requiredPartial = negotiateCapabilities(["events.physics.contact"], [validatedPartial.value]);
+  assert.equal(requiredPartial.accepted, false);
+  assert.equal(requiredPartial.unsupported[0]?.reason.code, "RUNTIME_LIMITATION");
+
+  assert.equal(validateCapabilityDescriptor({
+    ...available,
+    status: "partial",
+  }).success, false);
 });
 
 test("reports unavailable capabilities with their structured reason", () => {
@@ -196,6 +218,22 @@ test("validates registered action envelopes and rejects unregistered actions", (
   assert.equal(denied.allowed, false);
   if (denied.allowed) return;
   assert.equal(denied.failure.code, "ACTION_NOT_REGISTERED");
+
+  const sessionMismatch = authorizeRegisteredTestAction({
+    ...validRequest.value,
+    testSessionId: "another-session",
+  }, handshake.value);
+  assert.equal(sessionMismatch.allowed, false);
+  if (sessionMismatch.allowed) return;
+  assert.equal(sessionMismatch.failure.code, "POLICY_RESTRICTED");
+
+  const versionMismatch = authorizeRegisteredTestAction({
+    ...validRequest.value,
+    actionVersion: "1.1.0",
+  }, handshake.value);
+  assert.equal(versionMismatch.allowed, false);
+  if (versionMismatch.allowed) return;
+  assert.equal(versionMismatch.failure.code, "ACTION_VERSION_MISMATCH");
 });
 
 test("does not authorize controlled state changes in Development profile", () => {
@@ -243,9 +281,11 @@ test("rejects non-JSON JavaScript and runtime values before schema validation", 
   const cyclic: Record<string, unknown> = {};
   cyclic["self"] = cyclic;
 
+  let accessorInvoked = false;
   const accessor = Object.defineProperty({}, "runtimeValue", {
     enumerable: true,
     get: () => {
+      accessorInvoked = true;
       throw new Error("The validator must not invoke accessors.");
     },
   });
@@ -254,6 +294,7 @@ test("rejects non-JSON JavaScript and runtime values before schema validation", 
   assert.equal(validateJsonValue(new PhaserLikeObject()).success, false);
   assert.equal(validateJsonValue(cyclic).success, false);
   assert.equal(validateJsonValue(accessor).success, false);
+  assert.equal(accessorInvoked, false);
   assert.equal(validateJsonValue({ value: Number.NaN }).success, false);
   assert.equal(validateJsonValue({ value: () => "not JSON" }).success, false);
 });
