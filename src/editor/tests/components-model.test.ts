@@ -115,6 +115,6 @@ test("rejects invalid component renames and malformed property collections", () 
   );
   assert.equal(createUserComponentSchema({
     name: "Malformed",
-    properties: {} as unknown as UserComponentDefinition["properties"],
+    properties: {} as never,
   }).valid, false);
 });
