@@ -43,3 +43,19 @@ commands above in the Boundaries section from this package directory.
 ## Initial contracts
 
 Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically.
+
+
+## Legacy Scene/Prefab migration (explicit opt-in)
+
+`migrateLegacySceneDocument` and `migrateLegacyPrefabDocument` convert the existing Colibri `.scene` JSON shape to the versioned Core Scene/Prefab v1 envelope in memory. They never write the source file.
+
+The mapping rules are intentionally conservative:
+
+- Existing Scene/Prefab/Node IDs are mandatory and are preserved. Migration does not derive identity from names, file paths or array positions.
+- Legacy display-list and plain-object entries become Scene root Nodes in their original collection order; nested `list` entries become child Nodes. Node names and the seven common Transform values are mapped explicitly.
+- Legacy Component names are mapped only through the caller-provided `componentTypes` table. Each mapping supplies a stable Core `typeId` and `schemaVersion`. Namespaced values such as `PushOnClick.pushScale` become typed Component properties. Unmapped legacy references remain under `legacySource` and are reported as warnings.
+- Prefab instance overrides are emitted only when the caller supplies an explicit `prefabReferences` mapping with root Node ID and the set of exposed property names. Without it, raw values remain available in `legacySource`; the migration does not guess which fields are overrides.
+- Prefab exposed-property declarations, editor metadata, renderer-specific fields and the complete original JSON payload remain in extension data under `legacySource` / `legacyPrefabProperties`. They are not falsely presented as already converted runtime renderer or Inspector contracts.
+- A legacy Prefab with multiple independent roots is rejected rather than silently changing the hierarchy into parent/child nodes. Supply a separately reviewed grouping migration if that legacy pattern is encountered.
+
+The conversion result contains structured diagnostics. A caller must resolve warnings, register compatible component definitions and provide the appropriate Project/Prefab validation context before treating the converted document as load-ready. Scene hydration into a ComponentWorld remains COD-103.

@@ -1,0 +1,40 @@
+{
+    "id": "7b61bd98-edb2-4e20-a516-790d2c5df7b6",
+    "sceneType": "PREFAB",
+    "settings": {
+        "preloadPackFiles": [],
+        "createMethodName": "editorCreate",
+        "sceneKey": "CoinPrefab",
+        "compilerOutputLanguage": "TYPE_SCRIPT"
+    },
+    "displayList": [
+        {
+            "type": "Image",
+            "id": "d1efe159-9dca-4f6a-9de5-14863a905271",
+            "label": "coin",
+            "texture": {
+                "key": "dino"
+            }
+        }
+    ],
+    "plainObjects": [],
+    "meta": {
+        "app": "Phaser Editor 2D - Scene Editor",
+        "url": "https://phasereditor2d.com",
+        "contentType": "phasereditor2d.core.scene.SceneContentType",
+        "version": 5
+    },
+    "prefabProperties": [
+        {
+            "name": "value",
+            "label": "Value",
+            "tooltip": "Coin value",
+            "defValue": 10,
+            "customDefinition": false,
+            "type": {
+                "id": "number",
+                "isArray": false
+            }
+        }
+    ]
+}
