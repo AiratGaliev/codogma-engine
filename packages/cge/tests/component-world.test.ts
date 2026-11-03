@@ -114,3 +114,61 @@ test("rejects duplicate registrations and invalid frame deltas", () => {
   const world = new ComponentWorld("scene-a", registry);
   assert.throws(() => world.update(Number.NaN), /delta/i);
 });
+
+
+test("node activation transitions every attached component deterministically", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-a", createRegistry(log));
+  world.createNode({ id: "node-1", name: "Inactive", active: false });
+  world.attachComponent("node-1", schema.typeId, {}, { instanceId: "inactive-component" });
+  assert.deepEqual(log, ["create:inactive-component:node-1:1"]);
+
+  world.setNodeActive("node-1", true);
+  world.update(1 / 60);
+  world.setNodeActive("node-1", false);
+  world.setNodeActive("node-1", true);
+  world.removeComponent("inactive-component");
+
+  assert.deepEqual(log, [
+    "create:inactive-component:node-1:1",
+    "enable:inactive-component",
+    "start:inactive-component",
+    "update:inactive-component:0.016666666666666666",
+    "disable:inactive-component",
+    "enable:inactive-component",
+    "disable:inactive-component",
+    "destroy:inactive-component",
+  ]);
+});
+
+test("cleanup continues for all components when lifecycle callbacks throw", () => {
+  const log: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onDisable: () => {
+        log.push("disable:" + instanceId);
+        if (instanceId === "broken") throw new Error("disable failed");
+      },
+      onDestroy: () => {
+        log.push("destroy:" + instanceId);
+        if (instanceId === "broken") throw new Error("destroy failed");
+      },
+    }),
+  });
+  const world = new ComponentWorld("scene-a", registry);
+  world.createNode({ id: "node-1", name: "Player" });
+  world.attachComponent("node-1", schema.typeId, {}, { instanceId: "broken" });
+  world.attachComponent("node-1", schema.typeId, {}, { instanceId: "healthy" });
+
+  assert.throws(() => world.destroyNode("node-1"), AggregateError);
+  assert.equal(world.nodeCount, 0);
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(log, [
+    "disable:broken",
+    "destroy:broken",
+    "disable:healthy",
+    "destroy:healthy",
+  ]);
+});
