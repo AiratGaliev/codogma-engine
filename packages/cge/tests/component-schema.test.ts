@@ -133,6 +133,5 @@ test("round-trips Scene component values using the same schema and stable resour
     mode: "instant",
     texture: { assetId: "image-player" },
     target: { nodeId: "node-enemy" },
-    enabled: true,
   });
 });
