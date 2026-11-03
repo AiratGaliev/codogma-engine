@@ -85,3 +85,12 @@ Persisted component properties и transient runtime state — разные об�
 **Компромиссы:** потребуется явно определить schema/version/migration, component metadata и lifecycle contracts. Эти элементы нельзя оставлять implicit в generated source или UI state.
 
 Открытыми до реализации остаются конкретный JSON schema, API names/signatures, правила conflict resolution для component metadata, точный update order и transport протокол Preview Host. Эти детали не мешают начать изолированный pilot, но должны быть утверждены и покрыты тестами до подключения большого набора editor features.
+
+## Implementation update — 03.11.2026
+
+PR #39 introduces the first host-neutral contract implementation under `packages/cge/`: Project/Scene/Prefab v1 types and validation, in-memory Project v0 migration, deterministic serializers, structured diagnostics, versioned Component Schema, explicit registry and a component-object world updated only by an external tick. This realizes the first testable portion of this ADR without coupling the Core package to Phaser, the DOM, Colibri or the SolidJS Host.
+
+The legacy SolidJS Host workflow consumes the Core schema through a compatibility adapter for current `.components` documents. That adapter's `legacy.user-component:<class-name>` identifier is deliberately transitional; it is not a stable runtime type ID or module registration. TypeScript source editing and syntax diagnostics are also Host features, not runtime module loading.
+
+**Not yet implemented:** Project Model-aware scene loader, explicit project module manifest resolver, Phaser runtime adapter, Preview Host/live runtime identity, lifecycle integration into Phaser ticks, and data-driven standalone HTML5 build. The implementation must not be described as an end-to-end runtime migration until the acceptance sequence in [Core acceptance slice](../core-component-acceptance-slice.md) is complete. Legacy `.scene`/generated-code workflows remain compatible and are not rewritten by this PR.
+

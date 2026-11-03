@@ -48,9 +48,12 @@ import {
   addUserComponentDefinition,
   attachUserComponent,
   createUserComponentDefinition,
+  createUserComponentSchema,
   detachUserComponent,
   formatUserComponentsContent,
   parseUserComponentsContent,
+  validateUserComponentProperties,
+  validateUserComponentPropertyValue,
   removeUserComponentDefinition,
   updateUserComponentDefinition,
   type UserComponentsDocument,
@@ -62,6 +65,10 @@ import {
   createProjectFolder,
   type ProjectEntry,
 } from "./services/editor-api";
+import {
+  checkTypeScriptSource,
+  type TypeScriptSourceDiagnostic,
+} from "./services/typescript-diagnostics.ts";
 import {
   connectEditorMcpBridge,
   type EditorMcpHandler,
@@ -99,7 +106,7 @@ import FxInspector from "./components/FxInspector";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
-type ViewportTab = "Scene" | "Game";
+type ViewportTab = "Scene" | "Game" | "Source";
 type FocusContext = "global" | "scene" | "hierarchy" | "inspector" | "project" | "animation" | "components" | "console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
 
@@ -367,6 +374,12 @@ function App() {
   const [componentDocumentPath, setComponentDocumentPath] = createSignal("");
   const [savedComponentContent, setSavedComponentContent] = createSignal("");
   const [componentSaving, setComponentSaving] = createSignal(false);
+  const [scriptSourcePath, setScriptSourcePath] = createSignal("");
+  const [scriptSource, setScriptSource] = createSignal("");
+  const [savedScriptSource, setSavedScriptSource] = createSignal("");
+  const [scriptSaving, setScriptSaving] = createSignal(false);
+  const [scriptChecking, setScriptChecking] = createSignal(false);
+  const [scriptDiagnostics, setScriptDiagnostics] = createSignal<TypeScriptSourceDiagnostic[]>([]);
   const [newComponentName, setNewComponentName] = createSignal("");
   const [newComponentPropertyName, setNewComponentPropertyName] = createSignal("");
   const [newComponentPropertyType, setNewComponentPropertyType] = createSignal<"number" | "string" | "boolean">("number");
@@ -473,7 +486,11 @@ function App() {
     catch { return true; }
   });
 
-  const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty());
+  const scriptDirty = createMemo(() =>
+    Boolean(scriptSourcePath()) && scriptSource() !== savedScriptSource(),
+  );
+
+  const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty() || scriptDirty());
 
   const componentRegistry = createMemo(() => {
     const sources = componentSources();
@@ -695,11 +712,12 @@ function App() {
 
   let sceneLoadSequence = 0;
   let documentLoadSequence = 0;
+  let scriptCheckSequence = 0;
 
   async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
-    if (animationDirty() || componentDirty()) {
-      if (!window.confirm("The active animation or User Components file has unsaved changes. Discard them and open the scene?")) return false;
+    if (animationDirty() || componentDirty() || scriptDirty()) {
+      if (!window.confirm("The active animation, User Components or TypeScript source has unsaved changes. Discard them and open the scene?")) return false;
     }
     if (dirty()) {
       const discardChanges = window.confirm(
@@ -886,8 +904,8 @@ function App() {
 
   async function loadAnimationFile(path: string, sourceContent?: string) {
     if (path === animationPath()) return;
-    if ((dirty() || componentDirty()) &&
-        !window.confirm("The active scene or User Components file has unsaved changes. Discard them?")) return;
+    if ((dirty() || componentDirty() || scriptDirty()) &&
+        !window.confirm("The active scene, User Components or TypeScript source has unsaved changes. Discard them?")) return;
     if (animationDirty() && !window.confirm("The active animation file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
@@ -1047,8 +1065,8 @@ function App() {
 
   async function openUserComponentsFile(path: string) {
     if (path === componentDocumentPath()) return;
-    if ((dirty() || animationDirty()) &&
-        !window.confirm("The active scene or animation file has unsaved changes. Discard them?")) return;
+    if ((dirty() || animationDirty() || scriptDirty()) &&
+        !window.confirm("The active scene, animation or TypeScript source has unsaved changes. Discard them?")) return;
     if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
@@ -1071,6 +1089,113 @@ function App() {
     }
   }
 
+  async function runTypeScriptSourceCheck(path: string, content: string) {
+    const request = ++scriptCheckSequence;
+    setScriptChecking(true);
+    try {
+      const result = await checkTypeScriptSource(path, content);
+      if (request === scriptCheckSequence && scriptSourcePath() === path && scriptSource() === content) {
+        setScriptDiagnostics(result.diagnostics);
+      }
+    } catch (error) {
+      if (request === scriptCheckSequence) {
+        log("warning", `TypeScript diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      if (request === scriptCheckSequence) setScriptChecking(false);
+    }
+  }
+
+  function updateTypeScriptSource(content: string) {
+    setScriptSource(content);
+    const path = scriptSourcePath();
+    if (path) void runTypeScriptSourceCheck(path, content);
+  }
+
+  async function openTypeScriptFile(path: string, sourceContent?: string) {
+    if (path === scriptSourcePath()) {
+      setActiveViewport("Source");
+      return;
+    }
+    if (documentDirty() && !window.confirm("The active document has unsaved changes. Discard them and open the TypeScript source?")) return;
+    const request = ++documentLoadSequence;
+    try {
+      const content = sourceContent ?? await readProjectFile(path);
+      if (request !== documentLoadSequence) return;
+      setScriptSourcePath(path);
+      setScriptSource(content);
+      setSavedScriptSource(content);
+      setScriptDiagnostics([]);
+      setSelectedProjectPath(path);
+      setActiveViewport("Source");
+      setLayout((current) => ({ ...current, bottomTab: "Components" }));
+      await runTypeScriptSourceCheck(path, content);
+      log("success", `Opened TypeScript source ${path}`);
+    } catch (error) {
+      if (request !== documentLoadSequence) return;
+      log("error", `Could not open TypeScript source: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function saveTypeScriptFile() {
+    const path = scriptSourcePath();
+    if (!path || scriptSaving() || !scriptDirty()) return;
+    setScriptSaving(true);
+    try {
+      const content = scriptSource();
+      await writeProjectFile(path, content);
+      setSavedScriptSource(content);
+      await runTypeScriptSourceCheck(path, content);
+      log("success", `Saved TypeScript source ${path}`);
+    } catch (error) {
+      log("error", `TypeScript source save failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setScriptSaving(false);
+    }
+  }
+
+  async function createTypeScriptFile(path: string, content: string) {
+    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.tsx?$/i.test(path) || path.split("/").includes("..")) {
+      throw new Error("TypeScript source path must be a relative .ts/.tsx path inside the project.");
+    }
+    assertNewProjectFilePath(path);
+    const directory = path.split("/").slice(0, -1).join("/");
+    if (directory) await ensureProjectFolder(directory);
+    await writeProjectFile(path, content);
+    await refreshProjectTree();
+    await openTypeScriptFile(path, content);
+    log("success", `Created TypeScript source ${path}`);
+  }
+
+  async function openUserComponentSource(definition: UserComponentsDocument["components"][number]) {
+    const directory = componentDocumentPath().split("/").slice(0, -1).join("/");
+    const path = [directory, `${definition.name}.ts`].filter(Boolean).join("/");
+    const tree = projectTree();
+    const exists = tree
+      ? flattenProjectFiles(tree).some((entry) => entry.path === path && entry.entry.isFile)
+      : false;
+    if (exists) {
+      await openTypeScriptFile(path);
+      return;
+    }
+    const source = [
+      "/**",
+      ` * User-authored TypeScript source for ${definition.name}.`,
+      " * Component metadata remains in the adjacent .components file.",
+      " * Runtime execution requires explicit component module registration.",
+      " */",
+      `export class ${definition.name} {`,
+      "  // Add the component's TypeScript implementation here.",
+      "}",
+      "",
+    ].join("\\n");
+    try {
+      await createTypeScriptFile(path, source);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function openProjectFile(path: string) {
     const normalized = path.toLowerCase();
     if (normalized.endsWith(".scene")) {
@@ -1079,6 +1204,10 @@ function App() {
     }
     if (normalized.endsWith(".components")) {
       await openUserComponentsFile(path);
+      return;
+    }
+    if (normalized.endsWith(".ts") || normalized.endsWith(".tsx")) {
+      await openTypeScriptFile(path);
       return;
     }
     if (normalized.endsWith(".json")) {
@@ -1190,9 +1319,15 @@ function App() {
   function updateAttachedComponentProperty(componentName: string, propertyName: string, value: unknown) {
     const current = scene();
     const selected = selectedObject();
-    if (!current || !selected) return;
+    const definition = componentRegistry().find((item) => item.definition.name === componentName)?.definition;
+    if (!current || !selected || !definition) return;
+    const validation = validateUserComponentPropertyValue(definition, propertyName, value);
+    if (!validation.valid) {
+      for (const diagnostic of validation.diagnostics) log("error", `${componentName}.${propertyName}: ${diagnostic.message}`);
+      return;
+    }
     try {
-      applySceneChange(updateSceneObject(current, selected.id, { [`${componentName}.${propertyName}`]: value }), selected.id);
+      applySceneChange(updateSceneObject(current, selected.id, { [`${componentName}.${propertyName}`]: validation.value }), selected.id);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -1202,21 +1337,18 @@ function App() {
     const component = current.components.find((item) => item.name === componentName);
     const propertyName = newComponentPropertyName().trim();
     if (!component || !propertyName) return;
-    const defaultValue = newComponentPropertyType() === "number" ? 0
-      : newComponentPropertyType() === "boolean" ? false : "";
+    const propertyType = newComponentPropertyType();
+    const defaultValue = propertyType === "number" ? 0 : propertyType === "boolean" ? false : "";
     try {
-      const next = {
-        ...current,
-        components: current.components.map((item) => item.name === componentName
-          ? { ...item, properties: [...(item.properties ?? []), {
-              name: propertyName,
-              label: propertyName,
-              defValue: defaultValue,
-              customDefinition: false,
-              type: { id: newComponentPropertyType() },
-            }] }
-          : item),
-      };
+      const next = updateUserComponentDefinition(current, componentName, {
+        properties: [...(component.properties ?? []), {
+          name: propertyName,
+          label: propertyName,
+          defValue: defaultValue,
+          customDefinition: false,
+          type: { id: propertyType },
+        }],
+      });
       setComponentDocument(next);
       setNewComponentPropertyName("");
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
@@ -1352,15 +1484,51 @@ function App() {
 
 
   async function saveActiveDocument() {
+    if (activeViewport() === "Source" && scriptSourcePath()) return saveTypeScriptFile();
     if (layout().bottomTab === "Animation" && animationDocument()) return saveAnimationFile();
     if (layout().bottomTab === "Components" && componentDocument()) return saveUserComponentsFile();
     return saveScene();
+  }
+
+  function validateSceneUserComponents(document: SceneDocument): boolean {
+    const definitions = new Map(componentRegistry().map((entry) => [entry.definition.name, entry.definition]));
+    const errors: string[] = [];
+    for (const object of getSceneObjects(document)) {
+      const names = Array.isArray(object.source.components)
+        ? object.source.components.filter((name): name is string => typeof name === "string")
+        : [];
+      for (const name of names) {
+        const definition = definitions.get(name);
+        if (!definition) {
+          log("warning", `${object.name} · ${name}: no matching .components definition was found. The serialized component reference is preserved.`);
+          continue;
+        }
+        const result = validateUserComponentProperties(object.source, definition);
+        for (const diagnostic of result.diagnostics) {
+          if (diagnostic.severity === "error") {
+            errors.push(`${object.name} · ${name}.${diagnostic.propertyName ?? ""}: ${diagnostic.message}`);
+          } else if (diagnostic.severity === "warning") {
+            log("warning", `${object.name} · ${name}: ${diagnostic.message}`);
+          }
+        }
+      }
+    }
+    if (errors.length > 0) {
+      for (const message of errors) log("error", message);
+      return false;
+    }
+    return true;
   }
 
   async function saveScene(): Promise<boolean> {
     const current = scene();
     const path = scenePath();
     if (!current || !path || saving()) return false;
+
+    if (!validateSceneUserComponents(current)) {
+      setLoadError("One or more User Component values are invalid. Fix the Inspector diagnostics before saving.");
+      return false;
+    }
 
     setSaving(true);
     try {
@@ -3142,9 +3310,21 @@ function App() {
                 <Icon theme={theme()} name="play-scene" size={13} />
                 Game
               </button>
+              <Show when={scriptSourcePath()}>
+                <button
+                  class="viewport-tab"
+                  role="tab"
+                  aria-selected={activeViewport() === "Source"}
+                  classList={{ active: activeViewport() === "Source" }}
+                  onClick={() => setActiveViewport("Source")}
+                >
+                  <Icon theme={theme()} name="script" size={13} />
+                  Source
+                </button>
+              </Show>
               <div class="viewport-tab-spacer" />
-              <span class="viewport-resolution">{activeViewport() === "Scene" ? "800 × 600" : "LIVE GAME"}</span>
-              <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
+              <span class="viewport-resolution">{activeViewport() === "Scene" ? "800 × 600" : activeViewport() === "Source" ? "TYPESCRIPT" : "LIVE GAME"}</span>
+              <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : activeViewport() === "Source" ? (scriptDirty() ? "Unsaved source" : "Source ready") : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
             </div>
 
             <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"} tabIndex={0} data-focus-context="scene" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("button, input, textarea, select, [role=button]")) event.currentTarget.focus({ preventScroll: true }); }}>
@@ -3206,6 +3386,49 @@ function App() {
                   }}
                 />
                 <div class="game-view-caption">Game View loads the existing generated game output. Scene edits are saved to .scene and do not regenerate game.js automatically.</div>
+              </div>
+            </Show>
+
+            <Show when={activeViewport() === "Source"}>
+              <div class="typescript-source-workspace" data-testid="typescript-source-workspace">
+                <div class="typescript-source-toolbar">
+                  <div class="components-file-heading">
+                    <strong>{scriptSourcePath().split("/").pop() ?? "TypeScript source"}</strong>
+                    <span>{scriptSourcePath()}</span>
+                  </div>
+                  <div class="timeline-actions">
+                    <span class="typescript-diagnostic-status">
+                      {scriptChecking() ? "Checking syntax…" : scriptDiagnostics().length === 0 ? "No syntax diagnostics" : `${scriptDiagnostics().length} diagnostic(s)`}
+                    </span>
+                    <button class="primary-button" data-testid="save-typescript-source" disabled={!scriptDirty() || scriptSaving()} onClick={() => void saveTypeScriptFile()}>
+                      {scriptSaving() ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  aria-label="TypeScript source"
+                  data-testid="typescript-source-editor"
+                  class="typescript-source-editor"
+                  spellcheck={false}
+                  autocapitalize="off"
+                  autocomplete="off"
+                  autocorrect="off"
+                  value={scriptSource()}
+                  onInput={(event) => updateTypeScriptSource(event.currentTarget.value)}
+                />
+                <div class="typescript-diagnostics" data-testid="typescript-diagnostics" role="status" aria-live="polite">
+                  <Show when={scriptDiagnostics().length > 0} fallback={<span class="inspector-note">Single-file TypeScript syntax check. Project-wide semantic type checking uses the project's configured tsc build.</span>}>
+                    <For each={scriptDiagnostics()}>
+                      {(diagnostic) => (
+                        <div class="typescript-diagnostic-row" classList={{ error: diagnostic.severity === "error", warning: diagnostic.severity === "warning" }}>
+                          <strong>{diagnostic.severity.toUpperCase()}</strong>
+                          <span>{diagnostic.line ? `Ln ${diagnostic.line}, Col ${diagnostic.column ?? 1} · ` : ""}{diagnostic.message}</span>
+                          <code>TS{diagnostic.code}</code>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
+                </div>
               </div>
             </Show>
           </div>
@@ -3382,22 +3605,28 @@ function App() {
                           </div>
                           <For each={entry.definition.properties ?? []}>
                             {(property) => {
-                              const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? property.defValue;
+                              const propertySchema = () => createUserComponentSchema(entry.definition).value?.properties[property.name];
+                              const enumOptions = () => {
+                                const schema = propertySchema();
+                                return schema?.type === "enum" ? schema.options : [];
+                              };
+                              const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? propertySchema()?.defaultValue;
                               return (
                                 <label class="inspector-field component-property-field">
                                   <span>{property.label ?? property.name}</span>
-                                  <Show when={property.type?.id === "boolean"}>
+                                  <Show when={propertySchema()?.type === "boolean"}>
                                     <input type="checkbox" aria-label={`${entry.definition.name} ${property.name}`} checked={Boolean(propertyValue())} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.checked)} />
                                   </Show>
-                                  <Show when={property.type?.id === "option"}>
+                                  <Show when={propertySchema()?.type === "enum"}>
                                     <select aria-label={`${entry.definition.name} ${property.name}`} value={String(propertyValue() ?? "")} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.value)}>
-                                      <For each={property.type?.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
+                                      <For each={enumOptions()}>{(option) => <option value={option}>{option}</option>}</For>
                                     </select>
                                   </Show>
-                                  <Show when={property.type?.id !== "boolean" && property.type?.id !== "option"}>
-                                    <input aria-label={`${entry.definition.name} ${property.name}`} type={property.type?.id === "number" ? "number" : "text"} value={String(propertyValue() ?? "")} onChange={(event) => {
-                                      const value = property.type?.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
-                                      if (property.type?.id !== "number" || Number.isFinite(value)) updateAttachedComponentProperty(entry.definition.name, property.name, value);
+                                  <Show when={propertySchema()?.type === "number" || propertySchema()?.type === "string"}>
+                                    <input aria-label={`${entry.definition.name} ${property.name}`} type={propertySchema()?.type === "number" ? "number" : "text"} value={String(propertyValue() ?? "")} onChange={(event) => {
+                                      if (propertySchema()?.type === "number" && event.currentTarget.value === "") return;
+                                      const value = propertySchema()?.type === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
+                                      if (propertySchema()?.type !== "number" || Number.isFinite(value)) updateAttachedComponentProperty(entry.definition.name, property.name, value);
                                     }} />
                                   </Show>
                                 </label>
@@ -3947,6 +4176,7 @@ function App() {
                         <section class="components-definition-card" data-testid={`component-definition-${definition.name}`}>
                           <div class="components-definition-heading">
                             <div><strong>{definition.displayName ?? definition.name}</strong><code>{definition.name}</code></div>
+                            <button class="subtle-button" onClick={() => void openUserComponentSource(definition)}>Edit TypeScript source</button>
                             <button class="toolbar-icon-button tiny" aria-label={`Delete definition ${definition.name}`} title="Remove definition" onClick={() => {
                               if (window.confirm(`Remove User Component "${definition.name}" from this file? Existing scene references are preserved.`)) removeUserComponent(definition.name);
                             }}>

@@ -27,7 +27,7 @@
     "format:check": "prettier --check .",
     "deps:check": "depcruise server mini-services tests --config .dependency-cruiser.cjs",
     "knip": "knip",
-    "dev:editor-host": "npm --prefix src/editor run dev",
+    "dev:editor-host": "node scripts/dev-editor-host.mjs",
     "build:editor-host": "npm --prefix src/editor run build",
     "test:editor-host": "npm --prefix src/editor run test",
     "test:editor-host:browser": "npm --prefix src/editor run test:browser"
