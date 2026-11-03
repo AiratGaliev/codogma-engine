@@ -1620,3 +1620,69 @@ test("splitter resize ignores unrelated pointer events and stops on lost capture
   await expect(splitter).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
   await page.mouse.up();
 });
+
+
+test("User Component enum fields use Core schema and round-trip through Scene save/reopen", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
+  await page.getByTestId("hierarchy-item-dino").click();
+
+  const tint = page.getByLabel("Tint tint");
+  await expect(tint).toHaveValue("red");
+  await tint.selectOption("green");
+  await expect(tint).toHaveValue("green");
+  await saveSceneWithShortcut(page);
+
+  const saved = await readSavedScene(page);
+  const dino = saved.displayList.find((object: { label?: string }) => object.label === "dino");
+  expect(dino?.["Tint.tint"]).toBe("green");
+
+  await page.reload();
+  await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
+  await page.getByTestId("hierarchy-item-dino").click();
+  await expect(page.getByLabel("Tint tint")).toHaveValue("green");
+});
+
+test("TypeScript source opens, edits, saves and reopens from the Project browser", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const sourcePath = "components/PushOnClick.ts";
+  const originalResponse = await page.request.get("http://127.0.0.1:5173/editor/project/" + sourcePath);
+  expect(originalResponse.ok()).toBeTruthy();
+  const originalSource = await originalResponse.text();
+  const marker = "// Editor Host source authoring acceptance";
+
+  try {
+    const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+    await bottomTabs.getByRole("tab", { name: "Project" }).click();
+    await page.locator(".file-tree-row").filter({ hasText: "components" }).first().click();
+    await page.locator(".file-tree-row").filter({ hasText: "PushOnClick.ts" }).click();
+
+    const editor = page.getByTestId("typescript-source-editor");
+    await expect(editor).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Viewport" }).getByRole("tab", { name: "Source" })).toHaveAttribute("aria-selected", "true");
+    await editor.fill(originalSource + "\\n" + marker);
+    await expect(page.getByTestId("save-typescript-source")).toBeEnabled();
+    await expect(page.getByTestId("typescript-diagnostics")).not.toContainText("error");
+    await page.getByTestId("save-typescript-source").click();
+    await expect(page.getByTestId("save-typescript-source")).toBeDisabled();
+
+    const savedResponse = await page.request.get("http://127.0.0.1:5173/editor/project/" + sourcePath);
+    expect(savedResponse.ok()).toBeTruthy();
+    expect(await savedResponse.text()).toContain(marker);
+
+    await page.reload();
+    await bottomTabs.getByRole("tab", { name: "Project" }).click();
+    await page.locator(".file-tree-row").filter({ hasText: "components" }).first().click();
+    await page.locator(".file-tree-row").filter({ hasText: "PushOnClick.ts" }).click();
+    await expect(page.getByTestId("typescript-source-editor")).toContainText(marker);
+  } finally {
+    await page.request.post("http://127.0.0.1:3000/editor/api", {
+      data: {
+        method: "SetFileString",
+        body: { path: sourcePath, content: originalSource },
+      },
+    });
+  }
+});
