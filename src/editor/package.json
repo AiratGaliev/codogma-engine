@@ -5,11 +5,15 @@
   "type": "module",
   "description": "Codogma Engine SolidJS Editor Host",
   "scripts": {
+    "build:core": "tsc -p ../../packages/cge/tsconfig.json",
     "dev": "vite --host 127.0.0.1",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "predev": "npm run build:core",
+    "typecheck": "npm run build:core && tsc --noEmit -p tsconfig.json",
     "build": "npm run typecheck && vite build",
+    "pretest": "npm run build:core",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "pretest:watch": "npm run build:core",
     "test:watch": "vitest"
   },
   "dependencies": {
