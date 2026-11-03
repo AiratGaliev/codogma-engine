@@ -157,7 +157,7 @@ function validateNode(
   for (const key of ["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]) {
     const value = node.transform[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
-      diagnostics.push(issue("SCENE_INVALID_TRANSFORM", "Transform " + key + " must be finite.", path + ".transform." + key, node.id));
+      diagnostics.push(issue("SCENE_INVALID_TRANSFORM", "Transform " + key + " must be finite.", path + ".transform." + key, nodeId));
     }
   }
 
@@ -167,7 +167,7 @@ function validateNode(
         !isNonEmptyString(component.typeId) || typeof component.schemaVersion !== "number" ||
         !Number.isInteger(component.schemaVersion) || typeof component.enabled !== "boolean" ||
         !isRecord(component.properties) || !isJsonValue(component)) {
-      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, node.id));
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
       return;
     }
     const componentId = component.id as string;
