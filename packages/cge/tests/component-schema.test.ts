@@ -7,6 +7,7 @@ import {
   validateComponentProperties,
   validateComponentTypeSchema,
   type ComponentTypeSchemaV1,
+  type SceneDocumentV1,
 } from "../src/index.js";
 
 const schema: ComponentTypeSchemaV1 = {
@@ -87,7 +88,7 @@ test("round-trips Scene component values using the same schema and stable resour
     componentSchemas: new Map([[schema.typeId, schema]]),
     registeredComponentTypes: new Set([schema.typeId]),
   };
-  const scene = {
+  const scene: SceneDocumentV1 = {
     schemaVersion: 1,
     id: "scene-1",
     name: "Level",
