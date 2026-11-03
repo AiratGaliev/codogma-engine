@@ -112,7 +112,7 @@ export function createUserComponentSchema(
         code: "COMPONENT_INVALID_SCHEMA",
         severity: "error",
         message: "User Component properties require valid TypeScript identifier names.",
-        propertyName: typeof property?.name === "string" ? property.name : undefined,
+        ...(typeof property?.name === "string" ? { propertyName: property.name } : {}),
       });
       continue;
     }
