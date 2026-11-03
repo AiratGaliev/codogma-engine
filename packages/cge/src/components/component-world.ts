@@ -168,9 +168,18 @@ export class ComponentWorld {
       if (!node) throw new Error("Runtime node " + nodeId + " was not found.");
       if (node.active === active) return;
       node.active = active;
+      const errors: unknown[] = [];
       for (const id of this.componentsByNode.get(nodeId) ?? []) {
         const component = this.components.get(id);
-        if (component) this.synchronizeEnabledState(component);
+        if (!component) continue;
+        try {
+          this.synchronizeEnabledState(component);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length > 0) {
+        throw new AggregateError(errors, "One or more components failed during Node activation change.");
       }
     });
   }
@@ -179,9 +188,15 @@ export class ComponentWorld {
     this.assertUsable();
     this.schedule(() => {
       if (!this.nodes.has(nodeId)) return;
-      for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) this.removeComponentNow(id);
+      const errors: unknown[] = [];
+      for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) {
+        this.removeComponentNow(id, errors);
+      }
       this.componentsByNode.delete(nodeId);
       this.nodes.delete(nodeId);
+      if (errors.length > 0) {
+        throw new AggregateError(errors, "Node destruction encountered component lifecycle errors.");
+      }
     });
   }
 
@@ -311,7 +326,8 @@ export class ComponentWorld {
     }
   }
 
-  private removeComponentNow(instanceId: string, errors: unknown[] = []): void {
+  private removeComponentNow(instanceId: string, collectedErrors?: unknown[]): void {
+    const errors = collectedErrors ?? [];
     const component = this.components.get(instanceId);
     if (!component || component.destroyed) return;
     if (component.activeNotified) {
@@ -325,6 +341,9 @@ export class ComponentWorld {
     if (ids) {
       const index = ids.indexOf(instanceId);
       if (index >= 0) ids.splice(index, 1);
+    }
+    if (collectedErrors === undefined && errors.length > 0) {
+      throw new AggregateError(errors, "Component removal encountered lifecycle errors.");
     }
   }
 
