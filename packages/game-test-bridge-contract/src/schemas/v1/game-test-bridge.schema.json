@@ -1717,7 +1717,8 @@
             },
             "required": [
               "effect"
-            ]
+            ],
+            "type": "object"
           },
           "then": {
             "properties": {
