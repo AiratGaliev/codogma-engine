@@ -888,11 +888,6 @@
         },
         "animationId": {
           "$ref": "#/$defs/Identifier"
-        },
-        "reason": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
         }
       },
       "additionalProperties": false
@@ -1229,24 +1224,7 @@
                   "const": "animation.stopped"
                 },
                 "payload": {
-                  "allOf": [
-                    {
-                      "$ref": "#/$defs/AnimationPayload"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "reason": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 256
-                        }
-                      },
-                      "required": [
-                        "reason"
-                      ]
-                    }
-                  ]
+                  "$ref": "#/$defs/AnimationStoppedPayload"
                 }
               },
               "type": "object"
@@ -1879,6 +1857,28 @@
           "$ref": "#/$defs/TestActionRejectedOrFailed"
         }
       ]
+    },
+    "AnimationStoppedPayload": {
+      "type": "object",
+      "required": [
+        "entityRef",
+        "animationId",
+        "reason"
+      ],
+      "properties": {
+        "entityRef": {
+          "$ref": "#/$defs/OpaqueReference"
+        },
+        "animationId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
