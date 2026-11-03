@@ -3308,9 +3308,21 @@ function App() {
                 <Icon theme={theme()} name="play-scene" size={13} />
                 Game
               </button>
+              <Show when={scriptSourcePath()}>
+                <button
+                  class="viewport-tab"
+                  role="tab"
+                  aria-selected={activeViewport() === "Source"}
+                  classList={{ active: activeViewport() === "Source" }}
+                  onClick={() => setActiveViewport("Source")}
+                >
+                  <Icon theme={theme()} name="script" size={13} />
+                  Source
+                </button>
+              </Show>
               <div class="viewport-tab-spacer" />
-              <span class="viewport-resolution">{activeViewport() === "Scene" ? "800 × 600" : "LIVE GAME"}</span>
-              <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
+              <span class="viewport-resolution">{activeViewport() === "Scene" ? "800 × 600" : activeViewport() === "Source" ? "TYPESCRIPT" : "LIVE GAME"}</span>
+              <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : activeViewport() === "Source" ? (scriptDirty() ? "Unsaved source" : "Source ready") : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
             </div>
 
             <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"} tabIndex={0} data-focus-context="scene" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("button, input, textarea, select, [role=button]")) event.currentTarget.focus({ preventScroll: true }); }}>
@@ -3372,6 +3384,49 @@ function App() {
                   }}
                 />
                 <div class="game-view-caption">Game View loads the existing generated game output. Scene edits are saved to .scene and do not regenerate game.js automatically.</div>
+              </div>
+            </Show>
+
+            <Show when={activeViewport() === "Source"}>
+              <div class="typescript-source-workspace" data-testid="typescript-source-workspace">
+                <div class="typescript-source-toolbar">
+                  <div class="components-file-heading">
+                    <strong>{scriptSourcePath().split("/").pop() ?? "TypeScript source"}</strong>
+                    <span>{scriptSourcePath()}</span>
+                  </div>
+                  <div class="timeline-actions">
+                    <span class="typescript-diagnostic-status">
+                      {scriptChecking() ? "Checking syntax…" : scriptDiagnostics().length === 0 ? "No syntax diagnostics" : `${scriptDiagnostics().length} diagnostic(s)`}
+                    </span>
+                    <button class="primary-button" data-testid="save-typescript-source" disabled={!scriptDirty() || scriptSaving()} onClick={() => void saveTypeScriptFile()}>
+                      {scriptSaving() ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  aria-label="TypeScript source"
+                  data-testid="typescript-source-editor"
+                  class="typescript-source-editor"
+                  spellcheck={false}
+                  autocapitalize="off"
+                  autocomplete="off"
+                  autocorrect="off"
+                  value={scriptSource()}
+                  onInput={(event) => updateTypeScriptSource(event.currentTarget.value)}
+                />
+                <div class="typescript-diagnostics" data-testid="typescript-diagnostics" role="status" aria-live="polite">
+                  <Show when={scriptDiagnostics().length > 0} fallback={<span class="inspector-note">Single-file TypeScript syntax check. Project-wide semantic type checking uses the project's configured tsc build.</span>}>
+                    <For each={scriptDiagnostics()}>
+                      {(diagnostic) => (
+                        <div class="typescript-diagnostic-row" classList={{ error: diagnostic.severity === "error", warning: diagnostic.severity === "warning" }}>
+                          <strong>{diagnostic.severity.toUpperCase()}</strong>
+                          <span>{diagnostic.line ? `Ln ${diagnostic.line}, Col ${diagnostic.column ?? 1} · ` : ""}{diagnostic.message}</span>
+                          <code>TS{diagnostic.code}</code>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
+                </div>
               </div>
             </Show>
           </div>
