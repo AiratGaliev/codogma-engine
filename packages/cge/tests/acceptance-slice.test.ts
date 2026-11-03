@@ -49,7 +49,7 @@ function cloneScene(scene: SceneDocumentV1): SceneDocumentV1 {
 
 test("acceptance fixture connects Project, Scene, module identity and two component instances", () => {
   const { project, context } = loadContext();
-  assert.equal(project.componentModules[0]?.typeId, componentSchema.typeId);
+  assert.equal(project.componentModules[0]?.exports[0]?.typeId, componentSchema.typeId);
   assert.match(readFixture("FollowTarget.ts"), /com\.codogma\.acceptance\.follow-target/);
   assert.equal(
     project.assets.find((asset) => asset.id === project.componentModules[0]?.moduleAssetId)?.kind,
