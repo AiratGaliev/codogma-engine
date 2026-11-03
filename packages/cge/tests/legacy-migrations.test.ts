@@ -452,13 +452,13 @@ test("preserves legacy renderer type and compiler scope instead of treating them
   assert.equal(
     migratedAgentLevel.diagnostics.some((item) =>
       item.code === "PROJECT_LEGACY_FIELD_PRESERVED" &&
-      item.path.endsWith(".scope")),
+      item.path?.endsWith(".scope")),
     true,
   );
   assert.equal(
     migratedAgentLevel.diagnostics.some((item) =>
       item.code === "PROJECT_LEGACY_FIELD_PRESERVED" &&
-      item.path.endsWith(".type")),
+      item.path?.endsWith(".type")),
     true,
   );
 });
