@@ -163,3 +163,15 @@ test("rejects malformed type-specific metadata instead of silently ignoring it",
   assert.equal(invalidString.valid, false);
   assert.equal(invalidNode.valid, false);
 });
+
+test("preserves __proto__ as a JSON property without changing the normalized object's prototype", () => {
+  const input = JSON.parse('{"__proto__":{"future":true}}') as Record<string, unknown>;
+  const result = validateComponentProperties(schema, input);
+
+  assert.equal(result.valid, true);
+  assert.ok(result.value);
+  assert.equal(Object.getPrototypeOf(result.value), Object.prototype);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.value, "__proto__"), true);
+  assert.deepEqual(result.value["__proto__"], { future: true });
+  assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "future"), false);
+});

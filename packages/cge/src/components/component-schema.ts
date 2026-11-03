@@ -204,6 +204,15 @@ export function validateComponentTypeSchema(input: unknown): ValidationResult<Co
     : { valid: true, diagnostics, value: input as unknown as ComponentTypeSchemaV1 };
 }
 
+function setJsonProperty(target: JsonObject, key: string, value: JsonValue): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+}
+
 export function validateComponentProperties(
   schema: ComponentTypeSchemaV1,
   input: unknown,
@@ -211,7 +220,7 @@ export function validateComponentProperties(
 ): ValidationResult<JsonObject> {
   if (!isRecord(input)) return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_VALUE", "Component properties must be a JSON object.")] };
   const diagnostics: CoreDiagnostic[] = [];
-  const normalized = Object.create(null) as JsonObject;
+  const normalized: JsonObject = {};
 
   for (const [name, propertySchema] of Object.entries(schema.properties)) {
     if ((propertySchema.storage ?? "persisted") !== "persisted") continue;
@@ -223,7 +232,7 @@ export function validateComponentProperties(
     }
     const value = hasInput ? input[name] : propertySchema.defaultValue;
     diagnostics.push(...validateValue(name, propertySchema, value, context));
-    if (value !== undefined && isJsonValue(value)) normalized[name] = value;
+    if (value !== undefined && isJsonValue(value)) setJsonProperty(normalized, name, value);
   }
 
   for (const [name, value] of Object.entries(input)) {
@@ -232,7 +241,7 @@ export function validateComponentProperties(
       diagnostics.push(diagnostic("COMPONENT_INVALID_VALUE", "Unknown property " + name + " is not JSON-compatible.", name));
       continue;
     }
-    normalized[name] = value;
+    setJsonProperty(normalized, name, value);
     diagnostics.push(diagnostic("COMPONENT_UNKNOWN_PROPERTY", "Unknown property " + name + " was preserved.", name, "warning"));
   }
 

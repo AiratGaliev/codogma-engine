@@ -245,7 +245,7 @@ test("rejects malformed and duplicate Prefab overrides", () => {
         overrides: [
           { targetNodeId: "node", propertyPath: "x", value: 1 },
           { targetNodeId: "node", propertyPath: "x", value: 2 },
-          { targetNodeId: "", propertyPath: "", value: undefined },
+          { targetNodeId: "", propertyPath: "", value: null },
         ],
       },
     }],
