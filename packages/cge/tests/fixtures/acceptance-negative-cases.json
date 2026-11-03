@@ -1,0 +1,9 @@
+{
+  "brokenAssetId": "asset-does-not-exist",
+  "brokenNodeId": "node-does-not-exist",
+  "duplicateComponentId": "component-follow-player",
+  "duplicateNodeId": "node-player",
+  "unknownComponentTypeId": "com.codogma.missing.component",
+  "missingScriptAssetId": "asset-follow-target-module",
+  "unsupportedProjectVersion": 77
+}

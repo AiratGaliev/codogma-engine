@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "id": "scene-level",
+  "name": "Level",
+  "settings": {
+    "width": 800,
+    "height": 600,
+    "unknownSceneSetting": { "keep": "me" }
+  },
+  "rootNodes": [
+    {
+      "id": "node-player",
+      "name": "Player",
+      "active": true,
+      "transform": {
+        "x": 120,
+        "y": 180,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "originX": 0.5,
+        "originY": 0.5
+      },
+      "components": [
+        {
+          "id": "component-follow-player",
+          "typeId": "com.codogma.acceptance.follow-target",
+          "schemaVersion": 1,
+          "enabled": true,
+          "properties": {
+            "sprite": { "assetId": "asset-player-sprite" },
+            "target": { "nodeId": "node-enemy" },
+            "speed": 4,
+            "pluginExtension": { "retained": true }
+          },
+          "unknownComponentMetadata": { "source": "fixture" }
+        }
+      ],
+      "children": [],
+      "unknownNodeData": { "retained": ["one", "two"] }
+    },
+    {
+      "id": "node-enemy",
+      "name": "Enemy",
+      "active": true,
+      "transform": {
+        "x": 400,
+        "y": 240,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "originX": 0.5,
+        "originY": 0.5
+      },
+      "components": [
+        {
+          "id": "component-follow-enemy",
+          "typeId": "com.codogma.acceptance.follow-target",
+          "schemaVersion": 1,
+          "enabled": true,
+          "properties": {
+            "sprite": { "assetId": "asset-player-sprite" },
+            "target": { "nodeId": "node-player" },
+            "speed": 2
+          }
+        }
+      ],
+      "children": []
+    }
+  ],
+  "unknownSceneData": {
+    "retained": true
+  }
+}

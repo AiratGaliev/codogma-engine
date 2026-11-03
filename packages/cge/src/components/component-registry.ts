@@ -17,12 +17,22 @@ export interface ComponentBehavior {
   onDestroy?(): void;
 }
 
+/**
+ * Factory input is a per-instance immutable JSON snapshot. Component factories
+ * must be side-effect-free: acquire external resources in onCreate(), where
+ * the returned behavior can participate in the normal cleanup lifecycle.
+ */
 export interface ComponentFactoryContext {
   readonly instanceId: string;
   readonly node: ComponentNodeContext;
   readonly properties: Readonly<JsonObject>;
 }
 
+/**
+ * A versioned component implementation. Keep typeId stable across compatible
+ * releases; bump schemaVersion for incompatible schema-contract changes and
+ * version for changes to the component implementation/authoring definition.
+ */
 export interface ComponentTypeDefinition {
   readonly schema: ComponentTypeSchemaV1;
   create(context: ComponentFactoryContext): ComponentBehavior;
@@ -73,6 +83,14 @@ export class ComponentRegistry {
       create: definition.create,
     });
     this.definitions.set(typeId, registeredDefinition);
+  }
+
+  /**
+   * Removes a definition from future resolution. Worlds that already attached
+   * the definition retain their immutable registration snapshot until teardown.
+   */
+  unregister(typeId: string): boolean {
+    return this.definitions.delete(typeId);
   }
 
   get(typeId: string): ComponentTypeDefinition | undefined {

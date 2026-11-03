@@ -111,3 +111,31 @@ SolidJS Host:
 8. попадает в reproducible standalone HTML5 build с проверенными asset/module references.
 
 Пункты 5–8 нельзя считать закрытыми по результатам unit tests Core или Host typecheck. Для них нужны отдельные integration/browser/runtime/build evidence и соответствующие owner issues.
+
+
+## 8. Проверяемый Project Model acceptance fixture
+
+Фикстура в `packages/cge/tests/fixtures/` связывает persisted Project/Scene data и Core contracts на одной воспроизводимой модели:
+
+- `acceptance-project-v1.json` содержит versioned Project envelope, ссылку на Scene, script Asset и image Asset, а также module reference со стабильным `typeId`.
+- `acceptance-scene-v1.json` содержит два Node с разными stable IDs. На каждом закреплён отдельный Component instance одного и того же type ID.
+- Schema fixture использует Asset reference и Node reference; оба значения разрешаются по ID через Project/Scene validation context. Один компонент указывает на другой Node, поэтому проверяется и запрет self-reference.
+- В Scene присутствует неизвестное JSON-compatible extension data. Parse → serialize → parse обязан сохранить его без потери.
+- `acceptance-negative-cases.json` фиксирует отрицательные входы для broken asset/node reference, duplicate IDs, missing module asset, unknown type и unsupported schema version. Тесты применяют эти векторы к положительной fixture и проверяют structured diagnostics.
+
+Автоматизированное покрытие находится в `packages/cge/tests/acceptance-slice.test.ts`. Оно проверяет Project/Scene validation и serialization boundaries. Это **не** доказывает hydration SceneDocument в ComponentWorld: загрузчик и транзакционный rollback остаются отдельной реализацией COD-103.
+
+## 9. Component Core public contract и isolation guarantees
+
+Публичная поверхность Core экспортируется через `packages/cge/src/index.ts`. Component definition содержит versioned schema и factory; factory получает отдельный immutable JSON snapshot для каждого instance. Factory должна быть side-effect-free: внешние ресурсы приобретаются в `onCreate`, чтобы returned behavior участвовал в disable/destroy cleanup. Ошибка factory не регистрирует частичный instance.
+
+`ComponentRegistry.unregister(typeId)` удаляет definition только для будущих attach/resolve операций. Уже созданные ComponentWorld instances удерживают зарегистрированную definition snapshot до собственного teardown. Повторная регистрация того же type ID разрешена после unregister; она не подменяет definition уже существующих instances.
+
+Versioning policy для текущего контракта:
+- `typeId` — постоянная identity типа, не имя файла/класса и не отображаемый label.
+- `schemaVersion` — версия структуры/семантики schema contract; несовместимое изменение требует новой schema version и явного migration/diagnostic path.
+- `version` — версия конкретной component definition/implementation; обновление реализации не меняет identity типа.
+- Component instance ID независим от type ID и локален в пределах Project/Scene owner.
+- ComponentWorld не создаёт ticker: внешний runtime adapter управляет update(deltaSeconds) и временем жизни World.
+
+Проверки изоляции, unregister/re-register и factory failure добавлены в `packages/cge/tests/component-world.test.ts`. Они не заменяют Phaser tick integration, Scene Loader hydration или отдельную runtime acceptance.

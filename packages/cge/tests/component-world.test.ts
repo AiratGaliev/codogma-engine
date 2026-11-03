@@ -367,3 +367,101 @@ test("removes and disposes a system once and rejects duplicate system identities
 
   assert.deepEqual(log, ["dispose"]);
 });
+
+
+test("isolates same-type component instances across nodes and worlds", () => {
+  const observed = new Map<string, number>();
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId, properties }) => {
+      assert.equal(Object.isFrozen(properties), true);
+      let localValue = Number(properties.step);
+      return {
+        onUpdate: () => {
+          localValue += 1;
+          observed.set(instanceId, localValue);
+        },
+      };
+    },
+  });
+
+  const firstWorld = new ComponentWorld("scene-isolation-a", registry);
+  const secondWorld = new ComponentWorld("scene-isolation-b", registry);
+  firstWorld.createNode({ id: "node-a1", name: "First A" });
+  firstWorld.createNode({ id: "node-a2", name: "Second A" });
+  secondWorld.createNode({ id: "node-b1", name: "First B" });
+
+  firstWorld.attachComponent("node-a1", schema.typeId, { step: 1 }, { instanceId: "instance-a1" });
+  firstWorld.attachComponent("node-a2", schema.typeId, { step: 10 }, { instanceId: "instance-a2" });
+  secondWorld.attachComponent("node-b1", schema.typeId, { step: 100 }, { instanceId: "instance-b1" });
+
+  firstWorld.update(0.1);
+  secondWorld.update(0.1);
+  firstWorld.update(0.1);
+  secondWorld.update(0.1);
+
+  assert.deepEqual(Object.fromEntries(observed), {
+    "instance-a1": 3,
+    "instance-a2": 12,
+    "instance-b1": 102,
+  });
+  firstWorld.dispose();
+  secondWorld.dispose();
+});
+
+test("unregistering a definition only affects future attachments", () => {
+  const log: string[] = [];
+  const registry = createRegistry(log);
+  const world = new ComponentWorld("scene-unregister", registry);
+  world.createNode({ id: "node-existing", name: "Existing" });
+  world.createNode({ id: "node-new", name: "New" });
+  world.attachComponent("node-existing", schema.typeId, {}, { instanceId: "existing-instance" });
+
+  assert.equal(registry.unregister(schema.typeId), true);
+  assert.equal(registry.unregister(schema.typeId), false);
+  assert.throws(
+    () => world.attachComponent("node-new", schema.typeId, {}, { instanceId: "rejected-instance" }),
+    /not registered/i,
+  );
+
+  world.update(0.25);
+  assert.equal(log.includes("update:existing-instance:0.25"), true);
+  assert.equal(world.listComponents().some((item) => item.id === "existing-instance"), true);
+
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onCreate: () => log.push("replacement:create:" + instanceId),
+    }),
+  });
+  world.attachComponent("node-new", schema.typeId, {}, { instanceId: "replacement-instance" });
+  assert.equal(log.includes("replacement:create:replacement-instance"), true);
+  world.dispose();
+});
+
+test("factory failure does not leave a partially registered component instance", () => {
+  let shouldFail = true;
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => {
+      if (shouldFail) throw new Error("factory failed before returning a behavior");
+      return { onCreate: () => undefined };
+    },
+  });
+  const world = new ComponentWorld("scene-factory-failure", registry);
+  world.createNode({ id: "node-factory", name: "Factory" });
+
+  assert.throws(
+    () => world.attachComponent("node-factory", schema.typeId, {}, { instanceId: "failed-instance" }),
+    /factory failed/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(world.listComponents(), []);
+
+  shouldFail = false;
+  world.attachComponent("node-factory", schema.typeId, {}, { instanceId: "recovered-instance" });
+  assert.equal(world.componentCount, 1);
+  world.dispose();
+});
