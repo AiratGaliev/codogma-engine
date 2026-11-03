@@ -179,7 +179,7 @@ A missing event is not evidence that an event did not occur when coverage is par
 
 ### Capabilities and controlled test actions
 
-Capability IDs are stable, namespaced identifiers. Unsupported capabilities remain visible and include a machine-readable reason code, human-readable message and retryability. A consumer can call negotiateCapabilities before relying on optional event families.
+Capability IDs are stable, namespaced identifiers. Unsupported capabilities remain visible and include a machine-readable reason code, human-readable message and retryability. A consumer can call negotiateCapabilities before relying on a required capability. A partial capability must include a reason; it does not satisfy a requirement for the complete capability. It may still list individual event types that are explicitly supported, and isEventTypeAvailable only accepts those listed event types. Do not infer runtime support merely because an event type exists in the shared schema.
 
 Observation is the default. The handshake permits only the registered-only action policy and advertises an explicit registry. An action request references one registered action ID and exact version, plus JSON input; its descriptor names the input/output schema IDs and allowed profiles. The contract deliberately has no generic entity/component mutation operation.
 
@@ -207,7 +207,7 @@ Every validator first inspects the input as a JSON value, then validates it agai
 | Limit | Value |
 |---|---:|
 | Serialized wire message | 1 MiB |
-| Event payload or action input | 64 KiB |
+| Event payload, action input or output | 64 KiB |
 | Nesting depth | 32 |
 | JSON nodes | 20,000 |
 | Array items | 10,000 |
