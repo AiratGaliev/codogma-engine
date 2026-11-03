@@ -367,3 +367,212 @@ test("removes and disposes a system once and rejects duplicate system identities
 
   assert.deepEqual(log, ["dispose"]);
 });
+
+
+test("isolates same-type component instances across nodes and worlds", () => {
+  const observed = new Map<string, number>();
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId, properties }) => {
+      assert.equal(Object.isFrozen(properties), true);
+      let localValue = Number(properties.step);
+      return {
+        onUpdate: () => {
+          localValue += 1;
+          observed.set(instanceId, localValue);
+        },
+      };
+    },
+  });
+
+  const firstWorld = new ComponentWorld("scene-isolation-a", registry);
+  const secondWorld = new ComponentWorld("scene-isolation-b", registry);
+  firstWorld.createNode({ id: "node-a1", name: "First A" });
+  firstWorld.createNode({ id: "node-a2", name: "Second A" });
+  secondWorld.createNode({ id: "node-b1", name: "First B" });
+
+  firstWorld.attachComponent("node-a1", schema.typeId, { step: 1 }, { instanceId: "instance-a1" });
+  firstWorld.attachComponent("node-a2", schema.typeId, { step: 10 }, { instanceId: "instance-a2" });
+  secondWorld.attachComponent("node-b1", schema.typeId, { step: 100 }, { instanceId: "instance-b1" });
+
+  firstWorld.update(0.1);
+  secondWorld.update(0.1);
+  firstWorld.update(0.1);
+  secondWorld.update(0.1);
+
+  assert.deepEqual(Object.fromEntries(observed), {
+    "instance-a1": 3,
+    "instance-a2": 12,
+    "instance-b1": 102,
+  });
+  firstWorld.dispose();
+  secondWorld.dispose();
+});
+
+test("unregistering a definition only affects future attachments", () => {
+  const log: string[] = [];
+  const registry = createRegistry(log);
+  const world = new ComponentWorld("scene-unregister", registry);
+  world.createNode({ id: "node-existing", name: "Existing" });
+  world.createNode({ id: "node-new", name: "New" });
+  world.attachComponent("node-existing", schema.typeId, {}, { instanceId: "existing-instance" });
+
+  assert.equal(registry.unregister(schema.typeId), true);
+  assert.equal(registry.unregister(schema.typeId), false);
+  assert.throws(
+    () => world.attachComponent("node-new", schema.typeId, {}, { instanceId: "rejected-instance" }),
+    /not registered/i,
+  );
+
+  world.update(0.25);
+  assert.equal(log.includes("update:existing-instance:0.25"), true);
+  assert.equal(world.listComponents().some((item) => item.id === "existing-instance"), true);
+
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onCreate: () => log.push("replacement:create:" + instanceId),
+    }),
+  });
+  world.attachComponent("node-new", schema.typeId, {}, { instanceId: "replacement-instance" });
+  assert.equal(log.includes("replacement:create:replacement-instance"), true);
+  world.dispose();
+});
+
+test("factory failure does not leave a partially registered component instance", () => {
+  let shouldFail = true;
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => {
+      if (shouldFail) throw new Error("factory failed before returning a behavior");
+      return { onCreate: () => undefined };
+    },
+  });
+  const world = new ComponentWorld("scene-factory-failure", registry);
+  world.createNode({ id: "node-factory", name: "Factory" });
+
+  assert.throws(
+    () => world.attachComponent("node-factory", schema.typeId, {}, { instanceId: "failed-instance" }),
+    /factory failed/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(world.listComponents(), []);
+
+  shouldFail = false;
+  world.attachComponent("node-factory", schema.typeId, {}, { instanceId: "recovered-instance" });
+  assert.equal(world.componentCount, 1);
+  world.dispose();
+});
+
+
+test("rolls back component registration when onCreate fails and still runs onDestroy", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => ({
+      onCreate: () => {
+        calls.push("onCreate");
+        throw new Error("resource initialization failed");
+      },
+      onDestroy: () => calls.push("onDestroy"),
+    }),
+  });
+  const world = new ComponentWorld("scene-create-rollback", registry);
+  world.createNode({ id: "node-create-rollback", name: "Rollback" });
+
+  assert.throws(
+    () => world.attachComponent("node-create-rollback", schema.typeId, {}, { instanceId: "rollback-instance" }),
+    /failed during creation/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(world.listComponents(), []);
+  assert.deepEqual(calls, ["onCreate", "onDestroy"]);
+  world.dispose();
+});
+
+test("rolls back component registration when onEnable fails", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => ({
+      onCreate: () => calls.push("onCreate"),
+      onEnable: () => {
+        calls.push("onEnable");
+        throw new Error("enable failed");
+      },
+      onDestroy: () => calls.push("onDestroy"),
+    }),
+  });
+  const world = new ComponentWorld("scene-enable-rollback", registry);
+  world.createNode({ id: "node-enable-rollback", name: "Rollback" });
+
+  assert.throws(
+    () => world.attachComponent("node-enable-rollback", schema.typeId, {}, { instanceId: "enable-rollback-instance" }),
+    /failed during enable/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(calls, ["onCreate", "onEnable", "onDestroy"]);
+  world.dispose();
+});
+
+test("repeated ComponentWorld teardown disposes every component exactly once", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-repeat-teardown", createRegistry(log));
+  world.createNode({ id: "node-repeat-teardown", name: "Repeated teardown" });
+  world.attachComponent("node-repeat-teardown", schema.typeId, {}, { instanceId: "repeat-instance" });
+  world.update(1 / 60);
+
+  world.dispose();
+  world.dispose();
+  world.dispose();
+
+  assert.equal(world.isDisposed, true);
+  assert.equal(world.nodeCount, 0);
+  assert.equal(world.componentCount, 0);
+  assert.equal(log.filter((item) => item === "destroy:repeat-instance").length, 1);
+  assert.equal(log.filter((item) => item === "disable:repeat-instance").length, 1);
+});
+
+test("deep-freezes nested JSON reference properties passed to component factories", () => {
+  const referenceSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.reference-owner",
+    name: "Reference Owner",
+    version: "1.0.0",
+    properties: {
+      target: { type: "node", allowSelf: false, required: true },
+    },
+  };
+  let received: Readonly<Record<string, unknown>> | undefined;
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: referenceSchema,
+    create: ({ properties }) => {
+      received = properties;
+      return {};
+    },
+  });
+  const world = new ComponentWorld("scene-frozen-reference", registry, {
+    schemaContext: { nodeIds: new Set(["target-node"]) },
+  });
+  world.createNode({ id: "owner-node", name: "Owner" });
+  world.attachComponent(
+    "owner-node",
+    referenceSchema.typeId,
+    { target: { nodeId: "target-node" } },
+    { instanceId: "reference-instance" },
+  );
+
+  assert.ok(received);
+  assert.equal(Object.isFrozen(received), true);
+  assert.equal(Object.isFrozen(received.target), true);
+  assert.throws(() => {
+    (received?.target as { nodeId: string }).nodeId = "other-node";
+  }, TypeError);
+  assert.deepEqual(received.target, { nodeId: "target-node" });
+  world.dispose();
+});

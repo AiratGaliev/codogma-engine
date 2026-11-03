@@ -1,5 +1,5 @@
 import type { CoreDiagnostic } from "../diagnostics.js";
-import { cloneJsonValue, isJsonValue, type JsonObject } from "../json.js";
+import { cloneJsonValue, isJsonValue, type JsonObject, type JsonValue } from "../json.js";
 import { validateComponentProperties, type ComponentSchemaContext } from "./component-schema.js";
 import {
   ComponentRegistry,
@@ -70,6 +70,14 @@ function makeRuntimeTransform(input?: Partial<RuntimeTransform>): RuntimeTransfo
     if (!Number.isFinite(value)) throw new TypeError("Runtime transform " + key + " must be finite.");
   }
   return transform;
+}
+
+function freezeJsonValue<T extends JsonValue>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) freezeJsonValue(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 function defaultIdFactory(): () => string {
@@ -305,7 +313,7 @@ export class ComponentWorld {
     const behavior = definition.create({
       instanceId,
       node,
-      properties: cloneJsonValue(validation.value),
+      properties: freezeJsonValue(cloneJsonValue(validation.value)),
     });
     if (!behavior || typeof behavior !== "object") throw new TypeError("Factory for component " + typeId + " did not return a behavior object.");
 

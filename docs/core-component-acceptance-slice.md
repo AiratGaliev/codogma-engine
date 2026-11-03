@@ -111,3 +111,45 @@ SolidJS Host:
 8. попадает в reproducible standalone HTML5 build с проверенными asset/module references.
 
 Пункты 5–8 нельзя считать закрытыми по результатам unit tests Core или Host typecheck. Для них нужны отдельные integration/browser/runtime/build evidence и соответствующие owner issues.
+
+
+## 8. Проверяемый Project Model acceptance fixture
+
+Фикстура в `packages/cge/tests/fixtures/` связывает persisted Project/Scene data и Core contracts на одной воспроизводимой модели:
+
+- `acceptance-project-v1.json` содержит versioned Project envelope, ссылку на Scene, script Asset и image Asset, а также module reference со стабильным `typeId`.
+- `acceptance-scene-v1.json` содержит два Node с разными stable IDs. На каждом закреплён отдельный Component instance одного и того же type ID.
+- Schema fixture использует Asset reference и Node reference; оба значения разрешаются по ID через Project/Scene validation context. Один компонент указывает на другой Node, поэтому проверяется и запрет self-reference.
+- В Scene присутствует неизвестное JSON-compatible extension data. Parse → serialize → parse обязан сохранить его без потери.
+- `acceptance-negative-cases.json` фиксирует отрицательные входы для broken asset/node reference, duplicate IDs, missing module asset, unknown type и unsupported schema version. Тесты применяют эти векторы к положительной fixture и проверяют structured diagnostics.
+
+Автоматизированное покрытие находится в `packages/cge/tests/acceptance-slice.test.ts`. Оно проверяет Project/Scene validation и serialization boundaries. Это **не** доказывает hydration SceneDocument в ComponentWorld: загрузчик и транзакционный rollback остаются отдельной реализацией COD-103.
+
+## 9. Component Core public contract и isolation guarantees
+
+Публичная поверхность Core экспортируется через `packages/cge/src/index.ts`. Component definition содержит versioned schema и factory; factory получает отдельный immutable JSON snapshot для каждого instance. Factory должна быть side-effect-free: внешние ресурсы приобретаются в `onCreate`, чтобы returned behavior участвовал в disable/destroy cleanup. Ошибка factory не регистрирует частичный instance.
+
+`ComponentRegistry.unregister(typeId)` удаляет definition только для будущих attach/resolve операций. Уже созданные ComponentWorld instances удерживают зарегистрированную definition snapshot до собственного teardown. Повторная регистрация того же type ID разрешена после unregister; она не подменяет definition уже существующих instances.
+
+Versioning policy для текущего контракта:
+- `typeId` — постоянная identity типа, не имя файла/класса и не отображаемый label.
+- `schemaVersion` — версия структуры/семантики schema contract; несовместимое изменение требует новой schema version и явного migration/diagnostic path.
+- `version` — версия конкретной component definition/implementation; обновление реализации не меняет identity типа.
+- Component instance ID независим от type ID и локален в пределах Project/Scene owner.
+- ComponentWorld не создаёт ticker: внешний runtime adapter управляет update(deltaSeconds) и временем жизни World.
+
+Проверки изоляции, unregister/re-register и factory failure добавлены в `packages/cge/tests/component-world.test.ts`. Они не заменяют Phaser tick integration, Scene Loader hydration или отдельную runtime acceptance.
+
+
+## 10. ComponentWorld performance baseline
+
+CI Fast runs `npm run benchmark` from `packages/cge/` after the strict typecheck/build/test suite. The benchmark warms up the runtime and measures representative worlds with 100, 1,000 and 10,000 Nodes/components:
+
+- construction: stable Node creation and explicit ComponentRegistry attach;
+- update: 25 explicit `ComponentWorld.update(1 / 60)` ticks;
+- teardown: `ComponentWorld.dispose()` including component cleanup;
+- throughput: component updates per second and average update tick duration.
+
+The benchmark records Node.js version, OS/architecture and raw durations in the Actions log. It intentionally has no absolute pass/fail latency threshold: shared GitHub runners are noisy, so the measurement is evidence for comparisons on the same runner/runtime, not a cross-machine performance claim. Changes to internal storage/scheduler must preserve functional tests and compare this baseline before claiming an optimization.
+
+ADR-0001 defers an optimized data-oriented ECS until real workloads and profiles justify it; EVA.js remains an architecture reference and is not a runtime dependency. The benchmark measures the current object-component model rather than asserting ECS performance.
