@@ -148,12 +148,24 @@ function validateNode(
 ): void {
   if (!isRecord(node) || !isNonEmptyString(node.id) || !isNonEmptyString(node.name) ||
       typeof node.active !== "boolean" || !isRecord(node.transform) ||
-      !Array.isArray(node.components) || !Array.isArray(node.children) || !isJsonValue(node)) {
+      !Array.isArray(node.components) || !Array.isArray(node.children)) {
     diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires JSON-compatible id/name, active, transform, components and children.", path));
     return;
   }
 
   const nodeId = node.id as string;
+  const knownNodeFields = new Set(["id", "name", "active", "transform", "components", "children", "prefabInstance"]);
+  for (const [key, value] of Object.entries(node)) {
+    if (!knownNodeFields.has(key) && !isJsonValue(value)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Unknown node field must be JSON-compatible.", path + "." + key, nodeId));
+    }
+  }
+  const knownTransformFields = new Set(["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]);
+  for (const [key, value] of Object.entries(node.transform)) {
+    if (!knownTransformFields.has(key) && !isJsonValue(value)) {
+      diagnostics.push(issue("SCENE_INVALID_TRANSFORM", "Unknown transform field must be JSON-compatible.", path + ".transform." + key, nodeId));
+    }
+  }
   for (const key of ["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]) {
     const value = node.transform[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -217,15 +229,21 @@ export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input) || input.schemaVersion !== SCENE_SCHEMA_VERSION ||
+  if (!isRecord(input) || input.schemaVersion !== SCENE_SCHEMA_VERSION ||
       !isNonEmptyString(input.id) || !isNonEmptyString(input.name) ||
-      !Array.isArray(input.rootNodes) || !isRecord(input.settings)) {
+      !Array.isArray(input.rootNodes) || !isRecord(input.settings) || !isJsonValue(input.settings)) {
     return {
       valid: false,
       diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires stable id/name, rootNodes and JSON settings.")],
     };
   }
   const diagnostics: CoreDiagnostic[] = [];
+  const knownSceneFields = new Set(["schemaVersion", "id", "name", "rootNodes", "settings"]);
+  for (const [key, value] of Object.entries(input)) {
+    if (!knownSceneFields.has(key) && !isJsonValue(value)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Unknown scene field must be JSON-compatible.", key));
+    }
+  }
   const nodeIds = new Set<string>();
   collectNodeIds(input.rootNodes, nodeIds, diagnostics, "rootNodes");
   const componentIds = new Set<string>();
@@ -241,7 +259,7 @@ export function validatePrefabDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input) || input.schemaVersion !== PREFAB_SCHEMA_VERSION ||
+  if (!isRecord(input) || input.schemaVersion !== PREFAB_SCHEMA_VERSION ||
       !isNonEmptyString(input.id) || !isNonEmptyString(input.name) || !isRecord(input.root)) {
     return {
       valid: false,
@@ -255,6 +273,14 @@ export function validatePrefabDocument(
     rootNodes: [input.root],
     settings: {},
   }, context);
+  const knownPrefabFields = new Set(["schemaVersion", "id", "name", "root"]);
+  const extraFieldDiagnostics = Object.entries(input)
+    .filter(([key]) => !knownPrefabFields.has(key))
+    .filter(([, value]) => !isJsonValue(value))
+    .map(([key]) => issue("SCENE_INVALID_NODE", "Unknown prefab field must be JSON-compatible.", key));
+  if (extraFieldDiagnostics.length > 0) {
+    return { valid: false, diagnostics: [...result.diagnostics, ...extraFieldDiagnostics] };
+  }
   return result.valid
     ? { valid: true, diagnostics: result.diagnostics, value: input as unknown as PrefabDocumentV1 }
     : { valid: false, diagnostics: result.diagnostics };
