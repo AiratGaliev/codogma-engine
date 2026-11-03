@@ -307,7 +307,7 @@ test("migrates real nested Container Prefab hierarchy without flattening it", ()
   assert.equal(nested.root.children.length, 3);
   assert.equal(nested.root.children[0]?.prefabInstance?.prefabId, "62361060-1303-4a68-b8e6-3ade0fa1d41c");
   assert.equal(nested.root.children[2]?.children[0]?.id, "24c92083-aa88-4a46-9ed9-e6e0d189af5d");
-  assert.deepEqual(object(object(nested.root).legacySource), object(object(nestedSource.displayList as unknown[])[0]).legacySource);
+  assert.deepEqual(object(object(nested.root).legacySource), object((nestedSource.displayList as unknown[])[0]));
 });
 
 test("keeps nested Prefab override payload explicit instead of flattening it into ordinary children", () => {
