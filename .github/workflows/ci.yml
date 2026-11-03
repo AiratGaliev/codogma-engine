@@ -338,10 +338,16 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             src/editor/package-lock.json
+            packages/cge/package-lock.json
 
       - name: Install root dependencies for the existing backend
         if: steps.scope.outputs.run == 'true'
         run: npm ci
+
+      - name: Install and build Codogma Core for the Host
+        if: steps.scope.outputs.run == 'true'
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: packages/cge
 
       - name: Install Editor Host dependencies
         if: steps.scope.outputs.run == 'true'
