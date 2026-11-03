@@ -138,7 +138,7 @@ test("accepts unknown event types as opaque JSON for forward compatibility", () 
   };
   const result = validateGameTestEvent(fixture);
   assert.equal(result.success, true);
-  assert.equal(isEventTypeAvailable("org.example.future-event", new Set()), true);
+  assert.equal(isEventTypeAvailable("org.example.future-event", []), false);
 });
 
 test("validates capability descriptors and gates optional event families", () => {
