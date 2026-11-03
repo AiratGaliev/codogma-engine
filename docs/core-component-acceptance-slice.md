@@ -153,3 +153,8 @@ CI Fast runs `npm run benchmark` from `packages/cge/` after the strict typecheck
 The benchmark records Node.js version, OS/architecture and raw durations in the Actions log. It intentionally has no absolute pass/fail latency threshold: shared GitHub runners are noisy, so the measurement is evidence for comparisons on the same runner/runtime, not a cross-machine performance claim. Changes to internal storage/scheduler must preserve functional tests and compare this baseline before claiming an optimization.
 
 ADR-0001 defers an optimized data-oriented ECS until real workloads and profiles justify it; EVA.js remains an architecture reference and is not a runtime dependency. The benchmark measures the current object-component model rather than asserting ECS performance.
+
+
+## Project/Scene/Prefab future version and migration boundary
+
+Project, Scene and Prefab parsers/validators distinguish unsupported schema versions from malformed current-version documents. Future versions are rejected with the blocking `PROJECT_UNSUPPORTED_VERSION` diagnostic at the `schemaVersion` field; no forward-version data is normalized or written as v1. Project v0 migration deep-clones JSON input before normalizing the envelope, preserving source immutability and avoiding nested object aliasing.

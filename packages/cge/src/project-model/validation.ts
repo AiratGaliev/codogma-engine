@@ -82,16 +82,30 @@ function validateIdCollection(values: unknown[], path: string, diagnostics: Core
 }
 
 export function validateProjectDocument(input: unknown): ValidationResult<ProjectDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input) ||
-      input.schemaVersion !== PROJECT_SCHEMA_VERSION ||
-      !isNonEmptyString(input.name) ||
+  if (!isRecord(input) || !isJsonValue(input)) {
+    return {
+      valid: false,
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project document must be a JSON-compatible object.")],
+    };
+  }
+  if (input.schemaVersion !== PROJECT_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      diagnostics: [issue(
+        "PROJECT_UNSUPPORTED_VERSION",
+        "Project schema version " + String(input.schemaVersion) + " is not supported by this validator.",
+        "schemaVersion",
+      )],
+    };
+  }
+  if (!isNonEmptyString(input.name) ||
       !Array.isArray(input.scenes) || !Array.isArray(input.assets) ||
       !Array.isArray(input.prefabs) || !Array.isArray(input.componentModules) ||
       !isRecord(input.runtime) || !isNonEmptyString(input.runtime.adapterId) ||
       !isRecord(input.runtime.settings)) {
     return {
       valid: false,
-      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project v1 requires a supported schemaVersion, name, scenes, assets, prefabs, componentModules and runtime configuration.")],
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project v1 requires name, scenes, assets, prefabs, componentModules and runtime configuration.")],
     };
   }
   if (!isValidStableId(input.id)) {
@@ -423,12 +437,28 @@ export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
-  if (!isRecord(input) || input.schemaVersion !== SCENE_SCHEMA_VERSION ||
-      !isNonEmptyString(input.name) || !Array.isArray(input.rootNodes) ||
-      !isRecord(input.settings) || !isJsonValue(input.settings)) {
+  if (!isRecord(input) || !isJsonValue(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires a supported schemaVersion, name, rootNodes and JSON settings.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must be a JSON-compatible object.")],
+    };
+  }
+  if (input.schemaVersion !== SCENE_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      diagnostics: [issue(
+        "PROJECT_UNSUPPORTED_VERSION",
+        "Scene schema version " + String(input.schemaVersion) + " is not supported.",
+        "schemaVersion",
+        isValidStableId(input.id) ? input.id : undefined,
+      )],
+    };
+  }
+  if (!isNonEmptyString(input.name) || !Array.isArray(input.rootNodes) ||
+      !isRecord(input.settings)) {
+    return {
+      valid: false,
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires name, rootNodes and JSON settings.")],
     };
   }
   if (!isValidStableId(input.id)) {
@@ -455,11 +485,27 @@ export function validatePrefabDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
-  if (!isRecord(input) || input.schemaVersion !== PREFAB_SCHEMA_VERSION ||
-      !isNonEmptyString(input.name) || !isRecord(input.root)) {
+  if (!isRecord(input) || !isJsonValue(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires a supported schemaVersion, name and a root node.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must be a JSON-compatible object.")],
+    };
+  }
+  if (input.schemaVersion !== PREFAB_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      diagnostics: [issue(
+        "PROJECT_UNSUPPORTED_VERSION",
+        "Prefab schema version " + String(input.schemaVersion) + " is not supported.",
+        "schemaVersion",
+        isValidStableId(input.id) ? input.id : undefined,
+      )],
+    };
+  }
+  if (!isNonEmptyString(input.name) || !isRecord(input.root)) {
+    return {
+      valid: false,
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires name and a root node.")],
     };
   }
   if (!isValidStableId(input.id)) {

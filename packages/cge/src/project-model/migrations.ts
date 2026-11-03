@@ -1,6 +1,6 @@
 import type { CoreDiagnostic } from "../diagnostics.js";
 import { PROJECT_SCHEMA_VERSION, type ProjectDocumentV0, type ProjectDocumentV1 } from "./contracts.js";
-import { isRecord } from "../json.js";
+import { cloneJsonValue, isJsonValue, isRecord, type JsonValue } from "../json.js";
 import { validateProjectDocument } from "./validation.js";
 
 export interface ProjectMigrationResult {
@@ -12,12 +12,25 @@ export interface ProjectMigrationResult {
 
 export function migrateProjectDocument(input: unknown): ProjectMigrationResult {
   if (!isRecord(input) || typeof input.schemaVersion !== "number") {
-    throw new ProjectMigrationError("Project schemaVersion is missing or invalid.", []);
+    throw new ProjectMigrationError("Project schemaVersion is missing or invalid.", [{
+      code: "PROJECT_INVALID_DOCUMENT",
+      severity: "error",
+      message: "Project schemaVersion must be a number.",
+      path: "schemaVersion",
+    }]);
   }
-  const fromVersion = input.schemaVersion;
-  let migrated: unknown = input;
+  if (!isJsonValue(input)) {
+    throw new ProjectMigrationError("Project migration accepts JSON-compatible input only.", [{
+      code: "PROJECT_INVALID_DOCUMENT",
+      severity: "error",
+      message: "Project migration input must be a JSON-compatible object.",
+    }]);
+  }
+  const source = cloneJsonValue(input as unknown as JsonValue) as Record<string, unknown>;
+  const fromVersion = source.schemaVersion as number;
+  let migrated: unknown = source;
   if (fromVersion === 0) {
-    const legacy = input as ProjectDocumentV0;
+    const legacy = source as unknown as ProjectDocumentV0;
     migrated = {
       ...legacy,
       schemaVersion: PROJECT_SCHEMA_VERSION,

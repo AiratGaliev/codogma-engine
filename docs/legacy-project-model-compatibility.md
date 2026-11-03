@@ -107,3 +107,8 @@ Unknown JSON-compatible fields at the Project/Scene/Prefab/Node/Transform/Compon
 ### Legacy Component instance IDs
 
 The checked-in legacy Scene/Prefab examples store component class names in an array and namespaced properties on the owning Node; they do not persist a separate component instance ID. The migration consequently cannot create a Core ComponentInstance from the class name alone. Callers must supply an explicit stable ID through `componentInstanceIds`, indexed by `legacyComponentInstanceKey(nodeId, legacyName)`. If no mapping exists, the component reference/property fields remain in `legacySource` and a warning is returned. This avoids deriving instance identity from class name, type ID, source path or array order. Duplicate legacy component names on one Node are ambiguous in this format and require source-level disambiguation before conversion.
+
+
+## Future-version and migration purity checks
+
+The current v1 validators return `PROJECT_UNSUPPORTED_VERSION` with the exact `schemaVersion` path for future Project, Scene and Prefab documents. The parser does not reinterpret future schemas as v1 and never writes them. Project v0 migration clones the JSON tree before normalization/validation: it leaves the source object unchanged and the migrated result does not alias nested mutable values from the input.

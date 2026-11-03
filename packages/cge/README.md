@@ -91,3 +91,8 @@ The opt-in migrateSceneDocument and migratePrefabDocument helpers accept both le
 ### Legacy Component instance identity
 
 Legacy scene component lists do not carry persisted instance IDs. The migration API therefore requires the caller to supply an explicit stable ID mapping in `LegacySceneMigrationOptions.componentInstanceIds`, keyed by `legacyComponentInstanceKey(nodeId, legacyName)`. A legacy component is left inside the preserved source payload with a warning when that mapping is missing. Core never derives instance identity from class names, type IDs, file names or array positions.
+
+
+### Future schema version policy
+
+Project, Scene and Prefab validators reject unsupported schema versions with the blocking `PROJECT_UNSUPPORTED_VERSION` diagnostic at `schemaVersion`. They do not attempt to parse future documents as v1 or serialize them. Project migration operates on a deep JSON clone, does not mutate the caller's input and does not share nested mutable values with the returned migrated document.

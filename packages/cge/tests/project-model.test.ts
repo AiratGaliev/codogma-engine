@@ -467,3 +467,85 @@ test("reports stable ID errors at the Scene and Prefab identity fields", () => {
   assert.equal(invalidPrefab.valid, false);
   assert.equal(invalidPrefab.diagnostics[0]?.path, "id");
 });
+
+
+test("reports future Project, Scene and Prefab schema versions explicitly", () => {
+  const futureProject = validateProjectDocument({
+    schemaVersion: 9,
+    id: "project-future",
+    name: "Future",
+    scenes: [],
+    assets: [],
+    prefabs: [],
+    componentModules: [],
+    runtime: { adapterId: "phaser", settings: {} },
+  });
+  const futureScene = validateSceneDocument({
+    schemaVersion: 9,
+    id: "scene-future",
+    name: "Future",
+    rootNodes: [],
+    settings: {},
+  });
+  const futurePrefab = validatePrefabDocument({
+    schemaVersion: 9,
+    id: "prefab-future",
+    name: "Future",
+    root: {
+      id: "future-root",
+      name: "Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  });
+
+  assert.equal(futureProject.valid, false);
+  assert.equal(futureProject.diagnostics[0]?.code, "PROJECT_UNSUPPORTED_VERSION");
+  assert.equal(futureProject.diagnostics[0]?.path, "schemaVersion");
+  assert.equal(futureScene.valid, false);
+  assert.equal(futureScene.diagnostics[0]?.code, "PROJECT_UNSUPPORTED_VERSION");
+  assert.equal(futureScene.diagnostics[0]?.path, "schemaVersion");
+  assert.equal(futurePrefab.valid, false);
+  assert.equal(futurePrefab.diagnostics[0]?.code, "PROJECT_UNSUPPORTED_VERSION");
+  assert.equal(futurePrefab.diagnostics[0]?.path, "schemaVersion");
+});
+
+test("Project migration deep-copies JSON data and does not mutate or alias its source", () => {
+  const input = {
+    schemaVersion: 0,
+    id: "legacy-project-copy",
+    name: "Copy test",
+    scenes: [],
+    assets: [],
+    nestedPluginData: { values: [1, 2, 3] },
+  };
+  const sourceSnapshot = JSON.stringify(input);
+  const result = migrateProjectDocument(input);
+
+  assert.equal(JSON.stringify(input), sourceSnapshot);
+  assert.notEqual(
+    (result.document as unknown as Record<string, unknown>).nestedPluginData,
+    input.nestedPluginData,
+  );
+  const migratedNested = (result.document as unknown as Record<string, unknown>).nestedPluginData as { values: number[] };
+  migratedNested.values.push(4);
+  assert.deepEqual(input.nestedPluginData.values, [1, 2, 3]);
+});
+
+test("rejects legacy Project migration inputs that are not JSON-compatible", () => {
+  const invalid = {
+    schemaVersion: 0,
+    id: "legacy-project",
+    name: "Bad",
+    nested: new Date(),
+  };
+  assert.throws(
+    () => migrateProjectDocument(invalid),
+    (error: unknown) => error instanceof Error &&
+      "diagnostics" in error &&
+      Array.isArray((error as { diagnostics: unknown }).diagnostics) &&
+      ((error as { diagnostics: Array<{ code?: string }> }).diagnostics[0]?.code === "PROJECT_INVALID_DOCUMENT"),
+  );
+});
