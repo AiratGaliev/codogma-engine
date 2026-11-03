@@ -3548,22 +3548,24 @@ function App() {
                           </div>
                           <For each={entry.definition.properties ?? []}>
                             {(property) => {
-                              const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? property.defValue;
+                              const propertySchema = () => createUserComponentSchema(entry.definition).value?.properties[property.name];
+                              const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? propertySchema()?.defaultValue;
                               return (
                                 <label class="inspector-field component-property-field">
                                   <span>{property.label ?? property.name}</span>
-                                  <Show when={property.type?.id === "boolean"}>
+                                  <Show when={propertySchema()?.type === "boolean"}>
                                     <input type="checkbox" aria-label={`${entry.definition.name} ${property.name}`} checked={Boolean(propertyValue())} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.checked)} />
                                   </Show>
-                                  <Show when={property.type?.id === "option"}>
+                                  <Show when={propertySchema()?.type === "enum"}>
                                     <select aria-label={`${entry.definition.name} ${property.name}`} value={String(propertyValue() ?? "")} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.value)}>
-                                      <For each={property.type?.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
+                                      <For each={propertySchema()?.type === "enum" ? propertySchema()?.options ?? [] : []}>{(option) => <option value={option}>{option}</option>}</For>
                                     </select>
                                   </Show>
-                                  <Show when={property.type?.id !== "boolean" && property.type?.id !== "option"}>
-                                    <input aria-label={`${entry.definition.name} ${property.name}`} type={property.type?.id === "number" ? "number" : "text"} value={String(propertyValue() ?? "")} onChange={(event) => {
-                                      const value = property.type?.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
-                                      if (property.type?.id !== "number" || Number.isFinite(value)) updateAttachedComponentProperty(entry.definition.name, property.name, value);
+                                  <Show when={propertySchema()?.type === "number" || propertySchema()?.type === "string"}>
+                                    <input aria-label={`${entry.definition.name} ${property.name}`} type={propertySchema()?.type === "number" ? "number" : "text"} value={String(propertyValue() ?? "")} onChange={(event) => {
+                                      if (propertySchema()?.type === "number" && event.currentTarget.value === "") return;
+                                      const value = propertySchema()?.type === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
+                                      if (propertySchema()?.type !== "number" || Number.isFinite(value)) updateAttachedComponentProperty(entry.definition.name, property.name, value);
                                     }} />
                                   </Show>
                                 </label>
@@ -4113,6 +4115,7 @@ function App() {
                         <section class="components-definition-card" data-testid={`component-definition-${definition.name}`}>
                           <div class="components-definition-heading">
                             <div><strong>{definition.displayName ?? definition.name}</strong><code>{definition.name}</code></div>
+                            <button class="subtle-button" onClick={() => void openUserComponentSource(definition)}>Edit TypeScript source</button>
                             <button class="toolbar-icon-button tiny" aria-label={`Delete definition ${definition.name}`} title="Remove definition" onClick={() => {
                               if (window.confirm(`Remove User Component "${definition.name}" from this file? Existing scene references are preserved.`)) removeUserComponent(definition.name);
                             }}>
