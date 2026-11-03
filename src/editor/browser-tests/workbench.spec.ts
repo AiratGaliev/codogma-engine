@@ -326,6 +326,30 @@ test("Bottom workspace tabs close independently and the dock collapses when empt
   await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
 });
 
+test("detached Console remains visible when all Bottom tabs are closed", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    const key = "codogma.editor.layout";
+    const current = JSON.parse(localStorage.getItem(key) ?? "{}");
+    localStorage.setItem(key, JSON.stringify({ ...current, consoleDocked: false }));
+  });
+  await page.reload();
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  for (const panel of ["Project", "Animation", "Components"]) {
+    await page.getByRole("button", { name: "Close " + panel }).click();
+    await expect(bottomTabs.getByRole("tab", { name: panel })).toHaveCount(0);
+  }
+
+  await expect(bottomTabs.getByRole("tab")).toHaveCount(0);
+  await expect(page.getByTestId("workbench")).toHaveClass(/bottom-tabs-empty/);
+  await expect(page.getByTestId("bottom-dock")).toBeVisible();
+  await expect(page.getByTestId("splitter-bottom")).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+});
+
 test("Window menu marks the selected Bottom tab with a checkmark", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");

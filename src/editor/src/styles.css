@@ -3199,3 +3199,13 @@ textarea::placeholder {
 .workbench.bottom-hidden .bottom-dock {
   display: none;
 }
+
+
+/* When Console is explicitly undocked it remains usable after the tab group closes. */
+.workbench.bottom-tabs-empty .bottom-dock {
+  grid-template-rows: 0 4px var(--console-height);
+}
+
+.workbench.bottom-tabs-empty .bottom-upper-panel {
+  overflow: hidden;
+}

@@ -2714,7 +2714,8 @@ function App() {
       classList={{
         "hierarchy-hidden": !isLeftDockZoneAvailable(),
         "inspector-hidden": !isRightDockZoneAvailable(),
-        "bottom-hidden": visibleBottomTabs().length === 0,
+        "bottom-hidden": visibleBottomTabs().length === 0 && !(layout().consoleVisible && !layout().consoleDocked && !compactWorkbench()),
+        "bottom-tabs-empty": visibleBottomTabs().length === 0 && layout().consoleVisible && !layout().consoleDocked && !compactWorkbench(),
         "dock-dragging": draggedDockPanel() !== null,
       }}
       style={{
