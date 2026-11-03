@@ -139,3 +139,17 @@ Versioning policy для текущего контракта:
 - ComponentWorld не создаёт ticker: внешний runtime adapter управляет update(deltaSeconds) и временем жизни World.
 
 Проверки изоляции, unregister/re-register и factory failure добавлены в `packages/cge/tests/component-world.test.ts`. Они не заменяют Phaser tick integration, Scene Loader hydration или отдельную runtime acceptance.
+
+
+## 10. ComponentWorld performance baseline
+
+CI Fast runs `npm run benchmark` from `packages/cge/` after the strict typecheck/build/test suite. The benchmark warms up the runtime and measures representative worlds with 100, 1,000 and 10,000 Nodes/components:
+
+- construction: stable Node creation and explicit ComponentRegistry attach;
+- update: 25 explicit `ComponentWorld.update(1 / 60)` ticks;
+- teardown: `ComponentWorld.dispose()` including component cleanup;
+- throughput: component updates per second and average update tick duration.
+
+The benchmark records Node.js version, OS/architecture and raw durations in the Actions log. It intentionally has no absolute pass/fail latency threshold: shared GitHub runners are noisy, so the measurement is evidence for comparisons on the same runner/runtime, not a cross-machine performance claim. Changes to internal storage/scheduler must preserve functional tests and compare this baseline before claiming an optimization.
+
+ADR-0001 defers an optimized data-oriented ECS until real workloads and profiles justify it; EVA.js remains an architecture reference and is not a runtime dependency. The benchmark measures the current object-component model rather than asserting ECS performance.

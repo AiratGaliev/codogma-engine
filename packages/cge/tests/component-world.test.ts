@@ -465,3 +465,114 @@ test("factory failure does not leave a partially registered component instance",
   assert.equal(world.componentCount, 1);
   world.dispose();
 });
+
+
+test("rolls back component registration when onCreate fails and still runs onDestroy", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => ({
+      onCreate: () => {
+        calls.push("onCreate");
+        throw new Error("resource initialization failed");
+      },
+      onDestroy: () => calls.push("onDestroy"),
+    }),
+  });
+  const world = new ComponentWorld("scene-create-rollback", registry);
+  world.createNode({ id: "node-create-rollback", name: "Rollback" });
+
+  assert.throws(
+    () => world.attachComponent("node-create-rollback", schema.typeId, {}, { instanceId: "rollback-instance" }),
+    /failed during creation/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(world.listComponents(), []);
+  assert.deepEqual(calls, ["onCreate", "onDestroy"]);
+  world.dispose();
+});
+
+test("rolls back component registration when onEnable fails", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => ({
+      onCreate: () => calls.push("onCreate"),
+      onEnable: () => {
+        calls.push("onEnable");
+        throw new Error("enable failed");
+      },
+      onDestroy: () => calls.push("onDestroy"),
+    }),
+  });
+  const world = new ComponentWorld("scene-enable-rollback", registry);
+  world.createNode({ id: "node-enable-rollback", name: "Rollback" });
+
+  assert.throws(
+    () => world.attachComponent("node-enable-rollback", schema.typeId, {}, { instanceId: "enable-rollback-instance" }),
+    /failed during enable/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(calls, ["onCreate", "onEnable", "onDestroy"]);
+  world.dispose();
+});
+
+test("repeated ComponentWorld teardown disposes every component exactly once", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-repeat-teardown", createRegistry(log));
+  world.createNode({ id: "node-repeat-teardown", name: "Repeated teardown" });
+  world.attachComponent("node-repeat-teardown", schema.typeId, {}, { instanceId: "repeat-instance" });
+  world.update(1 / 60);
+
+  world.dispose();
+  world.dispose();
+  world.dispose();
+
+  assert.equal(world.isDisposed, true);
+  assert.equal(world.nodeCount, 0);
+  assert.equal(world.componentCount, 0);
+  assert.equal(log.filter((item) => item === "destroy:repeat-instance").length, 1);
+  assert.equal(log.filter((item) => item === "disable:repeat-instance").length, 1);
+});
+
+test("deep-freezes nested JSON reference properties passed to component factories", () => {
+  const referenceSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.reference-owner",
+    name: "Reference Owner",
+    version: "1.0.0",
+    properties: {
+      target: { type: "node", allowSelf: false, required: true },
+    },
+  };
+  let received: Readonly<Record<string, unknown>> | undefined;
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: referenceSchema,
+    create: ({ properties }) => {
+      received = properties;
+      return {};
+    },
+  });
+  const world = new ComponentWorld("scene-frozen-reference", registry, {
+    schemaContext: { nodeIds: new Set(["target-node"]) },
+  });
+  world.createNode({ id: "owner-node", name: "Owner" });
+  world.attachComponent(
+    "owner-node",
+    referenceSchema.typeId,
+    { target: { nodeId: "target-node" } },
+    { instanceId: "reference-instance" },
+  );
+
+  assert.ok(received);
+  assert.equal(Object.isFrozen(received), true);
+  assert.equal(Object.isFrozen(received.target), true);
+  assert.throws(() => {
+    (received?.target as { nodeId: string }).nodeId = "other-node";
+  }, TypeError);
+  assert.deepEqual(received.target, { nodeId: "target-node" });
+  world.dispose();
+});

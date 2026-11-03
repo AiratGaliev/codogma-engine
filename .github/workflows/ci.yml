@@ -283,6 +283,10 @@ jobs:
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run quality:check
         working-directory: packages/cge
+      - name: Measure ComponentWorld baseline (100/1,000/10,000 components)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run benchmark
+        working-directory: packages/cge
 
       - name: Install locked dependencies (MCP package)
         if: steps.scope.outputs.run_code_checks == 'true'
