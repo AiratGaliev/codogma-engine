@@ -63,6 +63,16 @@ export class ComponentRegistry {
   private readonly definitions = new Map<string, ComponentTypeDefinition>();
 
   register(definition: ComponentTypeDefinition): void {
+    if (!definition || typeof definition !== "object" || typeof definition.create !== "function") {
+      throw new ComponentRegistrationError(
+        "Component type definition requires a factory function.",
+        [{
+          code: "COMPONENT_INVALID_SCHEMA",
+          severity: "error",
+          message: "Component factory must be a synchronous function.",
+        }],
+      );
+    }
     const validation = validateComponentTypeSchema(definition.schema);
     if (!validation.valid || !validation.value) {
       throw new ComponentRegistrationError("Component type has an invalid schema.", validation.diagnostics);
@@ -80,7 +90,7 @@ export class ComponentRegistry {
     }
     const registeredDefinition = Object.freeze({
       schema: cloneAndFreezeSchema(validation.value),
-      create: definition.create,
+      create: (context: ComponentFactoryContext) => definition.create(context),
     });
     this.definitions.set(typeId, registeredDefinition);
   }

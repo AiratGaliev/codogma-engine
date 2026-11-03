@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ComponentRegistrationError,
   ComponentRegistry,
   ComponentWorld,
   type ComponentBehavior,
+  type ComponentSystem,
+  type ComponentTypeDefinition,
   type ComponentTypeSchemaV1,
 } from "../src/index.js";
 
@@ -575,4 +578,96 @@ test("deep-freezes nested JSON reference properties passed to component factorie
   }, TypeError);
   assert.deepEqual(received.target, { nodeId: "target-node" });
   world.dispose();
+});
+
+
+test("requires stable IDs at the runtime ComponentWorld boundary", () => {
+  const registry = createRegistry([]);
+  assert.throws(() => new ComponentWorld("scene with spaces", registry), /stable scene ID/i);
+  const world = new ComponentWorld("scene-valid", registry);
+  assert.throws(() => world.createNode({ id: "node/invalid", name: "Invalid" }), /stable IDs/i);
+  world.createNode({ id: "node-valid", name: "Valid" });
+  assert.throws(() => world.attachComponent("node-valid", schema.typeId, {}, { instanceId: "instance invalid" }), /stable ID/i);
+  assert.throws(() => world.attachComponent("node-valid", "type with spaces", {}), /stable Node and type IDs/i);
+  assert.throws(() => world.registerSystem({ id: "system invalid", update: () => undefined }), /stable ID/i);
+  world.dispose();
+});
+
+test("snapshots ComponentSystem identity and callbacks at registration", () => {
+  const world = new ComponentWorld("scene-system-snapshot", new ComponentRegistry());
+  const calls: string[] = [];
+  const system = {
+    id: "system-stable",
+    update() { calls.push("original:update"); },
+    dispose() { calls.push("original:dispose"); },
+  };
+  world.registerSystem(system);
+
+  system.id = "system-renamed";
+  system.update = () => calls.push("replacement:update");
+  system.dispose = () => calls.push("replacement:dispose");
+
+  world.update(0.1);
+  world.removeSystem("system-stable");
+  world.update(0.1);
+  world.dispose();
+
+  assert.deepEqual(calls, ["original:update", "original:dispose"]);
+});
+
+test("rejects asynchronous Component factories and rolls back without leaving an instance", () => {
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: (() => Promise.resolve({ onCreate: () => undefined })) as unknown as ComponentTypeDefinition["create"],
+  });
+  const world = new ComponentWorld("scene-async-factory", registry);
+  world.createNode({ id: "node-async-factory", name: "Async factory" });
+
+  assert.throws(
+    () => world.attachComponent("node-async-factory", schema.typeId, {}, { instanceId: "async-factory" }),
+    /factory failed|synchronously/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(world.listComponents(), []);
+  world.dispose();
+});
+
+test("reports async lifecycle and system callbacks instead of silently ignoring Promises", () => {
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => ({
+      onCreate: (() => Promise.resolve()) as unknown as () => void,
+    }),
+  });
+  const world = new ComponentWorld("scene-async-lifecycle", registry);
+  world.createNode({ id: "node-async-lifecycle", name: "Async lifecycle" });
+  assert.throws(
+    () => world.attachComponent("node-async-lifecycle", schema.typeId, {}, { instanceId: "async-lifecycle" }),
+    AggregateError,
+  );
+  assert.equal(world.componentCount, 0);
+  world.dispose();
+
+  const systemWorld = new ComponentWorld("scene-async-system", new ComponentRegistry());
+  systemWorld.registerSystem({
+    id: "async-system",
+    update: (() => Promise.reject(new Error("late async failure"))) as unknown as ComponentSystem["update"],
+  });
+  assert.throws(
+    () => systemWorld.update(0.1),
+    (error: unknown) => error instanceof AggregateError &&
+      error.errors.some((item) => item instanceof TypeError && /synchronously/.test(item.message)),
+  );
+  systemWorld.dispose();
+});
+
+test("ComponentRegistry rejects malformed runtime definitions before touching its registry", () => {
+  const registry = new ComponentRegistry();
+  assert.throws(
+    () => registry.register({ schema, create: null } as unknown as ComponentTypeDefinition),
+    ComponentRegistrationError,
+  );
+  assert.equal(registry.has(schema.typeId), false);
 });
