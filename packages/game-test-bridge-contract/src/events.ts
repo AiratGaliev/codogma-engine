@@ -41,18 +41,27 @@ export function isEventTypeAvailable(
     descriptor.eventTypes.includes(eventType);
 }
 
-function sumGapSizes(integrity: EventStreamIntegrity): number {
+function sumGapSizes(integrity: EventStreamIntegrity): bigint {
   return integrity.sequenceGaps.reduce(
-    (total, gap) => total + gap.toSequence - gap.fromSequence + 1,
-    0,
+    (total, gap) => total + BigInt(gap.toSequence) - BigInt(gap.fromSequence) + 1n,
+    0n,
   );
 }
 
 export function validateEventPageSemantics(page: EventPage): readonly ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   let previousSequence = 0;
+  const eventIds = new Set<string>();
 
   for (const event of page.events) {
+    if (eventIds.has(event.eventId)) {
+      issues.push({
+        code: "EVENT_ID_DUPLICATED",
+        path: "/events",
+        message: "Event identifiers must be unique within a page.",
+      });
+    }
+    eventIds.add(event.eventId);
     if (event.testSessionId !== page.testSessionId) {
       issues.push({
         code: "EVENT_SESSION_MISMATCH",
@@ -127,7 +136,7 @@ export function validateEventPageSemantics(page: EventPage): readonly Validation
 
   if (
     knownLostCount !== null &&
-    (knownLostCount < knownGapCount || knownLostCount < droppedCount)
+    (BigInt(knownLostCount) < knownGapCount || knownLostCount < droppedCount)
   ) {
     issues.push({
       code: "EVENT_LOSS_COUNT_INCONSISTENT",

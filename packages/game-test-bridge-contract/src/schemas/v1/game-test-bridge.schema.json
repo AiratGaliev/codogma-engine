@@ -80,7 +80,8 @@
       "propertyNames": {
         "minLength": 3,
         "maxLength": 128,
-        "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+        "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+        "type": "string"
       },
       "additionalProperties": {
         "$ref": "#/$defs/JsonValue"

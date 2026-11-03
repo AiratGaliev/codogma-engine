@@ -257,6 +257,35 @@ test("rejects non-JSON JavaScript and runtime values before schema validation", 
   assert.equal(validateJsonValue({ value: () => "not JSON" }).success, false);
 });
 
+test("preserves an unknown dropped-event count when overflow is confirmed", () => {
+  const fixture = structuredClone(gapEventPageFixture) as {
+    integrity: {
+      bufferOverflow: { occurred: boolean; droppedEventCount: number | null };
+      lostEventCount: number | null;
+    };
+  } & Record<string, unknown>;
+  fixture.integrity.bufferOverflow.droppedEventCount = null;
+  fixture.integrity.lostEventCount = null;
+
+  const result = validateEventPage(fixture);
+  assert.equal(result.success, true);
+  if (!result.success) return;
+  assert.equal(result.value.integrity.coverage, "partial");
+  assert.equal(result.value.integrity.lostEventCount, null);
+});
+
+test("rejects duplicate event identifiers within one page", () => {
+  const fixture = structuredClone(validEventPageFixture) as {
+    events: Array<Record<string, unknown>>;
+  } & Record<string, unknown>;
+  fixture.events[1] = { ...fixture.events[1], eventId: fixture.events[0]?.eventId };
+
+  const result = validateEventPage(fixture);
+  assert.equal(result.success, false);
+  if (result.success) return;
+  assert.ok(result.errors.some((entry) => entry.code === "EVENT_ID_DUPLICATED"));
+});
+
 test("enforces the serialized wire-size limit", () => {
   const oversized = Array.from({ length: 3000 }, () => "x".repeat(500));
   const result = validateJsonValue(oversized);

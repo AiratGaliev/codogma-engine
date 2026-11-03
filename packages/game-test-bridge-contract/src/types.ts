@@ -251,7 +251,7 @@ export interface EventPage {
   integrity: EventStreamIntegrity;
 }
 
-export interface TestActionDescriptor {
+export interface TestActionDescriptorBase {
   actionId: string;
   version: ContractVersion;
   description: string;
@@ -260,9 +260,11 @@ export interface TestActionDescriptor {
   allowedProfiles: readonly RuntimeProfile[];
   inputSchemaId: string;
   outputSchemaId: string;
-  status: "available" | "unavailable";
-  reason?: UnsupportedCapabilityReason;
 }
+
+export type TestActionDescriptor =
+  | (TestActionDescriptorBase & { status: "available"; reason?: never })
+  | (TestActionDescriptorBase & { status: "unavailable"; reason: UnsupportedCapabilityReason });
 
 export interface TestActionRequest<TInput extends JsonValue = JsonValue> {
   kind: "game-test-bridge.action-request";
