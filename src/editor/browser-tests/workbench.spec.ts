@@ -63,7 +63,7 @@ async function dragPanelHeaderWithPointer(
   await expect(targetZone).toBeVisible();
 
   const targetBounds = await targetZone.boundingBox();
-  if (!targetBounds) throw new Error("Native drag target geometry is unavailable.");
+  if (!targetBounds) throw new Error("Pointer drag target geometry is unavailable.");
   await page.mouse.move(
     targetBounds.x + targetBounds.width / 2,
     targetBounds.y + targetBounds.height / 2,
@@ -504,8 +504,12 @@ test("splitter double-click restores its adaptive workspace default", async ({ p
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   const splitter = page.getByTestId("splitter-hierarchy");
+  const defaultWidth = Number(await splitter.getAttribute("aria-valuenow"));
+  await splitter.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(splitter).toHaveAttribute("aria-valuenow", String(defaultWidth + 16));
   await splitter.dblclick();
-  await expect(splitter).toHaveAttribute("aria-valuenow", "228");
+  await expect(splitter).toHaveAttribute("aria-valuenow", String(defaultWidth));
   const layout = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
   expect(layout.leftWidthCustomized).toBe(false);
 });
