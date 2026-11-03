@@ -171,9 +171,9 @@ export function validateUserComponentProperties(
   const schema = createUserComponentSchema(definition);
   if (!schema.valid || !schema.value) return { valid: false, diagnostics: schema.diagnostics };
   const values: Record<string, unknown> = {};
-  for (const property of definition.properties ?? []) {
-    const key = `${definition.name}.${property.name}`;
-    if (Object.hasOwn(object, key)) values[property.name] = object[key];
+  const prefix = `${definition.name}.`;
+  for (const [key, value] of Object.entries(object)) {
+    if (key.startsWith(prefix)) values[key.slice(prefix.length)] = value;
   }
   return validateComponentProperties(schema.value, values);
 }
