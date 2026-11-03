@@ -59,3 +59,10 @@ The mapping rules are intentionally conservative:
 - A legacy Prefab with multiple independent roots is rejected rather than silently changing the hierarchy into parent/child nodes. Supply a separately reviewed grouping migration if that legacy pattern is encountered.
 
 The conversion result contains structured diagnostics. A caller must resolve warnings, register compatible component definitions and provide the appropriate Project/Prefab validation context before treating the converted document as load-ready. Scene hydration into a ComponentWorld remains COD-103.
+
+
+## Node Asset references in the Project Model
+
+Scene v1 Nodes may contain `assetReferences`: each item stores an explicit property path and stable Project `assetId`. Scene validation resolves these IDs against the supplied Project Asset registry. Legacy texture-key conversion is opt-in through `LegacySceneMigrationOptions.assetReferences`; no Asset ID is generated from a texture key or URL.
+
+The checked-in `asset-pack.json` fixture identifies the image by legacy key `dino` and URL `assets/dino.png`. A caller must create or select the Project Asset record and pass its stable ID to the migration. The original renderer-specific texture object remains in `legacySource` until the renderer/adapter contract defines its canonical representation.

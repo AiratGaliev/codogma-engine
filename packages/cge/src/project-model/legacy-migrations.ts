@@ -17,6 +17,10 @@ export interface LegacyComponentTypeReference {
   readonly schemaVersion: number;
 }
 
+export interface LegacyAssetReferenceMapping {
+  readonly assetId: string;
+}
+
 export interface LegacyPrefabReference {
   readonly rootNodeId: string;
   readonly propertyNames: ReadonlySet<string>;
@@ -26,6 +30,7 @@ export interface LegacySceneMigrationOptions {
   readonly name?: string;
   readonly componentTypes?: ReadonlyMap<string, LegacyComponentTypeReference>;
   readonly prefabReferences?: ReadonlyMap<string, LegacyPrefabReference>;
+  readonly assetReferences?: ReadonlyMap<string, LegacyAssetReferenceMapping>;
   readonly validationContext?: SceneValidationContext;
 }
 
@@ -232,6 +237,29 @@ function mapLegacyComponents(
   return { components, unresolved };
 }
 
+function mapLegacyAssetReferences(
+  source: Record<string, unknown>,
+  nodeId: string,
+  path: string,
+  options: LegacySceneMigrationOptions,
+  diagnostics: CoreDiagnostic[],
+): Array<{ propertyPath: string; assetId: string }> {
+  if (!isRecord(source.texture) || !isNonEmptyString(source.texture.key)) return [];
+  const legacyKey = source.texture.key;
+  const mapping = options.assetReferences?.get(legacyKey);
+  if (!mapping || !isNonEmptyString(mapping.assetId)) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "warning",
+      "Legacy texture key " + legacyKey + " has no explicit stable Asset ID mapping; the original texture configuration remains in legacySource.",
+      path + ".texture.key",
+      nodeId,
+    ));
+    return [];
+  }
+  return [{ propertyPath: "texture", assetId: mapping.assetId }];
+}
+
 function mapPrefabInstance(
   source: Record<string, unknown>,
   nodeId: string,
@@ -328,6 +356,7 @@ function migrateLegacyNode(
   }
 
   const prefabInstance = mapPrefabInstance(input, nodeId, path, options, diagnostics);
+  const assetReferences = mapLegacyAssetReferences(input, nodeId, path, options, diagnostics);
   const legacySource = cloneJsonValue(input as JsonValue) as JsonObject;
   const node: NodeDocument = {
     id: nodeId,
@@ -335,6 +364,7 @@ function migrateLegacyNode(
     active: typeof input.active === "boolean" ? input.active : true,
     transform: migrateTransform(input, nodeId, path, diagnostics),
     components: mapped.components,
+    ...(assetReferences.length === 0 ? {} : { assetReferences }),
     children,
     legacySource,
     legacyCollection: collection,

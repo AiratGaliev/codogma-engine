@@ -212,7 +212,7 @@ function validateNode(
   }
 
   const nodeId = node.id as string;
-  const knownNodeFields = new Set(["id", "name", "active", "transform", "components", "children", "prefabInstance"]);
+  const knownNodeFields = new Set(["id", "name", "active", "transform", "components", "assetReferences", "children", "prefabInstance"]);
   for (const [key, value] of Object.entries(node)) {
     if (!knownNodeFields.has(key) && !isJsonValue(value)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Unknown node field must be JSON-compatible.", path + "." + key, nodeId));
@@ -228,6 +228,29 @@ function validateNode(
     const value = node.transform[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
       diagnostics.push(issue("SCENE_INVALID_TRANSFORM", "Transform " + key + " must be finite.", path + ".transform." + key, nodeId));
+    }
+  }
+
+  if (node.assetReferences !== undefined) {
+    if (!Array.isArray(node.assetReferences)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Node assetReferences must be an array.", path + ".assetReferences", nodeId));
+    } else {
+      const propertyPaths = new Set<string>();
+      node.assetReferences.forEach((reference, index) => {
+        const referencePath = path + ".assetReferences[" + index + "]";
+        if (!isRecord(reference) || !isNonEmptyString(reference.propertyPath) ||
+            !isNonEmptyString(reference.assetId) || !isJsonValue(reference)) {
+          diagnostics.push(issue("SCENE_INVALID_NODE", "Node asset reference requires a non-empty propertyPath and stable assetId.", referencePath, nodeId));
+          return;
+        }
+        if (propertyPaths.has(reference.propertyPath)) {
+          diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Duplicate Node asset reference propertyPath " + reference.propertyPath + ".", referencePath + ".propertyPath", nodeId));
+        }
+        propertyPaths.add(reference.propertyPath);
+        if (context.assets && !context.assets.has(reference.assetId)) {
+          diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Asset " + reference.assetId + " is not present in the Project Asset registry.", referencePath + ".assetId", nodeId));
+        }
+      });
     }
   }
 

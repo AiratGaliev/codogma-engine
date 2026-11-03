@@ -78,12 +78,18 @@ export interface PrefabInstanceDocument {
   sourceNodeId?: string;
 }
 
+export interface NodeAssetReferenceDocument {
+  readonly propertyPath: string;
+  readonly assetId: string;
+}
+
 export interface NodeDocument {
   id: string;
   name: string;
   active: boolean;
   transform: TransformData;
   components: ComponentInstanceDocument[];
+  assetReferences?: NodeAssetReferenceDocument[];
   children: NodeDocument[];
   prefabInstance?: PrefabInstanceDocument;
 }

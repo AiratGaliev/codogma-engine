@@ -222,3 +222,56 @@ test("defaults invalid legacy transforms with a warning while preserving the ori
   );
   assert.equal(object(object(result.document.rootNodes[0]).legacySource).x, "not-a-number");
 });
+
+
+test("maps legacy texture keys to stable Project Asset IDs only through an explicit mapping", () => {
+  const legacyScene = JSON.parse(fixture("Level.scene")) as Record<string, unknown>;
+  const assetPack = JSON.parse(fixture("asset-pack.json")) as {
+    section1: { files: Array<{ url: string; type: string; key: string }> };
+  };
+  const packedImage = assetPack.section1.files.find((item) => item.key === "dino");
+  assert.ok(packedImage);
+  assert.equal(packedImage.url, "assets/dino.png");
+  assert.equal(packedImage.type, "image");
+
+  const asset = { id: "asset-image-dino", path: packedImage.url, kind: "image" as const };
+  const migrated = migrateLegacySceneDocument(legacyScene, {
+    componentTypes,
+    assetReferences: new Map([[packedImage.key, { assetId: asset.id }]]),
+    validationContext: { assets: new Map([[asset.id, asset]]) },
+  });
+
+  const first = migrated.document.rootNodes[0];
+  assert.ok(first);
+  assert.deepEqual(first.assetReferences, [{
+    propertyPath: "texture",
+    assetId: "asset-image-dino",
+  }]);
+  const rawTexture = object(first.legacySource).texture;
+  assert.deepEqual(rawTexture, { key: "dino" });
+});
+
+test("rejects unresolved Node Asset IDs and duplicate asset-reference property paths", () => {
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-asset-refs",
+    name: "Asset refs",
+    settings: {},
+    rootNodes: [{
+      id: "node-asset-refs",
+      name: "Sprite",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      assetReferences: [
+        { propertyPath: "texture", assetId: "missing-asset" },
+        { propertyPath: "texture", assetId: "missing-asset" },
+      ],
+      children: [],
+    }],
+  };
+  const result = parseSceneDocument(JSON.stringify(scene), { assets: new Map() });
+  assert.equal(result.value, undefined);
+  assert.equal(result.diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"), true);
+  assert.equal(result.diagnostics.some((item) => item.code === "PROJECT_DUPLICATE_ID"), true);
+});
