@@ -31,7 +31,9 @@
 | displayList | SceneDocumentV1.rootNodes | Порядок внутри коллекции сохраняется; legacyCollection: displayList сохраняет происхождение |
 | plainObjects | Продолжение rootNodes после display list | Исходная коллекция фиксируется как legacyCollection: plainObjects; межколлекционный порядок не придумывается |
 | node id | NodeDocument.id | Сохраняется; пропуск ID — blocking error, никакой генерации из имени/позиции |
-| label / name / type | NodeDocument.name | Приоритет label → name → type → ID; оригинал остаётся в legacySource |
+| label / name | NodeDocument.name | Приоритет label → name → stable Node ID; legacy renderer/object kind `type` не используется как имя |
+| renderer `type` | `legacySource.type` | Значения Image/Text/Container/EditableTilemapLayer описывают legacy renderer/object kind; сохраняются с warning до появления versioned rendering Component contract |
+| compiler `scope` | `legacySource.scope` | CLASS/METHOD/NESTED_PREFAB — legacy compiler/editor metadata; сохраняется с warning, не является Node name или runtime type ID |
 | list[] | NodeDocument.children[] | Рекурсивно мигрирует Container hierarchy и стабильные child IDs |
 | x/y/rotation/scaleX/scaleY/originX/originY | NodeDocument.transform | Числовые конечные значения переносятся; Core defaults применяются к отсутствующим; неверные заданные значения дают warning и сохраняются в source |
 | active | NodeDocument.active | Сохраняется при наличии; при отсутствии используется Core default true |
@@ -58,7 +60,7 @@
 
 - Все миграции opt-in и in-memory: исходные файлы автоматически не переписываются.
 - Полный исходный Scene/Prefab JSON и каждый исходный Node сохраняются под legacySource; Prefab properties остаются в legacyPrefabProperties.
-- Неизвестные Component types, неизвестные fields, несопоставленные texture keys, invalid transforms и nested Prefab payload выдаются как machine-readable warnings.
+- Неизвестные Component types, unknown legacy renderer `type` / compiler `scope`, несопоставленные texture keys, unmapped fields, invalid transforms и nested Prefab payload выдаются как machine-readable warnings.
 - Отсутствующие stable document/node IDs, несовместимый discriminator и Prefab с несколькими roots отклоняются как blocking diagnostics.
 - Component instance ID не выводится из Node ID + legacy component name: legacy format не сохраняет instance identity. Для преобразования caller обязан передать явный stable instance ID через `componentInstanceIds`; runtime type ID также берётся только из явного mapping.
 - Asset ID никогда не выводится из texture key или URL. Validation проверяет ссылку через переданный Project Asset registry.

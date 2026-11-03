@@ -430,3 +430,35 @@ test("requires an explicit stable Component instance ID mapping before convertin
     ["instance-explicit-push", "instance-explicit-tint"],
   );
 });
+
+
+test("preserves legacy renderer type and compiler scope instead of treating them as Node names", () => {
+  const level = JSON.parse(fixture("Level.scene")) as Record<string, unknown>;
+  const agentLevel = JSON.parse(fixture("AgentLevel.scene")) as Record<string, unknown>;
+  const migratedLevel = migrateLegacySceneDocument(level);
+  const migratedAgentLevel = migrateLegacySceneDocument(agentLevel);
+
+  const imageNode = migratedLevel.document.rootNodes[0];
+  assert.ok(imageNode);
+  assert.equal(imageNode.name, "dino");
+  assert.equal(object(object(imageNode).legacySource).type, "Image");
+
+  const tilemapNode = migratedAgentLevel.document.rootNodes.find((node) =>
+    object(node).id === "ea22bd4a-1ca0-4778-a736-aa388e22cee0");
+  assert.ok(tilemapNode);
+  assert.equal(tilemapNode.name, "mainLayer_1");
+  assert.equal(object(object(tilemapNode).legacySource).type, "EditableTilemapLayer");
+  assert.equal(object(object(tilemapNode).legacySource).scope, "METHOD");
+  assert.equal(
+    migratedAgentLevel.diagnostics.some((item) =>
+      item.code === "PROJECT_LEGACY_FIELD_PRESERVED" &&
+      item.path.endsWith(".scope")),
+    true,
+  );
+  assert.equal(
+    migratedAgentLevel.diagnostics.some((item) =>
+      item.code === "PROJECT_LEGACY_FIELD_PRESERVED" &&
+      item.path.endsWith(".type")),
+    true,
+  );
+});

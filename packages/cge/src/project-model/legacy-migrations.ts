@@ -445,9 +445,7 @@ function migrateLegacyNode(
     ? input.label
     : isNonEmptyString(input.name)
       ? input.name
-      : isNonEmptyString(input.type)
-        ? input.type
-        : nodeId;
+      : nodeId;
   const mapped = mapLegacyComponents(input, nodeId, path, options, diagnostics);
   const children = Array.isArray(input.list)
     ? input.list.map((child, index) =>
