@@ -118,3 +118,22 @@ test("rejects invalid component renames and malformed property collections", () 
     properties: {} as never,
   }).valid, false);
 });
+
+test("keeps __proto__ as a user property name in the legacy schema adapter", () => {
+  const definition = {
+    name: "Prototype",
+    properties: [{ name: "__proto__", label: "Prototype value", defValue: "safe", type: { id: "string" } }],
+  };
+  const schema = createUserComponentSchema(definition);
+  assert.equal(schema.valid, true);
+  assert.ok(schema.value);
+  assert.equal(Object.prototype.hasOwnProperty.call(schema.value.properties, "__proto__"), true);
+  assert.equal(schema.value.properties["__proto__"]?.type, "string");
+
+  const attached = attachUserComponent({ id: "node-1", type: "Image", components: [] }, definition);
+  assert.equal(attached["Prototype.__proto__"], "safe");
+  const validation = validateUserComponentProperties(attached, definition);
+  assert.equal(validation.valid, true);
+  assert.equal(validation.value?.["__proto__"], "safe");
+  assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "safe"), false);
+});

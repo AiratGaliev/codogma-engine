@@ -43,6 +43,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function setOwnValue<T>(target: Record<string, T>, key: string, value: T): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+}
+
 function assertDocument(document: unknown): asserts document is UserComponentsDocument {
   if (!isRecord(document) || !Array.isArray(document.components)) {
     throw new TypeError('A User Components document must contain a "components" array.');
@@ -147,7 +156,7 @@ export function createUserComponentSchema(
       });
       continue;
     }
-    properties[property.name] = schema;
+    setOwnValue(properties, property.name, schema);
   }
   if (diagnostics.some((item) => item.severity === "error")) return { valid: false, diagnostics };
 
@@ -184,7 +193,7 @@ export function validateUserComponentProperties(
   const values: Record<string, unknown> = {};
   const prefix = `${definition.name}.`;
   for (const [key, value] of Object.entries(object)) {
-    if (key.startsWith(prefix)) values[key.slice(prefix.length)] = value;
+    if (key.startsWith(prefix)) setOwnValue(values, key.slice(prefix.length), value);
   }
   return validateComponentProperties(schema.value, values);
 }
