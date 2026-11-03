@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-project",
+  "name": "Core fixture",
+  "scenes": [],
+  "assets": [],
+  "prefabs": [],
+  "componentModules": [],
+  "runtime": { "adapterId": "phaser", "settings": {} },
+  "unknownPluginData": { "keep": true }
+}
