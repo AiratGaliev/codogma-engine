@@ -325,13 +325,33 @@ textarea::placeholder {
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  justify-content: flex-start;
+  gap: 8px;
   padding: 7px 9px;
   border-radius: 2px;
   background: transparent;
   text-align: left;
   font-size: 11px;
+}
+
+.menu-item-check {
+  display: flex;
+  width: 14px;
+  min-width: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-selection);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.menu-item-label {
+  min-width: 0;
+  flex: 1;
+}
+
+.menu-item kbd {
+  margin-left: auto;
 }
 
 .menu-item:hover:not(:disabled) {
@@ -1391,8 +1411,13 @@ textarea::placeholder {
   background: var(--surface-panel);
 }
 
-.bottom-dock.console-docked {
+.bottom-dock.console-docked,
+.bottom-dock.console-hidden {
   grid-template-rows: minmax(0, 1fr);
+}
+
+.console-close-button {
+  flex: 0 0 auto;
 }
 
 .side-dock-zone.dock-drop-target { outline: 1px solid color-mix(in srgb, var(--accent-selection) 64%, transparent); outline-offset: -2px; }

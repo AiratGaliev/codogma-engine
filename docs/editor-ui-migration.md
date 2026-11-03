@@ -20,7 +20,7 @@
 - Workbench по основным Dark/Light artboards `.pen`: menu/toolbar, Scene/Game tabs, resizable splitters, Hierarchy/Inspector, Project/Animation/Components/Console, design tokens и Godot SVG icons; responsive layout хранится между запусками;
 - docking lifecycle первого среза COD-80: Console перемещается в Bottom Dock и обратно; Hierarchy и Inspector перетаскиваются в Bottom Dock, возвращаются в исходные слоты через `Undock`; вкладки Bottom Dock переставляются pointer-drag жестом, порядок и выбранная вкладка сохраняются;
 - focus/command model: W/E/R/Q и F2/Delete применяются только в контексте Scene/Hierarchy; shortcuts не перехватывают ввод в Inspector; Command Palette удерживает Tab внутри диалога и возвращает фокус исходному элементу при закрытии;
-- COD-83 расширяет Workbench тремя закреплёнными dock-зонами `Left / Right / Bottom`: Hierarchy и Inspector можно перемещать между зонами и группировать во вкладки; у каждой боковой зоны есть активная панель, поддерживаются close/reopen, возврат в home-zone, drag/drop, keyboard tab navigation и pointer/keyboard splitter resize. Project/Animation/Components остаются Bottom tabs, Console сохраняет отдельный dock/undock workflow. При ширине до 780px боковые панели временно представлены в Bottom без изменения их сохранённых зон; при возврате к wide layout они восстанавливаются. Layout хранится как `schemaVersion: 1` в локальном workspace storage с миграцией прежнего unversioned COD-80 state, фильтрацией неизвестных panel IDs и детерминированными defaults. Floating windows, произвольное docking tree и перемещение Scene/Game viewport не входят в scope.
+- COD-83 расширяет Workbench тремя закреплёнными dock-зонами `Left / Right / Bottom`: Hierarchy и Inspector можно перемещать между зонами и группировать во вкладки; у каждой боковой зоны есть активная панель, поддерживаются close/reopen, возврат в home-zone, drag/drop, keyboard tab navigation и pointer/keyboard splitter resize. Hierarchy, Inspector и Console закрываются независимо от dock placement и повторно открываются с сохранением предпочтительной зоны/режима Console. Пункты View имеют стабильные названия и checkmark, синхронизированный с состоянием видимости; Window отдельно отмечает активную Bottom-вкладку. Project/Animation/Components остаются постоянными Bottom tabs. При ширине до 780px боковые панели временно представлены в Bottom без изменения их сохранённых зон; при возврате к wide layout они восстанавливаются. Layout хранится как `schemaVersion: 2`; v0 и v1 раскладки мигрируют без потери существующих полей, а отсутствующее в старых версиях `consoleVisible` по умолчанию становится `true`. Неизвестные panel IDs фильтруются, повреждённое состояние получает детерминированные defaults. Floating windows, произвольное docking tree и перемещение Scene/Game viewport не входят в scope.
 - Game View загружает существующий проектный `index.html` в iframe; закрытие Game View уничтожает iframe/runtime, повторный запуск создаёт новый экземпляр.
 
 Новые модели не заменяют Project Model или backend serializers: scene helper сохраняет неизвестные поля и обновляет только явно разрешённые свойства. Legacy client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`.
@@ -62,14 +62,14 @@ Browser acceptance конфигурируется через `src/editor/playwri
 
 **Единый owner:** SolidJS `layout` signal внутри `App.tsx`. Чистая доменная модель и все переходы состояния находятся в `src/editor/src/domain/workspace-layout.ts`; UI не хранит вторую копию docking state. Состояние сохраняется отдельно от Project Model под ключом `localStorage["codogma.editor.layout"]`.
 
-Schema v1:
+Schema v2:
 
 | Поле | Тип | Назначение |
 |---|---|---|
-| `schemaVersion` | literal `1` | Версия persisted contract |
+| `schemaVersion` | literal `2` | Версия persisted contract |
 | `leftWidth`, `rightWidth`, `bottomHeight`, `consoleHeight` | number | Предпочтительные размеры dock-зон/Console |
 | `leftWidthCustomized`, `rightWidthCustomized`, `bottomHeightCustomized`, `consoleHeightCustomized` | boolean | Явно изменял ли пользователь соответствующий размер; защищает даже точное совпадение с default от автоматической compact/wide адаптации |
-| `hierarchyVisible`, `inspectorVisible` | boolean | Видимость панели независимо от её dock-зоны |
+| `hierarchyVisible`, `inspectorVisible`, `consoleVisible` | boolean | Видимость панели независимо от её dock-зоны/режима Console |
 | `hierarchyZone`, `inspectorZone` | `left, right, bottom` | Постоянное положение каждой панели |
 | `leftActivePanel`, `rightActivePanel` | `Hierarchy, Inspector, null` | Активная вкладка боковой группы |
 | `bottomTab` | tab ID | Активная вкладка Bottom |
@@ -80,7 +80,7 @@ Persisted bounds: Left `170–360 px`, Right `210–420 px`, Bottom `150–420 p
 
 **Pointer ownership и touch lifecycle:** splitter resize и tab drag принадлежат конкретному `pointerId`. События другого pointer игнорируются; второй одновременный жест не перезаписывает активное состояние. Состояние очищается владельцем на `pointerup`/`pointercancel` и при `lostpointercapture`. Для Left/Right/Bottom/Console splitters задан `touch-action: none`, чтобы браузерный pan не перехватывал touch resize. Потеря capture не оставляет активную drop-zone или resize state.
 
-**Миграция и fallback:** unversioned COD-80 state (`dockedPanels`) трактуется как schema v0: панели из `dockedPanels` переходят в Bottom, остальные возвращаются в home-zones. Schema v1 не сериализует `dockedPanels`. Неизвестная будущая версия, невалидный JSON, неизвестные panel IDs и некорректные значения получают детерминированные defaults; неизвестные tabs отбрасываются, известные панели сохраняются. Project data и файлы проекта не меняются.
+**Миграция и fallback:** unversioned COD-80 state (`dockedPanels`) трактуется как schema v0: панели из `dockedPanels` переходят в Bottom, остальные возвращаются в home-zones. Schema v1 переносится в v2 с сохранением существующих полей; новое `consoleVisible` при отсутствии поля по умолчанию равно `true`, чтобы старые пользовательские раскладки не теряли Console. Schema v2 не сериализует `dockedPanels`. Неизвестная будущая версия, невалидный JSON, неизвестные panel IDs и некорректные значения получают детерминированные defaults; неизвестные tabs отбрасываются, известные панели сохраняются. Project data и файлы проекта не меняются.
 
 **Lifecycle:** dock/undock меняет parent DOM node уже существующей панели; компонент не создаётся повторно. Scene/Game viewport остаётся в центре, его Phaser Canvas не переносится. При unmount Host снимает `keydown`/`resize` listeners и освобождает MCP bridge/preview lifecycle. Текущий Host не содержит in-app project-switch workflow, поэтому очистка именно при переключении между двумя project sessions пока не проверяется и остаётся отдельным lifecycle gap; это не следует трактовать как принятую project-switch acceptance.
 

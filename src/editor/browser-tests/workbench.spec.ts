@@ -286,6 +286,53 @@ test("Console panel can be dragged into the bottom Dock and undocked again", asy
 });
 
 
+test("Console closes and reopens from View without losing its Bottom Dock location", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+
+  await dragPanelHeaderWithPointer(
+    page,
+    page.locator(".desktop-console-panel .console-header"),
+    bottomTabs,
+  );
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  let persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.consoleDocked).toBe(true);
+  expect(persisted.consoleVisible).toBe(true);
+
+  await page.getByRole("button", { name: "Close Console" }).click();
+  await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
+  await expect(page.getByTestId("console-panel")).toHaveCount(0);
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.consoleDocked).toBe(true);
+  expect(persisted.consoleVisible).toBe(false);
+  expect(persisted.bottomTab).toBe("Project");
+
+  await page.getByRole("menuitem", { name: "View" }).click();
+  const consoleToggle = page.getByRole("menuitemcheckbox", { name: "Console" });
+  await expect(consoleToggle).toHaveAttribute("aria-checked", "false");
+  await consoleToggle.click();
+  await expect(bottomTabs.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveAttribute("aria-selected", "true");
+
+  await page.reload();
+  const restoredTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await expect(restoredTabs.getByRole("tab", { name: "Console" })).toBeVisible();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.consoleDocked).toBe(true);
+  expect(persisted.consoleVisible).toBe(true);
+});
+
 test("Hierarchy and Inspector panels dock into Bottom, persist and restore to their home slots", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
@@ -386,8 +433,15 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   await expect(page.getByTestId("hierarchy-panel")).not.toBeVisible();
 
   await page.getByRole("menuitem", { name: "View" }).click();
-  await page.getByRole("menuitem", { name: "Show Hierarchy" }).click();
+  const hierarchyToggle = page.getByRole("menuitemcheckbox", { name: "Hierarchy" });
+  await expect(hierarchyToggle).toHaveAttribute("aria-checked", "false");
+  await expect(hierarchyToggle).not.toContainText("Hide");
+  await hierarchyToggle.click();
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
+
+  await page.getByRole("menuitem", { name: "View" }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Hierarchy" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("menuitem", { name: "View" }).click();
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
   expect(await canvasHandle.evaluate((element) => element.isConnected)).toBe(true);
 
@@ -401,7 +455,7 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   await expect(page.getByTestId("scene-stage").locator("canvas")).toHaveCount(1);
 
   const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(persisted.schemaVersion).toBe(1);
+  expect(persisted.schemaVersion).toBe(2);
   expect(persisted.hierarchyZone).toBe("right");
   expect(persisted.inspectorZone).toBe("right");
 });
@@ -444,7 +498,7 @@ test("narrow viewport presents saved side panels in Bottom and restores their zo
   await bottomTabs.getByRole("tab", { name: "Hierarchy" }).click();
   await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
   const narrowState = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(narrowState.schemaVersion).toBe(1);
+  expect(narrowState.schemaVersion).toBe(2);
   expect(narrowState.bottomTab).toBe("Hierarchy");
   expect(narrowState.hierarchyZone).toBe("right");
 
@@ -559,7 +613,7 @@ test("legacy and unknown layout data restore deterministic, versioned workspaces
   await page.goto("/");
   await expect(page.getByRole("tablist", { name: "Bottom workspace" }).getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   let saved = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(saved.schemaVersion).toBe(1);
+  expect(saved.schemaVersion).toBe(2);
   expect(saved.hierarchyZone).toBe("bottom");
   expect(saved.leftWidth).toBe(255);
 
@@ -572,7 +626,7 @@ test("legacy and unknown layout data restore deterministic, versioned workspaces
   await page.reload();
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
   saved = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(saved.schemaVersion).toBe(1);
+  expect(saved.schemaVersion).toBe(2);
   expect(saved.hierarchyZone).toBe("left");
   expect(saved.leftWidth).toBe(228);
 });

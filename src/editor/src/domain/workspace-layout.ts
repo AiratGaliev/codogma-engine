@@ -1,4 +1,4 @@
-export const WORKSPACE_LAYOUT_SCHEMA_VERSION = 1;
+export const WORKSPACE_LAYOUT_SCHEMA_VERSION = 2;
 
 export type DockZone = "left" | "right" | "bottom";
 export type SidePanelId = "Hierarchy" | "Inspector";
@@ -21,6 +21,7 @@ export interface WorkspaceLayout {
   consoleHeightCustomized: boolean;
   hierarchyVisible: boolean;
   inspectorVisible: boolean;
+  consoleVisible: boolean;
   hierarchyZone: DockZone;
   inspectorZone: DockZone;
   leftActivePanel: SidePanelId | null;
@@ -148,6 +149,7 @@ export function createDefaultWorkspaceLayout(
     consoleHeightCustomized: false,
     hierarchyVisible: true,
     inspectorVisible: true,
+    consoleVisible: true,
     hierarchyZone: "left",
     inspectorZone: "right",
     leftActivePanel: "Hierarchy",
@@ -180,7 +182,7 @@ export function restoreWorkspaceLayout(
 
   // Version zero is the pre-COD-83 layout persisted by COD-80.
   // Unknown future schemas must not be interpreted as a current contract.
-  if (version !== 0 && version !== WORKSPACE_LAYOUT_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== WORKSPACE_LAYOUT_SCHEMA_VERSION) {
     return defaults;
   }
 
@@ -267,6 +269,10 @@ export function restoreWorkspaceLayout(
       typeof value.inspectorVisible === "boolean"
         ? value.inspectorVisible
         : defaults.inspectorVisible,
+    consoleVisible:
+      typeof value.consoleVisible === "boolean"
+        ? value.consoleVisible
+        : defaults.consoleVisible,
     hierarchyZone,
     inspectorZone,
     leftActivePanel: null,
@@ -358,7 +364,7 @@ export function getVisibleBottomTabs(
     ) {
       return true;
     }
-    if (panel === "Console") return compact || layout.consoleDocked;
+    if (panel === "Console") return layout.consoleVisible && (compact || layout.consoleDocked);
 
     return (
       (forceSidePanelsToBottom || getPanelZone(layout, panel) === "bottom") &&
@@ -484,6 +490,25 @@ export function setSidePanelVisibility(
   return next;
 }
 
+export function setConsolePanelVisibility(
+  layout: WorkspaceLayout,
+  visible: boolean,
+  compact = false,
+): WorkspaceLayout {
+  const next: WorkspaceLayout = {
+    ...layout,
+    consoleVisible: visible,
+  };
+
+  if (visible) {
+    if (compact || next.consoleDocked) next.bottomTab = "Console";
+  } else if (next.bottomTab === "Console") {
+    next.bottomTab = getVisibleBottomTab(next, compact, "Project");
+  }
+
+  return next;
+}
+
 export function reorderDockTab(
   layout: WorkspaceLayout,
   source: BottomTab,
@@ -500,7 +525,7 @@ export function reorderDockTab(
       return zone === "bottom";
     }
     if (panel === "Console") {
-      return zone === "bottom" && (compact || layout.consoleDocked);
+      return zone === "bottom" && layout.consoleVisible && (compact || layout.consoleDocked);
     }
     return (
       (forceSidePanelsToBottom || getPanelZone(layout, panel) === zone) &&

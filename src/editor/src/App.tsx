@@ -86,6 +86,7 @@ import {
   restoreWorkspaceLayoutContent,
   selectSidePanel,
   serializeWorkspaceLayout,
+  setConsolePanelVisibility,
   setSidePanelVisibility,
   type BottomTab,
   type DockZone,
@@ -127,6 +128,15 @@ interface Command {
   title: string;
   shortcut?: string;
   run: () => void;
+}
+
+interface MenuItem {
+  label: string;
+  shortcut?: string;
+  action: () => void;
+  disabled?: boolean;
+  checkable?: "checkbox" | "radio";
+  checked?: boolean;
 }
 
 function iconPath(theme: Theme, name: string): string {
@@ -272,6 +282,7 @@ function ConsolePanel(props: {
   onLevelChange: (level: string) => void;
   messages: ConsoleMessage[];
   onClear: () => void;
+  onClose: () => void;
   onPointerDown?: (event: PointerEvent & { currentTarget: HTMLElement }) => void;
   onUndock?: () => void;
 }) {
@@ -300,6 +311,14 @@ function ConsolePanel(props: {
         <span class="console-count">{props.messages.length} messages</span>
         <button class="toolbar-icon-button tiny" aria-label="Clear console" title="Clear console" onClick={props.onClear}>
           <Icon theme={props.theme} name="remove" size={12} />
+        </button>
+        <button
+          class="panel-close-button console-close-button"
+          aria-label="Close Console"
+          title="Close Console panel"
+          onClick={(event) => { event.stopPropagation(); props.onClose(); }}
+        >
+          ×
         </button>
       </div>
       <div class="console-messages" role="log" aria-label="Editor console" aria-live="polite">
@@ -616,11 +635,8 @@ function App() {
     },
     {
       id: "console",
-      title: "Show Console workspace",
-      run: () => {
-        if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
-        else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
-      },
+      title: "Open Console",
+      run: openConsole,
     },
   ]);
 
@@ -1816,6 +1832,46 @@ function App() {
     log("info", panel + " panel closed");
   }
 
+  function closeConsole() {
+    const next = setConsolePanelVisibility(layout(), false, compactWorkbench());
+    setLayout(next);
+
+    queueMicrotask(() => {
+      const target = document.querySelector<HTMLButtonElement>(
+        `[data-testid="bottom-tabs"] [data-dock-tab="${next.bottomTab}"]`,
+      );
+      (target ?? document.querySelector<HTMLButtonElement>(
+        '[data-testid="bottom-tabs"] [data-dock-tab="Project"]',
+      ))?.focus({ preventScroll: true });
+    });
+    log("info", "Console panel closed");
+  }
+
+  function openConsole() {
+    const next = setConsolePanelVisibility(layout(), true, compactWorkbench());
+    setLayout(next);
+
+    queueMicrotask(() => {
+      if (compactWorkbench() || next.consoleDocked) {
+        document.querySelector<HTMLButtonElement>(
+          '[data-testid="bottom-tabs"] [data-dock-tab="Console"]',
+        )?.focus({ preventScroll: true });
+        return;
+      }
+
+      const consolePanel = document.querySelector<HTMLElement>(".desktop-console-panel");
+      consolePanel?.scrollIntoView({ block: "nearest" });
+      consolePanel?.querySelector<HTMLSelectElement>(
+        '[aria-label="Console message filter"]',
+      )?.focus({ preventScroll: true });
+    });
+  }
+
+  function toggleConsoleVisibility() {
+    if (layout().consoleVisible) closeConsole();
+    else openConsole();
+  }
+
   function focusDockTab(panel: SidePanelId, zone: DockZone) {
     queueMicrotask(() => {
       const selector = zone === "bottom"
@@ -2552,7 +2608,7 @@ function App() {
 
 
 
-  const menuItems: Record<string, Array<{ label: string; shortcut?: string; action: () => void; disabled?: boolean }>> = {
+  const menuItems = createMemo<Record<string, MenuItem[]>>(() => ({
     File: [
       { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !componentDocument() },
       { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
@@ -2569,24 +2625,22 @@ function App() {
       { label: "Create Prefab from selected object", action: () => void createPrefabFromSelected(), disabled: !selectedObject() || scene()?.sceneType === "PREFAB" },
     ],
     View: [
-      { label: `${layout().hierarchyVisible ? "Hide" : "Show"} Hierarchy`, action: () => toggleSidePanel("Hierarchy") },
-      { label: `${layout().inspectorVisible ? "Hide" : "Show"} Inspector`, action: () => toggleSidePanel("Inspector") },
+      { label: "Hierarchy", checkable: "checkbox", checked: layout().hierarchyVisible, action: () => toggleSidePanel("Hierarchy") },
+      { label: "Inspector", checkable: "checkbox", checked: layout().inspectorVisible, action: () => toggleSidePanel("Inspector") },
+      { label: "Console", checkable: "checkbox", checked: layout().consoleVisible, action: toggleConsoleVisibility },
       { label: "Toggle light / dark theme", action: toggleTheme },
       { label: "Reset workspace layout", action: resetWorkbenchLayout },
     ],
     Window: [
-      { label: "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
-      { label: "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
-      { label: "Components", action: () => setLayout((current) => ({ ...current, bottomTab: "Components" })) },
-      { label: "Console", action: () => {
-        if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
-        else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
-      } },
+      { label: "Project", checkable: "radio", checked: layout().bottomTab === "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
+      { label: "Animation", checkable: "radio", checked: layout().bottomTab === "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
+      { label: "Components", checkable: "radio", checked: layout().bottomTab === "Components", action: () => setLayout((current) => ({ ...current, bottomTab: "Components" })) },
+      { label: "Console", checkable: compactWorkbench() || layout().consoleDocked ? "radio" : undefined, checked: layout().consoleVisible && (compactWorkbench() || layout().consoleDocked) && layout().bottomTab === "Console", action: openConsole },
     ],
     Help: [
       { label: "Editor Host architecture", action: () => log("info", "SolidJS Host · legacy Colibri remains available at /editor/") },
     ],
-  };
+  }));
 
   return (
     <div
@@ -2629,7 +2683,7 @@ function App() {
         </div>
 
         <div class="menu-bar" role="menubar" aria-label="Main menu">
-          <For each={Object.keys(menuItems)}>
+          <For each={Object.keys(menuItems())}>
             {(menu) => (
               <div class="menu-root">
                 <button
@@ -2644,18 +2698,23 @@ function App() {
                 </button>
                 <Show when={activeMenu() === menu}>
                   <div class="menu-popover" role="menu">
-                    <For each={menuItems[menu]}>
+                    <For each={menuItems()[menu]}>
                       {(item) => (
                         <button
                           class="menu-item"
-                          role="menuitem"
+                          role={item.checkable === "checkbox" ? "menuitemcheckbox" : item.checkable === "radio" ? "menuitemradio" : "menuitem"}
+                          aria-checked={item.checkable ? item.checked : undefined}
+                          classList={{ "menu-item-checkable": Boolean(item.checkable), checked: Boolean(item.checked) }}
                           disabled={item.disabled}
                           onClick={() => {
                             setActiveMenu("");
                             item.action();
                           }}
                         >
-                          <span>{item.label}</span>
+                          <span class="menu-item-check" aria-hidden="true">
+                            {item.checked ? (item.checkable === "radio" ? "●" : "✓") : ""}
+                          </span>
+                          <span class="menu-item-label">{item.label}</span>
                           <Show when={item.shortcut}><kbd>{item.shortcut}</kbd></Show>
                         </button>
                       )}
@@ -3422,7 +3481,10 @@ function App() {
       <section
         class="bottom-dock"
         data-testid="bottom-dock"
-        classList={{ "console-docked": compactWorkbench() || layout().consoleDocked }}
+        classList={{
+          "console-docked": compactWorkbench() || layout().consoleDocked,
+          "console-hidden": !layout().consoleVisible,
+        }}
       >
         <div class="bottom-upper-panel" data-dock-zone="bottom">
           <div
@@ -3457,7 +3519,7 @@ function App() {
               )}
             </For>
             <div class="dock-tabs-spacer" />
-            <button class="toolbar-icon-button tiny" aria-label="Hide bottom dock" title="Hide bottom workspace" onClick={() => setLayout((current) => ({ ...current, bottomHeight: 150 }))}>
+            <button class="toolbar-icon-button tiny" aria-label="Reduce bottom dock height" title="Reduce bottom workspace height" onClick={() => setLayout((current) => ({ ...current, bottomHeight: 150 }))}>
               <span>−</span>
             </button>
           </div>
@@ -3835,7 +3897,7 @@ function App() {
             </div>
           </Show>
 
-          <Show when={(compactWorkbench() || layout().consoleDocked) && bottomTab() === "Console"}>
+          <Show when={layout().consoleVisible && (compactWorkbench() || layout().consoleDocked) && bottomTab() === "Console"}>
             <ConsolePanel
               className="compact-console-panel"
               theme={theme()}
@@ -3843,6 +3905,7 @@ function App() {
               onLevelChange={setConsoleLevel}
               messages={visibleConsoleMessages()}
               onClear={() => setConsoleMessages([])}
+              onClose={closeConsole}
               {...(!compactWorkbench() && layout().consoleDocked ? { onUndock: undockConsole } : {})}
             />
           </Show>
@@ -3862,7 +3925,7 @@ function App() {
           />
         </div>
 
-        <Show when={!compactWorkbench() && !layout().consoleDocked}>
+        <Show when={!compactWorkbench() && !layout().consoleDocked && layout().consoleVisible}>
           <>
         <div
           class="console-splitter"
@@ -3885,6 +3948,7 @@ function App() {
           onLevelChange={setConsoleLevel}
           messages={visibleConsoleMessages()}
           onClear={() => setConsoleMessages([])}
+          onClose={closeConsole}
           onPointerDown={(event) => startDockPointerDrag(event, "Console", "header")}
         />
           </>
