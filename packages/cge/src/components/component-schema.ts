@@ -205,6 +205,18 @@ export function validateComponentTypeSchema(input: unknown): ValidationResult<Co
     : { valid: true, diagnostics, value: input as unknown as ComponentTypeSchemaV1 };
 }
 
+function isJsonObjectRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if ((prototype !== Object.prototype && prototype !== null) || Object.getOwnPropertySymbols(value).length > 0) {
+    return false;
+  }
+  return Object.keys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && "value" in descriptor;
+  });
+}
+
 function setJsonProperty(target: JsonObject, key: string, value: JsonValue): void {
   Object.defineProperty(target, key, {
     value,
@@ -219,7 +231,7 @@ export function validateComponentProperties(
   input: unknown,
   context: ComponentSchemaContext = {},
 ): ValidationResult<JsonObject> {
-  if (!isRecord(input) || !isJsonValue(input)) return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_VALUE", "Component properties must be a JSON-compatible object.")] };
+  if (!isJsonObjectRecord(input)) return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_VALUE", "Component properties must be a plain JSON object.")] };
   const diagnostics: CoreDiagnostic[] = [];
   const normalized: JsonObject = {};
 

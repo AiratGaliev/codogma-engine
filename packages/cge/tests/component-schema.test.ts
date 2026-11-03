@@ -5,6 +5,7 @@ import {
   serializeSceneDocument,
   parseSceneDocument,
   validateComponentProperties,
+  validateComponentPropertyValue,
   validateComponentTypeSchema,
   type ComponentTypeSchemaV1,
   type SceneDocumentV1,
