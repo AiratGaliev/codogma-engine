@@ -1204,6 +1204,10 @@ function App() {
       await openUserComponentsFile(path);
       return;
     }
+    if (normalized.endsWith(".ts") || normalized.endsWith(".tsx")) {
+      await openTypeScriptFile(path);
+      return;
+    }
     if (normalized.endsWith(".json")) {
       try {
         const content = await readProjectFile(path);
@@ -1313,9 +1317,15 @@ function App() {
   function updateAttachedComponentProperty(componentName: string, propertyName: string, value: unknown) {
     const current = scene();
     const selected = selectedObject();
-    if (!current || !selected) return;
+    const definition = componentRegistry().find((item) => item.definition.name === componentName)?.definition;
+    if (!current || !selected || !definition) return;
+    const validation = validateUserComponentPropertyValue(definition, propertyName, value);
+    if (!validation.valid) {
+      for (const diagnostic of validation.diagnostics) log("error", `${componentName}.${propertyName}: ${diagnostic.message}`);
+      return;
+    }
     try {
-      applySceneChange(updateSceneObject(current, selected.id, { [`${componentName}.${propertyName}`]: value }), selected.id);
+      applySceneChange(updateSceneObject(current, selected.id, { [`${componentName}.${propertyName}`]: validation.value }), selected.id);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -1475,15 +1485,48 @@ function App() {
 
 
   async function saveActiveDocument() {
+    if (activeViewport() === "Source" && scriptSourcePath()) return saveTypeScriptFile();
     if (layout().bottomTab === "Animation" && animationDocument()) return saveAnimationFile();
     if (layout().bottomTab === "Components" && componentDocument()) return saveUserComponentsFile();
     return saveScene();
+  }
+
+  function validateSceneUserComponents(document: SceneDocument): boolean {
+    const definitions = new Map(componentRegistry().map((entry) => [entry.definition.name, entry.definition]));
+    const errors: string[] = [];
+    for (const object of getSceneObjects(document)) {
+      const names = Array.isArray(object.source.components)
+        ? object.source.components.filter((name): name is string => typeof name === "string")
+        : [];
+      for (const name of names) {
+        const definition = definitions.get(name);
+        if (!definition) continue;
+        const result = validateUserComponentProperties(object.source, definition);
+        for (const diagnostic of result.diagnostics) {
+          if (diagnostic.severity === "error") {
+            errors.push(`${object.name} · ${name}.${diagnostic.propertyName ?? ""}: ${diagnostic.message}`);
+          } else if (diagnostic.severity === "warning") {
+            log("warning", `${object.name} · ${name}: ${diagnostic.message}`);
+          }
+        }
+      }
+    }
+    if (errors.length > 0) {
+      for (const message of errors) log("error", message);
+      return false;
+    }
+    return true;
   }
 
   async function saveScene(): Promise<boolean> {
     const current = scene();
     const path = scenePath();
     if (!current || !path || saving()) return false;
+
+    if (!validateSceneUserComponents(current)) {
+      setLoadError("One or more User Component values are invalid. Fix the Inspector diagnostics before saving.");
+      return false;
+    }
 
     setSaving(true);
     try {
