@@ -112,3 +112,67 @@ The checked-in legacy Scene/Prefab examples store component class names in an ar
 ## Future-version and migration purity checks
 
 The current v1 validators return `PROJECT_UNSUPPORTED_VERSION` with the exact `schemaVersion` path for future Project, Scene and Prefab documents. The parser does not reinterpret future schemas as v1 and never writes them. Project v0 migration clones the JSON tree before normalization/validation: it leaves the source object unchanged and the migrated result does not alias nested mutable values from the input.
+ 
+
+## Complete checked-in test project inventory — 27 legacy Scene/Prefab files
+
+The following file set was read from `tests/workspace/test-typescript/scenes/` on `dev` and copied verbatim into `packages/cge/tests/fixtures/legacy/`. The migration regression test iterates the complete list, rather than sampling only the nine original fixtures.
+
+| Legacy file | Observed format / capability represented |
+|---|---|
+| `AgentLevel.scene` | Scene; `displayList` + `plainObjects`; Image/Text/EditableTilemapLayer/EditableTilemap; `scope: METHOD` |
+| `CoinPrefab.scene` | Prefab; exposed numeric Prefab property; `meta.version: 5` |
+| `CoinRush.scene` | Scene; Image/Text and ordinary Transform/texture fields |
+| `DinoPrefab.scene` | Prefab; User Component names and namespaced properties; exposed bool/option properties |
+| `DoubleDinoPrefab.scene` | Prefab; Container with multiple nested Prefab instances; Prefab-level `lists` and exposed properties |
+| `Level.scene` | Scene; User Components, Prefab instances, `unlock`, `scope: CLASS`, namespaced properties |
+| `MyGame.scene` | Scene; Image/Text |
+| `OfficialE2E.scene` | Scene; Image/Text/Glow/Collider, Arcade body properties, nested object `list`, scene-level `lists` |
+| `TestListFieldScene.scene` | Scene; scene-level `lists` |
+| `TestOneObjectScene.scene` | Scene; `scope: PUBLIC` |
+| `TestTileSpriteSizeInInspector.scene` | Scene; TileSprite/Rectangle; width/height/isFilled |
+| `TextWordWrapScene.scene` | Scene; Text origin, font and word-wrap properties |
+| `box2d-acceptance.scene` | Scene; Box2D body enabled/type/shape/friction/restitution/density properties |
+| `componentsAwake/TestComponentsAwakeEvent.scene` | Scene; two legacy User Component names and Prefab instance |
+| `fx-acceptance.scene` | Scene; Circle/Bloom/Shine/Gradient FX objects and Container hierarchy |
+| `issue147/Issue147.scene` | Scene; scene-level `lists` |
+| `issue154/BaseContainerPrefab.scene` | Prefab; Container and nested children |
+| `issue154/DerivedContainer1Prefab.scene` | Prefab; inherited Prefab link, `unlock`, `nestedPrefabs` override data |
+| `issue154/Issue154.scene` | Scene; Prefab instance with nested override data |
+| `nestedPrefabInContanerIssue/AnotherPrefabPrefab.scene` | Prefab; nested Container/Text objects and `scope: NESTED_PREFAB` |
+| `nestedPrefabInContanerIssue/NestedInsideContainerPrefabInstanceScene.scene` | Scene; nested Prefab-instance structure |
+| `nestedPrefabInContanerIssue/NestedPrefabInContainerPrefab.scene` | Prefab; Container hierarchy with nested Prefab instances |
+| `originMigration/OriginMigration.scene` | Scene; Prefab instance with origin override/unlock metadata |
+| `originMigration/TextWithOriginPrefab.scene` | Prefab; Text origin, line spacing, stroke and padding properties |
+| `prefabAwake/PrefabAwakeTest.scene` | Scene; multiple Prefab instances exercising Awake handling |
+| `prefabAwake/WithAwakeEventPrefab.scene` | Prefab; Text and `settings.generateAwakeHandler` |
+| `prefabAwake/WithoutAwakeEventPrefab.scene` | Prefab; Text padding and `settings.generateAwakeEvent` |
+
+## Additional legacy format fixtures
+
+- `components/Behaviors.components`: `PushOnClick` and `Tint`, base class, Phaser GameObject type, property descriptors/defaults/options, `customDefinition`, `generateAwakeEvent`, metadata and `outputLang`.
+- `scenes/componentsAwake/AwakeTest.components`: `ComponentWithAwake` / `ComponentWithoutAwake`, GameObject type and `generateAwakeEvent`.
+- `assets/asset-pack.json`: Asset Pack metadata v2 with file keys, URLs and asset kinds. The migration test proves only explicit `dino → stable Asset ID` conversion; key/URL is never used as Project identity.
+
+The checked Scene/Prefab fixtures do not share one uniform version marker: some contain `meta.version` values 2, 3 or 5, while many omit it. Neither the migrator nor the compatibility test derives a version from the filename or silently treats `meta.version` as Project Model `schemaVersion`.
+
+## Observed legacy field families and current migration disposition
+
+| Field family | Observed fields / examples | Current disposition |
+|---|---|---|
+| Renderer / GameObject kind | `type: Image/Text/Container/TileSprite/Rectangle/EditableTilemap/EditableTilemapLayer/Glow/Circle/Bloom/Shine/Gradient/Collider` | Preserved under each Node's `legacySource` with `PROJECT_LEGACY_FIELD_PRESERVED`; not yet a v1 renderer component contract |
+| Compiler / editor scope | `scope: CLASS/METHOD/PUBLIC/NESTED_PREFAB` | Preserved with warning; never used as Node name or component type identity |
+| FX | `preFX`, `thickness`, `feather`, `threshold`, `blurRadius`, `blurSteps`, `blurQuality`, `blendAmount`, `radius`, `direction`, `duration`, `reveal`, `yoyo`, gradient coordinates/colors | Preserved with warning; no automatic FX schema conversion |
+| Arcade / Collider | `Arcade.active`, `body.physicsType`, `body.geometry`, `body.velocity.x`, `body.collideWorldBounds`, `object1`, `object2`, `overlapOnly` | Preserved with warning; not represented as runtime Physics/Collider components |
+| Box2D | `Box2DBodyComponent.active`, `box2dBody.enabled/bodyType/shapeType/friction/restitution/density`, `angle` | Preserved with warning; physics schema/adapter migration is not claimed |
+| Tilemap / TileSprite | `tilemapId`, `layerName`, `data`, `width`, `height`, `isFilled` | Preserved with warning; no Tilemap asset/importer contract migration |
+| Text | `fontFamily`, `fontSize`, `wordWrapWidth`, `wordWrapUseAdvanced`, `lineSpacing`, `stroke`, `strokeThickness`, `paddingLeft/Top/Right/Bottom`, `backgroundColor` | Preserved with warning; only common Transform is normalized |
+| User Components | `components[]`, `ComponentName.property`, `.components` manifest declarations and `generateAwakeEvent` | Converted to Core instances only with explicit stable `typeId`, schema version and independent stable instance ID mappings. Without them, original declarations/properties remain in `legacySource`; `.components` definitions remain source metadata |
+| Scene / Prefab lists | document `lists[]`, Node `list[]` | Node `list[]` maps to ordered `children[]`; document-level list/reference semantics remain in extension payload with warning |
+| Prefab inheritance/overrides | `prefabId`, `unlock[]`, `nestedPrefabs[]`, `prefabProperties[]` | Stable prefab link and explicitly supplied root/property mappings may be converted; nested override propagation, unlock policy and exposed-property schema remain compatibility payload (COD-8) |
+
+### What the 27-file test does and does not prove
+
+The automated test migrates every listed legacy Scene or one-root Prefab fixture using the public converter. It asserts document identity, top-level root count, the exact original document payload, each Node's exact legacy source payload, recursive `list[]`/children cardinality and Prefab exposed-property payload. It also confirms that all legacy `.components` definitions remain inspectable with their Awake metadata.
+
+This proves loss-avoidance for the checked-in test-project JSON payload and a conservative structural conversion. It does **not** prove semantic conversion or runtime parity for renderers, Text, FX, Arcade/Matter/Box2D, Tilemap/Tiled, Collider, Awake callbacks, importer/reimport, Prefab nested override propagation, or actual user projects. Those fields are intentionally reported as preserved-only until their owning versioned contracts and runtime/editor integrations exist. COD-17 therefore remains an active inventory task for importer/reimport and file/API boundaries; COD-25 remains open for the semantic mappings and broader project compatibility gates.

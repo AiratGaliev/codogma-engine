@@ -96,3 +96,8 @@ Legacy scene component lists do not carry persisted instance IDs. The migration 
 ### Future schema version policy
 
 Project, Scene and Prefab validators reject unsupported schema versions with the blocking `PROJECT_UNSUPPORTED_VERSION` diagnostic at `schemaVersion`. They do not attempt to parse future documents as v1 or serialize them. Project migration operates on a deep JSON clone, does not mutate the caller's input and does not share nested mutable values with the returned migrated document.
+
+
+## Legacy compatibility test scope
+
+The package test fixtures include all 27 `.scene` files checked into `tests/workspace/test-typescript/scenes/`, both `.components` manifests and the v2 Asset Pack fixture. The migration acceptance test checks exact source payload retention, stable IDs, ordered root collections, recursive Container children and Prefab exposed-property payload for every checked-in Scene/Prefab file. This is preservation/structural conversion evidence, not proof of runtime equivalence for legacy Renderer, FX, Physics, Tilemap, Collider, Text, Awake or nested Prefab override semantics; those values remain preserved with diagnostics.
