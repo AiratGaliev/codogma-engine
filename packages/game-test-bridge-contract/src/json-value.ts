@@ -51,6 +51,7 @@ export function validateJsonValue(
 ): JsonValueValidationResult {
   let visitedNodes = 0;
   const activeObjects = new WeakSet<object>();
+  const encoder = new TextEncoder();
 
   const visit = (value: unknown, path: string, depth: number): ValidationIssue | null => {
     visitedNodes += 1;
@@ -73,7 +74,7 @@ export function validateJsonValue(
     if (value === null || typeof value === "boolean") return null;
 
     if (typeof value === "string") {
-      if (new TextEncoder().encode(value).byteLength > limits.maxStringBytes) {
+      if (encoder.encode(value).byteLength > limits.maxStringBytes) {
         return {
           code: "JSON_STRING_LIMIT_EXCEEDED",
           path,
@@ -191,7 +192,7 @@ export function validateJsonValue(
       }
 
       for (const name of names) {
-        if (new TextEncoder().encode(name).byteLength > 256) {
+        if (encoder.encode(name).byteLength > 256) {
           return {
             code: "JSON_KEY_LIMIT_EXCEEDED",
             path: pointer(path, name),
@@ -227,7 +228,7 @@ export function validateJsonValue(
       return issue("JSON_VALUE_NOT_SERIALIZABLE", "", "The value cannot be serialized as JSON.");
     }
 
-    const byteLength = new TextEncoder().encode(serialized).byteLength;
+    const byteLength = encoder.encode(serialized).byteLength;
     if (byteLength > limits.maxBytes) {
       return issue("JSON_PAYLOAD_TOO_LARGE", "", "The serialized JSON value exceeds the configured byte limit.");
     }
