@@ -292,6 +292,8 @@ test("Main menu and Add Object menu dismiss on pointer interaction outside", asy
 
   await page.getByRole("menuitem", { name: "View" }).click();
   await expect(page.locator(".menu-popover")).toBeVisible();
+  await page.getByRole("menuitem", { name: "Window" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Project" })).toBeVisible();
   await page.getByRole("tab", { name: "Scene" }).click();
   await expect(page.locator(".menu-popover")).toHaveCount(0);
 
@@ -323,6 +325,20 @@ test("Bottom workspace tabs close independently and the dock collapses when empt
   await projectToggle.click();
   await expect(bottomTabs.getByRole("tab", { name: "Project" })).toBeVisible();
   await expect(page.getByTestId("bottom-dock")).toBeVisible();
+  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("middle-click closes a Bottom tab and activates a visible fallback", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  const animationTab = bottomTabs.getByRole("tab", { name: "Animation" });
+
+  await animationTab.click();
+  await expect(animationTab).toHaveAttribute("aria-selected", "true");
+  await animationTab.click({ button: "middle" });
+
+  await expect(bottomTabs.getByRole("tab", { name: "Animation" })).toHaveCount(0);
   await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
 });
 
