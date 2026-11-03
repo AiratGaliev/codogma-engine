@@ -139,7 +139,10 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "status": { "const": "unavailable" } }, "required": ["status"] },
+          "if": {
+            "properties": { "status": { "enum": ["partial", "unavailable"] } },
+            "required": ["status"]
+          },
           "then": { "required": ["reason"] },
           "else": { "not": { "required": ["reason"] } }
         }

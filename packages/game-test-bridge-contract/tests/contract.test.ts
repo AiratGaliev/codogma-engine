@@ -19,6 +19,7 @@ import {
   isKnownEventType,
   negotiateCapabilities,
   negotiateContractVersions,
+  validateCapabilityDescriptor,
   validateEventPage,
   validateEventReadRequest,
   validateGameTestEvent,
@@ -140,15 +141,34 @@ test("accepts unknown event types as opaque JSON for forward compatibility", () 
   assert.equal(isEventTypeAvailable("org.example.future-event", new Set()), true);
 });
 
-test("requires capability negotiation for collision/contact event families", () => {
-  assert.equal(isEventTypeAvailable("physics.contact", new Set()), false);
-  assert.equal(isEventTypeAvailable("physics.contact", new Set(["events.physics.contact"])), true);
+test("validates capability descriptors and gates optional event families", () => {
+  const unavailable = validateCapabilityDescriptor(unavailableCapabilityFixture);
+  assert.equal(unavailable.success, true);
+  if (!unavailable.success) return;
+
+  assert.equal(isEventTypeAvailable("scene.started", []), true);
+  assert.equal(isEventTypeAvailable("physics.contact", [unavailable.value]), false);
+  assert.equal(isEventTypeAvailable("org.example.future-event", [unavailable.value]), false);
+
+  const available: CapabilityDescriptor = {
+    id: "events.physics.contact",
+    version: "1.0.0",
+    description: "Physics contact events are available.",
+    scope: "runtime",
+    status: "available",
+    eventTypes: ["physics.contact"],
+  };
+  const validatedAvailable = validateCapabilityDescriptor(available);
+  assert.equal(validatedAvailable.success, true);
+  assert.equal(isEventTypeAvailable("physics.contact", [available]), true);
 });
 
 test("reports unavailable capabilities with their structured reason", () => {
-  const capability = unavailableCapabilityFixture as CapabilityDescriptor;
-  const result = negotiateCapabilities(["events.physics.contact"], [capability]);
+  const capability = validateCapabilityDescriptor(unavailableCapabilityFixture);
+  assert.equal(capability.success, true);
+  if (!capability.success) return;
 
+  const result = negotiateCapabilities(["events.physics.contact"], [capability.value]);
   assert.equal(result.accepted, false);
   assert.equal(result.unsupported[0]?.reason.code, "RUNTIME_LIMITATION");
 });

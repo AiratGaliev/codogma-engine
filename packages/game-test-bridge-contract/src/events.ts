@@ -30,6 +30,8 @@ export function isEventTypeAvailable(
   eventType: string,
   declaredCapabilities: readonly CapabilityDescriptor[],
 ): boolean {
+  if (!isKnownEventType(eventType)) return false;
+
   const requiredCapability = EVENT_CAPABILITY_REQUIREMENTS[eventType];
   if (requiredCapability === undefined) return true;
 
