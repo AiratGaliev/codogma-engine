@@ -75,34 +75,54 @@ import {
   type FxObject,
   type FxType,
 } from "./domain/fx-model.ts";
+import {
+  createDefaultWorkspaceLayout,
+  getMaximumConsoleHeight,
+  getSidePanelHomeZone,
+  getVisibleBottomTabs,
+  getVisibleSidePanels,
+  moveDockablePanel,
+  reorderDockTab as reorderWorkspaceDockTab,
+  restoreWorkspaceLayoutContent,
+  selectSidePanel,
+  serializeWorkspaceLayout,
+  setBottomPanelVisibility,
+  setConsolePanelVisibility,
+  setSidePanelVisibility,
+  type BottomTab,
+  type BottomWorkspacePanel,
+  type DockZone,
+  type SidePanelId,
+  type WorkspaceLayout,
+} from "./domain/workspace-layout.ts";
 import FxInspector from "./components/FxInspector";
 import PhaserSceneViewport from "./components/PhaserSceneViewport";
 
 type Theme = "dark" | "light";
 type ViewportTab = "Scene" | "Game";
-type SidePanelId = "Hierarchy" | "Inspector";
-type BottomTab = "Project" | "Animation" | "Components" | "Console" | SidePanelId;
 type FocusContext = "global" | "scene" | "hierarchy" | "inspector" | "project" | "animation" | "components" | "console";
 type ConsoleLevel = "info" | "success" | "warning" | "error";
+
+type DockDropTarget =
+  | { zone: DockZone; kind: "group" }
+  | { zone: DockZone; kind: "tab"; target: BottomTab; insertion: "before" | "after" };
+
+interface DockPointerDrag {
+  panel: BottomTab;
+  pointerId: number;
+  pointerType: string;
+  startX: number;
+  startY: number;
+  active: boolean;
+  source: "tab" | "header";
+  captureElement: HTMLElement;
+}
 
 interface ConsoleMessage {
   id: number;
   level: ConsoleLevel;
   text: string;
   time: string;
-}
-
-interface LayoutState {
-  leftWidth: number;
-  rightWidth: number;
-  bottomHeight: number;
-  consoleHeight: number;
-  hierarchyVisible: boolean;
-  inspectorVisible: boolean;
-  bottomTab: BottomTab;
-  bottomTabOrder: BottomTab[];
-  dockedPanels: SidePanelId[];
-  consoleDocked: boolean;
 }
 
 interface Command {
@@ -112,34 +132,13 @@ interface Command {
   run: () => void;
 }
 
-const DEFAULT_LAYOUT: LayoutState = {
-  leftWidth: 228,
-  rightWidth: 280,
-  bottomHeight: 286,
-  consoleHeight: 96,
-  hierarchyVisible: true,
-  inspectorVisible: true,
-  bottomTab: "Project",
-  bottomTabOrder: ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"],
-  dockedPanels: [],
-  consoleDocked: false,
-};
-
-function defaultLayout(compact: boolean): LayoutState {
-  return compact
-    ? { ...DEFAULT_LAYOUT, leftWidth: 194, rightWidth: 250, bottomHeight: 207, consoleHeight: 60 }
-    : { ...DEFAULT_LAYOUT };
-}
-
-function normalizeBottomTabOrder(value: unknown): BottomTab[] {
-  const allowed: BottomTab[] = ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"];
-  const supplied = Array.isArray(value) ? value.filter((item): item is BottomTab => allowed.includes(item)) : [];
-  return [...new Set(supplied), ...allowed.filter((item) => !supplied.includes(item))];
-}
-
-function clampLayoutValue(value: unknown, fallback: number, min: number, max: number): number {
-  const parsed = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
-  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+interface MenuItem {
+  label: string;
+  shortcut?: string;
+  action: () => void;
+  disabled?: boolean;
+  checkable?: "checkbox" | "radio";
+  checked?: boolean;
 }
 
 function iconPath(theme: Theme, name: string): string {
@@ -257,11 +256,12 @@ function PanelHeader(props: {
   icon: string;
   theme: Theme;
   trailing?: string;
-  onDragStart?: (event: DragEvent) => void;
+  onPointerDown?: (event: PointerEvent & { currentTarget: HTMLElement }) => void;
   onUndock?: () => void;
+  onClose?: () => void;
 }) {
   return (
-    <div class="panel-header" draggable={Boolean(props.onDragStart)} onDragStart={props.onDragStart} classList={{ "panel-header-draggable": Boolean(props.onDragStart) }}>
+    <div class="panel-header" onPointerDown={(event) => props.onPointerDown?.(event)} classList={{ "panel-header-draggable": Boolean(props.onPointerDown) }}>
       <Icon theme={props.theme} name={props.icon} size={14} />
       <span>{props.title}</span>
       <Show when={props.trailing}>
@@ -269,6 +269,9 @@ function PanelHeader(props: {
       </Show>
       <Show when={props.onUndock}>
         <button class="panel-undock-button" aria-label={`Undock ${props.title}`} title={`Move ${props.title} back to its default panel`} onClick={(event) => { event.stopPropagation(); props.onUndock?.(); }}>Undock</button>
+      </Show>
+      <Show when={props.onClose}>
+        <button class="panel-close-button" aria-label={`Close ${props.title}`} title={`Close ${props.title} panel`} onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}>×</button>
       </Show>
     </div>
   );
@@ -281,7 +284,8 @@ function ConsolePanel(props: {
   onLevelChange: (level: string) => void;
   messages: ConsoleMessage[];
   onClear: () => void;
-  onDragStart?: (event: DragEvent) => void;
+  onClose: () => void;
+  onPointerDown?: (event: PointerEvent & { currentTarget: HTMLElement }) => void;
   onUndock?: () => void;
 }) {
 
@@ -289,9 +293,8 @@ function ConsolePanel(props: {
     <section class="console-panel" classList={{ [props.className]: true }} data-testid="console-panel" data-focus-context="console">
       <div
         class="console-header"
-        draggable={Boolean(props.onDragStart)}
-        onDragStart={props.onDragStart}
-        classList={{ "console-header-draggable": Boolean(props.onDragStart) }}
+        onPointerDown={(event) => props.onPointerDown?.(event)}
+        classList={{ "console-header-draggable": Boolean(props.onPointerDown) }}
       >
         <div class="console-title"><Icon theme={props.theme} name="script" size={13} /> Console</div>
         <select aria-label="Console message filter" value={props.level} onChange={(event) => props.onLevelChange(event.currentTarget.value)}>
@@ -310,6 +313,14 @@ function ConsolePanel(props: {
         <span class="console-count">{props.messages.length} messages</span>
         <button class="toolbar-icon-button tiny" aria-label="Clear console" title="Clear console" onClick={props.onClear}>
           <Icon theme={props.theme} name="remove" size={12} />
+        </button>
+        <button
+          class="panel-close-button console-close-button"
+          aria-label="Close Console"
+          title="Close Console panel"
+          onClick={(event) => { event.stopPropagation(); props.onClose(); }}
+        >
+          ×
         </button>
       </div>
       <div class="console-messages" role="log" aria-label="Editor console" aria-live="polite">
@@ -372,48 +383,23 @@ function App() {
   const [saving, setSaving] = createSignal(false);
   const [loadError, setLoadError] = createSignal("");
   const [activeViewport, setActiveViewport] = createSignal<ViewportTab>("Scene");
-  const bottomTab = () => layout().bottomTab;
   const [compactWorkbench, setCompactWorkbench] = createSignal(window.innerWidth <= 1360);
-  const [layout, setLayout] = createSignal<LayoutState>((() => {
+  const [narrowWorkbench, setNarrowWorkbench] = createSignal(window.innerWidth <= 780);
+  const [viewportWidth, setViewportWidth] = createSignal(window.innerWidth);
+  const [viewportHeight, setViewportHeight] = createSignal(window.innerHeight);
+  const [layout, setLayout] = createSignal<WorkspaceLayout>((() => {
     const compact = window.innerWidth <= 1360;
-    const defaults = defaultLayout(compact);
-    const stored = window.localStorage.getItem("codogma.editor.layout");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Partial<LayoutState>;
-        const savedLeft = compact && parsed.leftWidth === DEFAULT_LAYOUT.leftWidth ? defaults.leftWidth : parsed.leftWidth;
-        const savedRight = compact && parsed.rightWidth === DEFAULT_LAYOUT.rightWidth ? defaults.rightWidth : parsed.rightWidth;
-        const savedBottom = compact && parsed.bottomHeight === DEFAULT_LAYOUT.bottomHeight ? defaults.bottomHeight : parsed.bottomHeight;
-        const dockedPanels = Array.isArray(parsed.dockedPanels)
-          ? parsed.dockedPanels.filter((panel): panel is SidePanelId => panel === "Hierarchy" || panel === "Inspector")
-          : [];
-        const bottomTabOrder = normalizeBottomTabOrder(parsed.bottomTabOrder);
-        const requestedBottomTab = parsed.bottomTab;
-        const validBottomTab =
-          requestedBottomTab === "Project" ||
-          requestedBottomTab === "Animation" ||
-          requestedBottomTab === "Components" ||
-          (requestedBottomTab === "Console" && (compact || parsed.consoleDocked === true)) ||
-          (requestedBottomTab === "Hierarchy" && dockedPanels.includes("Hierarchy")) ||
-          (requestedBottomTab === "Inspector" && dockedPanels.includes("Inspector"));
-        return {
-          leftWidth: clampLayoutValue(savedLeft, defaults.leftWidth, 170, 360),
-          rightWidth: clampLayoutValue(savedRight, defaults.rightWidth, 210, 420),
-          bottomHeight: clampLayoutValue(savedBottom, defaults.bottomHeight, 150, 420),
-          consoleHeight: clampLayoutValue(parsed.consoleHeight, defaults.consoleHeight, 56, 180),
-          hierarchyVisible: typeof parsed.hierarchyVisible === "boolean" ? parsed.hierarchyVisible : defaults.hierarchyVisible,
-          inspectorVisible: typeof parsed.inspectorVisible === "boolean" ? parsed.inspectorVisible : defaults.inspectorVisible,
-          consoleDocked: parsed.consoleDocked === true,
-          dockedPanels,
-          bottomTabOrder,
-          bottomTab: validBottomTab ? requestedBottomTab as BottomTab : "Project",
-        };
-      } catch {
-        window.localStorage.removeItem("codogma.editor.layout");
-      }
+    try {
+      return restoreWorkspaceLayoutContent(
+        window.localStorage.getItem("codogma.editor.layout"),
+        compact,
+        window.innerWidth <= 780,
+      );
+    } catch {
+      return createDefaultWorkspaceLayout(compact);
     }
-    return defaults;
   })());
+  const bottomTab = () => layout().bottomTab;
   const [hierarchySearch, setHierarchySearch] = createSignal("");
   const [projectSearch, setProjectSearch] = createSignal("");
   const [selectedProjectPath, setSelectedProjectPath] = createSignal("");
@@ -426,7 +412,8 @@ function App() {
   const [gameLoaded, setGameLoaded] = createSignal(false);
   const [consoleLevel, setConsoleLevel] = createSignal("all");
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
-  const [dockTargetActive, setDockTargetActive] = createSignal(false);
+  const [dockDropTarget, setDockDropTarget] = createSignal<DockDropTarget | null>(null);
+  const [dockDragPosition, setDockDragPosition] = createSignal({ x: 0, y: 0 });
   const [draggedDockPanel, setDraggedDockPanel] = createSignal<BottomTab | null>(null);
   const [hiddenObjects, setHiddenObjects] = createSignal(new Set<string>());
   const [lockedObjects, setLockedObjects] = createSignal(new Set<string>());
@@ -439,19 +426,20 @@ function App() {
   let previousPaletteFocus: HTMLElement | null = null;
   let hierarchyPanelElement: HTMLElement | undefined;
   let inspectorPanelElement: HTMLElement | undefined;
-  let hierarchyHomeSlot: HTMLDivElement | undefined;
-  let inspectorHomeSlot: HTMLDivElement | undefined;
+  let leftDockedContent: HTMLDivElement | undefined;
+  let rightDockedContent: HTMLDivElement | undefined;
   let bottomDockedContent: HTMLDivElement | undefined;
   let sceneCanvas: HTMLCanvasElement | null = null;
   let disposeEditorMcpBridge: (() => void) | undefined;
   let animationPlaybackRaf = 0;
   let animationPlaybackLastTimestamp = 0;
   let animationPlaybackElapsed = 0;
-  let bottomTabPointerDrag: { panel: BottomTab; pointerId: number; startX: number; startY: number; active: boolean } | undefined;
+  let dockPointerDrag: DockPointerDrag | undefined;
   let suppressDockTabClick = false;
   let resizeState:
     | {
         kind: "left" | "right" | "bottom" | "console";
+        pointerId: number;
         startX: number;
         startY: number;
         initialValue: number;
@@ -535,11 +523,15 @@ function App() {
     );
   });
 
-  const visibleBottomTabs = createMemo(() => layout().bottomTabOrder.filter((tab) => {
-    if (tab === "Hierarchy" || tab === "Inspector") return layout().dockedPanels.includes(tab);
-    if (tab === "Console") return compactWorkbench() || layout().consoleDocked;
-    return true;
-  }));
+  const visibleBottomTabs = createMemo(() =>
+    getVisibleBottomTabs(layout(), compactWorkbench(), narrowWorkbench()),
+  );
+  const leftDockPanels = createMemo(() =>
+    narrowWorkbench() ? [] : getVisibleSidePanels(layout(), "left"),
+  );
+  const rightDockPanels = createMemo(() =>
+    narrowWorkbench() ? [] : getVisibleSidePanels(layout(), "right"),
+  );
 
   const visibleConsoleMessages = createMemo(() => {
     const level = consoleLevel();
@@ -595,17 +587,17 @@ function App() {
     {
       id: "project",
       title: "Show Project panel",
-      run: () => setLayout((current) => ({ ...current, bottomTab: "Project" })),
+      run: () => openBottomPanel("Project"),
     },
     {
       id: "animation",
       title: "Show Animation workspace",
-      run: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })),
+      run: () => openBottomPanel("Animation"),
     },
     {
       id: "components",
       title: "Show User Components",
-      run: () => setLayout((current) => ({ ...current, bottomTab: "Components" })),
+      run: () => openBottomPanel("Components"),
     },
     {
       id: "tool-select",
@@ -645,11 +637,8 @@ function App() {
     },
     {
       id: "console",
-      title: "Show Console workspace",
-      run: () => {
-        if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
-        else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
-      },
+      title: "Open Console",
+      run: openConsole,
     },
   ]);
 
@@ -691,7 +680,17 @@ function App() {
 
   createEffect(() => {
     const current = layout();
-    window.localStorage.setItem("codogma.editor.layout", JSON.stringify(current));
+    try {
+      window.localStorage.setItem(
+        "codogma.editor.layout",
+        serializeWorkspaceLayout(current, compactWorkbench(), narrowWorkbench()),
+      );
+    } catch (error) {
+      log(
+        "warning",
+        `Workspace layout could not be saved: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   });
 
   let sceneLoadSequence = 0;
@@ -1467,210 +1466,686 @@ function App() {
     log("info", `Removed ${selected.name}`);
   }
 
+  function getMaximumSidePanelWidth(kind: "left" | "right"): number {
+    const compactMaximum = kind === "left" ? 194 : 250;
+    const wideMaximum = kind === "left" ? 360 : 420;
+    // Keep the established 781–920 px compact widths, then release the
+    // constraint gradually until both wide panels fit alongside a 320 px Scene.
+    const progress = Math.min(1, Math.max(0, (viewportWidth() - 920) / 188));
+    return Math.round(compactMaximum + (wideMaximum - compactMaximum) * progress);
+  }
+
+  function getDisplayedSidePanelWidth(
+    kind: "left" | "right",
+    current: WorkspaceLayout = layout(),
+  ): number {
+    const requestedWidth = kind === "left" ? current.leftWidth : current.rightWidth;
+    return Math.min(requestedWidth, getMaximumSidePanelWidth(kind));
+  }
+
+  function getMinimumBottomHeight(): number {
+    const headerHeight = compactWorkbench() ? 88 : 95;
+    // Below the normal workspace minimum, allow Bottom to shrink only as far
+    // as its tabs and the minimum detached Console can physically fit.
+    const availableHeight =
+      viewportHeight() - headerHeight - 72 - 4 - 30;
+    return Math.max(89, Math.min(150, availableHeight));
+  }
+
+  function getMinimumCenterHeight(): number {
+    const headerHeight = compactWorkbench() ? 88 : 95;
+    const preferredMinimum = narrowWorkbench() ? 260 : 220;
+    const availableHeight =
+      viewportHeight() - headerHeight - getMinimumBottomHeight() - 4 - 30;
+    return Math.max(72, Math.min(preferredMinimum, availableHeight));
+  }
+
+  function getMaximumBottomHeight(): number {
+    const headerHeight = compactWorkbench() ? 88 : 95;
+    return Math.max(
+      getMinimumBottomHeight(),
+      Math.min(
+        420,
+        viewportHeight() - headerHeight - getMinimumCenterHeight() - 4 - 30,
+      ),
+    );
+  }
+
+  function getDisplayedBottomHeight(current: WorkspaceLayout = layout()): number {
+    return Math.min(current.bottomHeight, getMaximumBottomHeight());
+  }
+
+  function getDisplayedConsoleHeight(current: WorkspaceLayout = layout()): number {
+    return Math.min(
+      current.consoleHeight,
+      getMaximumConsoleHeight(getDisplayedBottomHeight(current)),
+    );
+  }
+
   function startResize(
     kind: "left" | "right" | "bottom" | "console",
     event: PointerEvent & { currentTarget: HTMLDivElement },
   ) {
+    if (resizeState) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const current = layout();
     resizeState = {
       kind,
+      pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       initialValue:
         kind === "left"
-          ? current.leftWidth
+          ? getDisplayedSidePanelWidth("left", current)
           : kind === "right"
-            ? current.rightWidth
+            ? getDisplayedSidePanelWidth("right", current)
             : kind === "bottom"
-              ? current.bottomHeight
-              : current.consoleHeight,
+              ? getDisplayedBottomHeight(current)
+              : getDisplayedConsoleHeight(current),
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+  function handleSplitterKeyDown(
+    kind: "left" | "right" | "bottom" | "console",
+    event: KeyboardEvent,
+  ) {
+    const step = event.shiftKey ? 48 : 16;
+    const key = event.key;
+    let direction = 0;
+    if (key === "Home" || key === "End") {
+      direction = key === "Home" ? -1 : 1;
+    } else if (kind === "left" && key === "ArrowRight") direction = 1;
+    else if (kind === "left" && key === "ArrowLeft") direction = -1;
+    else if (kind === "right" && key === "ArrowLeft") direction = 1;
+    else if (kind === "right" && key === "ArrowRight") direction = -1;
+    else if ((kind === "bottom" || kind === "console") && key === "ArrowUp") direction = 1;
+    else if ((kind === "bottom" || kind === "console") && key === "ArrowDown") direction = -1;
+    else return;
+
+    event.preventDefault();
+    setLayout((current) => {
+      const keyName =
+        kind === "left" ? "leftWidth" :
+        kind === "right" ? "rightWidth" :
+        kind === "bottom" ? "bottomHeight" : "consoleHeight";
+      const customizedKey =
+        kind === "left" ? "leftWidthCustomized" :
+        kind === "right" ? "rightWidthCustomized" :
+        kind === "bottom" ? "bottomHeightCustomized" : "consoleHeightCustomized";
+      const minimum =
+        kind === "left" ? 170 :
+        kind === "right" ? 210 :
+        kind === "bottom" ? getMinimumBottomHeight() : 56;
+      const maximum =
+        kind === "left" || kind === "right"
+          ? getMaximumSidePanelWidth(kind)
+          : kind === "bottom"
+            ? getMaximumBottomHeight()
+            : getMaximumConsoleHeight(getDisplayedBottomHeight(current));
+      const value =
+        kind === "left" || kind === "right"
+          ? getDisplayedSidePanelWidth(kind, current)
+          : kind === "bottom"
+            ? getDisplayedBottomHeight(current)
+            : getDisplayedConsoleHeight(current);
+      const next = key === "Home"
+        ? minimum
+        : key === "End"
+          ? maximum
+          : Math.min(maximum, Math.max(minimum, value + direction * step));
+      // A no-op at a responsive limit must not overwrite the persisted
+      // preference that is temporarily larger than the current viewport.
+      if (next === value) return current;
+      return { ...current, [keyName]: next, [customizedKey]: true };
+    });
+  }
+
   function moveResize(event: PointerEvent) {
-    if (!resizeState || (event.buttons !== 1 && event.pointerType !== "touch")) return;
+    if (
+      !resizeState ||
+      resizeState.pointerId !== event.pointerId ||
+      (event.buttons !== 1 && event.pointerType !== "touch")
+    ) return;
     const { kind, startX, startY, initialValue } = resizeState;
     if (kind === "left") {
-      setLayout((current) => ({
-        ...current,
-        leftWidth: Math.min(360, Math.max(170, initialValue + event.clientX - startX)),
-      }));
+      setLayout((current) => {
+        const leftWidth = Math.min(
+          getMaximumSidePanelWidth("left"),
+          Math.max(170, initialValue + event.clientX - startX),
+        );
+        if (leftWidth === getDisplayedSidePanelWidth("left", current)) return current;
+        return { ...current, leftWidth, leftWidthCustomized: true };
+      });
     } else if (kind === "right") {
-      setLayout((current) => ({
-        ...current,
-        rightWidth: Math.min(420, Math.max(210, initialValue + startX - event.clientX)),
-      }));
+      setLayout((current) => {
+        const rightWidth = Math.min(
+          getMaximumSidePanelWidth("right"),
+          Math.max(210, initialValue + startX - event.clientX),
+        );
+        if (rightWidth === getDisplayedSidePanelWidth("right", current)) return current;
+        return { ...current, rightWidth, rightWidthCustomized: true };
+      });
     } else if (kind === "bottom") {
-      setLayout((current) => ({
-        ...current,
-        bottomHeight: Math.min(420, Math.max(150, initialValue + startY - event.clientY)),
-      }));
+      setLayout((current) => {
+        const bottomHeight = Math.min(
+          getMaximumBottomHeight(),
+          Math.max(getMinimumBottomHeight(), initialValue + startY - event.clientY),
+        );
+        if (bottomHeight === getDisplayedBottomHeight(current)) return current;
+        return { ...current, bottomHeight, bottomHeightCustomized: true };
+      });
     } else {
-      setLayout((current) => ({
-        ...current,
-        consoleHeight: Math.min(180, Math.max(56, initialValue + startY - event.clientY)),
-      }));
+      setLayout((current) => {
+        const consoleHeight = Math.min(
+          getMaximumConsoleHeight(getDisplayedBottomHeight(current)),
+          Math.max(56, initialValue + startY - event.clientY),
+        );
+        if (consoleHeight === getDisplayedConsoleHeight(current)) return current;
+        return { ...current, consoleHeight, consoleHeightCustomized: true };
+      });
     }
   }
 
-  function endResize() {
+  function endResize(event: PointerEvent) {
+    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
     resizeState = undefined;
   }
 
-  function handlePanelDragStart(event: DragEvent, panel: string) {
-    const dockPanel = panel as BottomTab;
-    setDraggedDockPanel(dockPanel);
-    event.dataTransfer?.setData("text/plain", panel);
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  function resetSplitter(kind: "left" | "right" | "bottom" | "console") {
+    const defaults = createDefaultWorkspaceLayout(compactWorkbench());
+    setLayout((current) => {
+      if (kind === "left") return { ...current, leftWidth: defaults.leftWidth, leftWidthCustomized: false };
+      if (kind === "right") return { ...current, rightWidth: defaults.rightWidth, rightWidthCustomized: false };
+      if (kind === "bottom") return { ...current, bottomHeight: defaults.bottomHeight, bottomHeightCustomized: false };
+      return { ...current, consoleHeight: defaults.consoleHeight, consoleHeightCustomized: false };
+    });
   }
 
-  function handlePanelDragEnd() {
-    setDraggedDockPanel(null);
-    setDockTargetActive(false);
+  function getStoredPanelZone(panel: SidePanelId): DockZone {
+    return panel === "Hierarchy" ? layout().hierarchyZone : layout().inspectorZone;
   }
 
-  function handleConsoleDragStart(event: DragEvent) {
-    handlePanelDragStart(event, "Console");
+  function getEffectivePanelZone(panel: SidePanelId): DockZone {
+    return narrowWorkbench() ? "bottom" : getStoredPanelZone(panel);
   }
 
-  function dockSidePanel(panel: SidePanelId, announce = true) {
-    const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
-    if (!node || !bottomDockedContent) {
-      log("error", `Cannot dock ${panel}: panel mount is unavailable.`);
+  function isDockPanelActive(panel: SidePanelId): boolean {
+    const current = layout();
+    const visible = panel === "Hierarchy"
+      ? current.hierarchyVisible
+      : current.inspectorVisible;
+    if (!visible) return false;
+
+    const zone = getEffectivePanelZone(panel);
+    if (zone === "left") return current.leftActivePanel === panel;
+    if (zone === "right") return current.rightActivePanel === panel;
+    return current.bottomTab === panel;
+  }
+
+  function getDockContent(zone: DockZone): HTMLDivElement | undefined {
+    return zone === "left"
+      ? leftDockedContent
+      : zone === "right"
+        ? rightDockedContent
+        : bottomDockedContent;
+  }
+
+  function movePanelElementToZone(panel: SidePanelId, zone: DockZone): boolean {
+    const node = panel === "Hierarchy"
+      ? hierarchyPanelElement
+      : inspectorPanelElement;
+    const target = getDockContent(zone);
+    if (!node || !target) return false;
+
+    const activeElement =
+      document.activeElement instanceof HTMLElement &&
+      node.contains(document.activeElement)
+        ? document.activeElement
+        : null;
+
+    if (node.parentElement !== target) target.appendChild(node);
+    if (activeElement) {
+      queueMicrotask(() => {
+        if (activeElement.isConnected) {
+          activeElement.focus({ preventScroll: true });
+        }
+      });
+    }
+    return true;
+  }
+
+  function syncDockPanelElements() {
+    movePanelElementToZone("Hierarchy", getEffectivePanelZone("Hierarchy"));
+    movePanelElementToZone("Inspector", getEffectivePanelZone("Inspector"));
+  }
+
+  function activateSidePanel(panel: SidePanelId) {
+    setLayout((current) => selectSidePanel(current, panel));
+  }
+
+  function handleDockTabKeyDown(
+    event: KeyboardEvent & { currentTarget: HTMLButtonElement },
+    zone: DockZone,
+  ) {
+    const tabs = Array.from(
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=\"tab\"]") ?? [],
+    );
+    const index = tabs.indexOf(event.currentTarget);
+    if (index < 0 || tabs.length === 0) return;
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    if (!nextTab) return;
+    nextTab.focus({ preventScroll: true });
+    const nextValue = nextTab.dataset.dockTab;
+    if (zone === "bottom") {
+      if (nextValue === "Project" || nextValue === "Animation" || nextValue === "Components" || nextValue === "Console" || nextValue === "Hierarchy" || nextValue === "Inspector") activateBottomTab(nextValue);
+    } else if (nextValue === "Hierarchy" || nextValue === "Inspector") {
+      activateSidePanel(nextValue);
+    }
+  }
+
+  function activateBottomTab(tab: BottomTab) {
+    setLayout((current) => {
+      if (
+        (tab === "Hierarchy" || tab === "Inspector") &&
+        !narrowWorkbench()
+      ) {
+        return selectSidePanel(current, tab);
+      }
+      return { ...current, bottomTab: tab };
+    });
+  }
+
+  function dockSidePanel(
+    panel: SidePanelId,
+    zone: DockZone = "bottom",
+    announce = true,
+  ) {
+    if (!movePanelElementToZone(panel, zone)) {
+      log("error", `Cannot dock ${panel}: its panel mount or target zone is unavailable.`);
       return;
     }
-    if (!layout().dockedPanels.includes(panel)) {
-      bottomDockedContent.appendChild(node);
-      node.classList.add("bottom-docked-panel");
-      setLayout((current) => ({
-        ...current,
-        dockedPanels: [...current.dockedPanels, panel],
-        bottomTab: panel,
-      }));
-      if (announce) log("success", `${panel} docked into Bottom workspace`);
-    } else {
-      setLayout((current) => ({ ...current, bottomTab: panel }));
+
+    setLayout((current) => moveDockablePanel(current, panel, zone, compactWorkbench()));
+    if (announce) {
+      const zoneLabel = zone === "left" ? "Left" : zone === "right" ? "Right" : "Bottom";
+      log("success", `${panel} docked in the ${zoneLabel} workspace`);
     }
   }
 
   function undockSidePanel(panel: SidePanelId) {
-    if (!layout().dockedPanels.includes(panel)) return;
-    const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
-    const home = panel === "Hierarchy" ? hierarchyHomeSlot : inspectorHomeSlot;
-    if (node && home) {
-      home.appendChild(node);
-      node.classList.remove("bottom-docked-panel");
+    const home = getSidePanelHomeZone(panel);
+    if (getStoredPanelZone(panel) === home) return;
+
+    if (narrowWorkbench()) {
+      // On narrow screens the panel is still presented inside Bottom. Update
+      // its permanent home zone without moving its DOM node into a hidden dock.
+      if (!movePanelElementToZone(panel, "bottom")) {
+        log("error", `Cannot return ${panel} to its home dock: its Bottom mount is unavailable.`);
+        return;
+      }
+      setLayout((current) => ({
+        ...moveDockablePanel(current, panel, home, compactWorkbench()),
+        bottomTab: panel,
+      }));
+      focusDockTab(panel, "bottom");
+    } else {
+      dockSidePanel(panel, home, false);
     }
-    setLayout((current) => ({
-      ...current,
-      dockedPanels: current.dockedPanels.filter((item) => item !== panel),
-      bottomTab: current.bottomTab === panel ? "Project" : current.bottomTab,
-    }));
-    log("info", `${panel} returned to its default panel`);
+
+    log("info", `${panel} returned to its default dock`);
   }
 
-  function toggleSidePanel(panel: SidePanelId) {
-    if (layout().dockedPanels.includes(panel)) undockSidePanel(panel);
-    const key = panel === "Hierarchy" ? "hierarchyVisible" : "inspectorVisible";
-    setLayout((current) => ({ ...current, [key]: !current[key] }));
+  function closeSidePanel(panel: SidePanelId) {
+    const zone = getEffectivePanelZone(panel);
+    const next = setSidePanelVisibility(
+      layout(),
+      panel,
+      false,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
+    setLayout(next);
+    const fallback = zone === "left"
+      ? next.leftActivePanel
+      : zone === "right"
+        ? next.rightActivePanel
+        : next.bottomTab;
+    queueMicrotask(() => {
+      const target = fallback
+        ? document.querySelector<HTMLButtonElement>(
+            `[data-dock-zone="${zone}"] [data-dock-tab="${fallback}"], [data-testid="bottom-tabs"] [data-dock-tab="${fallback}"]`,
+          )
+        : null;
+      (target ?? document.querySelector<HTMLButtonElement>(
+        "[data-testid=\"bottom-tabs\"] [data-dock-tab=\"Project\"]",
+      ))?.focus({ preventScroll: true });
+    });
+    log("info", panel + " panel closed");
   }
 
-  function resetWorkbenchLayout() {
-    undockSidePanel("Hierarchy");
-    undockSidePanel("Inspector");
-    setLayout(defaultLayout(compactWorkbench()));
-  }
-
-  function startBottomTabPointerDrag(event: PointerEvent & { currentTarget: HTMLButtonElement }, tab: BottomTab) {
-    if (event.button !== 0) return;
-    bottomTabPointerDrag = { panel: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function moveBottomTabPointerDrag(event: PointerEvent) {
-    const drag = bottomTabPointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 6) {
-      drag.active = true;
-      setDraggedDockPanel(drag.panel);
-      setDockTargetActive(true);
-    }
-  }
-
-  function endBottomTabPointerDrag(event: PointerEvent) {
-    const drag = bottomTabPointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    bottomTabPointerDrag = undefined;
-    if (drag.active) {
-      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-dock-tab]");
-      const targetTab = target?.dataset.dockTab as BottomTab | undefined;
-      if (targetTab) reorderBottomTab(drag.panel, targetTab);
-      suppressDockTabClick = true;
-      event.preventDefault();
-    }
-    handlePanelDragEnd();
-  }
-
-  function cancelBottomTabPointerDrag(event: PointerEvent) {
-    if (!bottomTabPointerDrag || bottomTabPointerDrag.pointerId !== event.pointerId) return;
-    bottomTabPointerDrag = undefined;
-    handlePanelDragEnd();
-  }
-
-  function reorderBottomTab(source: BottomTab, target: BottomTab) {
-    if (source === target) return;
-    setLayout((current) => {
-      const order = [...current.bottomTabOrder];
-      const sourceIndex = order.indexOf(source);
-      const targetIndex = order.indexOf(target);
-      if (sourceIndex < 0 || targetIndex < 0) return current;
-      order.splice(sourceIndex, 1);
-      order.splice(targetIndex, 0, source);
-      return { ...current, bottomTabOrder: order, bottomTab: source };
+  function focusBottomTab(tab: BottomTab) {
+    queueMicrotask(() => {
+      document.querySelector<HTMLButtonElement>(
+        `[data-testid="bottom-tabs"] [data-dock-tab="${tab}"]`,
+      )?.focus({ preventScroll: true });
     });
   }
 
-  function handleDockDragOver(event: DragEvent) {
-    if (!draggedDockPanel() && !event.dataTransfer?.types.includes("text/plain")) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    setDockTargetActive(true);
+  function closeConsole() {
+    const next = setConsolePanelVisibility(
+      layout(),
+      false,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
+    setLayout(next);
+    focusBottomTab(next.bottomTab);
+    log("info", "Console panel closed");
   }
 
-  function handleDockDragLeave(event: DragEvent & { currentTarget: HTMLDivElement }) {
-    const nextTarget = event.relatedTarget;
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-    setDockTargetActive(false);
+  function openBottomPanel(panel: BottomWorkspacePanel) {
+    setLayout((current) =>
+      setBottomPanelVisibility(current, panel, true, compactWorkbench(), narrowWorkbench()),
+    );
+    focusBottomTab(panel);
   }
 
-  function handleDockDrop(event: DragEvent, explicitTarget?: BottomTab) {
-    const transferredPanel = event.dataTransfer?.getData("text/plain");
-    const panel = (transferredPanel || draggedDockPanel()) as BottomTab | null;
-    const targetElement = event.target instanceof Element
-      ? event.target.closest<HTMLElement>("[data-dock-tab]")
-      : null;
-    const targetTab = explicitTarget ?? targetElement?.dataset.dockTab as BottomTab | undefined;
-    const bottomTabs: BottomTab[] = ["Project", "Animation", "Components", "Console", "Hierarchy", "Inspector"];
-    if (!panel || !bottomTabs.includes(panel)) return;
-    event.preventDefault();
-    setDockTargetActive(false);
-    setDraggedDockPanel(null);
-    if ((panel === "Hierarchy" || panel === "Inspector") && !layout().dockedPanels.includes(panel)) {
-      dockSidePanel(panel);
+  function toggleBottomPanel(panel: BottomWorkspacePanel) {
+    const visible = panel === "Project"
+      ? layout().projectVisible
+      : panel === "Animation"
+        ? layout().animationVisible
+        : layout().componentsVisible;
+    setLayout((current) =>
+      setBottomPanelVisibility(current, panel, !visible, compactWorkbench(), narrowWorkbench()),
+    );
+    if (!visible) focusBottomTab(panel);
+  }
+
+  function closeBottomPanel(panel: BottomTab) {
+    if (panel === "Hierarchy" || panel === "Inspector") {
+      closeSidePanel(panel);
       return;
     }
-    if (panel === "Console" && !layout().consoleDocked && !compactWorkbench()) {
+    if (panel === "Console") {
+      closeConsole();
+      return;
+    }
+
+    const next = setBottomPanelVisibility(
+      layout(),
+      panel,
+      false,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
+    setLayout(next);
+    focusBottomTab(next.bottomTab);
+    log("info", panel + " panel closed");
+  }
+
+  function openConsole() {
+    const next = setConsolePanelVisibility(
+      layout(),
+      true,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
+    setLayout(next);
+
+    queueMicrotask(() => {
+      if (compactWorkbench() || next.consoleDocked) {
+        document.querySelector<HTMLButtonElement>(
+          '[data-testid="bottom-tabs"] [data-dock-tab="Console"]',
+        )?.focus({ preventScroll: true });
+        return;
+      }
+
+      const consolePanel = document.querySelector<HTMLElement>(".desktop-console-panel");
+      consolePanel?.scrollIntoView({ block: "nearest" });
+      consolePanel?.querySelector<HTMLSelectElement>(
+        '[aria-label="Console message filter"]',
+      )?.focus({ preventScroll: true });
+    });
+  }
+
+  function toggleConsoleVisibility() {
+    if (layout().consoleVisible) closeConsole();
+    else openConsole();
+  }
+
+  function focusDockTab(panel: SidePanelId, zone: DockZone) {
+    queueMicrotask(() => {
+      const selector = zone === "bottom"
+        ? `[data-testid="bottom-tabs"] [data-dock-tab="${panel}"]`
+        : `[data-dock-zone="${zone}"] [data-dock-tab="${panel}"]`;
+      document.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+    });
+  }
+
+  function focusWorkspacePanel(panel: SidePanelId) {
+    focusDockTab(panel, getEffectivePanelZone(panel));
+  }
+
+  function toggleSidePanel(panel: SidePanelId) {
+    const isVisible = panel === "Hierarchy"
+      ? layout().hierarchyVisible
+      : layout().inspectorVisible;
+    setLayout((current) => {
+      const next = setSidePanelVisibility(
+        current,
+        panel,
+        !isVisible,
+        compactWorkbench(),
+        narrowWorkbench(),
+      );
+      if (!isVisible && narrowWorkbench()) next.bottomTab = panel;
+      return next;
+    });
+    if (!isVisible) focusWorkspacePanel(panel);
+  }
+
+  function resetWorkbenchLayout() {
+    const defaults = createDefaultWorkspaceLayout(compactWorkbench());
+    movePanelElementToZone("Hierarchy", narrowWorkbench() ? "bottom" : "left");
+    movePanelElementToZone("Inspector", narrowWorkbench() ? "bottom" : "right");
+    setLayout(defaults);
+    log("info", "Workspace layout restored to defaults");
+  }
+
+  function startDockPointerDrag(
+    event: PointerEvent & { currentTarget: HTMLElement },
+    panel: BottomTab,
+    source: "tab" | "header",
+  ) {
+    if (event.button !== 0 || event.isPrimary === false || dockPointerDrag || resizeState) return;
+    if (source === "header" && event.target instanceof Element &&
+      event.target.closest("button, input, select, textarea, a, [role=\"button\"]")) return;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      return;
+    }
+    if (source === "tab") suppressDockTabClick = false;
+    dockPointerDrag = {
+      panel, pointerId: event.pointerId, pointerType: event.pointerType,
+      startX: event.clientX, startY: event.clientY, active: false,
+      source, captureElement: event.currentTarget,
+    };
+    setDockDropTarget(null);
+  }
+
+  function getDockDropTargetAt(clientX: number, clientY: number, source: BottomTab): DockDropTarget | null {
+    const element = document.elementFromPoint(clientX, clientY);
+    if (!(element instanceof Element)) return null;
+    const zoneValue = element.closest<HTMLElement>("[data-dock-zone]")?.dataset.dockZone;
+    if (zoneValue !== "left" && zoneValue !== "right" && zoneValue !== "bottom") return null;
+    const zone: DockZone = zoneValue;
+    if (!isDockTargetAllowed(source, zone)) return null;
+    const tabElement = element.closest<HTMLElement>("[data-dock-tab]");
+    const tabValue = tabElement?.dataset.dockTab;
+    const validTabs: readonly BottomTab[] = ["Project","Animation","Components","Console","Hierarchy","Inspector"];
+    if (tabElement && tabValue && validTabs.includes(tabValue as BottomTab) && tabValue !== source) {
+      const bounds = tabElement.getBoundingClientRect();
+      return { zone, kind: "tab", target: tabValue as BottomTab,
+        insertion: clientX < bounds.left + bounds.width / 2 ? "before" : "after" };
+    }
+    if (tabValue === source) return null;
+    return { zone, kind: "group" };
+  }
+
+  function moveDockPointerDrag(event: PointerEvent) {
+    const drag = dockPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.active) {
+      const threshold = drag.pointerType === "touch" ? 8 : 6;
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < threshold) return;
+      drag.active = true;
+      setDraggedDockPanel(drag.panel);
+    }
+    if (event.pointerType !== "touch" && event.buttons !== 1) return;
+    event.preventDefault();
+    setDockDragPosition({ x: event.clientX, y: event.clientY });
+    setDockDropTarget(getDockDropTargetAt(event.clientX, event.clientY, drag.panel));
+  }
+
+  function reorderDockPanelTab(source: BottomTab, target: BottomTab, zone: DockZone,
+    insertion: "before" | "after" = "after") {
+    setLayout((current) => reorderWorkspaceDockTab(
+      current, source, target, zone, compactWorkbench(), narrowWorkbench(), insertion,
+    ));
+  }
+
+  function commitDockDrop(panel: BottomTab, target: DockDropTarget) {
+    if (panel === "Hierarchy" || panel === "Inspector") {
+      const transientNarrowBottom = narrowWorkbench() && target.zone === "bottom";
+      if (transientNarrowBottom) {
+        if (target.kind === "tab") reorderDockPanelTab(panel, target.target, target.zone, target.insertion);
+        else activateBottomTab(panel);
+      } else {
+        const currentZone = getStoredPanelZone(panel);
+        if (target.zone !== currentZone) dockSidePanel(panel, target.zone);
+        if (target.kind === "tab") reorderDockPanelTab(panel, target.target, target.zone, target.insertion);
+        else if (target.zone === currentZone) activateSidePanel(panel);
+      }
+      focusDockTab(panel, target.zone);
+      return;
+    }
+    if (panel === "Console" && !compactWorkbench() && !layout().consoleDocked) {
       setLayout((current) => ({ ...current, consoleDocked: true, bottomTab: "Console" }));
-      log("success", "Console docked into Bottom workspace");
-      return;
     }
-    if (targetTab) reorderBottomTab(panel, targetTab);
+    if (target.kind === "tab") reorderDockPanelTab(panel, target.target, target.zone, target.insertion);
+    else activateBottomTab(panel);
+  }
+
+  function finishDockPointerDrag(event: PointerEvent) {
+    const drag = dockPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const target = drag.active ? getDockDropTargetAt(event.clientX, event.clientY, drag.panel) : null;
+    dockPointerDrag = undefined;
+    setDockDropTarget(null);
+    setDraggedDockPanel(null);
+    if (drag.source === "tab") suppressDockTabClick = drag.active;
+    if (target) commitDockDrop(drag.panel, target);
+  }
+
+  function cancelDockPointerDrag(pointerId?: number, releaseCapture = true) {
+    const drag = dockPointerDrag;
+    if (!drag || (pointerId !== undefined && drag.pointerId !== pointerId)) return;
+    dockPointerDrag = undefined;
+    setDockDropTarget(null);
+    setDraggedDockPanel(null);
+    suppressDockTabClick = false;
+    if (releaseCapture && drag.captureElement.hasPointerCapture(drag.pointerId)) {
+      drag.captureElement.releasePointerCapture(drag.pointerId);
+    }
+  }
+
+  function shouldIgnoreDockTabClick(event: MouseEvent): boolean {
+    if (!suppressDockTabClick) return false;
+    suppressDockTabClick = false;
+    return event.detail > 0;
+  }
+
+  function isDockTargetAllowed(panel: BottomTab, zone: DockZone): boolean {
+    if (panel === "Hierarchy" || panel === "Inspector") return zone === "bottom" || !narrowWorkbench();
+    return zone === "bottom";
+  }
+
+  function isSideDockDragActive(): boolean {
+    const panel = draggedDockPanel();
+    return !narrowWorkbench() && (panel === "Hierarchy" || panel === "Inspector");
+  }
+
+  function isLeftDockZoneAvailable(): boolean {
+    return leftDockPanels().length > 0 || isSideDockDragActive();
+  }
+
+  function isRightDockZoneAvailable(): boolean {
+    return rightDockPanels().length > 0 || isSideDockDragActive();
+  }
+
+  function isEmptySideDockDropTarget(zone: "left" | "right"): boolean {
+    if (!isSideDockDragActive()) return false;
+    return zone === "left" ? leftDockPanels().length === 0 : rightDockPanels().length === 0;
+  }
+
+  function isDockGroupPreview(zone: DockZone): boolean {
+    const target = dockDropTarget();
+    return target?.zone === zone && target.kind === "group";
+  }
+
+  function isDockTabInsertionTarget(tab: BottomTab, insertion: "before" | "after"): boolean {
+    const target = dockDropTarget();
+    return target?.kind === "tab" && target.target === tab && target.insertion === insertion;
+  }
+
+  function handleWorkspacePointerMove(event: PointerEvent) {
+    moveResize(event);
+    moveDockPointerDrag(event);
+  }
+
+  function handleWorkspacePointerUp(event: PointerEvent) {
+    endResize(event);
+    finishDockPointerDrag(event);
+  }
+
+  function handleWorkspacePointerCancel(event: PointerEvent) {
+    endResize(event);
+    cancelDockPointerDrag(event.pointerId, false);
+  }
+
+  function handleWorkspaceLostPointerCapture(event: PointerEvent) {
+    endResize(event);
+    cancelDockPointerDrag(event.pointerId, false);
   }
 
   function undockConsole() {
-    setLayout((current) => ({ ...current, consoleDocked: false, bottomTab: "Project" }));
+    setLayout((current) => {
+      const next = { ...current, consoleDocked: false };
+      const visibleTabs = getVisibleBottomTabs(
+        next,
+        compactWorkbench(),
+        narrowWorkbench(),
+      );
+      return {
+        ...next,
+        bottomTab: visibleTabs.includes("Project")
+          ? "Project"
+          : (visibleTabs[0] ?? "Project"),
+      };
+    });
     log("info", "Console moved back to its own dock");
   }
 
@@ -1722,6 +2197,19 @@ function App() {
 
   function handleContextPointerDown(event: PointerEvent) {
     updateFocusContext(event.target);
+    if (!(event.target instanceof Element)) return;
+
+    const openMenuButton = document.querySelector<HTMLButtonElement>(
+      '.menu-button[aria-expanded="true"]',
+    );
+    const openMenuRoot = openMenuButton?.closest(".menu-root");
+    if (activeMenu() && (!openMenuRoot || !openMenuRoot.contains(event.target))) {
+      setActiveMenu("");
+    }
+
+    if (showObjectMenu() && !event.target.closest(".add-object-anchor")) {
+      setShowObjectMenu(false);
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -1732,6 +2220,11 @@ function App() {
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
     if (event.key === "Escape") {
+      if (dockPointerDrag) {
+        event.preventDefault();
+        cancelDockPointerDrag();
+        return;
+      }
       if (paletteOpen()) closePalette();
       setActiveMenu("");
       setShowObjectMenu(false);
@@ -1809,20 +2302,45 @@ function App() {
   function handleWorkbenchResize() {
     const previousCompact = compactWorkbench();
     const nextCompact = window.innerWidth <= 1360;
-    if (previousCompact === nextCompact) return;
-    setCompactWorkbench(nextCompact);
-    setLayout((current) => {
-      const previousDefaults = defaultLayout(previousCompact);
-      const nextDefaults = defaultLayout(nextCompact);
-      return {
-        ...current,
-        leftWidth: current.leftWidth === previousDefaults.leftWidth ? nextDefaults.leftWidth : current.leftWidth,
-        rightWidth: current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
-        bottomHeight: current.bottomHeight === previousDefaults.bottomHeight ? nextDefaults.bottomHeight : current.bottomHeight,
-        consoleHeight: current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
-        bottomTab: !nextCompact && current.bottomTab === "Console" ? "Project" : current.bottomTab,
-      };
-    });
+    const previousNarrow = narrowWorkbench();
+    setViewportWidth(window.innerWidth);
+    setViewportHeight(window.innerHeight);
+    const nextNarrow = window.innerWidth <= 780;
+
+    if (previousCompact !== nextCompact) {
+      setCompactWorkbench(nextCompact);
+      setLayout((current) => {
+        const previousDefaults = createDefaultWorkspaceLayout(previousCompact);
+        const nextDefaults = createDefaultWorkspaceLayout(nextCompact);
+        const nextLayout = {
+          ...current,
+          leftWidth: !current.leftWidthCustomized && current.leftWidth === previousDefaults.leftWidth ? nextDefaults.leftWidth : current.leftWidth,
+          rightWidth: !current.rightWidthCustomized && current.rightWidth === previousDefaults.rightWidth ? nextDefaults.rightWidth : current.rightWidth,
+          bottomHeight: !current.bottomHeightCustomized && current.bottomHeight === previousDefaults.bottomHeight ? nextDefaults.bottomHeight : current.bottomHeight,
+          consoleHeight: !current.consoleHeightCustomized && current.consoleHeight === previousDefaults.consoleHeight ? nextDefaults.consoleHeight : current.consoleHeight,
+          bottomTab:
+            !nextCompact && !current.consoleDocked && current.bottomTab === "Console"
+              ? "Project"
+              : current.bottomTab,
+        };
+        return nextLayout;
+      });
+    }
+
+    if (previousNarrow !== nextNarrow) {
+      setNarrowWorkbench(nextNarrow);
+      if (!nextNarrow) {
+        setLayout((current) => {
+          const selectedTransientSidePanel =
+            (current.bottomTab === "Hierarchy" && current.hierarchyZone !== "bottom") ||
+            (current.bottomTab === "Inspector" && current.inspectorZone !== "bottom");
+          return selectedTransientSidePanel
+            ? { ...current, bottomTab: "Project" }
+            : current;
+        });
+      }
+      queueMicrotask(syncDockPanelElements);
+    }
   }
 
   function readMcpPath(value: unknown, field: string): string {
@@ -1978,13 +2496,7 @@ function App() {
   };
 
   onMount(() => {
-    for (const panel of layout().dockedPanels) {
-      const node = panel === "Hierarchy" ? hierarchyPanelElement : inspectorPanelElement;
-      if (node && bottomDockedContent) {
-        bottomDockedContent.appendChild(node);
-        node.classList.add("bottom-docked-panel");
-      }
-    }
+    syncDockPanelElements();
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleWorkbenchResize);
     disposeEditorMcpBridge = connectEditorMcpBridge(editorMcpHandlers, {
@@ -2171,7 +2683,7 @@ function App() {
 
 
 
-  const menuItems: Record<string, Array<{ label: string; shortcut?: string; action: () => void; disabled?: boolean }>> = {
+  const menuItems = createMemo<Record<string, MenuItem[]>>(() => ({
     File: [
       { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !componentDocument() },
       { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
@@ -2188,24 +2700,30 @@ function App() {
       { label: "Create Prefab from selected object", action: () => void createPrefabFromSelected(), disabled: !selectedObject() || scene()?.sceneType === "PREFAB" },
     ],
     View: [
-      { label: `${layout().hierarchyVisible ? "Hide" : "Show"} Hierarchy`, action: () => setLayout((current) => ({ ...current, hierarchyVisible: !current.hierarchyVisible })) },
-      { label: `${layout().inspectorVisible ? "Hide" : "Show"} Inspector`, action: () => setLayout((current) => ({ ...current, inspectorVisible: !current.inspectorVisible })) },
+      { label: "Hierarchy", checkable: "checkbox", checked: layout().hierarchyVisible, action: () => toggleSidePanel("Hierarchy") },
+      { label: "Inspector", checkable: "checkbox", checked: layout().inspectorVisible, action: () => toggleSidePanel("Inspector") },
+      { label: "Project", checkable: "checkbox", checked: layout().projectVisible, action: () => toggleBottomPanel("Project") },
+      { label: "Animation", checkable: "checkbox", checked: layout().animationVisible, action: () => toggleBottomPanel("Animation") },
+      { label: "Components", checkable: "checkbox", checked: layout().componentsVisible, action: () => toggleBottomPanel("Components") },
+      { label: "Console", checkable: "checkbox", checked: layout().consoleVisible, action: toggleConsoleVisibility },
       { label: "Toggle light / dark theme", action: toggleTheme },
-      { label: "Reset workspace layout", action: () => setLayout(defaultLayout(compactWorkbench())) },
+      { label: "Reset workspace layout", action: resetWorkbenchLayout },
     ],
     Window: [
-      { label: "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
-      { label: "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
-      { label: "Components", action: () => setLayout((current) => ({ ...current, bottomTab: "Components" })) },
-      { label: "Console", action: () => {
-        if (compactWorkbench() || layout().consoleDocked) setLayout((current) => ({ ...current, bottomTab: "Console" }));
-        else document.querySelector(".desktop-console-panel")?.scrollIntoView({ block: "nearest" });
-      } },
+      { label: "Project", checkable: "radio", checked: layout().bottomTab === "Project", action: () => openBottomPanel("Project") },
+      { label: "Animation", checkable: "radio", checked: layout().bottomTab === "Animation", action: () => openBottomPanel("Animation") },
+      { label: "Components", checkable: "radio", checked: layout().bottomTab === "Components", action: () => openBottomPanel("Components") },
+      {
+        label: "Console",
+        ...(compactWorkbench() || layout().consoleDocked ? { checkable: "radio" as const } : {}),
+        checked: layout().consoleVisible && (compactWorkbench() || layout().consoleDocked) && layout().bottomTab === "Console",
+        action: openConsole,
+      },
     ],
     Help: [
       { label: "Editor Host architecture", action: () => log("info", "SolidJS Host · legacy Colibri remains available at /editor/") },
     ],
-  };
+  }));
 
   return (
     <div
@@ -2213,18 +2731,23 @@ function App() {
       data-testid="workbench"
       data-layout={compactWorkbench() ? "compact" : "wide"}
       classList={{
-        "hierarchy-hidden": !layout().hierarchyVisible || layout().dockedPanels.includes("Hierarchy"),
-        "inspector-hidden": !layout().inspectorVisible || layout().dockedPanels.includes("Inspector"),
+        "hierarchy-hidden": !isLeftDockZoneAvailable(),
+        "inspector-hidden": !isRightDockZoneAvailable(),
+        "bottom-hidden": visibleBottomTabs().length === 0 && !(layout().consoleVisible && !layout().consoleDocked && !compactWorkbench()),
+        "bottom-tabs-empty": visibleBottomTabs().length === 0 && layout().consoleVisible && !layout().consoleDocked && !compactWorkbench(),
+        "dock-dragging": draggedDockPanel() !== null,
       }}
       style={{
-        "--left-panel": `${layout().leftWidth}px`,
-        "--right-panel": `${layout().rightWidth}px`,
-        "--bottom-panel": `${layout().bottomHeight}px`,
-        "--console-height": `${layout().consoleHeight}px`,
+        "--left-panel": `${getDisplayedSidePanelWidth("left")}px`,
+        "--right-panel": `${getDisplayedSidePanelWidth("right")}px`,
+        "--bottom-panel": `${getDisplayedBottomHeight()}px`,
+        "--console-height": `${getDisplayedConsoleHeight()}px`,
+        "--center-min-height": `${getMinimumCenterHeight()}px`,
       }}
-      onPointerMove={moveResize}
-      onPointerUp={endResize}
-      onPointerCancel={endResize}
+      onPointerMove={handleWorkspacePointerMove}
+      onPointerUp={handleWorkspacePointerUp}
+      onPointerCancel={handleWorkspacePointerCancel}
+      onLostPointerCapture={handleWorkspaceLostPointerCapture}
       onFocusIn={handleFocusIn}
       onPointerDown={handleContextPointerDown}
     >
@@ -2245,7 +2768,7 @@ function App() {
         </div>
 
         <div class="menu-bar" role="menubar" aria-label="Main menu">
-          <For each={Object.keys(menuItems)}>
+          <For each={Object.keys(menuItems())}>
             {(menu) => (
               <div class="menu-root">
                 <button
@@ -2254,24 +2777,28 @@ function App() {
                   aria-haspopup="menu"
                   aria-expanded={activeMenu() === menu}
                   onClick={() => setActiveMenu((current) => current === menu ? "" : menu)}
-                  onMouseEnter={() => activeMenu() && setActiveMenu(menu)}
                 >
                   {menu}
                 </button>
                 <Show when={activeMenu() === menu}>
                   <div class="menu-popover" role="menu">
-                    <For each={menuItems[menu]}>
+                    <For each={menuItems()[menu]}>
                       {(item) => (
                         <button
                           class="menu-item"
-                          role="menuitem"
+                          role={item.checkable === "checkbox" ? "menuitemcheckbox" : item.checkable === "radio" ? "menuitemradio" : "menuitem"}
+                          aria-checked={item.checkable ? item.checked : undefined}
+                          classList={{ "menu-item-checkable": Boolean(item.checkable), checked: Boolean(item.checked) }}
                           disabled={item.disabled}
                           onClick={() => {
                             setActiveMenu("");
                             item.action();
                           }}
                         >
-                          <span>{item.label}</span>
+                          <span class="menu-item-check" aria-hidden="true">
+                            {item.checked ? "✓" : ""}
+                          </span>
+                          <span class="menu-item-label">{item.label}</span>
                           <Show when={item.shortcut}><kbd>{item.shortcut}</kbd></Show>
                         </button>
                       )}
@@ -2378,10 +2905,51 @@ function App() {
       </header>
 
       <div class="workspace-row">
-        <Show when={layout().hierarchyVisible}>
-          <div class="panel-home-slot" ref={(element) => { hierarchyHomeSlot = element; }}>
-          <aside ref={(element) => { hierarchyPanelElement = element; }} class="panel hierarchy-panel" data-testid="hierarchy-panel" data-focus-context="hierarchy" data-dock-panel="Hierarchy">
-            <PanelHeader title="Hierarchy" icon="file-tree" theme={theme()} trailing={sceneObjects().length ? String(sceneObjects().length) : "—"} onDragStart={(event) => handlePanelDragStart(event, "Hierarchy")} onUndock={() => undockSidePanel("Hierarchy")} />
+        <section
+          class="side-dock-zone left-side-dock"
+          data-testid="dock-zone-left"
+          data-dock-zone="left"
+          classList={{ "dock-drop-target": isDockGroupPreview("left") }}
+          style={{ display: isLeftDockZoneAvailable() ? "flex" : "none" }}
+        >
+          <div class="side-dock-tabs" role="tablist" aria-label="Left dock panels">
+            <For each={leftDockPanels()}>
+              {(panel) => (
+                <button
+                  type="button"
+                  class="side-dock-tab"
+                  role="tab"
+                  data-dock-tab={panel}
+                  aria-selected={layout().leftActivePanel === panel}
+                  classList={{
+                    "dock-drop-insert-before": isDockTabInsertionTarget(panel, "before"),
+                    "dock-drop-insert-after": isDockTabInsertionTarget(panel, "after"),
+                  }}
+                  onKeyDown={(event) => handleDockTabKeyDown(event, "left")}
+                  onPointerDown={(event) => startDockPointerDrag(event, panel, "tab")}
+                  onClick={(event) => {
+                    if (shouldIgnoreDockTabClick(event)) return;
+                    activateSidePanel(panel);
+                  }}
+                >
+                  {panel}
+                </button>
+              )}
+            </For>
+          </div>
+          <div class="side-dock-content" ref={(element) => { leftDockedContent = element; }}>
+          <aside ref={(element) => { hierarchyPanelElement = element; }} class="panel hierarchy-panel" classList={{ "dock-panel-inactive": !isDockPanelActive("Hierarchy") }} data-testid="hierarchy-panel" data-focus-context="hierarchy" data-dock-panel="Hierarchy">
+            <PanelHeader
+              title="Hierarchy"
+              icon="file-tree"
+              theme={theme()}
+              trailing={sceneObjects().length ? String(sceneObjects().length) : "—"}
+              onPointerDown={(event) => startDockPointerDrag(event, "Hierarchy", "header")}
+              {...(getStoredPanelZone("Hierarchy") !== getSidePanelHomeZone("Hierarchy")
+                ? { onUndock: () => undockSidePanel("Hierarchy") }
+                : {})}
+              onClose={() => closeSidePanel("Hierarchy")}
+            />
             <div class="panel-toolbar">
               <label class="search-control">
                 <Icon theme={theme()} name="search" size={13} />
@@ -2520,18 +3088,35 @@ function App() {
               <span>Scene tree</span>
             </div>
           </aside>
+            <Show when={isEmptySideDockDropTarget("left") && !isDockGroupPreview("left")}>
+              <div class="side-dock-empty-drop-hint" data-testid="empty-dock-hint-left">
+                Drop panel here
+              </div>
+            </Show>
           </div>
-        </Show>
+          <Show when={isDockGroupPreview("left")}>
+            <div class="dock-drop-preview" data-testid="dock-drop-preview" aria-hidden="true">
+              <strong>Left dock</strong>
+              <span>Release to move this panel</span>
+            </div>
+          </Show>
+        </section>
 
-        <Show when={layout().hierarchyVisible && !layout().dockedPanels.includes("Hierarchy")}>
+        <Show when={isLeftDockZoneAvailable()}>
           <div
             class="vertical-splitter"
             data-testid="splitter-hierarchy"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize Hierarchy panel"
+            aria-label="Resize left dock"
+            aria-valuemin={170}
+            aria-valuemax={getMaximumSidePanelWidth("left")}
+            aria-valuenow={getDisplayedSidePanelWidth("left")}
+            tabIndex={0}
             onPointerDown={(event) => startResize("left", event)}
-          />
+            onKeyDown={(event) => handleSplitterKeyDown("left", event)}
+          onDblClick={() => resetSplitter("left")}
+            title="Double-click to reset size"/>
         </Show>
 
         <main class="center-workspace">
@@ -2626,20 +3211,67 @@ function App() {
           </div>
         </main>
 
-        <Show when={layout().inspectorVisible}>
-          <div class="panel-home-slot" ref={(element) => { inspectorHomeSlot = element; }}>
-          <Show when={!layout().dockedPanels.includes("Inspector")}>
+        <Show when={isRightDockZoneAvailable()}>
           <div
             class="vertical-splitter"
             data-testid="splitter-inspector"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize Inspector panel"
+            aria-label="Resize right dock"
+            aria-valuemin={210}
+            aria-valuemax={getMaximumSidePanelWidth("right")}
+            aria-valuenow={getDisplayedSidePanelWidth("right")}
+            tabIndex={0}
             onPointerDown={(event) => startResize("right", event)}
-          />
-          </Show>
-          <aside ref={(element) => { inspectorPanelElement = element; }} class="panel inspector-panel" data-testid="inspector-panel" data-focus-context="inspector" data-dock-panel="Inspector">
-            <PanelHeader title="Inspector" icon="editor-inspector" theme={theme()} trailing={selectedObject() ? selectedObject()!.type : "—"} onDragStart={(event) => handlePanelDragStart(event, "Inspector")} onUndock={() => undockSidePanel("Inspector")} />
+            onKeyDown={(event) => handleSplitterKeyDown("right", event)}
+          onDblClick={() => resetSplitter("right")}
+            title="Double-click to reset size"/>
+        </Show>
+        <section
+          class="side-dock-zone right-side-dock"
+          data-testid="dock-zone-right"
+          data-dock-zone="right"
+          classList={{ "dock-drop-target": isDockGroupPreview("right") }}
+          style={{ display: isRightDockZoneAvailable() ? "flex" : "none" }}
+        >
+          <div class="side-dock-tabs" role="tablist" aria-label="Right dock panels">
+            <For each={rightDockPanels()}>
+              {(panel) => (
+                <button
+                  type="button"
+                  class="side-dock-tab"
+                  role="tab"
+                  data-dock-tab={panel}
+                  aria-selected={layout().rightActivePanel === panel}
+                  classList={{
+                    "dock-drop-insert-before": isDockTabInsertionTarget(panel, "before"),
+                    "dock-drop-insert-after": isDockTabInsertionTarget(panel, "after"),
+                  }}
+                  onKeyDown={(event) => handleDockTabKeyDown(event, "right")}
+                  onPointerDown={(event) => startDockPointerDrag(event, panel, "tab")}
+                  onClick={(event) => {
+                    if (shouldIgnoreDockTabClick(event)) return;
+                    activateSidePanel(panel);
+                  }}
+                >
+                  {panel}
+                </button>
+              )}
+            </For>
+          </div>
+          <div class="side-dock-content" ref={(element) => { rightDockedContent = element; }}>
+          <aside ref={(element) => { inspectorPanelElement = element; }} class="panel inspector-panel" classList={{ "dock-panel-inactive": !isDockPanelActive("Inspector") }} data-testid="inspector-panel" data-focus-context="inspector" data-dock-panel="Inspector">
+            <PanelHeader
+              title="Inspector"
+              icon="editor-inspector"
+              theme={theme()}
+              trailing={selectedObject() ? selectedObject()!.type : "—"}
+              onPointerDown={(event) => startDockPointerDrag(event, "Inspector", "header")}
+              {...(getStoredPanelZone("Inspector") !== getSidePanelHomeZone("Inspector")
+                ? { onUndock: () => undockSidePanel("Inspector") }
+                : {})}
+              onClose={() => closeSidePanel("Inspector")}
+            />
             <Show when={selectedObject()} fallback={<div class="inspector-empty"><Icon theme={theme()} name="node-2d" size={24} /><strong>No object selected</strong><span>Select an object in Hierarchy or Scene.</span></div>}>
               <div class="inspector-scroll">
                 <div class="inspector-object-heading">
@@ -2900,8 +3532,19 @@ function App() {
               <span>{documentDirty() ? "Modified" : "In sync"}</span>
             </div>
           </aside>
+            <Show when={isEmptySideDockDropTarget("right") && !isDockGroupPreview("right")}>
+              <div class="side-dock-empty-drop-hint" data-testid="empty-dock-hint-right">
+                Drop panel here
+              </div>
+            </Show>
           </div>
-        </Show>
+          <Show when={isDockGroupPreview("right")}>
+            <div class="dock-drop-preview" data-testid="dock-drop-preview" aria-hidden="true">
+              <strong>Right dock</strong>
+              <span>Release to move this panel</span>
+            </div>
+          </Show>
+        </section>
       </div>
 
       <div
@@ -2910,52 +3553,84 @@ function App() {
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize bottom dock"
+        aria-valuemin={getMinimumBottomHeight()}
+        aria-valuemax={getMaximumBottomHeight()}
+        aria-valuenow={getDisplayedBottomHeight()}
+        tabIndex={0}
         onPointerDown={(event) => startResize("bottom", event)}
-      />
+        onKeyDown={(event) => handleSplitterKeyDown("bottom", event)}
+      onDblClick={() => resetSplitter("bottom")}
+            title="Double-click to reset size"/>
 
       <section
         class="bottom-dock"
         data-testid="bottom-dock"
-        classList={{ "console-docked": compactWorkbench() || layout().consoleDocked }}
+        classList={{
+          "console-docked": compactWorkbench() || layout().consoleDocked,
+          "console-hidden": !layout().consoleVisible,
+        }}
       >
-        <div class="bottom-upper-panel">
+        <div class="bottom-upper-panel" data-dock-zone="bottom">
           <div
             class="bottom-tabs"
             role="tablist"
             aria-label="Bottom workspace"
-            classList={{ "dock-drop-target": dockTargetActive() }}
-            onDragOver={handleDockDragOver}
-            onDragLeave={handleDockDragLeave}
-            onDrop={handleDockDrop}
-            onPointerMove={moveBottomTabPointerDrag}
-            onPointerUp={endBottomTabPointerDrag}
-            onPointerCancel={cancelBottomTabPointerDrag}
+            data-testid="bottom-tabs"
           >
             <For each={visibleBottomTabs()}>
               {(tab) => (
-                <button
-                  class="dock-tab"
-                  role="tab"
-                  data-dock-tab={tab}
-                  aria-selected={bottomTab() === tab}
-                  classList={{ active: bottomTab() === tab }}
-                  onPointerDown={(event) => startBottomTabPointerDrag(event, tab)}
-                  onClick={() => {
-                    if (suppressDockTabClick) { suppressDockTabClick = false; return; }
-                    setLayout((current) => ({ ...current, bottomTab: tab }));
-                  }}
-                  title={`Drag to reorder ${tab}`}
-                >
-                  <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
-                  {tab}
-                </button>
+                <div class="dock-tab-item" role="presentation">
+                  <button
+                    class="dock-tab"
+                    role="tab"
+                    data-dock-tab={tab}
+                    aria-selected={bottomTab() === tab}
+                    classList={{
+                      active: bottomTab() === tab,
+                      "dock-drop-insert-before": isDockTabInsertionTarget(tab, "before"),
+                      "dock-drop-insert-after": isDockTabInsertionTarget(tab, "after"),
+                    }}
+                    onPointerDown={(event) => startDockPointerDrag(event, tab, "tab")}
+                    onAuxClick={(event) => {
+                      if (event.button === 1) closeBottomPanel(tab);
+                    }}
+                    onClick={(event) => {
+                      if (shouldIgnoreDockTabClick(event)) return;
+                      activateBottomTab(tab);
+                    }}
+                    onKeyDown={(event) => handleDockTabKeyDown(event, "bottom")}
+                    title={"Drag to move or reorder " + tab + " · middle-click to close"}
+                  >
+                    <Icon theme={theme()} name={tab === "Project" ? "folder" : tab === "Animation" ? "animation" : tab === "Components" ? "script" : tab === "Console" ? "script" : tab === "Hierarchy" ? "file-tree" : "editor-inspector"} size={13} />
+                    {tab}
+                  </button>
+                  <button
+                    type="button"
+                    class="dock-tab-close"
+                    aria-label={"Close " + tab}
+                    title={"Close " + tab}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeBottomPanel(tab);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
               )}
             </For>
             <div class="dock-tabs-spacer" />
-            <button class="toolbar-icon-button tiny" aria-label="Hide bottom dock" title="Hide bottom workspace" onClick={() => setLayout((current) => ({ ...current, bottomHeight: 150 }))}>
+            <button class="toolbar-icon-button tiny" aria-label="Reduce bottom dock height" title="Reduce bottom workspace height" onClick={() => setLayout((current) => ({ ...current, bottomHeight: 150 }))}>
               <span>−</span>
             </button>
           </div>
+
+          <Show when={isDockGroupPreview("bottom")}>
+            <div class="dock-drop-preview" data-testid="dock-drop-preview" aria-hidden="true">
+              <strong>Bottom dock</strong>
+              <span>Release to add this panel to the group</span>
+            </div>
+          </Show>
 
           <Show when={bottomTab() === "Project"}>
             <div class="project-browser" data-focus-context="project">
@@ -3323,7 +3998,7 @@ function App() {
             </div>
           </Show>
 
-          <Show when={(compactWorkbench() || layout().consoleDocked) && bottomTab() === "Console"}>
+          <Show when={layout().consoleVisible && (compactWorkbench() || layout().consoleDocked) && bottomTab() === "Console"}>
             <ConsolePanel
               className="compact-console-panel"
               theme={theme()}
@@ -3331,6 +4006,7 @@ function App() {
               onLevelChange={setConsoleLevel}
               messages={visibleConsoleMessages()}
               onClear={() => setConsoleMessages([])}
+              onClose={closeConsole}
               {...(!compactWorkbench() && layout().consoleDocked ? { onUndock: undockConsole } : {})}
             />
           </Show>
@@ -3339,11 +4015,18 @@ function App() {
             ref={(element) => { bottomDockedContent = element; }}
             data-testid="bottom-docked-content"
             data-focus-context={bottomTab().toLowerCase()}
-            style={{ display: layout().dockedPanels.includes(bottomTab() as SidePanelId) ? "flex" : "none" }}
+            style={{
+              display:
+                (bottomTab() === "Hierarchy" || bottomTab() === "Inspector") &&
+                isDockPanelActive(bottomTab() as SidePanelId) &&
+                getEffectivePanelZone(bottomTab() as SidePanelId) === "bottom"
+                  ? "flex"
+                  : "none",
+            }}
           />
         </div>
 
-        <Show when={!compactWorkbench() && !layout().consoleDocked}>
+        <Show when={!compactWorkbench() && !layout().consoleDocked && layout().consoleVisible}>
           <>
         <div
           class="console-splitter"
@@ -3351,8 +4034,14 @@ function App() {
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize Console panel"
+          aria-valuemin={56}
+          aria-valuemax={getMaximumConsoleHeight(getDisplayedBottomHeight())}
+          aria-valuenow={getDisplayedConsoleHeight()}
+          tabIndex={0}
           onPointerDown={(event) => startResize("console", event)}
-        />
+          onKeyDown={(event) => handleSplitterKeyDown("console", event)}
+        onDblClick={() => resetSplitter("console")}
+            title="Double-click to reset size"/>
         <ConsolePanel
           className="desktop-console-panel"
           theme={theme()}
@@ -3360,11 +4049,22 @@ function App() {
           onLevelChange={setConsoleLevel}
           messages={visibleConsoleMessages()}
           onClear={() => setConsoleMessages([])}
-          onDragStart={handleConsoleDragStart}
+          onClose={closeConsole}
+          onPointerDown={(event) => startDockPointerDrag(event, "Console", "header")}
         />
           </>
         </Show>
       </section>
+
+      <Show when={draggedDockPanel()}>
+        {(panel) => (
+          <div class="dock-drag-ghost" data-testid="dock-drag-ghost" aria-hidden="true"
+            style={{ left: `${dockDragPosition().x + 14}px`, top: `${dockDragPosition().y + 14}px` }}>
+            <Icon theme={theme()} name={panel() === "Hierarchy" ? "file-tree" : panel() === "Inspector" ? "editor-inspector" : "script"} size={13} />
+            <span>{panel()}</span>
+          </div>
+        )}
+      </Show>
 
       <footer class="status-bar">
         <span class="status-bar-left"><span class="status-led" /> {loading() ? "Loading project…" : loadError() ? "Project connection error" : projectName()}</span>

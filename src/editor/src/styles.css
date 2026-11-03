@@ -120,12 +120,13 @@ textarea::placeholder {
 }
 
 .workbench {
+  --workbench-header-height: 95px;
   display: grid;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 95px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
+  grid-template-rows: var(--workbench-header-height) minmax(var(--center-min-height, 220px), 1fr) 4px var(--bottom-panel) 30px;
   background: var(--surface-workspace);
   overflow: hidden;
 }
@@ -325,13 +326,33 @@ textarea::placeholder {
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  justify-content: flex-start;
+  gap: 8px;
   padding: 7px 9px;
   border-radius: 2px;
   background: transparent;
   text-align: left;
   font-size: 11px;
+}
+
+.menu-item-check {
+  display: flex;
+  width: 14px;
+  min-width: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-selection);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.menu-item-label {
+  min-width: 0;
+  flex: 1;
+}
+
+.menu-item kbd {
+  margin-left: auto;
 }
 
 .menu-item:hover:not(:disabled) {
@@ -464,13 +485,101 @@ textarea::placeholder {
   font-weight: 600;
 }
 
-.panel-home-slot {
-  display: contents;
+.side-dock-zone {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-panel);
 }
 
-.panel-header-draggable {
-  cursor: grab;
+.left-side-dock {
+  border-right: 1px solid var(--border-subtle);
 }
+
+.right-side-dock {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.side-dock-tabs {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-panel-header);
+}
+
+.side-dock-tab {
+  display: inline-flex;
+  touch-action: none;
+  cursor: grab;
+  min-width: 0;
+  min-height: 28px;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.side-dock-tab:active {
+  cursor: grabbing;
+}
+
+.side-dock-empty-drop-hint {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-control);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.side-dock-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.side-dock-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent-selection);
+  color: var(--text-primary);
+}
+
+.side-dock-content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.side-dock-content > .panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-right: 0;
+  border-left: 0;
+}
+
+.dock-panel-inactive {
+  display: none !important;
+}
+
+.panel-header-draggable { cursor: grab; touch-action: none; user-select: none; }
 
 .panel-header-draggable:active {
   cursor: grabbing;
@@ -488,6 +597,26 @@ textarea::placeholder {
 
 .panel-undock-button:hover {
   border-color: var(--accent-selection);
+  color: var(--text-primary);
+}
+
+.panel-close-button {
+  display: inline-flex;
+  width: 20px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.panel-close-button:hover {
+  border-color: var(--border-subtle);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -705,6 +834,11 @@ textarea::placeholder {
 .vertical-splitter {
   width: 4px;
   cursor: col-resize;
+  touch-action: none;
+}
+.vertical-splitter::before {
+  position: absolute; z-index: 1; top: 0; bottom: 0; left: -4px; width: 12px;
+  background: transparent; content: "";
 }
 
 .vertical-splitter::after {
@@ -727,6 +861,11 @@ textarea::placeholder {
 .horizontal-splitter {
   height: 4px;
   cursor: row-resize;
+  touch-action: none;
+}
+.horizontal-splitter::before, .console-splitter::before {
+  position: absolute; z-index: 1; top: -4px; right: 0; left: 0; height: 12px;
+  background: transparent; content: "";
 }
 
 .center-workspace {
@@ -755,6 +894,44 @@ textarea::placeholder {
 }
 
 .viewport-tab,
+.dock-tab-item {
+  position: relative;
+  display: inline-flex;
+  min-width: 82px;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+
+.dock-tab-item .dock-tab {
+  width: 100%;
+  min-width: 82px;
+  padding-right: 25px;
+}
+
+.dock-tab-close {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.dock-tab-item:hover .dock-tab-close,
+.dock-tab-item:focus-within .dock-tab-close {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
 .dock-tab {
   display: inline-flex;
   min-width: 76px;
@@ -1273,19 +1450,48 @@ textarea::placeholder {
   background: var(--surface-panel);
 }
 
-.bottom-dock.console-docked {
+.bottom-dock.console-docked,
+.bottom-dock.console-hidden {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.bottom-tabs.dock-drop-target {
-  outline: 1px dashed var(--accent-selection);
-  outline-offset: -2px;
-  background: var(--surface-panel-header);
+.console-close-button {
+  flex: 0 0 auto;
 }
 
-.console-header-draggable {
-  cursor: grab;
+.side-dock-zone.dock-drop-target { outline: 1px solid color-mix(in srgb, var(--accent-selection) 64%, transparent); outline-offset: -2px; }
+
+.dock-drop-preview {
+  position: absolute; z-index: 18; inset: 34px 7px 7px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-selection) 84%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-selection) 15%, var(--surface-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-selection) 20%, transparent);
+  color: var(--text-primary); pointer-events: none; text-align: center;
 }
+.dock-drop-preview strong { font-size: 11px; font-weight: 600; }
+.dock-drop-preview span { color: var(--text-secondary); font-size: 9px; }
+.dock-drag-ghost {
+  position: fixed; z-index: 1000; display: flex; min-width: 112px; height: 30px;
+  align-items: center; gap: 8px; padding: 0 10px;
+  border: 1px solid var(--accent-selection); border-radius: 4px;
+  background: var(--surface-panel-header); box-shadow: 0 8px 26px rgb(0 0 0 / 28%);
+  color: var(--text-primary); font-size: 10px; font-weight: 600;
+  pointer-events: none; user-select: none;
+}
+.workbench.dock-dragging { cursor: grabbing; }
+.side-dock-tab, .dock-tab { position: relative; }
+.dock-drop-insert-before::before, .dock-drop-insert-after::after {
+  position: absolute; z-index: 2; top: 3px; bottom: 3px; width: 2px; border-radius: 2px;
+  background: var(--accent-selection);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-selection) 24%, transparent);
+  content: ""; pointer-events: none;
+}
+.dock-drop-insert-before::before { left: -2px; }
+.dock-drop-insert-after::after { right: -2px; }
+
+.console-header-draggable { cursor: grab; touch-action: none; user-select: none; }
 
 .console-header-draggable:active {
   cursor: grabbing;
@@ -1307,6 +1513,7 @@ textarea::placeholder {
 }
 
 .bottom-upper-panel {
+  position: relative;
   display: grid;
   min-height: 0;
   grid-template-rows: 28px minmax(0, 1fr);
@@ -1322,6 +1529,7 @@ textarea::placeholder {
   min-width: 82px;
   font-size: 10px;
   cursor: grab;
+  touch-action: none;
 }
 
 .dock-tab:active {
@@ -1342,14 +1550,14 @@ textarea::placeholder {
   min-width: 0;
   min-height: 0;
   border-right: 0;
+  border-left: 0;
 }
 
-.bottom-docked-panel {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  border-right: 0;
+.vertical-splitter:focus-visible,
+.horizontal-splitter:focus-visible,
+.console-splitter:focus-visible {
+  outline: 1px solid var(--accent-selection);
+  outline-offset: -1px;
 }
 
 .project-browser {
@@ -1883,7 +2091,8 @@ textarea::placeholder {
 
 @media (max-width: 1360px) {
   .workbench {
-    grid-template-rows: 88px minmax(220px, 1fr) 4px var(--bottom-panel) 30px;
+    --workbench-header-height: 88px;
+    grid-template-rows: var(--workbench-header-height) minmax(var(--center-min-height, 220px), 1fr) 4px var(--bottom-panel) 30px;
   }
 
   .app-header {
@@ -1909,7 +2118,7 @@ textarea::placeholder {
 
 @media (max-width: 920px) {
   .workbench {
-    grid-template-rows: 88px minmax(220px, 1fr) 4px 207px 30px;
+    grid-template-rows: 88px minmax(var(--center-min-height, 220px), 1fr) 4px var(--bottom-panel) 30px;
     --left-panel: 194px;
     --right-panel: 250px;
     --console-height: 60px;
@@ -1934,7 +2143,7 @@ textarea::placeholder {
 
 @media (max-width: 780px) {
   .workbench {
-    grid-template-rows: 88px minmax(260px, 1fr) 4px 190px 30px;
+    grid-template-rows: var(--workbench-header-height) minmax(var(--center-min-height, 260px), 1fr) 4px var(--bottom-panel) 30px;
     --console-height: 56px;
   }
 
@@ -1942,15 +2151,17 @@ textarea::placeholder {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
+  .left-side-dock,
+  .right-side-dock,
   .hierarchy-panel,
   .inspector-panel,
   .vertical-splitter {
-    display: none;
+    display: none !important;
   }
 
-  .bottom-docked-content .hierarchy-panel,
-  .bottom-docked-content .inspector-panel {
-    display: flex;
+  .bottom-docked-content .hierarchy-panel:not(.dock-panel-inactive),
+  .bottom-docked-content .inspector-panel:not(.dock-panel-inactive) {
+    display: flex !important;
   }
 
   .workbench:not(.hierarchy-hidden) .hierarchy-panel {
@@ -2976,4 +3187,25 @@ textarea::placeholder {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+
+/* A closed Bottom group must not reserve space or leave a dead splitter. */
+.workbench.bottom-hidden {
+  grid-template-rows: var(--workbench-header-height, 95px) minmax(var(--center-min-height, 220px), 1fr) 0 0 30px;
+}
+
+.workbench.bottom-hidden .horizontal-splitter,
+.workbench.bottom-hidden .bottom-dock {
+  display: none;
+}
+
+
+/* When Console is explicitly undocked it remains usable after the tab group closes. */
+.workbench.bottom-tabs-empty .bottom-dock {
+  grid-template-rows: 0 4px var(--console-height);
+}
+
+.workbench.bottom-tabs-empty .bottom-upper-panel {
+  overflow: hidden;
 }
