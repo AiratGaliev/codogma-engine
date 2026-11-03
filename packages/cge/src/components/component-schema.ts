@@ -162,7 +162,7 @@ export function validateComponentTypeSchema(input: unknown): ValidationResult<Co
   }
   const diagnostics: CoreDiagnostic[] = [];
   for (const [name, schema] of Object.entries(input.properties)) {
-    if (!/^[A-Za-z_$][\\w$]*$/.test(name)) diagnostics.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property key " + name + " is not a valid identifier.", name));
+    if (!/^[A-Za-z_$][\w$]*$/.test(name)) diagnostics.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property key " + name + " is not a valid identifier.", name));
     else diagnostics.push(...validatePropertySchema(name, schema));
   }
   return hasErrors(diagnostics)
