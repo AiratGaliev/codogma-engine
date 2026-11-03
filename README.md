@@ -520,6 +520,18 @@ npm run test:mcp-package
 
 Run `npm audit --audit-level=low` in the affected package scope when its `package.json`, `package-lock.json` or applicable `.npmrc` changes. CI Fast applies the same scope selection; manual workflow dispatch runs every configured audit.
 
+Для разработки нового SolidJS Editor Host (`src/editor/`) после получения изменений
+с локальной зависимостью Core выполните из корня репозитория:
+
+```bash
+npm ci --prefix src/editor
+npm run dev:editor-host
+```
+
+`npm ci` обновляет локальную ссылку `file:../../packages/cge`; команда Host
+автоматически собирает Core перед стартом Vite, typecheck и unit tests. Отдельно
+устанавливать зависимости `packages/cge` для обычной разработки Host не требуется.
+
 Then run checks relevant to the change. The full automated E2E suites are not part of a topic PR into <code>dev</code>; they start at the promotion PR <code>dev → test</code>:
 
 | Change type | Required local acceptance |
