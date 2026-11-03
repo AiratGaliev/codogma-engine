@@ -1,5 +1,5 @@
 import type { CoreDiagnostic } from "../diagnostics.js";
-import { cloneJsonValue, type JsonObject } from "../json.js";
+import { cloneJsonValue, isJsonValue, type JsonObject } from "../json.js";
 import { validateComponentProperties, type ComponentSchemaContext } from "./component-schema.js";
 import {
   ComponentRegistry,
@@ -92,6 +92,7 @@ export class ComponentWorld {
   private readonly schemaContext: Omit<ComponentSchemaContext, "ownerNodeId">;
   private updating = false;
   private flushing = false;
+  private disposing = false;
   private disposed = false;
 
   constructor(
@@ -104,7 +105,7 @@ export class ComponentWorld {
     this.schemaContext = options.schemaContext ?? {};
   }
 
-  get isDisposed(): boolean { return this.disposed; }
+  get isDisposed(): boolean { return this.disposed || this.disposing; }
   get nodeCount(): number { return this.nodes.size; }
   get componentCount(): number { return this.components.size; }
 
@@ -139,9 +140,12 @@ export class ComponentWorld {
     options: { instanceId?: string; enabled?: boolean } = {},
   ): string {
     this.assertUsable();
+    if (!isJsonValue(properties)) throw new TypeError("Component properties must be JSON-compatible.");
+    const propertiesSnapshot = cloneJsonValue(properties);
     const instanceId = options.instanceId ?? this.idFactory();
     if (!instanceId.trim()) throw new TypeError("A component instance requires a stable id.");
-    this.schedule(() => this.attachComponentNow(nodeId, typeId, properties, instanceId, options.enabled ?? true));
+    const enabled = options.enabled ?? true;
+    this.schedule(() => this.attachComponentNow(nodeId, typeId, propertiesSnapshot, instanceId, enabled));
     return instanceId;
   }
 
@@ -202,9 +206,10 @@ export class ComponentWorld {
 
   registerSystem(system: ComponentSystem): void {
     this.assertUsable();
-    if (!system.id.trim()) throw new TypeError("A component system requires a stable id.");
+    const systemId = system.id;
+    if (!systemId.trim()) throw new TypeError("A component system requires a stable id.");
     this.schedule(() => {
-      if (this.systems.some((item) => item.id === system.id)) throw new Error("Component system " + system.id + " is already registered.");
+      if (this.systems.some((item) => item.id === systemId)) throw new Error("Component system " + systemId + " is already registered.");
       this.systems.push(system);
     });
   }
@@ -265,10 +270,16 @@ export class ComponentWorld {
   }
 
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.disposing) return;
     if (this.updating || this.flushing) throw new Error("ComponentWorld.dispose() must run outside an update boundary.");
     const errors: unknown[] = [];
-    this.disposeNow(errors);
+    this.disposing = true;
+    try {
+      this.disposeNow(errors);
+    } finally {
+      this.disposed = true;
+      this.disposing = false;
+    }
     if (errors.length > 0) throw new AggregateError(errors, "ComponentWorld disposal encountered lifecycle errors.");
   }
 
@@ -362,29 +373,48 @@ export class ComponentWorld {
   }
 
   private schedule(mutation: Mutation): void {
-    if (this.updating || this.flushing) this.queuedMutations.push(mutation);
-    else mutation();
+    if (this.updating || this.flushing) {
+      this.queuedMutations.push(mutation);
+      return;
+    }
+
+    const errors: unknown[] = [];
+    this.flushing = true;
+    try {
+      try { mutation(); }
+      catch (error) { errors.push(error); }
+      this.drainQueuedMutations(errors);
+    } finally {
+      this.flushing = false;
+    }
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "ComponentWorld mutations failed.");
   }
 
   private flushMutations(errors: unknown[]): void {
     if (this.flushing || this.queuedMutations.length === 0) return;
     this.flushing = true;
-    let operations = 0;
     try {
-      while (this.queuedMutations.length > 0) {
-        operations += 1;
-        if (operations > 10_000) {
-          errors.push(new Error("ComponentWorld mutation queue exceeded its 10,000 operation safety limit."));
-          this.queuedMutations.length = 0;
-          break;
-        }
-        const mutation = this.queuedMutations.shift();
-        if (!mutation) continue;
-        try { mutation(); }
-        catch (error) { errors.push(error); }
-      }
+      this.drainQueuedMutations(errors);
     } finally {
       this.flushing = false;
+    }
+  }
+
+  private drainQueuedMutations(errors: unknown[]): void {
+    let operations = 0;
+    while (this.queuedMutations.length > 0) {
+      operations += 1;
+      if (operations > 10_000) {
+        errors.push(new Error("ComponentWorld mutation queue exceeded its 10,000 operation safety limit."));
+        this.queuedMutations.length = 0;
+        break;
+      }
+      const mutation = this.queuedMutations.shift();
+      if (!mutation) continue;
+      try { mutation(); }
+      catch (error) { errors.push(error); }
     }
   }
 
@@ -396,9 +426,9 @@ export class ComponentWorld {
     }
     this.systems.length = 0;
     this.nodes.clear();
+    this.components.clear();
     this.componentsByNode.clear();
     this.queuedMutations.length = 0;
-    this.disposed = true;
   }
 
   private invoke(
@@ -419,7 +449,7 @@ export class ComponentWorld {
   }
 
   private assertUsable(): void {
-    if (this.disposed) throw new ComponentWorldError("CORE_WORLD_DISPOSED", "ComponentWorld has already been disposed.");
+    if (this.disposed || this.disposing) throw new ComponentWorldError("CORE_WORLD_DISPOSED", "ComponentWorld is disposed or disposing.");
   }
 }
 

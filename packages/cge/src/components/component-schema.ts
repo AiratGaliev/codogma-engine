@@ -108,28 +108,58 @@ function validateValue(
 }
 
 function validatePropertySchema(name: string, input: unknown): CoreDiagnostic[] {
-  if (!isRecord(input) || !PROPERTY_TYPES.includes(input.type as (typeof PROPERTY_TYPES)[number])) {
+  if (!isRecord(input) || !isJsonValue(input) || !PROPERTY_TYPES.includes(input.type as (typeof PROPERTY_TYPES)[number])) {
     return [diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an unsupported type.", name)];
   }
   const errors: CoreDiagnostic[] = [];
-  if (input.required !== undefined && typeof input.required !== "boolean") errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " required must be boolean.", name));
+  if (input.label !== undefined && typeof input.label !== "string") {
+    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " label must be a string.", name));
+  }
+  if (input.description !== undefined && typeof input.description !== "string") {
+    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " description must be a string.", name));
+  }
+  if (input.required !== undefined && typeof input.required !== "boolean") {
+    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " required must be boolean.", name));
+  }
   if (input.storage !== undefined && !STORAGE_VALUES.includes(input.storage as ComponentPropertyStorage)) {
     errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an unsupported storage mode.", name));
   }
-  const numericKeys = input.type === "number" ? ["min", "max"] : input.type === "string" ? ["minLength", "maxLength"] : [];
-  for (const key of numericKeys) {
-    const value = input[key];
-    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || (key.endsWith("Length") && (!Number.isInteger(value) || value < 0)))) {
-      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an invalid " + key + " constraint.", name));
+
+  if (input.type === "number") {
+    for (const key of ["min", "max"]) {
+      const value = input[key];
+      if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) {
+        errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an invalid " + key + " constraint.", name));
+      }
+    }
+    if (input.integer !== undefined && typeof input.integer !== "boolean") {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " integer must be boolean.", name));
+    }
+    if (typeof input.min === "number" && typeof input.max === "number" && input.min > input.max) {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " minimum exceeds maximum.", name));
     }
   }
-  if (input.type === "number" && typeof input.min === "number" && typeof input.max === "number" && input.min > input.max) {
-    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " minimum exceeds maximum.", name));
+
+  if (input.type === "string") {
+    for (const key of ["minLength", "maxLength"]) {
+      const value = input[key];
+      if (value !== undefined && (typeof value !== "number" || !Number.isInteger(value) || value < 0)) {
+        errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an invalid " + key + " constraint.", name));
+      }
+    }
+    if (typeof input.minLength === "number" && typeof input.maxLength === "number" && input.minLength > input.maxLength) {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " minimum length exceeds maximum length.", name));
+    }
+    if (input.pattern !== undefined) {
+      if (typeof input.pattern !== "string") {
+        errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " pattern must be a string.", name));
+      } else {
+        try { new RegExp(input.pattern); }
+        catch { errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an invalid regular expression.", name)); }
+      }
+    }
   }
-  if (input.type === "string" && typeof input.pattern === "string") {
-    try { new RegExp(input.pattern); }
-    catch { errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an invalid regular expression.", name)); }
-  }
+
   if (input.type === "enum" &&
       (!Array.isArray(input.options) || input.options.length === 0 ||
        input.options.some((option) => typeof option !== "string" || option.length === 0) ||
@@ -140,6 +170,10 @@ function validatePropertySchema(name: string, input: unknown): CoreDiagnostic[] 
       (!Array.isArray(input.assetKinds) || input.assetKinds.some((kind) => !ASSET_KINDS.includes(kind as AssetKind)))) {
     errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Asset property " + name + " has an unsupported asset kind.", name));
   }
+  if (input.type === "node" && input.allowSelf !== undefined && typeof input.allowSelf !== "boolean") {
+    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Node property " + name + " allowSelf must be boolean.", name));
+  }
+
   if (input.defaultValue !== undefined && !isJsonValue(input.defaultValue)) {
     errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Default for " + name + " is not JSON-compatible.", name));
   } else if (input.defaultValue !== undefined && errors.length === 0) {
@@ -153,7 +187,7 @@ function validatePropertySchema(name: string, input: unknown): CoreDiagnostic[] 
 }
 
 export function validateComponentTypeSchema(input: unknown): ValidationResult<ComponentTypeSchemaV1> {
-  if (!isRecord(input) || input.schemaVersion !== COMPONENT_SCHEMA_VERSION ||
+  if (!isRecord(input) || !isJsonValue(input) || input.schemaVersion !== COMPONENT_SCHEMA_VERSION ||
       typeof input.typeId !== "string" || !input.typeId.trim() ||
       typeof input.name !== "string" || !input.name.trim() ||
       typeof input.version !== "string" || !input.version.trim() ||
@@ -177,7 +211,7 @@ export function validateComponentProperties(
 ): ValidationResult<JsonObject> {
   if (!isRecord(input)) return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_VALUE", "Component properties must be a JSON object.")] };
   const diagnostics: CoreDiagnostic[] = [];
-  const normalized: JsonObject = {};
+  const normalized = Object.create(null) as JsonObject;
 
   for (const [name, propertySchema] of Object.entries(schema.properties)) {
     if ((propertySchema.storage ?? "persisted") !== "persisted") continue;

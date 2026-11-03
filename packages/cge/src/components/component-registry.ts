@@ -38,6 +38,17 @@ export class ComponentRegistrationError extends Error {
   }
 }
 
+function cloneAndFreezeSchema(schema: ComponentTypeSchemaV1): ComponentTypeSchemaV1 {
+  const snapshot = JSON.parse(JSON.stringify(schema)) as ComponentTypeSchemaV1;
+  const freeze = (value: unknown): void => {
+    if (value === null || typeof value !== "object" || Object.isFrozen(value)) return;
+    for (const child of Object.values(value)) freeze(child);
+    Object.freeze(value);
+  };
+  freeze(snapshot);
+  return snapshot;
+}
+
 export class ComponentRegistry {
   private readonly definitions = new Map<string, ComponentTypeDefinition>();
 
@@ -46,17 +57,22 @@ export class ComponentRegistry {
     if (!validation.valid || !validation.value) {
       throw new ComponentRegistrationError("Component type has an invalid schema.", validation.diagnostics);
     }
-    if (this.definitions.has(definition.schema.typeId)) {
+    const typeId = validation.value.typeId;
+    if (this.definitions.has(typeId)) {
       throw new ComponentRegistrationError(
-        "Component type " + definition.schema.typeId + " is already registered.",
+        "Component type " + typeId + " is already registered.",
         [{
           code: "CORE_DUPLICATE_REGISTRATION",
           severity: "error",
-          message: "Component type " + definition.schema.typeId + " is already registered.",
+          message: "Component type " + typeId + " is already registered.",
         }],
       );
     }
-    this.definitions.set(definition.schema.typeId, definition);
+    const registeredDefinition = Object.freeze({
+      schema: cloneAndFreezeSchema(validation.value),
+      create: definition.create,
+    });
+    this.definitions.set(typeId, registeredDefinition);
   }
 
   get(typeId: string): ComponentTypeDefinition | undefined {

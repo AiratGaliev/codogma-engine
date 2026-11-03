@@ -17,6 +17,7 @@ export interface SceneValidationContext {
   componentSchemas?: ReadonlyMap<string, ComponentTypeSchemaV1>;
   registeredComponentTypes?: ReadonlySet<string>;
   prefabIds?: ReadonlySet<string>;
+  prefabs?: ReadonlyMap<string, PrefabDocumentV1>;
 }
 
 function issue(
@@ -138,6 +139,62 @@ function collectNodeIds(nodes: unknown[], ids: Set<string>, diagnostics: CoreDia
   });
 }
 
+function collectPrefabNodes(root: PrefabDocumentV1["root"]): Map<string, PrefabDocumentV1["root"]> {
+  const nodes = new Map<string, PrefabDocumentV1["root"]>();
+  const visit = (node: PrefabDocumentV1["root"]): void => {
+    nodes.set(node.id, node);
+    node.children.forEach(visit);
+  };
+  visit(root);
+  return nodes;
+}
+
+function validatePrefabOverrides(
+  prefabInstance: Record<string, unknown>,
+  path: string,
+  context: SceneValidationContext,
+  nodeId: string,
+  diagnostics: CoreDiagnostic[],
+): void {
+  if (!isNonEmptyString(prefabInstance.prefabId) || !Array.isArray(prefabInstance.overrides)) return;
+  const prefabId = prefabInstance.prefabId;
+  const prefabDocument = context.prefabs?.get(prefabId);
+  if (context.prefabs && !prefabDocument) {
+    diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab " + prefabId + " is not available in the validation context.", path + ".prefabId", nodeId));
+  } else if (!context.prefabs && context.prefabIds && !context.prefabIds.has(prefabId)) {
+    diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab " + prefabId + " is not registered.", path + ".prefabId", nodeId));
+  }
+  const prefabNodes = prefabDocument ? collectPrefabNodes(prefabDocument.root) : undefined;
+  const seenOverrides = new Set<string>();
+
+  prefabInstance.overrides.forEach((override, index) => {
+    const overridePath = path + ".overrides[" + index + "]";
+    if (!isRecord(override) || !isJsonValue(override) ||
+        !isNonEmptyString(override.targetNodeId) || !isNonEmptyString(override.propertyPath) ||
+        !Object.prototype.hasOwnProperty.call(override, "value") || !isJsonValue(override.value) ||
+        (override.targetComponentId !== undefined && !isNonEmptyString(override.targetComponentId))) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab override requires targetNodeId, propertyPath and a JSON-compatible value; targetComponentId must be a non-empty id when present.", overridePath, nodeId));
+      return;
+    }
+
+    const targetNodeId = override.targetNodeId;
+    const targetComponentId = typeof override.targetComponentId === "string" ? override.targetComponentId : "";
+    const identity = targetNodeId + "\u0000" + targetComponentId + "\u0000" + override.propertyPath;
+    if (seenOverrides.has(identity)) {
+      diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Prefab override is duplicated for the same target and property.", overridePath, nodeId));
+    }
+    seenOverrides.add(identity);
+
+    const targetNode = prefabNodes?.get(targetNodeId);
+    if (prefabNodes && !targetNode) {
+      diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab override target node " + targetNodeId + " does not exist in prefab " + prefabId + ".", overridePath + ".targetNodeId", nodeId));
+    } else if (targetNode && targetComponentId &&
+        !targetNode.components.some((component) => component.id === targetComponentId)) {
+      diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab override component " + targetComponentId + " does not exist on target node " + targetNodeId + ".", overridePath + ".targetComponentId", nodeId));
+    }
+  });
+}
+
 function validateNode(
   node: unknown,
   path: string,
@@ -203,7 +260,7 @@ function validateNode(
       });
       diagnostics.push(...result.diagnostics.map((item) => ({
         ...item,
-        path: componentPath + ".properties",
+        path: componentPath + ".properties" + (item.propertyName ? "." + item.propertyName : ""),
         entityId: nodeId,
         componentInstanceId: componentId,
       })));
@@ -215,8 +272,10 @@ function validateNode(
     if (!isRecord(prefab) || !isNonEmptyString(prefab.prefabId) ||
         !Array.isArray(prefab.overrides) || !isJsonValue(prefab)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab instance requires a prefabId and JSON overrides.", path + ".prefabInstance", node.id));
-    } else if (context.prefabIds && !context.prefabIds.has(prefab.prefabId as string)) {
-      diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab " + prefab.prefabId + " is not registered.", path + ".prefabInstance.prefabId", node.id));
+    } else if (prefab.sourceNodeId !== undefined && !isNonEmptyString(prefab.sourceNodeId)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab sourceNodeId must be a non-empty stable id.", path + ".prefabInstance.sourceNodeId", node.id));
+    } else {
+      validatePrefabOverrides(prefab, path + ".prefabInstance", context, node.id, diagnostics);
     }
   }
 

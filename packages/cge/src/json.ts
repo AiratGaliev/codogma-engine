@@ -10,12 +10,38 @@ export function isJsonValue(value: unknown, ancestors = new WeakSet<object>()): 
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
   if (typeof value === "number") return Number.isFinite(value);
   if (typeof value !== "object" || ancestors.has(value)) return false;
+
   ancestors.add(value);
-  const valid = Array.isArray(value)
-    ? value.every((item) => isJsonValue(item, ancestors))
-    : isRecord(value) && Object.values(value).every((item) => isJsonValue(item, ancestors));
-  ancestors.delete(value);
-  return valid;
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0) {
+        return false;
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        if (!Object.prototype.hasOwnProperty.call(value, index)) return false;
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !("value" in descriptor) || !isJsonValue(descriptor.value, ancestors)) return false;
+      }
+      return Object.keys(value).every((key) => {
+        const index = Number(key);
+        return Number.isInteger(index) && index >= 0 && index < value.length && String(index) === key;
+      });
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    if ((prototype !== Object.prototype && prototype !== null) || Object.getOwnPropertySymbols(value).length > 0) {
+      return false;
+    }
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !("value" in descriptor) || !isJsonValue(descriptor.value, ancestors)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 export function cloneJsonValue<T extends JsonValue>(value: T): T {
@@ -26,7 +52,7 @@ export function stableStringify(value: JsonValue, space = 2): string {
   function sort(item: JsonValue): JsonValue {
     if (Array.isArray(item)) return item.map(sort);
     if (item !== null && typeof item === "object") {
-      const sorted: JsonObject = {};
+      const sorted = Object.create(null) as JsonObject;
       for (const key of Object.keys(item).sort()) {
         const child = item[key];
         if (child !== undefined) sorted[key] = sort(child);
