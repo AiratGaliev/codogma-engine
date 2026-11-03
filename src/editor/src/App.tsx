@@ -1170,8 +1170,10 @@ function App() {
   async function openUserComponentSource(definition: UserComponentsDocument["components"][number]) {
     const directory = componentDocumentPath().split("/").slice(0, -1).join("/");
     const path = [directory, `${definition.name}.ts`].filter(Boolean).join("/");
-    const exists = flattenProjectFiles(projectTree() ?? { name: "", isFile: false, children: [] })
-      .some((entry) => entry.path === path && entry.entry.isFile);
+    const tree = projectTree();
+    const exists = tree
+      ? flattenProjectFiles(tree).some((entry) => entry.path === path && entry.entry.isFile)
+      : false;
     if (exists) {
       await openTypeScriptFile(path);
       return;
@@ -3604,6 +3606,10 @@ function App() {
                           <For each={entry.definition.properties ?? []}>
                             {(property) => {
                               const propertySchema = () => createUserComponentSchema(entry.definition).value?.properties[property.name];
+                              const enumOptions = () => {
+                                const schema = propertySchema();
+                                return schema?.type === "enum" ? schema.options : [];
+                              };
                               const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? propertySchema()?.defaultValue;
                               return (
                                 <label class="inspector-field component-property-field">
@@ -3613,7 +3619,7 @@ function App() {
                                   </Show>
                                   <Show when={propertySchema()?.type === "enum"}>
                                     <select aria-label={`${entry.definition.name} ${property.name}`} value={String(propertyValue() ?? "")} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.value)}>
-                                      <For each={propertySchema()?.type === "enum" ? propertySchema()?.options ?? [] : []}>{(option) => <option value={option}>{option}</option>}</For>
+                                      <For each={enumOptions()}>{(option) => <option value={option}>{option}</option>}</For>
                                     </select>
                                   </Show>
                                   <Show when={propertySchema()?.type === "number" || propertySchema()?.type === "string"}>
