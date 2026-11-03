@@ -103,6 +103,17 @@ export function createUserComponentSchema(
     };
   }
 
+  if (definition.properties !== undefined && !Array.isArray(definition.properties)) {
+    return {
+      valid: false,
+      diagnostics: [{
+        code: "COMPONENT_INVALID_SCHEMA",
+        severity: "error",
+        message: "User Component properties must be an array.",
+      }],
+    };
+  }
+
   const properties: ComponentTypeSchemaV1["properties"] = {};
   const diagnostics: CoreDiagnostic[] = [];
   const names = new Set<string>();
@@ -258,6 +269,9 @@ export function updateUserComponentDefinition(
   const current = components[index];
   if (!current) throw new Error(`User Component "${name}" was not found.`);
   const updated = { ...current, ...clone(patch) };
+  if (typeof updated.name !== "string" || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(updated.name)) {
+    throw new TypeError("User Component name must be a valid TypeScript identifier.");
+  }
   if (components.some((item, itemIndex) => itemIndex !== index && item.name === updated.name)) {
     throw new Error(`User Component "${updated.name}" already exists.`);
   }

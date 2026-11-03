@@ -1628,8 +1628,16 @@ test("User Component enum fields use Core schema and round-trip through Scene sa
   await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
   await page.getByTestId("hierarchy-item-dino").click();
 
-  const tint = page.getByLabel("Tint tint");
+  const attachedComponents = page.getByTestId("attached-components");
+  const tint = attachedComponents.getByLabel("Tint tint");
   await expect(tint).toHaveValue("red");
+
+  await attachedComponents.getByRole("button", { name: "Detach Tint" }).click();
+  await expect(attachedComponents.getByLabel("Tint tint")).toHaveCount(0);
+  await attachedComponents.getByLabel("User Component to attach").selectOption("Tint");
+  await attachedComponents.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(attachedComponents.getByLabel("Tint tint")).toHaveValue("red");
+
   await tint.selectOption("green");
   await expect(tint).toHaveValue("green");
   await saveSceneWithShortcut(page);
@@ -1641,7 +1649,8 @@ test("User Component enum fields use Core schema and round-trip through Scene sa
   await page.reload();
   await expect(page.getByTestId("hierarchy-item-dino")).toBeVisible();
   await page.getByTestId("hierarchy-item-dino").click();
-  await expect(page.getByLabel("Tint tint")).toHaveValue("green");
+  await expect(page.getByTestId("attached-components").getByLabel("Tint tint")).toHaveValue("green");
+  await expect(page.getByTestId("attached-components").getByRole("button", { name: "Detach Tint" })).toBeVisible();
 });
 
 test("TypeScript source opens, edits, saves and reopens from the Project browser", async ({ page }) => {

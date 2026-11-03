@@ -1337,21 +1337,18 @@ function App() {
     const component = current.components.find((item) => item.name === componentName);
     const propertyName = newComponentPropertyName().trim();
     if (!component || !propertyName) return;
-    const defaultValue = newComponentPropertyType() === "number" ? 0
-      : newComponentPropertyType() === "boolean" ? false : "";
+    const propertyType = newComponentPropertyType();
+    const defaultValue = propertyType === "number" ? 0 : propertyType === "boolean" ? false : "";
     try {
-      const next = {
-        ...current,
-        components: current.components.map((item) => item.name === componentName
-          ? { ...item, properties: [...(item.properties ?? []), {
-              name: propertyName,
-              label: propertyName,
-              defValue: defaultValue,
-              customDefinition: false,
-              type: { id: newComponentPropertyType() },
-            }] }
-          : item),
-      };
+      const next = updateUserComponentDefinition(current, componentName, {
+        properties: [...(component.properties ?? []), {
+          name: propertyName,
+          label: propertyName,
+          defValue: defaultValue,
+          customDefinition: false,
+          type: { id: propertyType },
+        }],
+      });
       setComponentDocument(next);
       setNewComponentPropertyName("");
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
@@ -1502,7 +1499,10 @@ function App() {
         : [];
       for (const name of names) {
         const definition = definitions.get(name);
-        if (!definition) continue;
+        if (!definition) {
+          log("warning", `${object.name} · ${name}: no matching .components definition was found. The serialized component reference is preserved.`);
+          continue;
+        }
         const result = validateUserComponentProperties(object.source, definition);
         for (const diagnostic of result.diagnostics) {
           if (diagnostic.severity === "error") {

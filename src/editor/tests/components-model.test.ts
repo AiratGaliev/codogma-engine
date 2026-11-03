@@ -107,3 +107,14 @@ test("validates enum edits and rejects unsupported legacy property types", () =>
   assert.equal(schema.valid, false);
   assert.match(schema.diagnostics[0]?.message ?? "", /unsupported legacy type/);
 });
+
+test("rejects invalid component renames and malformed property collections", () => {
+  assert.throws(
+    () => updateUserComponentDefinition(fixture, "PushOnClick", { name: "Bad Name" }),
+    /valid TypeScript identifier/,
+  );
+  assert.equal(createUserComponentSchema({
+    name: "Malformed",
+    properties: {} as unknown as UserComponentDefinition["properties"],
+  }).valid, false);
+});
