@@ -109,7 +109,7 @@ export function authorizeRegisteredTestAction(
   }
 
   if (descriptor.status === "unavailable") {
-    return denied("CAPABILITY_UNAVAILABLE", descriptor.reason?.message ?? "The registered action is unavailable.");
+    return denied("CAPABILITY_UNAVAILABLE", descriptor.reason.message);
   }
 
   if (!descriptor.allowedProfiles.includes(handshake.profile)) {
