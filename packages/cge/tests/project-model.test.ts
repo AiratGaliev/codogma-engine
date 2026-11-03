@@ -8,6 +8,11 @@ import {
   serializeProjectDocument,
   validateProjectDocument,
   validateSceneDocument,
+  isJsonValue,
+  stableStringify,
+  type ComponentTypeSchemaV1,
+  type JsonValue,
+  type PrefabDocumentV1,
   type ProjectDocumentV1,
 } from "../src/index.js";
 
@@ -123,4 +128,130 @@ test("checked-in project v0/v1 compatibility fixtures are exercised by the parse
     (parsed.value as unknown as Record<string, unknown>).unknownPluginData,
     { keep: true },
   );
+});
+
+test("rejects non-JSON objects and safely preserves an own __proto__ data key", () => {
+  assert.equal(isJsonValue(new Date()), false);
+  assert.equal(isJsonValue(new Map()), false);
+  assert.equal(isJsonValue({ value: Number.NaN }), false);
+
+  const parsed = JSON.parse('{"__proto__":{"polluted":true},"value":1}') as JsonValue;
+  assert.equal(isJsonValue(parsed), true);
+  const roundTrip = JSON.parse(stableStringify(parsed)) as Record<string, unknown>;
+  assert.equal(Object.prototype.hasOwnProperty.call(roundTrip, "__proto__"), true);
+  assert.deepEqual(roundTrip.__proto__, { polluted: true });
+  assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "polluted"), false);
+});
+
+test("component validation diagnostics retain the exact persisted property path", () => {
+  const componentSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.path-check",
+    name: "Path Check",
+    version: "1.0.0",
+    properties: { speed: { type: "number", min: 0 } },
+  };
+  const result = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene-path",
+    name: "Path",
+    settings: {},
+    rootNodes: [{
+      id: "node-path",
+      name: "Player",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-path",
+        typeId: componentSchema.typeId,
+        schemaVersion: 1,
+        enabled: true,
+        properties: { speed: -1 },
+      }],
+      children: [],
+    }],
+  }, { componentSchemas: new Map([[componentSchema.typeId, componentSchema]]) });
+
+  const diagnostic = result.diagnostics.find((item) => item.propertyName === "speed");
+  assert.equal(diagnostic?.path, "rootNodes[0].components[0].properties.speed");
+  assert.equal(diagnostic?.componentInstanceId, "component-path");
+});
+
+test("validates Prefab override target node and component references", () => {
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-1",
+    name: "Crate",
+    root: {
+      id: "prefab-root",
+      name: "Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "prefab-component",
+        typeId: "com.codogma.crate",
+        schemaVersion: 1,
+        enabled: true,
+        properties: {},
+      }],
+      children: [],
+    },
+  };
+  const makeScene = (overrides: unknown[]) => ({
+    schemaVersion: 1,
+    id: "scene-prefab",
+    name: "Scene",
+    settings: {},
+    rootNodes: [{
+      id: "instance-node",
+      name: "Crate Instance",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+      prefabInstance: { prefabId: "prefab-1", overrides },
+    }],
+  });
+  const context = { prefabs: new Map([["prefab-1", prefab]]) };
+  const valid = validateSceneDocument(makeScene([
+    { targetNodeId: "prefab-root", propertyPath: "transform.x", value: 25 },
+    { targetNodeId: "prefab-root", targetComponentId: "prefab-component", propertyPath: "enabled", value: false },
+  ]), context);
+  assert.equal(valid.valid, true);
+
+  const invalid = validateSceneDocument(makeScene([
+    { targetNodeId: "missing-node", propertyPath: "transform.x", value: 25 },
+    { targetNodeId: "prefab-root", targetComponentId: "missing-component", propertyPath: "enabled", value: false },
+  ]), context);
+  assert.equal(invalid.valid, false);
+  assert.equal(invalid.diagnostics.filter((item) => item.code === "PROJECT_INVALID_REFERENCE").length, 2);
+});
+
+test("rejects malformed and duplicate Prefab overrides", () => {
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-prefab-invalid",
+    name: "Scene",
+    settings: {},
+    rootNodes: [{
+      id: "instance-node",
+      name: "Crate Instance",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+      prefabInstance: {
+        prefabId: "prefab-1",
+        overrides: [
+          { targetNodeId: "node", propertyPath: "x", value: 1 },
+          { targetNodeId: "node", propertyPath: "x", value: 2 },
+          { targetNodeId: "", propertyPath: "", value: undefined },
+        ],
+      },
+    }],
+  };
+  const result = validateSceneDocument(scene);
+  assert.equal(result.valid, false);
+  assert.equal(result.diagnostics.some((item) => item.code === "PROJECT_DUPLICATE_ID"), true);
+  assert.equal(result.diagnostics.some((item) => item.code === "SCENE_INVALID_NODE"), true);
 });

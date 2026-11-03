@@ -172,3 +172,144 @@ test("cleanup continues for all components when lifecycle callbacks throw", () =
     "destroy:healthy",
   ]);
 });
+
+test("snapshots queued component properties when the attachment is requested", () => {
+  const log: string[] = [];
+  let world: ComponentWorld;
+  const mutatorSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.property-snapshot",
+    name: "Property Snapshot",
+    version: "1.0.0",
+    properties: {},
+  };
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: mutatorSchema,
+    create: () => ({
+      onUpdate: () => {
+        const properties = { step: 1 };
+        world.attachComponent("node-1", schema.typeId, properties, { instanceId: "snapshot-component" });
+        properties.step = 9;
+      },
+    }),
+  });
+  registry.register({
+    schema,
+    create: ({ properties }) => ({
+      onCreate: () => log.push("step:" + String(properties.step)),
+    }),
+  });
+  world = new ComponentWorld("scene-a", registry);
+  world.createNode({ id: "node-1", name: "Player" });
+  world.attachComponent("node-1", mutatorSchema.typeId, {}, { instanceId: "mutator" });
+  world.update(1 / 60);
+
+  assert.deepEqual(log, ["step:1"]);
+});
+
+test("defers structural changes triggered by direct lifecycle callbacks until the operation boundary", () => {
+  const log: string[] = [];
+  let world: ComponentWorld;
+  const parentSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.parent-mutator",
+    name: "Parent Mutator",
+    version: "1.0.0",
+    properties: {},
+  };
+  const childSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.child-mutator",
+    name: "Child Mutator",
+    version: "1.0.0",
+    properties: {},
+  };
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: parentSchema,
+    create: () => ({
+      onCreate: () => world.attachComponent("node-1", childSchema.typeId, {}, { instanceId: "child-component" }),
+      onDestroy: () => log.push("parent:destroy"),
+    }),
+  });
+  registry.register({
+    schema: childSchema,
+    create: () => ({ onCreate: () => log.push("child:create") }),
+  });
+  world = new ComponentWorld("scene-a", registry);
+  world.createNode({ id: "node-1", name: "Player" });
+  world.attachComponent("node-1", parentSchema.typeId, {}, { instanceId: "parent-component" });
+
+  assert.equal(world.componentCount, 2);
+  assert.deepEqual(log, ["child:create"]);
+  world.removeComponent("parent-component");
+  assert.equal(world.componentCount, 1);
+  assert.deepEqual(log, ["child:create", "parent:destroy"]);
+});
+
+test("does not leave orphan components when a Node is destroyed from a lifecycle callback", () => {
+  const mutatorSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.attach-on-destroy",
+    name: "Attach On Destroy",
+    version: "1.0.0",
+    properties: {},
+  };
+  const registry = new ComponentRegistry();
+  let world: ComponentWorld;
+  registry.register({
+    schema: mutatorSchema,
+    create: () => ({
+      onDestroy: () => world.attachComponent("node-1", mutatorSchema.typeId, {}, { instanceId: "orphan" }),
+    }),
+  });
+  world = new ComponentWorld("scene-a", registry);
+  world.createNode({ id: "node-1", name: "Player" });
+  world.attachComponent("node-1", mutatorSchema.typeId, {}, { instanceId: "source" });
+
+  assert.throws(() => world.destroyNode("node-1"), /was not found/);
+  assert.equal(world.nodeCount, 0);
+  assert.equal(world.componentCount, 0);
+});
+
+test("rejects lifecycle mutations during disposal and still releases every instance", () => {
+  const log: string[] = [];
+  const registry = new ComponentRegistry();
+  let world: ComponentWorld;
+  registry.register({
+    schema,
+    create: () => ({
+      onDestroy: () => {
+        log.push("destroying");
+        world.attachComponent("node-1", schema.typeId, {}, { instanceId: "late-component" });
+      },
+    }),
+  });
+  world = new ComponentWorld("scene-a", registry);
+  world.createNode({ id: "node-1", name: "Player" });
+  world.attachComponent("node-1", schema.typeId, {}, { instanceId: "initial-component" });
+
+  assert.throws(() => world.dispose(), AggregateError);
+  assert.equal(world.isDisposed, true);
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(log, ["destroying"]);
+});
+
+test("registry owns an immutable schema snapshot after registration", () => {
+  const registry = new ComponentRegistry();
+  const mutableSchema: ComponentTypeSchemaV1 = {
+    ...schema,
+    properties: { step: { type: "number", min: 0, defaultValue: 1 } },
+  };
+  registry.register({ schema: mutableSchema, create: () => ({}) });
+  const registered = registry.get(schema.typeId);
+  assert.ok(registered);
+  mutableSchema.properties.step = { type: "number", min: 100, defaultValue: 200 };
+
+  const registeredStep = registered.schema.properties.step;
+  assert.equal(registeredStep?.type === "number" ? registeredStep.min : undefined, 0);
+  assert.throws(() => {
+    (registeredStep as unknown as { min?: number }).min = 400;
+  }, TypeError);
+});

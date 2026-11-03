@@ -135,3 +135,31 @@ test("round-trips Scene component values using the same schema and stable resour
     target: { nodeId: "node-enemy" },
   });
 });
+
+test("rejects malformed type-specific metadata instead of silently ignoring it", () => {
+  const invalidNumber = validateComponentTypeSchema({
+    schemaVersion: 1,
+    typeId: "com.codogma.invalid-number",
+    name: "Invalid Number",
+    version: "1.0.0",
+    properties: { value: { type: "number", integer: "yes" } },
+  });
+  const invalidString = validateComponentTypeSchema({
+    schemaVersion: 1,
+    typeId: "com.codogma.invalid-string",
+    name: "Invalid String",
+    version: "1.0.0",
+    properties: { value: { type: "string", minLength: 8, maxLength: 2, pattern: 42 } },
+  });
+  const invalidNode = validateComponentTypeSchema({
+    schemaVersion: 1,
+    typeId: "com.codogma.invalid-node",
+    name: "Invalid Node",
+    version: "1.0.0",
+    properties: { target: { type: "node", allowSelf: "false" } },
+  });
+
+  assert.equal(invalidNumber.valid, false);
+  assert.equal(invalidString.valid, false);
+  assert.equal(invalidNode.valid, false);
+});
