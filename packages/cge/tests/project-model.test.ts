@@ -8,6 +8,7 @@ import {
   serializeProjectDocument,
   validateProjectDocument,
   validateSceneDocument,
+  validatePrefabDocument,
   isJsonValue,
   stableStringify,
   type ComponentTypeSchemaV1,
