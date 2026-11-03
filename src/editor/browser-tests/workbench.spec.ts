@@ -286,6 +286,27 @@ test("Console panel can be dragged into the bottom Dock and undocked again", asy
 });
 
 
+test("Window menu marks the selected Bottom tab with a checkmark", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await page.getByRole("menuitem", { name: "Window" }).click();
+  const projectItem = page.getByRole("menuitemradio", { name: "Project" });
+  const animationItem = page.getByRole("menuitemradio", { name: "Animation" });
+  await expect(projectItem).toHaveAttribute("aria-checked", "true");
+  await expect(projectItem).toContainText("✓");
+  await expect(animationItem).toHaveAttribute("aria-checked", "false");
+
+  await animationItem.click();
+  await expect(page.getByRole("tab", { name: "Animation" })).toHaveAttribute("aria-selected", "true");
+
+  await page.getByRole("menuitem", { name: "Window" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+  const selectedAnimation = page.getByRole("menuitemradio", { name: "Animation" });
+  await expect(selectedAnimation).toHaveAttribute("aria-checked", "true");
+  await expect(selectedAnimation).toContainText("✓");
+});
+
 test("Console closes and reopens from View without losing its Bottom Dock location", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");

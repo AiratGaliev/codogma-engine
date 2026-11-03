@@ -2635,7 +2635,12 @@ function App() {
       { label: "Project", checkable: "radio", checked: layout().bottomTab === "Project", action: () => setLayout((current) => ({ ...current, bottomTab: "Project" })) },
       { label: "Animation", checkable: "radio", checked: layout().bottomTab === "Animation", action: () => setLayout((current) => ({ ...current, bottomTab: "Animation" })) },
       { label: "Components", checkable: "radio", checked: layout().bottomTab === "Components", action: () => setLayout((current) => ({ ...current, bottomTab: "Components" })) },
-      { label: "Console", checkable: compactWorkbench() || layout().consoleDocked ? "radio" : undefined, checked: layout().consoleVisible && (compactWorkbench() || layout().consoleDocked) && layout().bottomTab === "Console", action: openConsole },
+      {
+        label: "Console",
+        ...(compactWorkbench() || layout().consoleDocked ? { checkable: "radio" as const } : {}),
+        checked: layout().consoleVisible && (compactWorkbench() || layout().consoleDocked) && layout().bottomTab === "Console",
+        action: openConsole,
+      },
     ],
     Help: [
       { label: "Editor Host architecture", action: () => log("info", "SolidJS Host · legacy Colibri remains available at /editor/") },
@@ -2712,7 +2717,7 @@ function App() {
                           }}
                         >
                           <span class="menu-item-check" aria-hidden="true">
-                            {item.checked ? (item.checkable === "radio" ? "●" : "✓") : ""}
+                            {item.checked ? "✓" : ""}
                           </span>
                           <span class="menu-item-label">{item.label}</span>
                           <Show when={item.shortcut}><kbd>{item.shortcut}</kbd></Show>
