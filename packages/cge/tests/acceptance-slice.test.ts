@@ -29,12 +29,12 @@ const componentSchema: ComponentTypeSchemaV1 = {
 };
 
 function loadContext() {
-  const project = parseProjectDocument(readFixture("acceptance-project-v1.json"));
-  assert.ok(project);
-  const projectDocument = project;
-  const assets = new Map(projectDocument.assets.map((asset) => [asset.id, asset] as const));
+  const parsedProject = parseProjectDocument(readFixture("acceptance-project-v1.json"));
+  assert.ok(parsedProject.value);
+  const project = parsedProject.value;
+  const assets = new Map(project.assets.map((asset) => [asset.id, asset] as const));
   return {
-    project: projectDocument,
+    project,
     context: {
       assets,
       componentSchemas: new Map([[componentSchema.typeId, componentSchema]]),
