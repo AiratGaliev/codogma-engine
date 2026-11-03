@@ -1155,7 +1155,7 @@ function App() {
   }
 
   async function createTypeScriptFile(path: string, content: string) {
-    if (!/^[A-Za-z0-9_.-]+(?:\\/[A-Za-z0-9_.-]+)*\\.tsx?$/i.test(path) || path.split("/").includes("..")) {
+    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.tsx?$/i.test(path) || path.split("/").includes("..")) {
       throw new Error("TypeScript source path must be a relative .ts/.tsx path inside the project.");
     }
     assertNewProjectFilePath(path);
