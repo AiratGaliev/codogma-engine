@@ -64,15 +64,20 @@ export interface UnsupportedCapabilityReason {
   retryable: boolean;
 }
 
-export interface CapabilityDescriptor {
+export interface CapabilityDescriptorBase {
   id: string;
   version: ContractVersion;
   description: string;
   scope: "runtime" | "session" | "project";
-  status: "available" | "partial" | "unavailable";
   eventTypes: readonly string[];
-  reason?: UnsupportedCapabilityReason;
 }
+
+export type CapabilityDescriptor =
+  | (CapabilityDescriptorBase & { status: "available"; reason?: never })
+  | (CapabilityDescriptorBase & {
+      status: "partial" | "unavailable";
+      reason: UnsupportedCapabilityReason;
+    });
 
 export interface HandshakeMessage extends ContractVersionSet {
   kind: "game-test-bridge.handshake";
