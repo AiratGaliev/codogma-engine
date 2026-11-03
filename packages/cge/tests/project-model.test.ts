@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   migrateProjectDocument,
@@ -101,4 +103,24 @@ test("scene validation catches duplicate node ids and invalid transforms", () =>
   assert.equal(result.valid, false);
   assert.equal(result.diagnostics.some((item) => item.code === "SCENE_DUPLICATE_ID"), true);
   assert.equal(result.diagnostics.some((item) => item.code === "SCENE_INVALID_TRANSFORM"), true);
+});
+
+test("checked-in project v0/v1 compatibility fixtures are exercised by the parser", () => {
+  const legacy = readFileSync(resolve(process.cwd(), "tests/fixtures/project-v0.json"), "utf8");
+  const current = readFileSync(resolve(process.cwd(), "tests/fixtures/project-v1.json"), "utf8");
+
+  const migrated = parseProjectDocument(legacy);
+  const parsed = parseProjectDocument(current);
+
+  assert.equal(migrated.value?.schemaVersion, 1);
+  assert.equal(migrated.migratedFrom, 0);
+  assert.deepEqual(
+    (migrated.value as unknown as Record<string, unknown>).unknownPluginData,
+    { keep: true },
+  );
+  assert.equal(parsed.value?.schemaVersion, 1);
+  assert.deepEqual(
+    (parsed.value as unknown as Record<string, unknown>).unknownPluginData,
+    { keep: true },
+  );
 });
