@@ -30,8 +30,8 @@ const componentSchema: ComponentTypeSchemaV1 = {
 
 function loadContext() {
   const project = parseProjectDocument(readFixture("acceptance-project-v1.json"));
-  assert.ok(project.value);
-  const projectDocument = project.value;
+  assert.ok(project);
+  const projectDocument = project;
   const assets = new Map(projectDocument.assets.map((asset) => [asset.id, asset] as const));
   return {
     project: projectDocument,
@@ -49,10 +49,10 @@ function cloneScene(scene: SceneDocumentV1): SceneDocumentV1 {
 
 test("acceptance fixture connects Project, Scene, module identity and two component instances", () => {
   const { project, context } = loadContext();
-  assert.equal(project.value.componentModules[0]?.typeId, componentSchema.typeId);
+  assert.equal(project.componentModules[0]?.typeId, componentSchema.typeId);
   assert.match(readFixture("FollowTarget.ts"), /com\.codogma\.acceptance\.follow-target/);
   assert.equal(
-    project.value.assets.find((asset) => asset.id === project.value.componentModules[0]?.moduleAssetId)?.kind,
+    project.assets.find((asset) => asset.id === project.componentModules[0]?.moduleAssetId)?.kind,
     "script",
   );
 
@@ -142,8 +142,8 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
   );
 
   const projectWithoutModule = {
-    ...project.value,
-    assets: project.value.assets.filter((asset) => asset.id !== negative.missingScriptAssetId),
+    ...project,
+    assets: project.assets.filter((asset) => asset.id !== negative.missingScriptAssetId),
   };
   assert.equal(
     validateProjectDocument(projectWithoutModule).diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"),
@@ -152,7 +152,7 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
 
   assert.equal(
     parseProjectDocument(JSON.stringify({
-      ...project.value,
+      ...project,
       schemaVersion: negative.unsupportedProjectVersion,
     })).diagnostics.some((item) => item.code === "PROJECT_UNSUPPORTED_VERSION"),
     true,
