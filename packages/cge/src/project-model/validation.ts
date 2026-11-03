@@ -153,6 +153,7 @@ function validateNode(
     return;
   }
 
+  const nodeId = node.id as string;
   for (const key of ["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]) {
     const value = node.transform[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -169,28 +170,30 @@ function validateNode(
       diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, node.id));
       return;
     }
-    if (componentIds.has(component.id)) {
-      diagnostics.push(issue("COMPONENT_DUPLICATE_INSTANCE", "Duplicate component instance id " + component.id + ".", componentPath + ".id", node.id));
+    const componentId = component.id as string;
+    const componentTypeId = component.typeId as string;
+    if (componentIds.has(componentId)) {
+      diagnostics.push(issue("COMPONENT_DUPLICATE_INSTANCE", "Duplicate component instance id " + componentId + ".", componentPath + ".id", nodeId));
     }
-    componentIds.add(component.id);
-    if (context.registeredComponentTypes && !context.registeredComponentTypes.has(component.typeId)) {
-      diagnostics.push(issue("COMPONENT_UNKNOWN_TYPE", "Component type " + component.typeId + " is not registered.", componentPath + ".typeId", node.id));
+    componentIds.add(componentId);
+    if (context.registeredComponentTypes && !context.registeredComponentTypes.has(componentTypeId)) {
+      diagnostics.push(issue("COMPONENT_UNKNOWN_TYPE", "Component type " + componentTypeId + " is not registered.", componentPath + ".typeId", nodeId));
     }
-    const schema = context.componentSchemas?.get(component.typeId);
+    const schema = context.componentSchemas?.get(componentTypeId);
     if (schema) {
       if (component.schemaVersion !== schema.schemaVersion) {
-        diagnostics.push(issue("COMPONENT_INVALID_SCHEMA", "Component instance schema version does not match the registered schema.", componentPath + ".schemaVersion", node.id));
+        diagnostics.push(issue("COMPONENT_INVALID_SCHEMA", "Component instance schema version does not match the registered schema.", componentPath + ".schemaVersion", nodeId));
       }
       const result = validateComponentProperties(schema, component.properties, {
         ...(context.assets === undefined ? {} : { assets: context.assets }),
         nodeIds,
-        ownerNodeId: node.id,
+        ownerNodeId: nodeId,
       });
       diagnostics.push(...result.diagnostics.map((item) => ({
         ...item,
         path: componentPath + ".properties",
-        entityId: node.id,
-        componentInstanceId: component.id,
+        entityId: nodeId,
+        componentInstanceId: componentId,
       })));
     }
   });
@@ -200,7 +203,7 @@ function validateNode(
     if (!isRecord(prefab) || !isNonEmptyString(prefab.prefabId) ||
         !Array.isArray(prefab.overrides) || !isJsonValue(prefab)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab instance requires a prefabId and JSON overrides.", path + ".prefabInstance", node.id));
-    } else if (context.prefabIds && !context.prefabIds.has(prefab.prefabId)) {
+    } else if (context.prefabIds && !context.prefabIds.has(prefab.prefabId as string)) {
       diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab " + prefab.prefabId + " is not registered.", path + ".prefabInstance.prefabId", node.id));
     }
   }
