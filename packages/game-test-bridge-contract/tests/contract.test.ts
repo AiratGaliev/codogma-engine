@@ -278,12 +278,44 @@ test("rejects duplicate event identifiers within one page", () => {
   const fixture = structuredClone(validEventPageFixture) as {
     events: Array<Record<string, unknown>>;
   } & Record<string, unknown>;
-  fixture.events[1] = { ...fixture.events[1], eventId: fixture.events[0]?.eventId };
+  const firstEvent = fixture.events[0];
+  const secondEvent = fixture.events[1];
+  assert.ok(firstEvent);
+  assert.ok(secondEvent);
+  fixture.events[1] = { ...secondEvent, eventId: firstEvent.eventId };
 
   const result = validateEventPage(fixture);
   assert.equal(result.success, false);
   if (result.success) return;
   assert.ok(result.errors.some((entry) => entry.code === "EVENT_ID_DUPLICATED"));
+});
+
+test("enforces the event payload size limit independently from the full message limit", () => {
+  const fixture = {
+    kind: "game-test-bridge.event",
+    eventId: "event-large-payload",
+    sequence: 50,
+    timestamp: 1793742000700,
+    timeDomain: "monotonic-ms",
+    testSessionId: "session-42",
+    eventType: "gameplay.semantic",
+    payload: {
+      name: "gameplay.large-payload",
+      schemaVersion: "1.0.0",
+      data: "x".repeat(65535),
+    },
+  };
+
+  const result = validateGameTestEvent(fixture);
+  assert.equal(result.success, false);
+  if (result.success) return;
+  assert.ok(result.errors.some((entry) => entry.code === "JSON_PAYLOAD_TOO_LARGE"));
+});
+
+test("uses strict numeric semantic version ranges", () => {
+  assert.equal(isContractVersion("1.2.3"), true);
+  assert.equal(isContractVersion("01.2.3"), false);
+  assert.equal(isContractVersion("1.2"), false);
 });
 
 test("enforces the serialized wire-size limit", () => {
