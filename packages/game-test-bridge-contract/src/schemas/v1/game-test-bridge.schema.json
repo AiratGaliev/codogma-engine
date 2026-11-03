@@ -1,0 +1,996 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codogma.com/game-test-bridge/1.0.0/schema.json",
+  "title": "Codogma Game Test Bridge contract schema v1",
+  "description": "Transport-neutral JSON wire contracts for Development/Test runtime observation and registered test actions.",
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "maxLength": 32
+    },
+    "VersionRange": {
+      "type": "object",
+      "required": ["minimum", "maximumExclusive"],
+      "properties": {
+        "minimum": { "$ref": "#/$defs/ContractVersion" },
+        "maximumExclusive": { "$ref": "#/$defs/ContractVersion" }
+      },
+      "additionalProperties": false
+    },
+    "OpaqueReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+    },
+    "EventTypeId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$"
+    },
+    "JsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string", "maxLength": 65536 },
+        {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/JsonValue" }
+        },
+        {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "$ref": "#/$defs/JsonValue" }
+        }
+      ]
+    },
+    "Extensions": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "minLength": 3,
+        "maxLength": 128,
+        "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/JsonValue" }
+    },
+    "DiagnosticField": {
+      "type": "string",
+      "enum": [
+        "transform.position",
+        "transform.rotation",
+        "transform.scale",
+        "lifecycle",
+        "component.status",
+        "resource.state",
+        "animation.state",
+        "input.device",
+        "physics.body",
+        "metrics.frameTime"
+      ]
+    },
+    "BridgeDiagnostic": {
+      "type": "object",
+      "required": ["code", "severity", "message", "source"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]+$"
+        },
+        "severity": { "type": "string", "enum": ["info", "warning", "error"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "source": { "$ref": "#/$defs/Identifier" },
+        "field": { "$ref": "#/$defs/DiagnosticField" },
+        "subjectRef": { "$ref": "#/$defs/OpaqueReference" }
+      },
+      "additionalProperties": false
+    },
+    "UnsupportedCapabilityReason": {
+      "type": "object",
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "NOT_DECLARED",
+            "NOT_IMPLEMENTED",
+            "PROFILE_DISABLED",
+            "RUNTIME_LIMITATION",
+            "DEPENDENCY_MISSING",
+            "POLICY_RESTRICTED",
+            "VERSION_MISMATCH",
+            "NOT_APPLICABLE",
+            "OTHER"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "retryable": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "CapabilityDescriptor": {
+      "type": "object",
+      "required": ["id", "version", "description", "scope", "status", "eventTypes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "version": { "$ref": "#/$defs/ContractVersion" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "scope": { "type": "string", "enum": ["runtime", "session", "project"] },
+        "status": { "type": "string", "enum": ["available", "partial", "unavailable"] },
+        "eventTypes": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/EventTypeId" }
+        },
+        "reason": { "$ref": "#/$defs/UnsupportedCapabilityReason" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "unavailable" } }, "required": ["status"] },
+          "then": { "required": ["reason"] },
+          "else": { "not": { "required": ["reason"] } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "RuntimeReadiness": {
+      "type": "object",
+      "required": ["state", "readyForTest", "diagnostics"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["starting", "ready", "degraded", "blocked", "stopped"]
+        },
+        "readyForTest": { "type": "boolean" },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/BridgeDiagnostic" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "HandshakeMessage": {
+      "type": "object",
+      "required": [
+        "kind",
+        "protocolVersion",
+        "schemaVersion",
+        "supportedProtocolVersions",
+        "supportedSchemaVersions",
+        "engineVersion",
+        "runtimeAdapterVersion",
+        "projectRevision",
+        "buildId",
+        "previewId",
+        "testSessionId",
+        "profile",
+        "actionPolicy",
+        "readiness",
+        "capabilities",
+        "registeredActions"
+      ],
+      "properties": {
+        "kind": { "const": "game-test-bridge.handshake" },
+        "protocolVersion": { "$ref": "#/$defs/ContractVersion" },
+        "schemaVersion": { "$ref": "#/$defs/ContractVersion" },
+        "supportedProtocolVersions": { "$ref": "#/$defs/VersionRange" },
+        "supportedSchemaVersions": { "$ref": "#/$defs/VersionRange" },
+        "engineVersion": { "$ref": "#/$defs/ContractVersion" },
+        "runtimeAdapterVersion": { "$ref": "#/$defs/ContractVersion" },
+        "projectRevision": { "$ref": "#/$defs/Identifier" },
+        "buildId": { "$ref": "#/$defs/Identifier" },
+        "previewId": {
+          "oneOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "testSessionId": { "$ref": "#/$defs/Identifier" },
+        "profile": { "type": "string", "enum": ["development", "test"] },
+        "actionPolicy": { "const": "registered-only" },
+        "readiness": { "$ref": "#/$defs/RuntimeReadiness" },
+        "capabilities": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/CapabilityDescriptor" }
+        },
+        "registeredActions": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/TestActionDescriptor" }
+        },
+        "extensions": { "$ref": "#/$defs/Extensions" }
+      },
+      "additionalProperties": false
+    },
+    "Transform2D": {
+      "type": "object",
+      "required": ["x", "y", "rotation", "scaleX", "scaleY"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "rotation": { "type": "number" },
+        "scaleX": { "type": "number" },
+        "scaleY": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "SceneSnapshot": {
+      "type": "object",
+      "required": ["sceneRef", "typeId", "state"],
+      "properties": {
+        "sceneRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" },
+        "state": { "type": "string", "enum": ["loading", "active", "paused", "stopping"] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "additionalProperties": false
+    },
+    "ComponentSnapshot": {
+      "type": "object",
+      "required": ["componentRef", "typeId", "state", "diagnostics"],
+      "properties": {
+        "componentRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" },
+        "state": {
+          "type": "string",
+          "enum": ["attached", "initializing", "active", "disabled", "failed", "detached"]
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/BridgeDiagnostic" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "EntitySnapshot": {
+      "type": "object",
+      "required": ["entityRef", "typeId", "state", "components"],
+      "properties": {
+        "entityRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" },
+        "state": { "type": "string", "enum": ["spawning", "active", "disabled", "destroying"] },
+        "transform": { "$ref": "#/$defs/Transform2D" },
+        "components": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/ComponentSnapshot" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceSnapshot": {
+      "type": "object",
+      "required": ["resourceRef", "typeId", "state", "diagnostics"],
+      "properties": {
+        "resourceRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" },
+        "state": { "type": "string", "enum": ["queued", "loading", "loaded", "failed", "unavailable"] },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/BridgeDiagnostic" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RuntimeMetric": {
+      "type": "object",
+      "required": ["name", "value", "unit", "source", "sampledAt", "sampleWindowMs", "accuracy"],
+      "properties": {
+        "name": { "$ref": "#/$defs/Identifier" },
+        "value": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "source": { "$ref": "#/$defs/Identifier" },
+        "sampledAt": { "type": "number", "minimum": 0 },
+        "sampleWindowMs": { "type": "number", "exclusiveMinimum": 0, "maximum": 3600000 },
+        "accuracy": { "type": "string", "enum": ["exact", "sampled", "estimated"] }
+      },
+      "additionalProperties": false
+    },
+    "RuntimeSnapshot": {
+      "type": "object",
+      "required": [
+        "kind",
+        "schemaVersion",
+        "testSessionId",
+        "capturedAt",
+        "timeDomain",
+        "readiness",
+        "activeScene",
+        "entities",
+        "resources",
+        "metrics",
+        "diagnostics"
+      ],
+      "properties": {
+        "kind": { "const": "game-test-bridge.snapshot" },
+        "schemaVersion": { "$ref": "#/$defs/ContractVersion" },
+        "testSessionId": { "$ref": "#/$defs/Identifier" },
+        "capturedAt": { "type": "number", "minimum": 0 },
+        "timeDomain": { "type": "string", "enum": ["unix-ms", "monotonic-ms"] },
+        "readiness": { "$ref": "#/$defs/RuntimeReadiness" },
+        "activeScene": {
+          "oneOf": [
+            { "$ref": "#/$defs/SceneSnapshot" },
+            { "type": "null" }
+          ]
+        },
+        "entities": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/EntitySnapshot" }
+        },
+        "resources": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/ResourceSnapshot" }
+        },
+        "metrics": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/RuntimeMetric" }
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 512,
+          "items": { "$ref": "#/$defs/BridgeDiagnostic" }
+        },
+        "extensions": { "$ref": "#/$defs/Extensions" }
+      },
+      "additionalProperties": false
+    },
+    "EventEnvelopeBase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "eventId",
+        "sequence",
+        "timestamp",
+        "timeDomain",
+        "testSessionId",
+        "eventType",
+        "payload"
+      ],
+      "properties": {
+        "kind": { "const": "game-test-bridge.event" },
+        "eventId": { "$ref": "#/$defs/Identifier" },
+        "sequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "timestamp": { "type": "number", "minimum": 0 },
+        "timeDomain": { "type": "string", "enum": ["unix-ms", "monotonic-ms"] },
+        "testSessionId": { "$ref": "#/$defs/Identifier" },
+        "sceneRef": { "$ref": "#/$defs/OpaqueReference" },
+        "entityRef": { "$ref": "#/$defs/OpaqueReference" },
+        "eventType": { "$ref": "#/$defs/EventTypeId" },
+        "payload": { "$ref": "#/$defs/JsonValue" },
+        "extensions": { "$ref": "#/$defs/Extensions" }
+      },
+      "additionalProperties": false
+    },
+    "SceneStartedPayload": {
+      "type": "object",
+      "required": ["sceneRef", "sceneTypeId"],
+      "properties": {
+        "sceneRef": { "$ref": "#/$defs/OpaqueReference" },
+        "sceneTypeId": { "$ref": "#/$defs/Identifier" }
+      },
+      "additionalProperties": false
+    },
+    "SceneReadyPayload": {
+      "type": "object",
+      "required": ["sceneRef"],
+      "properties": { "sceneRef": { "$ref": "#/$defs/OpaqueReference" } },
+      "additionalProperties": false
+    },
+    "SceneStoppedPayload": {
+      "type": "object",
+      "required": ["sceneRef", "reason"],
+      "properties": {
+        "sceneRef": { "$ref": "#/$defs/OpaqueReference" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      },
+      "additionalProperties": false
+    },
+    "EntitySpawnedPayload": {
+      "type": "object",
+      "required": ["entityRef", "typeId"],
+      "properties": {
+        "entityRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" }
+      },
+      "additionalProperties": false
+    },
+    "EntityDestroyedPayload": {
+      "type": "object",
+      "required": ["entityRef", "reason"],
+      "properties": {
+        "entityRef": { "$ref": "#/$defs/OpaqueReference" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      },
+      "additionalProperties": false
+    },
+    "ComponentChangedPayload": {
+      "type": "object",
+      "required": ["entityRef", "componentRef", "typeId"],
+      "properties": {
+        "entityRef": { "$ref": "#/$defs/OpaqueReference" },
+        "componentRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" }
+      },
+      "additionalProperties": false
+    },
+    "ResourceLoadedPayload": {
+      "type": "object",
+      "required": ["resourceRef", "typeId"],
+      "properties": {
+        "resourceRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" }
+      },
+      "additionalProperties": false
+    },
+    "ResourceFailedPayload": {
+      "type": "object",
+      "required": ["resourceRef", "typeId", "errorCode"],
+      "properties": {
+        "resourceRef": { "$ref": "#/$defs/OpaqueReference" },
+        "typeId": { "$ref": "#/$defs/Identifier" },
+        "errorCode": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "additionalProperties": false
+    },
+    "AnimationPayload": {
+      "type": "object",
+      "required": ["entityRef", "animationId"],
+      "properties": {
+        "entityRef": { "$ref": "#/$defs/OpaqueReference" },
+        "animationId": { "$ref": "#/$defs/Identifier" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      },
+      "additionalProperties": false
+    },
+    "InputObservedPayload": {
+      "type": "object",
+      "required": ["device", "control", "phase", "value"],
+      "properties": {
+        "device": { "type": "string", "enum": ["keyboard", "pointer", "touch", "gamepad", "other"] },
+        "control": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "phase": { "type": "string", "enum": ["down", "up", "move", "cancel"] },
+        "value": { "$ref": "#/$defs/JsonValue" }
+      },
+      "additionalProperties": false
+    },
+    "RuntimeStatePayload": {
+      "type": "object",
+      "required": ["reason"],
+      "properties": { "reason": { "type": "string", "minLength": 1, "maxLength": 256 } },
+      "additionalProperties": false
+    },
+    "SceneTransitionedPayload": {
+      "type": "object",
+      "required": ["fromSceneRef", "toSceneRef"],
+      "properties": {
+        "fromSceneRef": {
+          "oneOf": [
+            { "$ref": "#/$defs/OpaqueReference" },
+            { "type": "null" }
+          ]
+        },
+        "toSceneRef": { "$ref": "#/$defs/OpaqueReference" }
+      },
+      "additionalProperties": false
+    },
+    "GameplaySemanticPayload": {
+      "type": "object",
+      "required": ["name", "schemaVersion", "data"],
+      "properties": {
+        "name": { "$ref": "#/$defs/EventTypeId" },
+        "schemaVersion": { "$ref": "#/$defs/ContractVersion" },
+        "data": { "$ref": "#/$defs/JsonValue" }
+      },
+      "additionalProperties": false
+    },
+    "PhysicsContactPayload": {
+      "type": "object",
+      "required": ["bodyARef", "bodyBRef", "phase"],
+      "properties": {
+        "bodyARef": { "$ref": "#/$defs/OpaqueReference" },
+        "bodyBRef": { "$ref": "#/$defs/OpaqueReference" },
+        "phase": { "type": "string", "enum": ["begin", "stay", "end"] }
+      },
+      "additionalProperties": false
+    },
+    "GameTestEvent": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "scene.started" },
+                "payload": { "$ref": "#/$defs/SceneStartedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "scene.ready" },
+                "payload": { "$ref": "#/$defs/SceneReadyPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "scene.stopped" },
+                "payload": { "$ref": "#/$defs/SceneStoppedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "entity.spawned" },
+                "payload": { "$ref": "#/$defs/EntitySpawnedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "entity.destroyed" },
+                "payload": { "$ref": "#/$defs/EntityDestroyedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "component.attached" },
+                "payload": { "$ref": "#/$defs/ComponentChangedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "component.detached" },
+                "payload": { "$ref": "#/$defs/ComponentChangedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "resource.loaded" },
+                "payload": { "$ref": "#/$defs/ResourceLoadedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "resource.failed" },
+                "payload": { "$ref": "#/$defs/ResourceFailedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "animation.started" },
+                "payload": { "$ref": "#/$defs/AnimationPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "animation.completed" },
+                "payload": { "$ref": "#/$defs/AnimationPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "animation.stopped" },
+                "payload": {
+                  "allOf": [
+                    { "$ref": "#/$defs/AnimationPayload" },
+                    { "required": ["reason"] }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "input.observed" },
+                "payload": { "$ref": "#/$defs/InputObservedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "runtime.paused" },
+                "payload": { "$ref": "#/$defs/RuntimeStatePayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "runtime.resumed" },
+                "payload": { "$ref": "#/$defs/RuntimeStatePayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "scene.transitioned" },
+                "payload": { "$ref": "#/$defs/SceneTransitionedPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "gameplay.semantic" },
+                "payload": { "$ref": "#/$defs/GameplaySemanticPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "properties": {
+                "eventType": { "const": "physics.contact" },
+                "payload": { "$ref": "#/$defs/PhysicsContactPayload" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/EventEnvelopeBase" },
+            {
+              "not": {
+                "properties": {
+                  "eventType": {
+                    "enum": [
+                      "scene.started",
+                      "scene.ready",
+                      "scene.stopped",
+                      "entity.spawned",
+                      "entity.destroyed",
+                      "component.attached",
+                      "component.detached",
+                      "resource.loaded",
+                      "resource.failed",
+                      "animation.started",
+                      "animation.completed",
+                      "animation.stopped",
+                      "input.observed",
+                      "runtime.paused",
+                      "runtime.resumed",
+                      "scene.transitioned",
+                      "gameplay.semantic",
+                      "physics.contact"
+                    ]
+                  }
+                },
+                "required": ["eventType"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "EventReadRequest": {
+      "type": "object",
+      "required": ["testSessionId", "cursor", "limit"],
+      "properties": {
+        "testSessionId": { "$ref": "#/$defs/Identifier" },
+        "cursor": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "eventTypes": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/EventTypeId" }
+        },
+        "entityRefs": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/OpaqueReference" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SequenceGap": {
+      "type": "object",
+      "required": ["fromSequence", "toSequence", "reason"],
+      "properties": {
+        "fromSequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "toSequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "reason": { "type": "string", "enum": ["buffer-overflow", "retention", "source-gap"] }
+      },
+      "additionalProperties": false
+    },
+    "BufferOverflowDiagnostic": {
+      "type": "object",
+      "required": ["occurred", "capacity", "droppedEventCount"],
+      "properties": {
+        "occurred": { "type": "boolean" },
+        "capacity": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "droppedEventCount": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "EventStreamIntegrity": {
+      "type": "object",
+      "required": ["coverage", "sequenceGaps", "bufferOverflow", "lostEventCount"],
+      "properties": {
+        "coverage": { "type": "string", "enum": ["complete", "partial", "unknown"] },
+        "sequenceGaps": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/SequenceGap" }
+        },
+        "bufferOverflow": { "$ref": "#/$defs/BufferOverflowDiagnostic" },
+        "lostEventCount": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "EventPage": {
+      "type": "object",
+      "required": [
+        "kind",
+        "testSessionId",
+        "requestCursor",
+        "nextCursor",
+        "hasMore",
+        "events",
+        "integrity"
+      ],
+      "properties": {
+        "kind": { "const": "game-test-bridge.event-page" },
+        "testSessionId": { "$ref": "#/$defs/Identifier" },
+        "requestCursor": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "nextCursor": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "hasMore": { "type": "boolean" },
+        "events": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/GameTestEvent" }
+        },
+        "integrity": { "$ref": "#/$defs/EventStreamIntegrity" },
+        "extensions": { "$ref": "#/$defs/Extensions" }
+      },
+      "additionalProperties": false
+    },
+    "TestActionDescriptor": {
+      "type": "object",
+      "required": [
+        "actionId",
+        "version",
+        "description",
+        "capabilityId",
+        "effect",
+        "allowedProfiles",
+        "inputSchemaId",
+        "outputSchemaId",
+        "status"
+      ],
+      "properties": {
+        "actionId": { "$ref": "#/$defs/Identifier" },
+        "version": { "$ref": "#/$defs/ContractVersion" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "capabilityId": { "$ref": "#/$defs/Identifier" },
+        "effect": { "type": "string", "enum": ["observe", "controlled-state-change"] },
+        "allowedProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["development", "test"] }
+        },
+        "inputSchemaId": { "$ref": "#/$defs/Identifier" },
+        "outputSchemaId": { "$ref": "#/$defs/Identifier" },
+        "status": { "type": "string", "enum": ["available", "unavailable"] },
+        "reason": { "$ref": "#/$defs/UnsupportedCapabilityReason" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "unavailable" } },
+            "required": ["status"]
+          },
+          "then": { "required": ["reason"] },
+          "else": { "not": { "required": ["reason"] } }
+        },
+        {
+          "if": {
+            "properties": { "effect": { "const": "controlled-state-change" } },
+            "required": ["effect"]
+          },
+          "then": {
+            "properties": {
+              "allowedProfiles": {
+                "const": ["test"]
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "TestActionRequest": {
+      "type": "object",
+      "required": ["kind", "requestId", "testSessionId", "actionId", "actionVersion", "input"],
+      "properties": {
+        "kind": { "const": "game-test-bridge.action-request" },
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "testSessionId": { "$ref": "#/$defs/Identifier" },
+        "actionId": { "$ref": "#/$defs/Identifier" },
+        "actionVersion": { "$ref": "#/$defs/ContractVersion" },
+        "input": { "$ref": "#/$defs/JsonValue" }
+      },
+      "additionalProperties": false
+    },
+    "TestActionFailure": {
+      "type": "object",
+      "required": ["code", "message", "retryable", "diagnostics"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "ACTION_NOT_REGISTERED",
+            "ACTION_VERSION_MISMATCH",
+            "CAPABILITY_NOT_DECLARED",
+            "CAPABILITY_UNAVAILABLE",
+            "PROFILE_NOT_ALLOWED",
+            "INPUT_VALIDATION_FAILED",
+            "EXECUTION_FAILED",
+            "TIMEOUT",
+            "CANCELLED",
+            "POLICY_RESTRICTED"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "retryable": { "type": "boolean" },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/BridgeDiagnostic" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "TestActionSuccess": {
+      "type": "object",
+      "required": ["kind", "requestId", "status", "completedAt", "output"],
+      "properties": {
+        "kind": { "const": "game-test-bridge.action-result" },
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "status": { "const": "succeeded" },
+        "completedAt": { "type": "number", "minimum": 0 },
+        "output": { "$ref": "#/$defs/JsonValue" }
+      },
+      "additionalProperties": false
+    },
+    "TestActionRejectedOrFailed": {
+      "type": "object",
+      "required": ["kind", "requestId", "status", "completedAt", "failure"],
+      "properties": {
+        "kind": { "const": "game-test-bridge.action-result" },
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "status": { "type": "string", "enum": ["rejected", "failed"] },
+        "completedAt": { "type": "number", "minimum": 0 },
+        "failure": { "$ref": "#/$defs/TestActionFailure" }
+      },
+      "additionalProperties": false
+    },
+    "TestActionResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/TestActionSuccess" },
+        { "$ref": "#/$defs/TestActionRejectedOrFailed" }
+      ]
+    }
+  }
+}
