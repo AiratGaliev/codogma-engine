@@ -82,9 +82,9 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 Следующие направления описывают целевой продукт, а не подтверждённые функции текущей версии:
 
-- собственное независимое от Phaser публичное игровое API и runtime Core;
-- загрузчик сцен из новой сериализуемой Project Model с разрешением независимо зарегистрированных TypeScript-компонентов (не реализован как завершённый workflow);
-- законченная ECS/component-модель, встроенная в редакторский Inspector и сериализацию;
+- завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, migrations/validation/serialization, component schema/registry/world), но не является законченным runtime;
+- data-driven загрузчик сцен из сериализуемой Project Model с разрешением зарегистрированных TypeScript modules, rollback и связью с Phaser adapter (не реализован как завершённый workflow);
+- законченная runtime ECS/component-модель, интегрированная с Editor Inspector, Project Model loader и Phaser runtime; текущие Core lifecycle tests изолированы от UI/runtime;
 - синхронизация Inspector с реальными экземплярами компонентов работающей игры;
 - полноценный Game Preview Host с embedded, standalone и внешним browser preview;
 - специализированный runtime debugger и профайлер с измерениями CPU/кадра/ресурсов;
@@ -227,6 +227,9 @@ Tauri и Electron не выбираются только по размеру д�
 - метаданные, используемые Inspector, сериализацией, кодогенерацией и тестами.
 
 ### 5.2. Требования к проектным данным
+
+**Текущая реализационная база (03.11.2026):** начальный host-neutral контракт Project/Scene/Prefab и Component Schema v1 находится в `packages/cge/`. Фактический состав, проверки и незакрытые границы зафиксированы в [Core acceptance slice](core-component-acceptance-slice.md). Эта реализация не меняет существующие legacy `.scene`/`.components` форматы автоматически и не означает готовность Data-driven Scene Loader или HTML5 production build.
+
 
 - Переименование или перемещение ассета не должно молча разрушать ссылки на него. Система должна обновлять управляемые ссылки или явно показывать ошибку/задачу исправления.
 - Сохранение и повторное открытие сцены не теряет поддерживаемые свойства, иерархию, настройки компонентов и префабные переопределения.
