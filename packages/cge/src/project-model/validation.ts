@@ -186,20 +186,21 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
       ));
       return;
     }
+    const moduleId = module.id as string;
     warnUnknownFields(
       module,
       new Set(["id", "moduleAssetId", "version", "exports"]),
       modulePath,
       diagnostics,
-      module.id,
+      moduleId,
     );
     const asset = assetsById.get(module.moduleAssetId);
     if (!asset || asset.kind !== "script") {
       diagnostics.push(issue(
         "PROJECT_INVALID_REFERENCE",
-        "Component module " + module.id + " must reference a registered script asset.",
+        "Component module " + moduleId + " must reference a registered script asset.",
         modulePath + ".moduleAssetId",
-        module.id,
+        moduleId,
       ));
     }
     module.exports.forEach((exported, exportIndex) => {
@@ -213,7 +214,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
           "PROJECT_INVALID_DOCUMENT",
           "Component module export requires a stable typeId and positive integer schemaVersion.",
           exportPath,
-          module.id,
+          moduleId,
         ));
         return;
       }
@@ -222,14 +223,14 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
         new Set(["typeId", "schemaVersion"]),
         exportPath,
         diagnostics,
-        module.id,
+        moduleId,
       );
       if (exportedTypeIds.has(exported.typeId)) {
         diagnostics.push(issue(
           "PROJECT_DUPLICATE_ID",
           "Component type " + exported.typeId + " is exported more than once in the project manifest.",
           exportPath + ".typeId",
-          module.id,
+          moduleId,
         ));
       }
       exportedTypeIds.add(exported.typeId);
