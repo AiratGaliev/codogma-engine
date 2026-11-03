@@ -53,11 +53,7 @@ export function negotiateCapabilities(
     if (descriptor.status !== "available") {
       unsupported.push({
         capabilityId,
-        reason: descriptor.reason ?? {
-          code: "RUNTIME_LIMITATION",
-          message: descriptor.description,
-          retryable: false,
-        },
+        reason: descriptor.reason,
       });
       continue;
     }
@@ -133,7 +129,7 @@ export function authorizeRegisteredTestAction(
   }
 
   if (capability.status !== "available") {
-    return denied("CAPABILITY_UNAVAILABLE", capability.reason?.message ?? "The action capability is not fully available.");
+    return denied("CAPABILITY_UNAVAILABLE", capability.reason.message);
   }
 
   return { allowed: true };
