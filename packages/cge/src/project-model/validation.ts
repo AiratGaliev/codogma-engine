@@ -256,16 +256,34 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
     : { valid: true, diagnostics, value: input as unknown as ProjectDocumentV1 };
 }
 
-function collectNodeIds(nodes: unknown[], ids: Set<string>, diagnostics: CoreDiagnostic[], prefix: string): void {
+function collectNodeIds(
+  nodes: unknown[],
+  ids: Set<string>,
+  diagnostics: CoreDiagnostic[],
+  prefix: string,
+  visitedNodes: WeakSet<object> = new WeakSet(),
+): void {
   nodes.forEach((node, index) => {
     const path = prefix + "[" + index + "]";
     if (!isRecord(node) || !isValidStableId(node.id)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires a stable ID using letters, digits, dot, underscore, colon or hyphen (maximum 256 characters).", path + ".id"));
       return;
     }
+    if (visitedNodes.has(node)) {
+      diagnostics.push(issue(
+        "SCENE_INVALID_NODE",
+        "Scene hierarchy cannot contain cyclic or shared Node object references; use stable IDs for references.",
+        path,
+        node.id,
+      ));
+      return;
+    }
+    visitedNodes.add(node);
     if (ids.has(node.id)) diagnostics.push(issue("SCENE_DUPLICATE_ID", "Duplicate node id " + node.id + ".", path + ".id", node.id));
     ids.add(node.id);
-    if (Array.isArray(node.children)) collectNodeIds(node.children, ids, diagnostics, path + ".children");
+    if (Array.isArray(node.children)) {
+      collectNodeIds(node.children, ids, diagnostics, path + ".children", visitedNodes);
+    }
   });
 }
 
@@ -333,6 +351,7 @@ function validateNode(
   context: SceneValidationContext,
   diagnostics: CoreDiagnostic[],
   componentIds: Set<string>,
+  visitedNodes: WeakSet<object>,
 ): void {
   if (!isRecord(node) || !isValidStableId(node.id) || !isNonEmptyString(node.name) ||
       typeof node.active !== "boolean" || !isRecord(node.transform) ||
@@ -340,6 +359,8 @@ function validateNode(
     diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires JSON-compatible id/name, active, transform, components and children.", path));
     return;
   }
+  if (visitedNodes.has(node)) return;
+  visitedNodes.add(node);
 
   const nodeId = node.id as string;
   const knownNodeFields = new Set(["id", "name", "active", "transform", "components", "assetReferences", "children", "prefabInstance"]);
@@ -429,7 +450,7 @@ function validateNode(
   }
 
   node.children.forEach((child, index) =>
-    validateNode(child, path + ".children[" + index + "]", nodeIds, context, diagnostics, componentIds),
+    validateNode(child, path + ".children[" + index + "]", nodeIds, context, diagnostics, componentIds, visitedNodes),
   );
 }
 
@@ -437,10 +458,10 @@ export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input)) {
+  if (!isRecord(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must be a JSON-compatible object.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must be an object.")],
     };
   }
   if (input.schemaVersion !== SCENE_SCHEMA_VERSION) {
@@ -471,11 +492,19 @@ export function validateSceneDocument(
   const knownSceneFields = new Set(["schemaVersion", "id", "name", "rootNodes", "settings"]);
   warnUnknownFields(input, knownSceneFields, "scene", diagnostics, input.id);
   const nodeIds = new Set<string>();
-  collectNodeIds(input.rootNodes, nodeIds, diagnostics, "rootNodes");
+  const visitedNodes = new WeakSet<object>();
+  collectNodeIds(input.rootNodes, nodeIds, diagnostics, "rootNodes", visitedNodes);
+  const validatedNodes = new WeakSet<object>();
   const componentIds = new Set<string>();
   input.rootNodes.forEach((node, index) =>
-    validateNode(node, "rootNodes[" + index + "]", nodeIds, context, diagnostics, componentIds),
+    validateNode(node, "rootNodes[" + index + "]", nodeIds, context, diagnostics, componentIds, validatedNodes),
   );
+  if (!isJsonValue(input) && !hasErrors(diagnostics)) {
+    diagnostics.push(issue(
+      "SCENE_INVALID_NODE",
+      "Scene document contains values that are not JSON-compatible.",
+    ));
+  }
   return hasErrors(diagnostics)
     ? { valid: false, diagnostics }
     : { valid: true, diagnostics, value: input as unknown as SceneDocumentV1 };
@@ -485,10 +514,10 @@ export function validatePrefabDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input)) {
+  if (!isRecord(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must be a JSON-compatible object.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must be an object.")],
     };
   }
   if (input.schemaVersion !== PREFAB_SCHEMA_VERSION) {
@@ -524,6 +553,12 @@ export function validatePrefabDocument(
   const knownPrefabFields = new Set(["schemaVersion", "id", "name", "root"]);
   const diagnostics = [...result.diagnostics];
   warnUnknownFields(input, knownPrefabFields, "prefab", diagnostics, input.id);
+  if (!isJsonValue(input) && !hasErrors(diagnostics)) {
+    diagnostics.push(issue(
+      "SCENE_INVALID_NODE",
+      "Prefab document contains values that are not JSON-compatible.",
+    ));
+  }
   return hasErrors(diagnostics)
     ? { valid: false, diagnostics }
     : { valid: true, diagnostics, value: input as unknown as PrefabDocumentV1 };

@@ -549,3 +549,28 @@ test("rejects legacy Project migration inputs that are not JSON-compatible", () 
       ((error as { diagnostics: Array<{ code?: string }> }).diagnostics[0]?.code === "PROJECT_INVALID_DOCUMENT"),
   );
 });
+
+
+test("rejects cyclic Scene Node object graphs without recursing indefinitely", () => {
+  const root: Record<string, unknown> = {
+    id: "node-cycle",
+    name: "Cycle",
+    active: true,
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+    components: [],
+    children: [],
+  };
+  root.children = [root];
+  const result = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene-cycle",
+    name: "Cycle",
+    settings: {},
+    rootNodes: [root],
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(result.diagnostics.some((item) =>
+    item.code === "SCENE_INVALID_NODE" &&
+    item.path === "rootNodes[0].children[0]"), true);
+});
