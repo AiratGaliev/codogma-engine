@@ -1,0 +1,1 @@
+{"kind":"game-test-bridge.action-result","requestId":"request-102","status":"rejected","completedAt":1793742000500,"failure":{"code":"ACTION_NOT_REGISTERED","message":"The requested test action is not registered in this session.","retryable":false,"diagnostics":[]}}
