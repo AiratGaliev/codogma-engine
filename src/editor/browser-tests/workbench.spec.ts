@@ -307,11 +307,32 @@ test("Window menu marks the selected Bottom tab with a checkmark", async ({ page
   await expect(selectedAnimation).toContainText("✓");
 });
 
-test("Console closes and reopens from View without losing its Bottom Dock location", async ({ page }) => {
+test("Console closes/reopens in standalone and docked modes without losing placement", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
   await expect(page.getByTestId("console-panel")).toBeVisible();
+
+  await page.getByRole("button", { name: "Close Console" }).click();
+  await expect(page.getByTestId("console-panel")).toHaveCount(0);
+  await expect(page.getByTestId("splitter-console")).toHaveCount(0);
+  let persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.consoleVisible).toBe(false);
+  expect(persisted.consoleDocked).toBe(false);
+
+  await page.getByRole("menuitem", { name: "View" }).click();
+  const standaloneToggle = page.getByRole("menuitemcheckbox", { name: "Console" });
+  await expect(standaloneToggle).toHaveAttribute("aria-checked", "false");
+  await standaloneToggle.click();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await expect(page.getByTestId("splitter-console")).toBeVisible();
+  persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
+  );
+  expect(persisted.consoleVisible).toBe(true);
+  expect(persisted.consoleDocked).toBe(false);
 
   await dragPanelHeaderWithPointer(
     page,
@@ -319,7 +340,7 @@ test("Console closes and reopens from View without losing its Bottom Dock locati
     bottomTabs,
   );
   await expect(page.getByTestId("console-panel")).toBeVisible();
-  let persisted = await page.evaluate(() =>
+  persisted = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"),
   );
   expect(persisted.consoleDocked).toBe(true);
