@@ -18,7 +18,7 @@
 
 ### Project Model v1
 
-`ProjectDocumentV1` содержит стабильный project ID, имя, ссылки на Scenes/Assets/Prefabs, явный список component modules и runtime adapter configuration. Все ссылки разрешаются по ID, а не по порядку файлов или имени класса. Asset path — относительный путь внутри project root; абсолютные URL, traversal и некорректные сегменты не являются project asset paths.
+`ProjectDocumentV1` содержит стабильный project ID, имя, ссылки на Scenes/Assets/Prefabs, явный список component modules и runtime adapter configuration. Module manifest entry хранит stable module `id`, `moduleAssetId` (script Asset), implementation `version` и `exports[]` со стабильными `typeId` и `schemaVersion`. Все ссылки разрешаются по ID, а не по порядку файлов или имени класса. Asset path — относительный путь внутри project root; абсолютные URL, traversal и некорректные сегменты не являются project asset paths.
 
 ### Scene / Node / Prefab v1
 
@@ -117,7 +117,7 @@ SolidJS Host:
 
 Фикстура в `packages/cge/tests/fixtures/` связывает persisted Project/Scene data и Core contracts на одной воспроизводимой модели:
 
-- `acceptance-project-v1.json` содержит versioned Project envelope, ссылку на Scene, script Asset и image Asset, а также module reference со стабильным `typeId`.
+- `acceptance-project-v1.json` содержит versioned Project envelope, ссылку на Scene, script Asset и image Asset, а также module manifest entry со стабильными module `id` и `typeId`/`schemaVersion` в `exports[]`.
 - `acceptance-scene-v1.json` содержит два Node с разными stable IDs. На каждом закреплён отдельный Component instance одного и того же type ID.
 - Schema fixture использует Asset reference и Node reference; оба значения разрешаются по ID через Project/Scene validation context. Один компонент указывает на другой Node, поэтому проверяется и запрет self-reference.
 - В Scene присутствует неизвестное JSON-compatible extension data. Parse → serialize → parse обязан сохранить его без потери.

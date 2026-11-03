@@ -411,3 +411,22 @@ test("rejects invalid stable Component type IDs in explicit legacy mappings", ()
       error.diagnostics.some((item) => item.code === "PROJECT_MIGRATION_INVALID_INPUT"),
   );
 });
+
+
+test("requires an explicit stable Component instance ID mapping before converting legacy component declarations", () => {
+  const source = JSON.parse(fixture("Level.scene")) as Record<string, unknown>;
+  const mapping = new Map<string, string>([
+    [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), "instance-explicit-push"],
+    [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "Tint"), "instance-explicit-tint"],
+  ]);
+  const migrated = migrateLegacySceneDocument(source, {
+    componentTypes,
+    componentInstanceIds: mapping,
+  });
+  const node = migrated.document.rootNodes[0];
+  assert.ok(node);
+  assert.deepEqual(
+    node.components.map((component) => component.id),
+    ["instance-explicit-push", "instance-explicit-tint"],
+  );
+});

@@ -3,19 +3,40 @@
   "id": "acceptance-project",
   "name": "Core Acceptance Fixture",
   "scenes": [
-    { "id": "scene-level", "assetId": "asset-scene-level" }
+    {
+      "id": "scene-level",
+      "assetId": "asset-scene-level"
+    }
   ],
   "assets": [
-    { "id": "asset-scene-level", "path": "scenes/Level.cge-scene.json", "kind": "scene" },
-    { "id": "asset-follow-target-module", "path": "src/FollowTarget.ts", "kind": "script" },
-    { "id": "asset-player-sprite", "path": "assets/player.png", "kind": "image" }
+    {
+      "id": "asset-scene-level",
+      "path": "scenes/Level.cge-scene.json",
+      "kind": "scene"
+    },
+    {
+      "id": "asset-follow-target-module",
+      "path": "src/FollowTarget.ts",
+      "kind": "script"
+    },
+    {
+      "id": "asset-player-sprite",
+      "path": "assets/player.png",
+      "kind": "image"
+    }
   ],
   "prefabs": [],
   "componentModules": [
     {
-      "typeId": "com.codogma.acceptance.follow-target",
+      "id": "module-follow-target",
       "moduleAssetId": "asset-follow-target-module",
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "exports": [
+        {
+          "typeId": "com.codogma.acceptance.follow-target",
+          "schemaVersion": 1
+        }
+      ]
     }
   ],
   "runtime": {

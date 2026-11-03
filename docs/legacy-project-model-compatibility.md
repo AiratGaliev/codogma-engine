@@ -35,7 +35,7 @@
 | list[] | NodeDocument.children[] | Рекурсивно мигрирует Container hierarchy и стабильные child IDs |
 | x/y/rotation/scaleX/scaleY/originX/originY | NodeDocument.transform | Числовые конечные значения переносятся; Core defaults применяются к отсутствующим; неверные заданные значения дают warning и сохраняются в source |
 | active | NodeDocument.active | Сохраняется при наличии; при отсутствии используется Core default true |
-| components[] | NodeDocument.components[] | Только с внешним mapping legacy name → stable typeId + schemaVersion; неизвестные ссылки сохраняются и дают warning |
+| components[] | NodeDocument.components[] | Только с mapping legacy name → stable typeId + schemaVersion **и** explicit stable component instance ID; без любого mapping source reference/values остаются в `legacySource` с warning |
 | ComponentName.property | ComponentInstanceDocument.properties[property] | JSON-совместимые значения переносятся по явному mapping компонента; исходные namespaced fields сохраняются |
 | prefabId | NodeDocument.prefabInstance.prefabId | Стабильный ID сохраняется; resolver/existence check требует Project/Prefab validation context |
 | texture.key | NodeDocument.assetReferences[{propertyPath: texture, assetId}] | Только при явном asset key → stable Asset ID mapping и Project Asset registry context |
@@ -60,7 +60,7 @@
 - Полный исходный Scene/Prefab JSON и каждый исходный Node сохраняются под legacySource; Prefab properties остаются в legacyPrefabProperties.
 - Неизвестные Component types, неизвестные fields, несопоставленные texture keys, invalid transforms и nested Prefab payload выдаются как machine-readable warnings.
 - Отсутствующие stable document/node IDs, несовместимый discriminator и Prefab с несколькими roots отклоняются как blocking diagnostics.
-- Component IDs строятся детерминированно из уже существующего Node ID + legacy component name; runtime type ID всегда берётся из явного mapping.
+- Component instance ID не выводится из Node ID + legacy component name: legacy format не сохраняет instance identity. Для преобразования caller обязан передать явный stable instance ID через `componentInstanceIds`; runtime type ID также берётся только из явного mapping.
 - Asset ID никогда не выводится из texture key или URL. Validation проверяет ссылку через переданный Project Asset registry.
 - Наличие legacySource означает отсутствие потери исходного JSON payload, но не завершение всех semantic conversions, renderers, reimport и runtime behavior.
 
