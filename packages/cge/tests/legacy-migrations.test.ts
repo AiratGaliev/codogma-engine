@@ -6,6 +6,9 @@ import {
   LegacyProjectMigrationError,
   migrateLegacyPrefabDocument,
   migrateLegacySceneDocument,
+  migrateSceneDocument,
+  migratePrefabDocument,
+  legacyComponentInstanceKey,
   parsePrefabDocument,
   parseSceneDocument,
   serializePrefabDocument,
@@ -20,6 +23,13 @@ const fixture = (name: string): string =>
 const componentTypes = new Map<string, LegacyComponentTypeReference>([
   ["PushOnClick", { typeId: "com.codogma.legacy.push-on-click", schemaVersion: 1 }],
   ["Tint", { typeId: "com.codogma.legacy.tint", schemaVersion: 1 }],
+]);
+
+const componentInstanceIds = new Map<string, string>([
+  [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), "instance-level-push"],
+  [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "Tint"), "instance-level-tint"],
+  [legacyComponentInstanceKey("dd494496-e0c6-479b-98ed-25ff529caa6f", "Tint"), "instance-dino-tint"],
+  [legacyComponentInstanceKey("dd494496-e0c6-479b-98ed-25ff529caa6f", "PushOnClick"), "instance-dino-push"],
 ]);
 
 function clone<T>(value: T): T {
@@ -60,6 +70,7 @@ test("migrates a real legacy SCENE with explicit component and prefab mappings",
 
   const result = migrateLegacySceneDocument(legacyScene, {
     componentTypes,
+    componentInstanceIds,
     prefabReferences,
     validationContext: { prefabIds: allPrefabIds },
   });
@@ -80,7 +91,7 @@ test("migrates a real legacy SCENE with explicit component and prefab mappings",
   const pushComponent = firstNode.components.find((item) =>
     item.typeId === "com.codogma.legacy.push-on-click");
   assert.ok(pushComponent);
-  assert.equal(pushComponent.id, "legacy:dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae:PushOnClick");
+  assert.equal(pushComponent.id, "instance-level-push");
   assert.equal(pushComponent.schemaVersion, 1);
   assert.equal(pushComponent.properties.pushScale, 0.8);
 
@@ -106,7 +117,7 @@ test("migrates real legacy Prefab documents and preserves property declarations 
   const legacyDino = JSON.parse(fixture("DinoPrefab.scene")) as Record<string, unknown>;
   const legacyCoin = JSON.parse(fixture("CoinPrefab.scene")) as Record<string, unknown>;
 
-  const dino = migrateLegacyPrefabDocument(legacyDino, { componentTypes });
+  const dino = migrateLegacyPrefabDocument(legacyDino, { componentTypes, componentInstanceIds });
   const coin = migrateLegacyPrefabDocument(legacyCoin, { componentTypes });
 
   assert.equal(dino.document.id, legacyDino.id);
@@ -146,13 +157,14 @@ test("legacy Scene and Prefab serialization round-trip the migration envelope", 
   const prefabIds = new Set([String(dino.id), "f09cbbd7-3019-4f77-b666-386ed906ee51", "67273ad8-1b79-4edb-ac29-ca5abefe6603"]);
   const scene = migrateLegacySceneDocument(sourceScene, {
     componentTypes,
+    componentInstanceIds,
     prefabReferences: new Map([[String(dino.id), {
       rootNodeId: String(prefabNode.id),
       propertyNames: new Set(["rotating"]),
     }]]),
     validationContext: { prefabIds },
   }).document;
-  const prefab = migrateLegacyPrefabDocument(dino, { componentTypes }).document;
+  const prefab = migrateLegacyPrefabDocument(dino, { componentTypes, componentInstanceIds }).document;
 
   const sceneJson = serializeSceneDocument(scene, {
     registeredComponentTypes: new Set([...componentTypes.values()].map((item) => item.typeId)),
@@ -343,5 +355,59 @@ test("preserves legacy scene-level list declarations with a structured warning",
   assert.deepEqual(object(result.document).legacySource, source);
   assert.equal(result.diagnostics.some((item) =>
     item.path === "document.lists" &&
-    item.code === "PROJECT_LEGACY_COMPONENT_PRESERVED"), true);
+    item.code === "PROJECT_LEGACY_FIELD_PRESERVED"), true);
+});
+
+
+test("repeated Scene and Prefab migration is deterministic and leaves source inputs untouched", () => {
+  const legacyScene = JSON.parse(fixture("Level.scene")) as Record<string, unknown>;
+  const legacyPrefab = JSON.parse(fixture("BaseContainerPrefab.scene")) as Record<string, unknown>;
+  const sceneBefore = JSON.stringify(legacyScene);
+  const prefabBefore = JSON.stringify(legacyPrefab);
+
+  const firstScene = migrateSceneDocument(legacyScene, { componentTypes, componentInstanceIds });
+  const secondScene = migrateSceneDocument(firstScene.document, { componentTypes });
+  const firstPrefab = migratePrefabDocument(legacyPrefab, { componentTypes, componentInstanceIds });
+  const secondPrefab = migratePrefabDocument(firstPrefab.document, { componentTypes });
+
+  assert.equal(firstScene.sourceVersion, "legacy-scene");
+  assert.equal(secondScene.sourceVersion, "cge-scene-v1");
+  assert.deepEqual(secondScene.document, firstScene.document);
+  assert.equal(firstPrefab.sourceVersion, "legacy-prefab");
+  assert.equal(secondPrefab.sourceVersion, "cge-prefab-v1");
+  assert.deepEqual(secondPrefab.document, firstPrefab.document);
+  assert.equal(JSON.stringify(legacyScene), sceneBefore);
+  assert.equal(JSON.stringify(legacyPrefab), prefabBefore);
+});
+
+
+test("does not invent Component instance IDs from legacy type names", () => {
+  const source = JSON.parse(fixture("Level.scene")) as Record<string, unknown>;
+  const result = migrateLegacySceneDocument(source, { componentTypes });
+  const firstNode = result.document.rootNodes[0];
+  assert.ok(firstNode);
+  assert.equal(firstNode.components.length, 0);
+  assert.deepEqual(object(firstNode).legacyComponents, ["PushOnClick", "Tint"]);
+  assert.equal(result.diagnostics.some((item) =>
+    item.code === "PROJECT_LEGACY_COMPONENT_PRESERVED" &&
+    item.path === "displayList[0].components[0]"), true);
+});
+
+
+test("rejects invalid stable Component type IDs in explicit legacy mappings", () => {
+  const source = JSON.parse(fixture("Level.scene")) as Record<string, unknown>;
+  const invalidTypes = new Map<string, LegacyComponentTypeReference>([
+    ["PushOnClick", { typeId: "component/type", schemaVersion: 1 }],
+  ]);
+  const invalidInstanceIds = new Map<string, string>([
+    [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), "instance-level-push"],
+  ]);
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      componentTypes: invalidTypes,
+      componentInstanceIds: invalidInstanceIds,
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "PROJECT_MIGRATION_INVALID_INPUT"),
+  );
 });

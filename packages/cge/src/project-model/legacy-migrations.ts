@@ -9,6 +9,7 @@ import {
   type PrefabDocumentV1,
   type SceneDocumentV1,
   type TransformData,
+  isValidStableId,
 } from "./contracts.js";
 import { validatePrefabDocument, validateSceneDocument, type SceneValidationContext } from "./validation.js";
 
@@ -29,6 +30,8 @@ export interface LegacyPrefabReference {
 export interface LegacySceneMigrationOptions {
   readonly name?: string;
   readonly componentTypes?: ReadonlyMap<string, LegacyComponentTypeReference>;
+  /** Explicit persisted instance IDs, keyed by legacyComponentInstanceKey(nodeId, componentName). */
+  readonly componentInstanceIds?: ReadonlyMap<string, string>;
   readonly prefabReferences?: ReadonlyMap<string, LegacyPrefabReference>;
   readonly assetReferences?: ReadonlyMap<string, LegacyAssetReferenceMapping>;
   readonly validationContext?: SceneValidationContext;
@@ -51,6 +54,13 @@ const TRANSFORM_FIELDS = [
 ] as const;
 
 type LegacyCollection = "displayList" | "plainObjects" | "container";
+
+export function legacyComponentInstanceKey(nodeId: string, legacyComponentName: string): string {
+  if (!isValidStableId(nodeId) || !isNonEmptyString(legacyComponentName)) {
+    throw new TypeError("Legacy component instance mapping requires a stable Node ID and a non-empty legacy component name.");
+  }
+  return nodeId + "\u0000" + legacyComponentName;
+}
 
 function diagnostic(
   code: CoreDiagnostic["code"],
@@ -85,7 +95,7 @@ function asLegacyDocument(input: unknown, expectedType: "SCENE" | "PREFAB"): Leg
   if (!isRecord(input) || !isJsonValue(input)) {
     return fail("Legacy " + expectedType + " input must be a JSON object.");
   }
-  if (!isNonEmptyString(input.id)) {
+  if (!isValidStableId(input.id)) {
     return fail("Legacy " + expectedType + " document requires its existing stable id.", "id");
   }
   if (input.sceneType !== expectedType) {
@@ -201,10 +211,29 @@ function mapLegacyComponents(
       ));
       return;
     }
-    if (!isNonEmptyString(mapping.typeId) ||
+    if (!isValidStableId(mapping.typeId) ||
         !Number.isInteger(mapping.schemaVersion) ||
         mapping.schemaVersion < 1) {
       fail("Legacy component mapping for " + entry + " requires a stable typeId and positive integer schemaVersion.", path + ".components[" + index + "]");
+    }
+
+    const instanceId = options.componentInstanceIds?.get(legacyComponentInstanceKey(nodeId, entry));
+    if (!instanceId) {
+      unresolved.push(entry);
+      diagnostics.push(diagnostic(
+        "PROJECT_LEGACY_COMPONENT_PRESERVED",
+        "warning",
+        "Legacy component " + entry + " has no explicit stable instance ID mapping. Its source reference and namespaced properties remain in legacySource.",
+        path + ".components[" + index + "]",
+        nodeId,
+      ));
+      return;
+    }
+    if (!isValidStableId(instanceId)) {
+      fail(
+        "Legacy component instance mapping for " + entry + " must provide a valid stable ID.",
+        path + ".components[" + index + "]",
+      );
     }
 
     const properties: Record<string, JsonValue> = {};
@@ -226,7 +255,7 @@ function mapLegacyComponents(
     }
 
     components.push({
-      id: "legacy:" + nodeId + ":" + entry,
+      id: instanceId,
       typeId: mapping.typeId,
       schemaVersion: mapping.schemaVersion,
       enabled: true,
@@ -247,15 +276,18 @@ function mapLegacyAssetReferences(
   if (!isRecord(source.texture) || !isNonEmptyString(source.texture.key)) return [];
   const legacyKey = source.texture.key;
   const mapping = options.assetReferences?.get(legacyKey);
-  if (!mapping || !isNonEmptyString(mapping.assetId)) {
+  if (!mapping) {
     diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "PROJECT_LEGACY_ASSET_REFERENCE_PRESERVED",
       "warning",
       "Legacy texture key " + legacyKey + " has no explicit stable Asset ID mapping; the original texture configuration remains in legacySource.",
       path + ".texture.key",
       nodeId,
     ));
     return [];
+  }
+  if (!isValidStableId(mapping.assetId)) {
+    return fail("Legacy Asset mapping for texture key " + legacyKey + " must provide a stable Asset ID.", path + ".texture.key");
   }
   return [{ propertyPath: "texture", assetId: mapping.assetId }];
 }
@@ -268,7 +300,7 @@ function mapPrefabInstance(
   diagnostics: CoreDiagnostic[],
 ): NodeDocument["prefabInstance"] | undefined {
   if (source.prefabId === undefined) return undefined;
-  if (!isNonEmptyString(source.prefabId)) {
+  if (!isValidStableId(source.prefabId)) {
     diagnostics.push(diagnostic(
       "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
       "warning",
@@ -281,6 +313,9 @@ function mapPrefabInstance(
 
   const reference = options.prefabReferences?.get(source.prefabId);
   const overrides: Array<{ targetNodeId: string; propertyPath: string; value: JsonValue }> = [];
+  if (reference && !isValidStableId(reference.rootNodeId)) {
+    return fail("Legacy Prefab mapping for " + source.prefabId + " must provide a stable root Node ID.", path + ".prefabId");
+  }
   if (!reference) {
     diagnostics.push(diagnostic(
       "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
@@ -324,7 +359,7 @@ function reportUnmappedLegacyNodeFields(
   diagnostics: CoreDiagnostic[],
 ): void {
   const known = new Set([
-    "id", "type", "label", "name", "scope", "active", "components", "list",
+    "id", "label", "name", "active", "components", "list",
     "x", "y", "rotation", "scaleX", "scaleY", "originX", "originY",
     "prefabId", "unlock", "nestedPrefabs", "texture",
   ]);
@@ -335,7 +370,7 @@ function reportUnmappedLegacyNodeFields(
   for (const key of Object.keys(source)) {
     if (known.has(key) || componentNames.some((name) => key.startsWith(name + "."))) continue;
     diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "PROJECT_LEGACY_FIELD_PRESERVED",
       "warning",
       "Legacy Node field " + key + " is not part of the current host-neutral Node contract; it remains verbatim in legacySource.",
       path + "." + key,
@@ -383,7 +418,7 @@ function reportUnmappedLegacyDocumentFields(
   for (const key of Object.keys(source)) {
     if (known.has(key)) continue;
     diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "PROJECT_LEGACY_FIELD_PRESERVED",
       "warning",
       "Legacy document field " + key + " remains in the preserved source payload because no v1 contract mapping is defined.",
       path + "." + key,
@@ -401,7 +436,7 @@ function migrateLegacyNode(
   if (!isRecord(input) || !isJsonValue(input)) {
     return fail("Legacy scene node must be a JSON object.", path);
   }
-  if (!isNonEmptyString(input.id)) {
+  if (!isValidStableId(input.id)) {
     return fail("Legacy scene node is missing its stable id; migration never invents identity from array order.", path + ".id");
   }
 
@@ -421,7 +456,7 @@ function migrateLegacyNode(
 
   if (input.list !== undefined && !Array.isArray(input.list)) {
     diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "PROJECT_LEGACY_FIELD_PRESERVED",
       "warning",
       "Legacy list/container children are not an array; the original value remains in legacySource.",
       path + ".list",
@@ -470,7 +505,7 @@ export function migrateLegacySceneDocument(
 
   if (legacy.displayList !== undefined && !Array.isArray(legacy.displayList)) {
     diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "PROJECT_LEGACY_FIELD_PRESERVED",
       "warning",
       "Legacy displayList is not an array; the original document is retained in legacySource.",
       "displayList",
@@ -478,7 +513,7 @@ export function migrateLegacySceneDocument(
   }
   if (legacy.plainObjects !== undefined && !Array.isArray(legacy.plainObjects)) {
     diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "PROJECT_LEGACY_FIELD_PRESERVED",
       "warning",
       "Legacy plainObjects is not an array; the original document is retained in legacySource.",
       "plainObjects",
@@ -573,4 +608,41 @@ export class LegacyProjectMigrationError extends Error {
     this.name = "LegacyProjectMigrationError";
     this.diagnostics = diagnostics;
   }
+}
+
+
+export function migrateSceneDocument(
+  input: unknown,
+  options: LegacySceneMigrationOptions = {},
+): LegacyMigrationResult<SceneDocumentV1> {
+  if (isRecord(input) && input.schemaVersion === SCENE_SCHEMA_VERSION) {
+    if (!isJsonValue(input)) return fail("Scene v1 input must be JSON-compatible.");
+    const document = cloneJsonValue(input as JsonValue) as unknown as SceneDocumentV1;
+    const validation = validateSceneDocument(document, buildValidationContext(options));
+    assertValidMigration(validation, "Scene v1 document is invalid.");
+    return {
+      document,
+      diagnostics: validation.diagnostics,
+      sourceVersion: "cge-scene-v1",
+    };
+  }
+  return migrateLegacySceneDocument(input, options);
+}
+
+export function migratePrefabDocument(
+  input: unknown,
+  options: LegacySceneMigrationOptions = {},
+): LegacyMigrationResult<PrefabDocumentV1> {
+  if (isRecord(input) && input.schemaVersion === PREFAB_SCHEMA_VERSION) {
+    if (!isJsonValue(input)) return fail("Prefab v1 input must be JSON-compatible.");
+    const document = cloneJsonValue(input as JsonValue) as unknown as PrefabDocumentV1;
+    const validation = validatePrefabDocument(document, buildValidationContext(options));
+    assertValidMigration(validation, "Prefab v1 document is invalid.");
+    return {
+      document,
+      diagnostics: validation.diagnostics,
+      sourceVersion: "cge-prefab-v1",
+    };
+  }
+  return migrateLegacyPrefabDocument(input, options);
 }

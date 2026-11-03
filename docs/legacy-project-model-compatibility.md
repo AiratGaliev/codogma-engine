@@ -91,3 +91,17 @@ CI evidence is attached to PR #41 after its run completes.
 - реальные пользовательские проекты, отличающиеся от checked-in test workspace.
 
 Пока эти данные не покрыты fixtures/tests, COD-25/COD-17 не должны утверждать полную migration compatibility для всех существующих проектов.
+
+## Project Component Module manifest v1
+
+Persisted Project Model v1 now separates module identity from source location and component type identity. Each module stores stable id, moduleAssetId (a Project Asset reference of kind script), module implementation version and exports[]. Every export stores stable typeId and positive schemaVersion. Validation enforces unique module IDs and globally unique exported type IDs across the Project.
+
+The module source path is resolved through the referenced AssetReference; it is not an identity. Runtime/module execution and source introspection are not part of this manifest schema.
+
+Stable IDs use a documented opaque grammar: case-sensitive ASCII, 1–256 characters, first character alphanumeric and remaining characters alphanumeric or dot/underscore/colon/hyphen.
+
+Unknown JSON-compatible fields at the Project/Scene/Prefab/Node/Transform/Component/Asset reference boundaries are retained and produce PROJECT_UNKNOWN_FIELD_PRESERVED warnings with exact field paths. Arbitrary runtime.settings is passed through as adapter-owned extension configuration.
+
+### Legacy Component instance IDs
+
+The checked-in legacy Scene/Prefab examples store component class names in an array and namespaced properties on the owning Node; they do not persist a separate component instance ID. The migration consequently cannot create a Core ComponentInstance from the class name alone. Callers must supply an explicit stable ID through `componentInstanceIds`, indexed by `legacyComponentInstanceKey(nodeId, legacyName)`. If no mapping exists, the component reference/property fields remain in `legacySource` and a warning is returned. This avoids deriving instance identity from class name, type ID, source path or array order. Duplicate legacy component names on one Node are ambiguous in this format and require source-level disambiguation before conversion.

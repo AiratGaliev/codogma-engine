@@ -70,3 +70,24 @@ A field-by-field inventory of the checked-in legacy Scene/Prefab/Component/Asset
 Scene v1 Nodes may contain `assetReferences`: each item stores an explicit property path and stable Project `assetId`. Scene validation resolves these IDs against the supplied Project Asset registry. Legacy texture-key conversion is opt-in through `LegacySceneMigrationOptions.assetReferences`; no Asset ID is generated from a texture key or URL.
 
 The checked-in `asset-pack.json` fixture identifies the image by legacy key `dino` and URL `assets/dino.png`. A caller must create or select the Project Asset record and pass its stable ID to the migration. The original renderer-specific texture object remains in `legacySource` until the renderer/adapter contract defines its canonical representation.
+
+## Project Component Module manifest
+
+Project v1 stores component modules as explicit manifest entries:
+
+- id — stable module identity, independent from its filename/path and from any exported component type IDs;
+- moduleAssetId — stable ID of a Project Asset whose kind is script; the source path is resolved from that Asset record;
+- version — version of the module implementation;
+- exports[] — all public component definitions exported by the module, each with its stable typeId and positive integer schemaVersion.
+
+The validator enforces unique module IDs and globally unique exported component type IDs, validates the source Asset kind and validates every export schema version. It does not infer exports from class names or execute source files.
+
+Stable IDs are opaque, case-sensitive identifiers of 1–256 ASCII characters: the first character is a letter or digit; remaining characters may additionally contain dot, underscore, colon and hyphen. They are identifiers, not paths or display labels.
+
+Unknown JSON-compatible fields on Project/Scene/Prefab/Node/Transform/Component/Asset manifest records are preserved and returned as PROJECT_UNKNOWN_FIELD_PRESERVED warnings with their exact path. Arbitrary runtime.settings remains an extension configuration object and is not recursively interpreted by Core.
+
+The opt-in migrateSceneDocument and migratePrefabDocument helpers accept both legacy inputs and already versioned v1 documents. Repeated migration validates/clones v1 data without regenerating IDs or overrides and never writes source files automatically.
+
+### Legacy Component instance identity
+
+Legacy scene component lists do not carry persisted instance IDs. The migration API therefore requires the caller to supply an explicit stable ID mapping in `LegacySceneMigrationOptions.componentInstanceIds`, keyed by `legacyComponentInstanceKey(nodeId, legacyName)`. A legacy component is left inside the preserved source payload with a warning when that mapping is missing. Core never derives instance identity from class names, type IDs, file names or array positions.

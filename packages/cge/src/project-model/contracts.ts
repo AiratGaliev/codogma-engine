@@ -35,10 +35,26 @@ export interface PrefabReference {
   assetId: string;
 }
 
-export interface ComponentModuleReference {
+export interface ComponentModuleExportReference {
   typeId: string;
+  schemaVersion: number;
+}
+
+export interface ComponentModuleReference {
+  /** Stable module identity, independent from source path and exported component type IDs. */
+  id: string;
+  /** Stable Project Asset ID of a script source; its path is resolved through AssetReference. */
   moduleAssetId: string;
+  /** Version of the module implementation. */
   version: string;
+  exports: ComponentModuleExportReference[];
+}
+
+export function isValidStableId(value: unknown): value is string {
+  return typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 256 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
 }
 
 export interface RuntimeConfiguration {

@@ -270,7 +270,199 @@ test("rejects malformed optional Asset sub-resource identifiers", () => {
   });
 
   assert.equal(invalidNumber.valid, false);
-  assert.equal(invalidNumber.diagnostics.some((item) => item.path === "assets[0]"), true);
+  assert.equal(invalidNumber.diagnostics.some((item) => item.path === "assets[0].subResourceId"), true);
   assert.equal(invalidEmpty.valid, false);
-  assert.equal(invalidEmpty.diagnostics.some((item) => item.path === "assets[0]"), true);
+  assert.equal(invalidEmpty.diagnostics.some((item) => item.path === "assets[0].subResourceId"), true);
+});
+
+
+test("validates a stable Component Module manifest and resolves source script Assets", () => {
+  const project = {
+    ...validProject,
+    assets: [
+      ...validProject.assets,
+      { id: "asset-follow-target-module", path: "src/FollowTarget.ts", kind: "script" },
+    ],
+    componentModules: [{
+      id: "module-follow-target",
+      moduleAssetId: "asset-follow-target-module",
+      version: "1.2.0",
+      exports: [
+        { typeId: "com.codogma.follow-target", schemaVersion: 1 },
+        { typeId: "com.codogma.follow-camera", schemaVersion: 2 },
+      ],
+    }],
+  };
+  const result = validateProjectDocument(project);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.value?.componentModules[0]?.id, "module-follow-target");
+  assert.equal(result.value?.componentModules[0]?.moduleAssetId, "asset-follow-target-module");
+  assert.deepEqual(result.value?.componentModules[0]?.exports, project.componentModules[0]?.exports);
+});
+
+test("rejects duplicate module identities and component type exports across modules", () => {
+  const scriptAsset = { id: "asset-module", path: "src/components.ts", kind: "script" as const };
+  const module = {
+    id: "module-a",
+    moduleAssetId: scriptAsset.id,
+    version: "1.0.0",
+    exports: [{ typeId: "com.codogma.player", schemaVersion: 1 }],
+  };
+  const duplicateModule = validateProjectDocument({
+    ...validProject,
+    assets: [...validProject.assets, scriptAsset],
+    componentModules: [module, { ...module, exports: [{ typeId: "com.codogma.enemy", schemaVersion: 1 }] }],
+  });
+  assert.equal(duplicateModule.valid, false);
+  assert.equal(duplicateModule.diagnostics.some((item) =>
+    item.code === "PROJECT_DUPLICATE_ID" && item.path === "componentModules[1].id"), true);
+
+  const duplicateType = validateProjectDocument({
+    ...validProject,
+    assets: [...validProject.assets, scriptAsset, { id: "asset-module-2", path: "src/other.ts", kind: "script" }],
+    componentModules: [
+      module,
+      { id: "module-b", moduleAssetId: "asset-module-2", version: "1.0.0", exports: [{ typeId: "com.codogma.player", schemaVersion: 2 }] },
+    ],
+  });
+  assert.equal(duplicateType.valid, false);
+  assert.equal(duplicateType.diagnostics.some((item) =>
+    item.code === "PROJECT_DUPLICATE_ID" && item.path === "componentModules[1].exports[0].typeId"), true);
+});
+
+test("rejects invalid Module export schema versions and non-script source assets", () => {
+  const imageAsset = { id: "asset-image", path: "assets/player.png", kind: "image" as const };
+  const invalidSchemaVersion = validateProjectDocument({
+    ...validProject,
+    assets: [...validProject.assets, imageAsset],
+    componentModules: [{
+      id: "module-player",
+      moduleAssetId: imageAsset.id,
+      version: "1.0.0",
+      exports: [{ typeId: "com.codogma.player", schemaVersion: 0 }],
+    }],
+  });
+  assert.equal(invalidSchemaVersion.valid, false);
+  assert.equal(invalidSchemaVersion.diagnostics.some((item) =>
+    item.code === "PROJECT_INVALID_DOCUMENT" && item.path === "componentModules[0].exports[0]"), true);
+  assert.equal(invalidSchemaVersion.diagnostics.some((item) =>
+    item.code === "PROJECT_INVALID_REFERENCE" && item.path === "componentModules[0].moduleAssetId"), true);
+});
+
+test("preserves unknown Project and Asset fields with structured warnings", () => {
+  const project = JSON.parse(JSON.stringify(validProject)) as Record<string, unknown>;
+  project.pluginEnvelope = { plugin: "example", revision: 2 };
+  const assets = project.assets as Array<Record<string, unknown>>;
+  assets[0] = { ...assets[0], importMetadata: { source: "atlas", page: 1 } };
+
+  const result = validateProjectDocument(project);
+  assert.equal(result.valid, true);
+  assert.deepEqual((result.value as unknown as Record<string, unknown>).pluginEnvelope, project.pluginEnvelope);
+  assert.equal(result.diagnostics.some((item) =>
+    item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED" && item.path === "project.pluginEnvelope"), true);
+  assert.equal(result.diagnostics.some((item) =>
+    item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED" && item.path === "assets[0].importMetadata"), true);
+});
+
+test("requires stable opaque IDs and rejects whitespace/control characters", () => {
+  const invalidProject = validateProjectDocument({
+    ...validProject,
+    id: "project with spaces",
+  });
+  assert.equal(invalidProject.valid, false);
+  assert.equal(invalidProject.diagnostics.some((item) => item.path === "id"), true);
+
+  const invalidAsset = validateProjectDocument({
+    ...validProject,
+    assets: [{ id: "assets/../image", path: "assets/player.png", kind: "image" }],
+  });
+  assert.equal(invalidAsset.valid, false);
+  assert.equal(invalidAsset.diagnostics.some((item) => item.path === "assets[0].id"), true);
+});
+
+test("preserves unknown Scene, Node, Transform and Component extension fields with diagnostics", () => {
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-extension",
+    name: "Extension",
+    settings: {},
+    pluginSceneData: { cameraPreset: "portrait" },
+    rootNodes: [{
+      id: "node-extension",
+      name: "Sprite",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5, pluginAnchor: "center" },
+      components: [{
+        id: "component-extension",
+        typeId: "com.codogma.sprite",
+        schemaVersion: 1,
+        enabled: true,
+        properties: {},
+        pluginComponentData: { revision: 3 },
+      }],
+      children: [],
+      pluginNodeData: ["preserve"],
+    }],
+  };
+  const result = validateSceneDocument(scene);
+  assert.equal(result.valid, true);
+  assert.deepEqual((result.value as unknown as Record<string, unknown>).pluginSceneData, { cameraPreset: "portrait" });
+  assert.equal(result.diagnostics.some((item) => item.path === "scene.pluginSceneData"), true);
+  assert.equal(result.diagnostics.some((item) => item.path === "rootNodes[0].pluginNodeData"), true);
+  assert.equal(result.diagnostics.some((item) => item.path === "rootNodes[0].transform.pluginAnchor"), true);
+  assert.equal(result.diagnostics.some((item) => item.path === "rootNodes[0].components[0].pluginComponentData"), true);
+});
+
+test("rejects malformed Scene identity before serializing its hierarchy", () => {
+  const result = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene / outside",
+    name: "Invalid ID",
+    settings: {},
+    rootNodes: [],
+  });
+  assert.equal(result.valid, false);
+  assert.equal(result.diagnostics[0]?.code, "SCENE_INVALID_NODE");
+});
+
+
+test("rejects unknown Project extension values that are not JSON-compatible", () => {
+  const project = {
+    ...validProject,
+    pluginPayload: new Date(),
+  };
+  const result = validateProjectDocument(project);
+  assert.equal(result.valid, false);
+  assert.equal(result.diagnostics.some((item) =>
+    item.code === "PROJECT_INVALID_DOCUMENT"), true);
+});
+
+
+test("reports stable ID errors at the Scene and Prefab identity fields", () => {
+  const invalidScene = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene with spaces",
+    name: "Bad Scene",
+    rootNodes: [],
+    settings: {},
+  });
+  assert.equal(invalidScene.valid, false);
+  assert.equal(invalidScene.diagnostics[0]?.path, "id");
+
+  const invalidPrefab = validatePrefabDocument({
+    schemaVersion: 1,
+    id: "prefab/with/path",
+    name: "Bad Prefab",
+    root: {
+      id: "root-node",
+      name: "Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  });
+  assert.equal(invalidPrefab.valid, false);
+  assert.equal(invalidPrefab.diagnostics[0]?.path, "id");
 });

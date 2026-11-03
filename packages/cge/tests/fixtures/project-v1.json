@@ -3,9 +3,32 @@
   "id": "fixture-project",
   "name": "Core fixture",
   "scenes": [],
-  "assets": [],
+  "assets": [
+    {
+      "id": "asset-follow-target-module",
+      "path": "src/FollowTarget.ts",
+      "kind": "script"
+    }
+  ],
   "prefabs": [],
-  "componentModules": [],
-  "runtime": { "adapterId": "phaser", "settings": {} },
-  "unknownPluginData": { "keep": true }
+  "componentModules": [
+    {
+      "id": "module-follow-target",
+      "moduleAssetId": "asset-follow-target-module",
+      "version": "1.0.0",
+      "exports": [
+        {
+          "typeId": "com.codogma.follow-target",
+          "schemaVersion": 1
+        }
+      ]
+    }
+  ],
+  "runtime": {
+    "adapterId": "phaser",
+    "settings": {}
+  },
+  "unknownPluginData": {
+    "keep": true
+  }
 }
