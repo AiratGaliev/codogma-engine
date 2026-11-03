@@ -207,6 +207,40 @@ export function validateComponentProperties(
     : { valid: true, diagnostics, value: normalized };
 }
 
+export function validateComponentPropertyValue(
+  schema: ComponentTypeSchemaV1,
+  propertyName: string,
+  value: unknown,
+  context: ComponentSchemaContext = {},
+): ValidationResult<JsonValue> {
+  const property = schema.properties[propertyName];
+  if (!property) {
+    return {
+      valid: false,
+      diagnostics: [diagnostic(
+        "COMPONENT_UNKNOWN_PROPERTY",
+        "Property " + propertyName + " is not declared by component " + schema.typeId + ".",
+        propertyName,
+      )],
+    };
+  }
+  if ((property.storage ?? "persisted") !== "persisted") {
+    return {
+      valid: false,
+      diagnostics: [diagnostic(
+        "COMPONENT_INVALID_SCHEMA",
+        "Property " + propertyName + " is not a persisted component property.",
+        propertyName,
+      )],
+    };
+  }
+  const diagnostics = validateValue(propertyName, property, value, context);
+  if (hasErrors(diagnostics) || !isJsonValue(value)) {
+    return { valid: false, diagnostics };
+  }
+  return { valid: true, diagnostics, value };
+}
+
 export function serializeComponentProperties(
   schema: ComponentTypeSchemaV1,
   input: unknown,
