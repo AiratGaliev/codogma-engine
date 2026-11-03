@@ -31,9 +31,10 @@ const componentSchema: ComponentTypeSchemaV1 = {
 function loadContext() {
   const project = parseProjectDocument(readFixture("acceptance-project-v1.json"));
   assert.ok(project.value);
-  const assets = new Map(project.value.assets.map((asset) => [asset.id, asset] as const));
+  const projectDocument = project.value;
+  const assets = new Map(projectDocument.assets.map((asset) => [asset.id, asset] as const));
   return {
-    project,
+    project: projectDocument,
     context: {
       assets,
       componentSchemas: new Map([[componentSchema.typeId, componentSchema]]),
@@ -48,10 +49,10 @@ function cloneScene(scene: SceneDocumentV1): SceneDocumentV1 {
 
 test("acceptance fixture connects Project, Scene, module identity and two component instances", () => {
   const { project, context } = loadContext();
-  assert.equal(project.value?.componentModules[0]?.typeId, componentSchema.typeId);
+  assert.equal(project.value.componentModules[0]?.typeId, componentSchema.typeId);
   assert.match(readFixture("FollowTarget.ts"), /com\.codogma\.acceptance\.follow-target/);
   assert.equal(
-    project.value?.assets.find((asset) => asset.id === project.value?.componentModules[0]?.moduleAssetId)?.kind,
+    project.value.assets.find((asset) => asset.id === project.value.componentModules[0]?.moduleAssetId)?.kind,
     "script",
   );
 
