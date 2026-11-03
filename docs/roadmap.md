@@ -203,6 +203,9 @@ Legacy Colibri используется как источник требован
 
 ## Этап 2 — Project Model и собственный TypeScript Component/ECS Core
 
+**Реализационный baseline (03.11.2026):** начальная реализация Project/Scene/Prefab v1, Component Schema/Registry/World, in-memory Project v0 migration и deterministic serialization добавлена в `packages/cge/` (PR #39). Это закрывает контрактный/тестовый фундамент, но не loader/Phaser adapter/Preview/build. Точная граница и acceptance sequence: [Core acceptance slice](core-component-acceptance-slice.md).
+
+
 **Цель:** создать основу собственного движка над существующим runtime — не подключать второй game runtime поверх Phaser, а связать editor model и игру через общий API.
 
 **Зависимости:** этап 1.
