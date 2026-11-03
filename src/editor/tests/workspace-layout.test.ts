@@ -542,3 +542,21 @@ test("moving a side panel out of Bottom preserves the selected compact Console t
   assert.equal(moved.bottomTab, "Console");
   assert.ok(getVisibleBottomTabs(moved, true).includes("Console"));
 });
+
+
+test("closing Console in narrow mode selects a visible side panel presented in Bottom", () => {
+  const layout = {
+    ...createDefaultWorkspaceLayout(true),
+    projectVisible: false,
+    animationVisible: false,
+    componentsVisible: false,
+    bottomTab: "Console" as const,
+  };
+
+  const closed = setConsolePanelVisibility(layout, false, true, true);
+  const visibleTabs = getVisibleBottomTabs(closed, true, true);
+
+  assert.deepEqual(visibleTabs, ["Hierarchy", "Inspector"]);
+  assert.equal(closed.bottomTab, "Hierarchy");
+  assert.ok(visibleTabs.includes(closed.bottomTab));
+});

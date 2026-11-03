@@ -423,6 +423,25 @@ test("Console closes and reopens in Bottom and explicit Undock persists", async 
   expect(persisted.consoleDocked).toBe(false);
 });
 
+test("undocking Console selects a visible Bottom tab when Project is closed", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
+  await page.getByRole("button", { name: "Close Project" }).click();
+  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveCount(0);
+  await expect(bottomTabs.getByRole("tab", { name: "Animation" })).toHaveAttribute("aria-selected", "true");
+
+  await bottomTabs.getByRole("tab", { name: "Console" }).click();
+  await expect(page.getByTestId("console-panel")).toBeVisible();
+  await page.getByRole("button", { name: "Undock Console" }).click();
+
+  await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
+  await expect(bottomTabs.getByRole("tab", { name: "Animation" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("animation-workspace")).toBeVisible();
+  await expect(bottomTabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+});
+
 test("Hierarchy and Inspector panels dock into Bottom, persist and restore to their home slots", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");

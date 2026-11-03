@@ -536,6 +536,7 @@ export function setConsolePanelVisibility(
   layout: WorkspaceLayout,
   visible: boolean,
   compact = false,
+  forceSidePanelsToBottom = false,
 ): WorkspaceLayout {
   const next: WorkspaceLayout = {
     ...layout,
@@ -545,7 +546,12 @@ export function setConsolePanelVisibility(
   if (visible) {
     if (compact || next.consoleDocked) next.bottomTab = "Console";
   } else if (next.bottomTab === "Console") {
-    next.bottomTab = getVisibleBottomTab(next, compact, "Project");
+    next.bottomTab = getVisibleBottomTab(
+      next,
+      compact,
+      "Project",
+      forceSidePanelsToBottom,
+    );
   }
 
   return next;

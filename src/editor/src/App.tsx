@@ -1843,7 +1843,12 @@ function App() {
   }
 
   function closeConsole() {
-    const next = setConsolePanelVisibility(layout(), false, compactWorkbench());
+    const next = setConsolePanelVisibility(
+      layout(),
+      false,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
     setLayout(next);
     focusBottomTab(next.bottomTab);
     log("info", "Console panel closed");
@@ -1891,7 +1896,12 @@ function App() {
   }
 
   function openConsole() {
-    const next = setConsolePanelVisibility(layout(), true, compactWorkbench());
+    const next = setConsolePanelVisibility(
+      layout(),
+      true,
+      compactWorkbench(),
+      narrowWorkbench(),
+    );
     setLayout(next);
 
     queueMicrotask(() => {
@@ -2122,11 +2132,20 @@ function App() {
   }
 
   function undockConsole() {
-    setLayout((current) => ({
-      ...current,
-      consoleDocked: false,
-      bottomTab: "Project",
-    }));
+    setLayout((current) => {
+      const next = { ...current, consoleDocked: false };
+      const visibleTabs = getVisibleBottomTabs(
+        next,
+        compactWorkbench(),
+        narrowWorkbench(),
+      );
+      return {
+        ...next,
+        bottomTab: visibleTabs.includes("Project")
+          ? "Project"
+          : (visibleTabs[0] ?? "Project"),
+      };
+    });
     log("info", "Console moved back to its own dock");
   }
 
