@@ -359,6 +359,34 @@ jobs:
         run: npm run build
         working-directory: src/editor
 
+      - name: Smoke-test Vite dev server and Core package resolution
+        if: steps.scope.outputs.run == 'true'
+        working-directory: src/editor
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="$(mktemp)"
+          setsid npm run dev >"$log_file" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -- "-$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            rm -f "$log_file"
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/src/domain/components-model.ts -o /tmp/codogma-components-model.js; then
+              echo "Vite transformed components-model.ts and resolved @codogma/cge."
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat "$log_file"
+          echo "::error::Vite dev server did not resolve the Core package import."
+          exit 1
+
       - name: Run Editor Host domain tests
         if: steps.scope.outputs.run == 'true'
         run: npm test
