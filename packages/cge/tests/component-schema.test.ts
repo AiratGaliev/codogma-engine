@@ -175,3 +175,15 @@ test("preserves __proto__ as a JSON property without changing the normalized obj
   assert.deepEqual(result.value["__proto__"], { future: true });
   assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "future"), false);
 });
+
+test("rejects non-JSON values for typed property validation with diagnostics", () => {
+  const nonJsonProperties = validateComponentProperties(schema, new Date());
+  assert.equal(nonJsonProperties.valid, false);
+  assert.equal(nonJsonProperties.diagnostics[0]?.code, "COMPONENT_INVALID_VALUE");
+
+  const assetLikeDate = Object.assign(new Date(), { assetId: "image-player" });
+  const assetValue = validateComponentPropertyValue(schema, "texture", assetLikeDate);
+  assert.equal(assetValue.valid, false);
+  assert.equal(assetValue.diagnostics[0]?.code, "COMPONENT_INVALID_VALUE");
+  assert.match(assetValue.diagnostics[0]?.message ?? "", /JSON-compatible/);
+});

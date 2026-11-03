@@ -71,6 +71,7 @@ function validateValue(
   context: ComponentSchemaContext,
 ): CoreDiagnostic[] {
   const fail = (message: string): CoreDiagnostic[] => [diagnostic("COMPONENT_INVALID_VALUE", message, name)];
+  if (!isJsonValue(value)) return fail(name + " must be JSON-compatible.");
   switch (schema.type) {
     case "string":
       if (typeof value !== "string") return fail(name + " must be a string.");
@@ -218,7 +219,7 @@ export function validateComponentProperties(
   input: unknown,
   context: ComponentSchemaContext = {},
 ): ValidationResult<JsonObject> {
-  if (!isRecord(input)) return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_VALUE", "Component properties must be a JSON object.")] };
+  if (!isRecord(input) || !isJsonValue(input)) return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_VALUE", "Component properties must be a JSON-compatible object.")] };
   const diagnostics: CoreDiagnostic[] = [];
   const normalized: JsonObject = {};
 
