@@ -462,3 +462,113 @@ test("preserves legacy renderer type and compiler scope instead of treating them
     true,
   );
 });
+
+
+function assertLegacyNodeSourceTree(migrated: unknown, legacy: unknown): void {
+  const migratedNode = object(migrated);
+  const legacyNode = object(legacy);
+  assert.deepEqual(object(migratedNode.legacySource), legacyNode);
+
+  const expectedChildren = Array.isArray(legacyNode.list) ? legacyNode.list : [];
+  const actualChildren = Array.isArray(migratedNode.children) ? migratedNode.children : [];
+  assert.equal(actualChildren.length, expectedChildren.length);
+
+  for (let index = 0; index < expectedChildren.length; index += 1) {
+    assertLegacyNodeSourceTree(actualChildren[index], expectedChildren[index]);
+  }
+}
+
+test("migrates every checked-in legacy Scene and Prefab fixture without losing hierarchy or source fields", () => {
+  const fixtureNames = [
+  "AgentLevel.scene",
+  "CoinPrefab.scene",
+  "CoinRush.scene",
+  "DinoPrefab.scene",
+  "DoubleDinoPrefab.scene",
+  "Level.scene",
+  "MyGame.scene",
+  "OfficialE2E.scene",
+  "TestListFieldScene.scene",
+  "TestOneObjectScene.scene",
+  "TestTileSpriteSizeInInspector.scene",
+  "TextWordWrapScene.scene",
+  "box2d-acceptance.scene",
+  "TestComponentsAwakeEvent.scene",
+  "fx-acceptance.scene",
+  "Issue147.scene",
+  "BaseContainerPrefab.scene",
+  "DerivedContainer1Prefab.scene",
+  "Issue154.scene",
+  "AnotherPrefabPrefab.scene",
+  "NestedInsideContainerPrefabInstanceScene.scene",
+  "NestedPrefabInContainerPrefab.scene",
+  "OriginMigration.scene",
+  "TextWithOriginPrefab.scene",
+  "PrefabAwakeTest.scene",
+  "WithAwakeEventPrefab.scene",
+  "WithoutAwakeEventPrefab.scene"
+];
+  let sceneCount = 0;
+  let prefabCount = 0;
+  let warningCount = 0;
+
+  for (const name of fixtureNames) {
+    const source = JSON.parse(fixture(name)) as Record<string, unknown>;
+    const displayList = Array.isArray(source.displayList) ? source.displayList : [];
+    const plainObjects = Array.isArray(source.plainObjects) ? source.plainObjects : [];
+    const sourceRoots = [...displayList, ...plainObjects];
+
+    if (source.sceneType === "SCENE") {
+      const migrated = migrateLegacySceneDocument(source);
+      sceneCount += 1;
+      assert.equal(migrated.document.id, source.id, name);
+      assert.equal(migrated.document.rootNodes.length, sourceRoots.length, name);
+      assert.deepEqual(object(object(migrated.document).legacySource), source, name);
+      migrated.document.rootNodes.forEach((node, index) => {
+        assertLegacyNodeSourceTree(node, sourceRoots[index]);
+        assert.equal(object(node).legacyCollection, index < displayList.length ? "displayList" : "plainObjects");
+      });
+      warningCount += migrated.diagnostics.filter((item) => item.severity === "warning").length;
+    } else if (source.sceneType === "PREFAB") {
+      assert.equal(sourceRoots.length, 1, name);
+      const migrated = migrateLegacyPrefabDocument(source);
+      prefabCount += 1;
+      assert.equal(migrated.document.id, source.id, name);
+      assertLegacyNodeSourceTree(migrated.document.root, sourceRoots[0]);
+      assert.deepEqual(object(object(migrated.document).legacySource), source, name);
+      assert.equal(
+        JSON.stringify(object(migrated.document).legacyPrefabProperties ?? []),
+        JSON.stringify(source.prefabProperties ?? []),
+        name,
+      );
+      warningCount += migrated.diagnostics.filter((item) => item.severity === "warning").length;
+    } else {
+      assert.fail("Unexpected legacy discriminator in fixture " + name);
+    }
+  }
+
+  assert.equal(sceneCount + prefabCount, fixtureNames.length);
+  assert.equal(sceneCount > 0, true);
+  assert.equal(prefabCount > 0, true);
+  assert.equal(warningCount > 0, true);
+});
+
+test("keeps both real legacy User Component definition formats inspectable without fabricating a schema version", () => {
+  const behaviors = JSON.parse(fixture("Behaviors.components")) as {
+    components: Array<{ name: string; properties: Array<{ name: string; type: { id: string } }>; generateAwakeEvent: boolean }>;
+    outputLang: string;
+  };
+  const awake = JSON.parse(fixture("AwakeTest.components")) as {
+    components: Array<{ name: string; gameObjectType: string; generateAwakeEvent: boolean }>;
+    outputLang: string;
+  };
+
+  assert.deepEqual(behaviors.components.map((item) => item.name).sort(), ["PushOnClick", "Tint"]);
+  assert.equal(behaviors.components.find((item) => item.name === "PushOnClick")?.properties[0]?.type.id, "number");
+  assert.equal(behaviors.components.find((item) => item.name === "PushOnClick")?.generateAwakeEvent, true);
+  assert.equal(awake.components.map((item) => item.name).sort().join(","), "ComponentWithAwake,ComponentWithoutAwake");
+  assert.equal(awake.components.find((item) => item.name === "ComponentWithAwake")?.generateAwakeEvent, true);
+  assert.equal(awake.components.find((item) => item.name === "ComponentWithoutAwake")?.generateAwakeEvent, false);
+  assert.equal(behaviors.outputLang, "TYPE_SCRIPT");
+  assert.equal(awake.outputLang, "TYPE_SCRIPT");
+});
