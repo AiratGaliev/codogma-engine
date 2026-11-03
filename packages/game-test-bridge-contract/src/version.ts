@@ -41,16 +41,22 @@ export function compareContractVersions(left: ContractVersion, right: ContractVe
   return 0;
 }
 
-export function isVersionInRange(version: ContractVersion, range: VersionRange): boolean {
-  if (
-    compareContractVersions(range.minimum, range.maximumExclusive) >= 0 ||
-    compareContractVersions(version, range.minimum) < 0 ||
-    compareContractVersions(version, range.maximumExclusive) >= 0
-  ) {
-    return false;
-  }
+export function isValidVersionRange(range: VersionRange): boolean {
+  const minimum = parseVersion(range.minimum);
+  const maximum = parseVersion(range.maximumExclusive);
 
-  return true;
+  if (!minimum || !maximum) return false;
+  if (compareContractVersions(range.minimum, range.maximumExclusive) >= 0) return false;
+
+  return maximum.major === minimum.major ||
+    (maximum.major === minimum.major + 1 && maximum.minor === 0 && maximum.patch === 0);
+}
+
+export function isVersionInRange(version: ContractVersion, range: VersionRange): boolean {
+  if (!parseVersion(version) || !isValidVersionRange(range)) return false;
+
+  return compareContractVersions(version, range.minimum) >= 0 &&
+    compareContractVersions(version, range.maximumExclusive) < 0;
 }
 
 export interface VersionCompatibilityResult {

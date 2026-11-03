@@ -26,7 +26,7 @@ export interface CapabilityNegotiationResult {
 function notDeclared(capabilityId: string): UnsupportedCapabilityReason {
   return {
     code: "NOT_DECLARED",
-    message: "The runtime adapter did not declare this capability.",
+    message: "The runtime adapter did not declare this capability: " + capabilityId,
     retryable: false,
   };
 }
@@ -50,8 +50,15 @@ export function negotiateCapabilities(
       continue;
     }
 
-    if (descriptor.status === "unavailable") {
-      unsupported.push({ capabilityId, reason: descriptor.reason ?? notDeclared(capabilityId) });
+    if (descriptor.status !== "available") {
+      unsupported.push({
+        capabilityId,
+        reason: descriptor.reason ?? {
+          code: "RUNTIME_LIMITATION",
+          message: descriptor.description,
+          retryable: false,
+        },
+      });
       continue;
     }
 
@@ -125,8 +132,8 @@ export function authorizeRegisteredTestAction(
     return denied("CAPABILITY_NOT_DECLARED", "The action capability was not declared by the runtime.");
   }
 
-  if (capability.status === "unavailable") {
-    return denied("CAPABILITY_UNAVAILABLE", capability.reason?.message ?? "The action capability is unavailable.");
+  if (capability.status !== "available") {
+    return denied("CAPABILITY_UNAVAILABLE", capability.reason?.message ?? "The action capability is not fully available.");
   }
 
   return { allowed: true };

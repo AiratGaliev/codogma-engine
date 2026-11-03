@@ -1,4 +1,4 @@
-import type { EventPage, EventStreamIntegrity, KnownEventType, ValidationIssue } from "./types.js";
+import type { CapabilityDescriptor, EventPage, EventStreamIntegrity, KnownEventType, ValidationIssue } from "./types.js";
 import { EVENT_CAPABILITY_REQUIREMENTS } from "./capabilities.js";
 
 const KNOWN_EVENT_TYPES = new Set<string>([
@@ -28,10 +28,15 @@ export function isKnownEventType(eventType: string): eventType is KnownEventType
 
 export function isEventTypeAvailable(
   eventType: string,
-  availableCapabilityIds: ReadonlySet<string>,
+  declaredCapabilities: readonly CapabilityDescriptor[],
 ): boolean {
   const requiredCapability = EVENT_CAPABILITY_REQUIREMENTS[eventType];
-  return requiredCapability === undefined || availableCapabilityIds.has(requiredCapability);
+  if (requiredCapability === undefined) return true;
+
+  const descriptor = declaredCapabilities.find((capability) => capability.id === requiredCapability);
+  return descriptor !== undefined &&
+    descriptor.status !== "unavailable" &&
+    descriptor.eventTypes.includes(eventType);
 }
 
 function sumGapSizes(integrity: EventStreamIntegrity): number {
@@ -103,6 +108,14 @@ export function validateEventPageSemantics(page: EventPage): readonly Validation
       code: "EVENT_OVERFLOW_DIAGNOSTIC_INCONSISTENT",
       path: "/integrity/bufferOverflow",
       message: "Overflow state and dropped event count must agree.",
+    });
+  }
+
+  if (overflow.occurred && overflow.droppedEventCount === null && page.integrity.lostEventCount !== null) {
+    issues.push({
+      code: "EVENT_LOSS_COUNT_INCONSISTENT",
+      path: "/integrity/lostEventCount",
+      message: "The total lost count must remain unknown when overflow drops are uncounted.",
     });
   }
 

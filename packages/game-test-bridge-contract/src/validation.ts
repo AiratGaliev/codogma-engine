@@ -1,7 +1,9 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import type { ValidateFunction } from "ajv";
 import type {
+  CapabilityDescriptor,
   EventPage,
+  EventReadRequest,
   GameTestEvent,
   HandshakeMessage,
   RuntimeSnapshot,
@@ -14,6 +16,7 @@ import type {
 import { validateEventPageSemantics } from "./events.js";
 import { validateEventPayloadSize, validateJsonValue } from "./json-value.js";
 import { GAME_TEST_BRIDGE_SCHEMA, GAME_TEST_BRIDGE_SCHEMA_ID } from "./schema.js";
+import { isVersionInRange, isValidVersionRange } from "./version.js";
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -30,10 +33,12 @@ function compile<T>(definition: string): ValidateFunction<T> {
   return ajv.compile<T>({ $ref: GAME_TEST_BRIDGE_SCHEMA_ID + "#/$defs/" + definition });
 }
 
+const validateCapabilitySchema = compile<CapabilityDescriptor>("CapabilityDescriptor");
 const validateHandshakeSchema = compile<HandshakeMessage>("HandshakeMessage");
 const validateRuntimeSnapshotSchema = compile<RuntimeSnapshot>("RuntimeSnapshot");
 const validateEventSchema = compile<GameTestEvent>("GameTestEvent");
 const validateEventPageSchema = compile<EventPage>("EventPage");
+const validateEventReadRequestSchema = compile<EventReadRequest>("EventReadRequest");
 const validateTestActionDescriptorSchema = compile<TestActionDescriptor>("TestActionDescriptor");
 const validateTestActionRequestSchema = compile<TestActionRequest>("TestActionRequest");
 const validateTestActionResultSchema = compile<TestActionResult>("TestActionResult");
@@ -70,21 +75,54 @@ function appendIssues<T>(
   return { success: false, errors: issues };
 }
 
+export function validateCapabilityDescriptor(input: unknown): ValidationResult<CapabilityDescriptor> {
+  return validateWithSchema(validateCapabilitySchema, input);
+}
+
 export function validateHandshake(input: unknown): ValidationResult<HandshakeMessage> {
   const result = validateWithSchema(validateHandshakeSchema, input);
   if (!result.success) return result;
 
   const issues: ValidationIssue[] = [];
-  const capabilityIds = new Set<string>();
+  const ranges = [
+    {
+      field: "/supportedProtocolVersions",
+      current: result.value.protocolVersion,
+      range: result.value.supportedProtocolVersions,
+    },
+    {
+      field: "/supportedSchemaVersions",
+      current: result.value.schemaVersion,
+      range: result.value.supportedSchemaVersions,
+    },
+  ] as const;
+
+  for (const entry of ranges) {
+    if (!isValidVersionRange(entry.range)) {
+      issues.push({
+        code: "VERSION_RANGE_INVALID",
+        path: entry.field,
+        message: "The supported version range must be ordered and must not span incompatible major versions.",
+      });
+    } else if (!isVersionInRange(entry.current, entry.range)) {
+      issues.push({
+        code: "CURRENT_VERSION_OUTSIDE_SUPPORT_RANGE",
+        path: entry.field,
+        message: "The current contract version must be included in the range declared by this peer.",
+      });
+    }
+  }
+
+  const capabilityById = new Map<string, CapabilityDescriptor>();
   for (const capability of result.value.capabilities) {
-    if (capabilityIds.has(capability.id)) {
+    if (capabilityById.has(capability.id)) {
       issues.push({
         code: "DUPLICATE_CAPABILITY_ID",
         path: "/capabilities",
         message: "Capability identifiers must be unique within a handshake.",
       });
     }
-    capabilityIds.add(capability.id);
+    capabilityById.set(capability.id, capability);
   }
 
   const actionIds = new Set<string>();
@@ -98,21 +136,18 @@ export function validateHandshake(input: unknown): ValidationResult<HandshakeMes
     }
     actionIds.add(action.actionId);
 
-    if (!capabilityIds.has(action.capabilityId)) {
+    const capability = capabilityById.get(action.capabilityId);
+    if (!capability) {
       issues.push({
         code: "ACTION_CAPABILITY_NOT_DECLARED",
         path: "/registeredActions",
         message: "Every registered action must reference a capability declared by the handshake.",
       });
-    }
-
-    if (action.effect === "controlled-state-change" && (
-      action.allowedProfiles.length !== 1 || action.allowedProfiles[0] !== "test"
-    )) {
+    } else if (action.status === "available" && capability.status !== "available") {
       issues.push({
-        code: "STATE_CHANGE_ACTION_NOT_TEST_ONLY",
+        code: "ACTION_CAPABILITY_UNAVAILABLE",
         path: "/registeredActions",
-        message: "Controlled state changes must be restricted to the Test profile.",
+        message: "An available action must reference a fully available capability.",
       });
     }
   }
@@ -134,16 +169,27 @@ export function validateGameTestEvent(input: unknown): ValidationResult<GameTest
     : { success: false, errors: payloadResult.errors };
 }
 
-export function validateEventReadRequest(input: unknown): ValidationResult<unknown> {
-  const validator = compile<unknown>("EventReadRequest");
-  return validateWithSchema(validator, input);
+export function validateEventReadRequest(input: unknown): ValidationResult<EventReadRequest> {
+  return validateWithSchema(validateEventReadRequestSchema, input);
 }
 
 export function validateEventPage(input: unknown): ValidationResult<EventPage> {
   const result = validateWithSchema(validateEventPageSchema, input);
   if (!result.success) return result;
 
-  const semanticIssues = validateEventPageSemantics(result.value);
+  const semanticIssues = [...validateEventPageSemantics(result.value)];
+  result.value.events.forEach((event, index) => {
+    const payloadResult = validateEventPayloadSize(event.payload);
+    if (!payloadResult.success) {
+      for (const error of payloadResult.errors) {
+        semanticIssues.push({
+          ...error,
+          path: "/events/" + index + "/payload" + error.path,
+        });
+      }
+    }
+  });
+
   return appendIssues(result, semanticIssues);
 }
 
@@ -179,5 +225,15 @@ export function validateTestActionRequest(input: unknown): ValidationResult<Test
 }
 
 export function validateTestActionResult(input: unknown): ValidationResult<TestActionResult> {
-  return validateWithSchema(validateTestActionResultSchema, input);
+  const result = validateWithSchema(validateTestActionResultSchema, input);
+  if (!result.success) return result;
+
+  if (result.value.status === "succeeded") {
+    const outputResult = validateEventPayloadSize(result.value.output);
+    return outputResult.success
+      ? result
+      : { success: false, errors: outputResult.errors };
+  }
+
+  return result;
 }
