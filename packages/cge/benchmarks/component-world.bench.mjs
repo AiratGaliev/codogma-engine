@@ -73,12 +73,11 @@ const warmup = createWorld(250, "warmup");
 for (let tick = 0; tick < 5; tick += 1) warmup.world.update(1 / 60);
 warmup.world.dispose();
 
+const newline = String.fromCharCode(10);
 process.stdout.write(
   "ComponentWorld benchmark · " + process.version + " · " +
-  process.platform + "/" + process.arch + "
-",
+  process.platform + "/" + process.arch + newline,
 );
 for (const size of [100, 1_000, 10_000]) {
-  process.stdout.write(JSON.stringify(measure(size)) + "
-");
+  process.stdout.write(JSON.stringify(measure(size)) + newline);
 }
