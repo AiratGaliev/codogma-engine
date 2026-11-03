@@ -1089,6 +1089,111 @@ function App() {
     }
   }
 
+  async function runTypeScriptSourceCheck(path: string, content: string) {
+    const request = ++scriptCheckSequence;
+    setScriptChecking(true);
+    try {
+      const result = await checkTypeScriptSource(path, content);
+      if (request === scriptCheckSequence && scriptSourcePath() === path && scriptSource() === content) {
+        setScriptDiagnostics(result.diagnostics);
+      }
+    } catch (error) {
+      if (request === scriptCheckSequence) {
+        log("warning", `TypeScript diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      if (request === scriptCheckSequence) setScriptChecking(false);
+    }
+  }
+
+  function updateTypeScriptSource(content: string) {
+    setScriptSource(content);
+    const path = scriptSourcePath();
+    if (path) void runTypeScriptSourceCheck(path, content);
+  }
+
+  async function openTypeScriptFile(path: string, sourceContent?: string) {
+    if (path === scriptSourcePath()) {
+      setActiveViewport("Source");
+      return;
+    }
+    if (documentDirty() && !window.confirm("The active document has unsaved changes. Discard them and open the TypeScript source?")) return;
+    const request = ++documentLoadSequence;
+    try {
+      const content = sourceContent ?? await readProjectFile(path);
+      if (request !== documentLoadSequence) return;
+      setScriptSourcePath(path);
+      setScriptSource(content);
+      setSavedScriptSource(content);
+      setScriptDiagnostics([]);
+      setSelectedProjectPath(path);
+      setActiveViewport("Source");
+      setLayout((current) => ({ ...current, bottomTab: "Components" }));
+      await runTypeScriptSourceCheck(path, content);
+      log("success", `Opened TypeScript source ${path}`);
+    } catch (error) {
+      if (request !== documentLoadSequence) return;
+      log("error", `Could not open TypeScript source: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function saveTypeScriptFile() {
+    const path = scriptSourcePath();
+    if (!path || scriptSaving() || !scriptDirty()) return;
+    setScriptSaving(true);
+    try {
+      const content = scriptSource();
+      await writeProjectFile(path, content);
+      setSavedScriptSource(content);
+      await runTypeScriptSourceCheck(path, content);
+      log("success", `Saved TypeScript source ${path}`);
+    } catch (error) {
+      log("error", `TypeScript source save failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setScriptSaving(false);
+    }
+  }
+
+  async function createTypeScriptFile(path: string, content: string) {
+    if (!/^[A-Za-z0-9_.-]+(?:\\/[A-Za-z0-9_.-]+)*\\.tsx?$/i.test(path) || path.split("/").includes("..")) {
+      throw new Error("TypeScript source path must be a relative .ts/.tsx path inside the project.");
+    }
+    assertNewProjectFilePath(path);
+    const directory = path.split("/").slice(0, -1).join("/");
+    if (directory) await ensureProjectFolder(directory);
+    await writeProjectFile(path, content);
+    await refreshProjectTree();
+    await openTypeScriptFile(path, content);
+    log("success", `Created TypeScript source ${path}`);
+  }
+
+  async function openUserComponentSource(definition: UserComponentsDocument["components"][number]) {
+    const directory = componentDocumentPath().split("/").slice(0, -1).join("/");
+    const path = [directory, `${definition.name}.ts`].filter(Boolean).join("/");
+    const exists = flattenProjectFiles(projectTree() ?? { name: "", isFile: false, children: [] })
+      .some((entry) => entry.path === path && entry.entry.isFile);
+    if (exists) {
+      await openTypeScriptFile(path);
+      return;
+    }
+    const source = [
+      "/**",
+      ` * User-authored TypeScript source for ${definition.name}.`,
+      " * Component metadata remains in the adjacent .components file.",
+      " * Runtime execution requires explicit component module registration.",
+      " */",
+      `export class ${definition.name} {`,
+      "  // Add the component's TypeScript implementation here.",
+      "}",
+      "",
+    ].join("\\n");
+    try {
+      await createTypeScriptFile(path, source);
+    } catch (error) {
+      log("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function openProjectFile(path: string) {
     const normalized = path.toLowerCase();
     if (normalized.endsWith(".scene")) {
