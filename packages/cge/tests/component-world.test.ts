@@ -341,7 +341,12 @@ test("runs registered systems after component updates and disposes them in rever
   ]);
 
   world.dispose();
-  assert.deepEqual(log.slice(4), ["dispose:second", "dispose:first"]);
+  assert.deepEqual(log.slice(4), [
+    "disable:system-owner",
+    "destroy:system-owner",
+    "dispose:second",
+    "dispose:first",
+  ]);
 });
 
 test("removes and disposes a system once and rejects duplicate system identities", () => {
