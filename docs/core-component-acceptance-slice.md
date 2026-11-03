@@ -62,7 +62,7 @@ Core package: `packages/cge/`.
 - Deterministic serialization/round-trip и parse/unsupported-version diagnostics.
 - Scene duplicate node/component IDs и finite Transform checks.
 - Defaults, required values, enum/numeric constraints, discriminator-specific schema metadata, non-JSON value rejection, persisted/editorOnly/runtime filtering, asset/node reference validation и точные property diagnostics.
-- Registry duplicate protection/immutable schema snapshot; explicit-tick lifecycle, deferred structural mutations at operation boundaries, disposal reentrancy protection, attach input snapshots, scene world disposal и invalid delta rejection.
+- Registry duplicate protection/immutable schema snapshot; explicit-tick lifecycle, component-before-system update ordering, system removal/reverse-order disposal, deferred structural mutations at operation boundaries, disposal reentrancy protection, attach input snapshots, scene world disposal и invalid delta rejection.
 
 SolidJS Host:
 

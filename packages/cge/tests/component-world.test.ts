@@ -313,3 +313,52 @@ test("registry owns an immutable schema snapshot after registration", () => {
     (registeredStep as unknown as { min?: number }).min = 400;
   }, TypeError);
 });
+
+test("runs registered systems after component updates and disposes them in reverse order", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-systems", createRegistry(log));
+  world.createNode({ id: "node-systems", name: "Player" });
+  world.attachComponent("node-systems", schema.typeId, {}, { instanceId: "system-owner" });
+  log.length = 0;
+
+  world.registerSystem({
+    id: "first",
+    update: () => log.push("system:first"),
+    dispose: () => log.push("dispose:first"),
+  });
+  world.registerSystem({
+    id: "second",
+    update: () => log.push("system:second"),
+    dispose: () => log.push("dispose:second"),
+  });
+
+  world.update(0.25);
+  assert.deepEqual(log, [
+    "start:system-owner",
+    "update:system-owner:0.25",
+    "system:first",
+    "system:second",
+  ]);
+
+  world.dispose();
+  assert.deepEqual(log.slice(4), ["dispose:second", "dispose:first"]);
+});
+
+test("removes and disposes a system once and rejects duplicate system identities", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-system-removal", new ComponentRegistry());
+  const system = {
+    id: "system-a",
+    update: () => log.push("update"),
+    dispose: () => log.push("dispose"),
+  };
+
+  world.registerSystem(system);
+  assert.throws(() => world.registerSystem({ ...system }), /already registered/i);
+  world.removeSystem(system.id);
+  world.removeSystem(system.id);
+  world.update(0);
+  world.dispose();
+
+  assert.deepEqual(log, ["dispose"]);
+});
