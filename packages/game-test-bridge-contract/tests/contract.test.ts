@@ -138,7 +138,7 @@ test("accepts unknown event types as opaque JSON for forward compatibility", () 
   };
   const result = validateGameTestEvent(fixture);
   assert.equal(result.success, true);
-  assert.equal(isEventTypeAvailable("org.example.future-event", new Set()), true);
+  assert.equal(isEventTypeAvailable("org.example.future-event", []), false);
 });
 
 test("validates capability descriptors and gates optional event families", () => {
@@ -161,6 +161,11 @@ test("validates capability descriptors and gates optional event families", () =>
   const validatedAvailable = validateCapabilityDescriptor(available);
   assert.equal(validatedAvailable.success, true);
   assert.equal(isEventTypeAvailable("physics.contact", [available]), true);
+
+  assert.equal(validateCapabilityDescriptor({
+    ...available,
+    status: "partial",
+  }).success, false);
 });
 
 test("reports unavailable capabilities with their structured reason", () => {
