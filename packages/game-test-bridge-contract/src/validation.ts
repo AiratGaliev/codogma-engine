@@ -43,7 +43,7 @@ const validateTestActionDescriptorSchema = compile<TestActionDescriptor>("TestAc
 const validateTestActionRequestSchema = compile<TestActionRequest>("TestActionRequest");
 const validateTestActionResultSchema = compile<TestActionResult>("TestActionResult");
 
-function schemaIssues(validator: ValidateFunction, input: unknown): readonly ValidationIssue[] {
+function schemaIssues(validator: ValidateFunction): readonly ValidationIssue[] {
   return (validator.errors ?? []).map((error) => ({
     code: "SCHEMA_" + error.keyword.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
     path: error.instancePath || "/",
@@ -61,7 +61,7 @@ function validateWithSchema<T>(
   }
 
   if (!validator(inspected.value)) {
-    return { success: false, errors: schemaIssues(validator, inspected.value) };
+    return { success: false, errors: schemaIssues(validator) };
   }
 
   return { success: true, value: inspected.value as T };
