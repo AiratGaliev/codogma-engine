@@ -486,7 +486,11 @@ function App() {
     catch { return true; }
   });
 
-  const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty());
+  const scriptDirty = createMemo(() =>
+    Boolean(scriptSourcePath()) && scriptSource() !== savedScriptSource(),
+  );
+
+  const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty() || scriptDirty());
 
   const componentRegistry = createMemo(() => {
     const sources = componentSources();
@@ -712,8 +716,8 @@ function App() {
 
   async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
-    if (animationDirty() || componentDirty()) {
-      if (!window.confirm("The active animation or User Components file has unsaved changes. Discard them and open the scene?")) return false;
+    if (animationDirty() || componentDirty() || scriptDirty()) {
+      if (!window.confirm("The active animation, User Components or TypeScript source has unsaved changes. Discard them and open the scene?")) return false;
     }
     if (dirty()) {
       const discardChanges = window.confirm(
@@ -900,8 +904,8 @@ function App() {
 
   async function loadAnimationFile(path: string, sourceContent?: string) {
     if (path === animationPath()) return;
-    if ((dirty() || componentDirty()) &&
-        !window.confirm("The active scene or User Components file has unsaved changes. Discard them?")) return;
+    if ((dirty() || componentDirty() || scriptDirty()) &&
+        !window.confirm("The active scene, User Components or TypeScript source has unsaved changes. Discard them?")) return;
     if (animationDirty() && !window.confirm("The active animation file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
@@ -1061,8 +1065,8 @@ function App() {
 
   async function openUserComponentsFile(path: string) {
     if (path === componentDocumentPath()) return;
-    if ((dirty() || animationDirty()) &&
-        !window.confirm("The active scene or animation file has unsaved changes. Discard them?")) return;
+    if ((dirty() || animationDirty() || scriptDirty()) &&
+        !window.confirm("The active scene, animation or TypeScript source has unsaved changes. Discard them?")) return;
     if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
     try {
