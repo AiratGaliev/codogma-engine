@@ -1,3 +1,13 @@
+import {
+  validateComponentProperties,
+  validateComponentPropertyValue,
+  validateComponentTypeSchema,
+  type ComponentTypeSchemaV1,
+  type CoreDiagnostic,
+  type JsonObject,
+  type JsonValue,
+  type ValidationResult,
+} from "@codogma/cge";
 import type { SceneObject } from "./scene-model.ts";
 
 export interface UserComponentProperty {
@@ -6,7 +16,7 @@ export interface UserComponentProperty {
   tooltip?: string;
   defValue?: unknown;
   customDefinition?: boolean;
-  type?: { id: "string" | "number" | "boolean" | "option"; options?: string[]; [key: string]: unknown };
+  type?: { id: string; options?: string[]; [key: string]: unknown };
   [key: string]: unknown;
 }
 
@@ -48,6 +58,124 @@ function assertDocument(document: unknown): asserts document is UserComponentsDo
       throw new TypeError(`User Component "${value.name}" properties must be an array.`);
     }
   }
+}
+
+function legacyPropertySchema(property: UserComponentProperty): ComponentTypeSchemaV1["properties"][string] | undefined {
+  const base = {
+    label: property.label ?? property.name,
+    ...(typeof property.tooltip === "string" ? { description: property.tooltip } : {}),
+    ...(Object.hasOwn(property, "defValue") ? { defaultValue: property.defValue as JsonValue } : {}),
+  };
+  switch (property.type?.id) {
+    case "number":
+      return { ...base, type: "number" };
+    case "boolean":
+      return { ...base, type: "boolean" };
+    case "option":
+      return Array.isArray(property.type.options)
+        ? { ...base, type: "enum", options: property.type.options.filter((item): item is string => typeof item === "string") }
+        : undefined;
+    case "string":
+    case undefined:
+      // Legacy definitions without a type were text fields in the old Inspector.
+      return { ...base, type: "string" };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Adapts the existing .components JSON format to the public Core schema.
+ * This is a compatibility adapter only: it does not register a runtime module
+ * or infer a new stable component type ID from a scene/file path.
+ */
+export function createUserComponentSchema(
+  definition: UserComponentDefinition,
+): ValidationResult<ComponentTypeSchemaV1> {
+  if (!definition || typeof definition.name !== "string" || !definition.name.trim()) {
+    return {
+      valid: false,
+      diagnostics: [{
+        code: "COMPONENT_INVALID_SCHEMA",
+        severity: "error",
+        message: "A User Component definition requires a name.",
+      }],
+    };
+  }
+
+  const properties: ComponentTypeSchemaV1["properties"] = {};
+  const diagnostics: CoreDiagnostic[] = [];
+  const names = new Set<string>();
+  for (const property of definition.properties ?? []) {
+    if (!property || typeof property.name !== "string" || !/^[A-Za-z_$][\w$]*$/.test(property.name)) {
+      diagnostics.push({
+        code: "COMPONENT_INVALID_SCHEMA",
+        severity: "error",
+        message: "User Component properties require valid TypeScript identifier names.",
+        propertyName: typeof property?.name === "string" ? property.name : undefined,
+      });
+      continue;
+    }
+    if (names.has(property.name)) {
+      diagnostics.push({
+        code: "COMPONENT_INVALID_SCHEMA",
+        severity: "error",
+        message: `Duplicate User Component property "${property.name}".`,
+        propertyName: property.name,
+      });
+      continue;
+    }
+    names.add(property.name);
+    const schema = legacyPropertySchema(property);
+    if (!schema) {
+      diagnostics.push({
+        code: "COMPONENT_INVALID_SCHEMA",
+        severity: "error",
+        message: `User Component property "${property.name}" uses unsupported legacy type "${property.type?.id ?? "unknown"}".`,
+        propertyName: property.name,
+      });
+      continue;
+    }
+    properties[property.name] = schema;
+  }
+  if (diagnostics.some((item) => item.severity === "error")) return { valid: false, diagnostics };
+
+  const schema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: `legacy.user-component:${definition.name}`,
+    name: definition.displayName ?? definition.name,
+    version: "legacy",
+    properties,
+  };
+  const result = validateComponentTypeSchema(schema);
+  return {
+    ...result,
+    diagnostics: [...diagnostics, ...result.diagnostics],
+  };
+}
+
+export function validateUserComponentPropertyValue(
+  definition: UserComponentDefinition,
+  propertyName: string,
+  value: unknown,
+): ValidationResult<JsonValue> {
+  const schema = createUserComponentSchema(definition);
+  if (!schema.valid || !schema.value) return { valid: false, diagnostics: schema.diagnostics };
+  return validateComponentPropertyValue(schema.value, propertyName, value);
+}
+
+export function validateUserComponentProperties(
+  object: SceneObject,
+  definition: UserComponentDefinition,
+): ValidationResult<JsonObject> {
+  const schema = createUserComponentSchema(definition);
+  if (!schema.valid || !schema.value) return { valid: false, diagnostics: schema.diagnostics };
+  const values: Record<string, unknown> = {};
+  for (const property of definition.properties ?? []) {
+    const key = `${definition.name}.${property.name}`;
+    if (Object.hasOwn(object, key)) values[property.name] = object[key];
+  }
+  return validateComponentProperties(schema.value, values);
 }
 
 export function isUserComponentsContent(value: unknown): value is UserComponentsDocument {
@@ -111,6 +239,10 @@ export function addUserComponentDefinition(
   )) {
     throw new TypeError("User Component properties must have valid identifier names.");
   }
+  const schema = createUserComponentSchema(definition);
+  if (!schema.valid) {
+    throw new TypeError(schema.diagnostics.map((item) => item.message).join("\n"));
+  }
   return { ...document, components: [...document.components, clone(definition)] };
 }
 
@@ -126,10 +258,12 @@ export function updateUserComponentDefinition(
   const current = components[index];
   if (!current) throw new Error(`User Component "${name}" was not found.`);
   const updated = { ...current, ...clone(patch) };
-  components[index] = updated;
   if (components.some((item, itemIndex) => itemIndex !== index && item.name === updated.name)) {
     throw new Error(`User Component "${updated.name}" already exists.`);
   }
+  const schema = createUserComponentSchema(updated);
+  if (!schema.valid) throw new TypeError(schema.diagnostics.map((item) => item.message).join("\n"));
+  components[index] = updated;
   assertDocument({ ...document, components });
   return { ...document, components };
 }
@@ -153,6 +287,9 @@ export function attachUserComponent(
   if (!object || typeof object !== "object" || !definition || typeof definition.name !== "string") {
     throw new TypeError("A scene object and User Component definition are required.");
   }
+  const schema = createUserComponentSchema(definition);
+  if (!schema.valid) throw new TypeError(schema.diagnostics.map((item) => item.message).join("\n"));
+
   const next = clone(object);
   const components = Array.isArray(next.components) ? next.components.slice() : [];
   if (components.includes(definition.name)) return next;
@@ -161,6 +298,8 @@ export function attachUserComponent(
   for (const property of definition.properties ?? []) {
     const key = `${definition.name}.${property.name}`;
     if (!Object.hasOwn(next, key) && Object.hasOwn(property, "defValue")) {
+      const result = validateUserComponentPropertyValue(definition, property.name, property.defValue);
+      if (!result.valid) throw new TypeError(result.diagnostics.map((item) => item.message).join("\n"));
       next[key] = clone(property.defValue);
     }
   }
@@ -180,5 +319,9 @@ export function detachUserComponent(object: SceneObject, componentName: string):
 
 export function formatUserComponentsContent(document: UserComponentsDocument): string {
   assertDocument(document);
+  for (const definition of document.components) {
+    const result = createUserComponentSchema(definition);
+    if (!result.valid) throw new TypeError(result.diagnostics.map((item) => item.message).join("\n"));
+  }
   return `${JSON.stringify(document, null, 4)}\n`;
 }
