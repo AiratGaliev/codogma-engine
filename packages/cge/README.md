@@ -61,6 +61,10 @@ The mapping rules are intentionally conservative:
 The conversion result contains structured diagnostics. A caller must resolve warnings, register compatible component definitions and provide the appropriate Project/Prefab validation context before treating the converted document as load-ready. Scene hydration into a ComponentWorld remains COD-103.
 
 
+## Compatibility inventory
+
+A field-by-field inventory of the checked-in legacy Scene/Prefab/Component/Asset Pack fixtures, including migrated fields and deliberately preserved-only fields, is maintained in [docs/legacy-project-model-compatibility.md](../../docs/legacy-project-model-compatibility.md). The inventory is representative of repository test projects; it is not yet a complete importer/reimport audit of every project format.
+
 ## Node Asset references in the Project Model
 
 Scene v1 Nodes may contain `assetReferences`: each item stores an explicit property path and stable Project `assetId`. Scene validation resolves these IDs against the supplied Project Asset registry. Legacy texture-key conversion is opt-in through `LegacySceneMigrationOptions.assetReferences`; no Asset ID is generated from a texture key or URL.

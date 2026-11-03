@@ -275,3 +275,73 @@ test("rejects unresolved Node Asset IDs and duplicate asset-reference property p
   assert.equal(result.diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"), true);
   assert.equal(result.diagnostics.some((item) => item.code === "PROJECT_DUPLICATE_ID"), true);
 });
+
+
+test("migrates displayList and plainObjects from an additional real Scene fixture", () => {
+  const source = JSON.parse(fixture("AgentLevel.scene")) as Record<string, unknown>;
+  const displayList = source.displayList as unknown[];
+  const plainObjects = source.plainObjects as unknown[];
+  const migrated = migrateLegacySceneDocument(source);
+
+  assert.equal(migrated.document.rootNodes.length, displayList.length + plainObjects.length);
+  const firstPlainObject = object(plainObjects[0]);
+  const migratedPlainObject = migrated.document.rootNodes[displayList.length];
+  assert.ok(migratedPlainObject);
+  assert.equal(migratedPlainObject.id, firstPlainObject.id);
+  assert.equal(object(migratedPlainObject).legacyCollection, "plainObjects");
+  assert.deepEqual(object(migrated.document).legacySource, source);
+});
+
+test("migrates real nested Container Prefab hierarchy without flattening it", () => {
+  const baseSource = JSON.parse(fixture("BaseContainerPrefab.scene")) as Record<string, unknown>;
+  const nestedSource = JSON.parse(fixture("NestedPrefabInContainerPrefab.scene")) as Record<string, unknown>;
+  const base = migrateLegacyPrefabDocument(baseSource).document;
+  const nested = migrateLegacyPrefabDocument(nestedSource).document;
+
+  assert.equal(base.root.id, "8a6260f5-41cc-4317-b862-2c49c34ba837");
+  assert.deepEqual(
+    base.root.children.map((item) => item.id),
+    ["4c327af7-0f36-46da-8103-6b52abca1942", "933a50ce-834a-4f1e-b358-b07b98ffc15d"],
+  );
+  assert.equal(nested.root.id, "6b3513cb-8932-4f92-8d25-ca3527b6eb5d");
+  assert.equal(nested.root.children.length, 3);
+  assert.equal(nested.root.children[0]?.prefabInstance?.prefabId, "62361060-1303-4a68-b8e6-3ade0fa1d41c");
+  assert.equal(nested.root.children[2]?.children[0]?.id, "24c92083-aa88-4a46-9ed9-e6e0d189af5d");
+  assert.deepEqual(object(object(nested.root).legacySource), object(object(nestedSource.displayList as unknown[])[0]).legacySource);
+});
+
+test("keeps nested Prefab override payload explicit instead of flattening it into ordinary children", () => {
+  const derivedSource = JSON.parse(fixture("DerivedContainer1Prefab.scene")) as Record<string, unknown>;
+  const sceneSource = JSON.parse(fixture("NestedInsideContainerPrefabInstanceScene.scene")) as Record<string, unknown>;
+  const derived = migrateLegacyPrefabDocument(derivedSource);
+  const scene = migrateLegacySceneDocument(sceneSource);
+
+  assert.equal(derived.document.root.prefabInstance?.prefabId, "ff655d3a-5788-448d-a43a-508b716df366");
+  assert.equal(scene.document.rootNodes[0]?.prefabInstance?.prefabId, "0af548e2-20ec-4b0c-a216-2dc598698b2f");
+  assert.deepEqual(
+    object(object(derived.document.root).legacySource).nestedPrefabs,
+    object((derivedSource.displayList as unknown[])[0]).nestedPrefabs,
+  );
+  assert.deepEqual(
+    object(object(scene.document.rootNodes[0]).legacySource).nestedPrefabs,
+    object((sceneSource.displayList as unknown[])[0]).nestedPrefabs,
+  );
+  assert.equal(
+    derived.diagnostics.some((item) => item.code === "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED"),
+    true,
+  );
+  assert.equal(
+    scene.diagnostics.some((item) => item.code === "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED"),
+    true,
+  );
+});
+
+test("preserves legacy scene-level list declarations with a structured warning", () => {
+  const source = JSON.parse(fixture("TestListFieldScene.scene")) as Record<string, unknown>;
+  const result = migrateLegacySceneDocument(source);
+
+  assert.deepEqual(object(result.document).legacySource, source);
+  assert.equal(result.diagnostics.some((item) =>
+    item.path === "document.lists" &&
+    item.code === "PROJECT_LEGACY_COMPONENT_PRESERVED"), true);
+});

@@ -317,6 +317,80 @@ function mapPrefabInstance(
   };
 }
 
+function reportUnmappedLegacyNodeFields(
+  source: Record<string, unknown>,
+  nodeId: string,
+  path: string,
+  diagnostics: CoreDiagnostic[],
+): void {
+  const known = new Set([
+    "id", "type", "label", "name", "scope", "active", "components", "list",
+    "x", "y", "rotation", "scaleX", "scaleY", "originX", "originY",
+    "prefabId", "unlock", "nestedPrefabs", "texture",
+  ]);
+  const componentNames = Array.isArray(source.components)
+    ? source.components.filter(isNonEmptyString)
+    : [];
+
+  for (const key of Object.keys(source)) {
+    if (known.has(key) || componentNames.some((name) => key.startsWith(name + "."))) continue;
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "warning",
+      "Legacy Node field " + key + " is not part of the current host-neutral Node contract; it remains verbatim in legacySource.",
+      path + "." + key,
+      nodeId,
+    ));
+  }
+
+  if (Array.isArray(source.nestedPrefabs) && source.nestedPrefabs.length > 0) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
+      "warning",
+      "Nested Prefab references/overrides require an explicit nested-Prefab migration contract; the complete list remains in legacySource.",
+      path + ".nestedPrefabs",
+      nodeId,
+    ));
+  } else if (source.nestedPrefabs !== undefined && !Array.isArray(source.nestedPrefabs)) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
+      "warning",
+      "Legacy nestedPrefabs field is not an array and remains in legacySource.",
+      path + ".nestedPrefabs",
+      nodeId,
+    ));
+  }
+
+  if (source.unlock !== undefined) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
+      "warning",
+      "Legacy unlock metadata is preserved but is not converted into Prefab property declarations or override policy.",
+      path + ".unlock",
+      nodeId,
+    ));
+  }
+}
+
+function reportUnmappedLegacyDocumentFields(
+  source: Record<string, unknown>,
+  path: string,
+  diagnostics: CoreDiagnostic[],
+): void {
+  const known = new Set([
+    "id", "sceneType", "settings", "displayList", "plainObjects", "meta", "prefabProperties",
+  ]);
+  for (const key of Object.keys(source)) {
+    if (known.has(key)) continue;
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_COMPONENT_PRESERVED",
+      "warning",
+      "Legacy document field " + key + " remains in the preserved source payload because no v1 contract mapping is defined.",
+      path + "." + key,
+    ));
+  }
+}
+
 function migrateLegacyNode(
   input: unknown,
   path: string,
@@ -355,6 +429,7 @@ function migrateLegacyNode(
     ));
   }
 
+  reportUnmappedLegacyNodeFields(input, nodeId, path, diagnostics);
   const prefabInstance = mapPrefabInstance(input, nodeId, path, options, diagnostics);
   const assetReferences = mapLegacyAssetReferences(input, nodeId, path, options, diagnostics);
   const legacySource = cloneJsonValue(input as JsonValue) as JsonObject;
@@ -389,6 +464,7 @@ export function migrateLegacySceneDocument(
 ): LegacyMigrationResult<SceneDocumentV1> {
   const legacy = asLegacyDocument(input, "SCENE");
   const diagnostics: CoreDiagnostic[] = [];
+  reportUnmappedLegacyDocumentFields(legacy, "document", diagnostics);
   const displayList = Array.isArray(legacy.displayList) ? legacy.displayList : [];
   const plainObjects = Array.isArray(legacy.plainObjects) ? legacy.plainObjects : [];
 
@@ -442,6 +518,7 @@ export function migrateLegacyPrefabDocument(
 ): LegacyMigrationResult<PrefabDocumentV1> {
   const legacy = asLegacyDocument(input, "PREFAB");
   const diagnostics: CoreDiagnostic[] = [];
+  reportUnmappedLegacyDocumentFields(legacy, "document", diagnostics);
   const displayList = Array.isArray(legacy.displayList) ? legacy.displayList : [];
   const plainObjects = Array.isArray(legacy.plainObjects) ? legacy.plainObjects : [];
   const roots = [
