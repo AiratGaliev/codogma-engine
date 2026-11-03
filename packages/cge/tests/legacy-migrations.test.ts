@@ -247,7 +247,7 @@ test("maps legacy texture keys to stable Project Asset IDs only through an expli
     propertyPath: "texture",
     assetId: "asset-image-dino",
   }]);
-  const rawTexture = object(first.legacySource).texture;
+  const rawTexture = object(object(first).legacySource).texture;
   assert.deepEqual(rawTexture, { key: "dino" });
 });
 
