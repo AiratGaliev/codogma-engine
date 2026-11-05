@@ -57,7 +57,8 @@ Compatibility adapter формирует временный `legacy.user-compone
 
 Core package: `packages/cge/`.
 
-- Project v1 required envelope, stable references, duplicate IDs, safe asset paths, optional sub-resource ID validation и unknown JSON data.
+- Project v1 required envelope, stable references, duplicate IDs, safe asset paths, optional sub-resource ID validation и preservation of unknown JSON-compatible envelope extensions with exact-path `PROJECT_UNKNOWN_FIELD_PRESERVED` warnings. Unknown Component properties remain preserved with `COMPONENT_UNKNOWN_PROPERTY` warnings.
+- Project/Scene/Prefab JSON boundary rejects accessors/getters, non-plain prototypes, symbols, sparse arrays and cyclic graphs without executing getters; future Project/Scene/Prefab versions return blocking `PROJECT_UNSUPPORTED_VERSION` diagnostics.
 - In-memory Project v0 → v1 migration: deep-clone, defaults only for absent optional fields, blocking diagnostics for malformed present fields and unsupported future versions; исходный файл автоматически не переписывается.
 - COD-25 feature branch: explicit legacy Scene/Prefab conversion across all 27 COD-17 fixtures; stable Component/Prefab mappings are caller-supplied, unknown payload is preserved, malformed present hierarchy/Component arrays fail instead of yielding partial trees, and legacy `meta.version` is reported without executing Colibri migration extensions. Scene/Prefab save/reopen, idempotency, input immutability and mapping failures are tested. This code remains separate from `dev` until PR #48 is merged.
 - Deterministic serialization/round-trip и parse/unsupported-version diagnostics.
