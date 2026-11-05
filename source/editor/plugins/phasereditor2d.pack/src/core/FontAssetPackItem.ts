@@ -87,7 +87,10 @@ namespace phasereditor2d.pack.core {
 
         resetCache(): void {
             if (this._fontFace && typeof document !== "undefined" && document.fonts) {
-                document.fonts.delete(this._fontFace);
+                const fontSet = document.fonts as FontFaceSet & {
+                    delete(font: FontFace): boolean;
+                };
+                fontSet.delete(this._fontFace);
             }
 
             this._fontFace = null;
