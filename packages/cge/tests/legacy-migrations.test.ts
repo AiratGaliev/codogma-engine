@@ -272,7 +272,7 @@ test("unknown Component classes, texture keys and Prefab links remain losslessly
   assert.equal(first.components.length, 0);
   assert.deepEqual(object(first).legacyComponents, ["PushOnClick", "Tint"]);
   assert.equal(
-    object(object(object(migrated.document.legacySource).displayList as unknown[])[0])["PushOnClick.pushScale"],
+    object((object(migrated.document.legacySource).displayList as unknown[])[0])["PushOnClick.pushScale"],
     0.8,
   );
   assert.equal(
@@ -492,7 +492,7 @@ test("defaults malformed Transform values with diagnostics while preserving thei
     true,
   );
   assert.equal(
-    object(object(object(migrated.document.legacySource).displayList as unknown[])[0]).x,
+    object((object(migrated.document.legacySource).displayList as unknown[])[0]).x,
     "not-a-number",
   );
 });
