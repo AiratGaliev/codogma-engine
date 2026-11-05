@@ -697,3 +697,43 @@ test("snapshots the registered component factory and preserves its receiver", ()
   assert.deepEqual(calls, ["registered-context"]);
   world.dispose();
 });
+
+
+test("protects Node activation state from writes that bypass lifecycle transitions", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-active-guard", createRegistry(log));
+  const node = world.createNode({ id: "node-active-guard", name: "Actor" });
+  world.attachComponent(node.id, schema.typeId, {}, { instanceId: "active-guard" });
+
+  assert.equal(Reflect.set(node, "active", false), false);
+  assert.equal(node.active, true);
+  assert.equal(Reflect.set(node, "id", "renamed-node"), false);
+  assert.equal(node.id, "node-active-guard");
+  node.transform.x = 42;
+  assert.equal(node.transform.x, 42);
+
+  world.setNodeActive(node.id, false);
+  world.setNodeActive(node.id, true);
+  assert.deepEqual(log, [
+    "create:active-guard:node-active-guard:1",
+    "enable:active-guard",
+    "disable:active-guard",
+    "enable:active-guard",
+  ]);
+  world.dispose();
+});
+
+test("rejects asynchronous system disposal and still completes world teardown", () => {
+  const world = new ComponentWorld("scene-async-dispose", new ComponentRegistry());
+  world.registerSystem({
+    id: "async-dispose",
+    update: () => undefined,
+    dispose: (() => Promise.resolve()) as unknown as ComponentSystem["dispose"],
+  });
+
+  assert.throws(() => world.dispose(), AggregateError);
+  assert.equal(world.isDisposed, true);
+  assert.equal(world.nodeCount, 0);
+  assert.equal(world.componentCount, 0);
+  assert.doesNotThrow(() => world.dispose());
+});

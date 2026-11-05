@@ -20,8 +20,7 @@ export interface RuntimeTransform {
 }
 
 export interface RuntimeNode extends ComponentNodeContext {
-  active: boolean;
-  transform: RuntimeTransform;
+  readonly transform: RuntimeTransform;
 }
 
 export interface RuntimeComponentSnapshot {
@@ -105,6 +104,7 @@ function defaultIdFactory(): () => string {
 
 export class ComponentWorld {
   private readonly nodes = new Map<string, RuntimeNode>();
+  private readonly nodeActivation = new WeakMap<RuntimeNode, { active: boolean }>();
   private readonly components = new Map<string, ComponentRecord>();
   private readonly componentsByNode = new Map<string, string[]>();
   private readonly systems: RegisteredComponentSystem[] = [];
@@ -140,12 +140,14 @@ export class ComponentWorld {
     if (this.updating || this.flushing) throw new Error("Nodes must be created outside a ComponentWorld update boundary.");
     if (!isValidStableId(input.id) || !input.name.trim()) throw new TypeError("Runtime nodes require valid stable IDs and non-empty names.");
     if (this.nodes.has(input.id)) throw new Error("Runtime node " + input.id + " already exists.");
-    const node: RuntimeNode = {
+    const activation = { active: input.active ?? true };
+    const node: RuntimeNode = Object.freeze({
       id: input.id,
       name: input.name,
-      active: input.active ?? true,
+      get active(): boolean { return activation.active; },
       transform: makeRuntimeTransform(input.transform),
-    };
+    });
+    this.nodeActivation.set(node, activation);
     this.nodes.set(node.id, node);
     this.componentsByNode.set(node.id, []);
     return node;
@@ -192,8 +194,10 @@ export class ComponentWorld {
     this.schedule(() => {
       const node = this.nodes.get(nodeId);
       if (!node) throw new Error("Runtime node " + nodeId + " was not found.");
-      if (node.active === active) return;
-      node.active = active;
+      const activation = this.nodeActivation.get(node);
+      if (!activation) throw new Error("Runtime node activation state is unavailable.");
+      if (activation.active === active) return;
+      activation.active = active;
       const errors: unknown[] = [];
       for (const id of this.componentsByNode.get(nodeId) ?? []) {
         const component = this.components.get(id);
