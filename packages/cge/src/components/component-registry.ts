@@ -63,7 +63,18 @@ export class ComponentRegistry {
   private readonly definitions = new Map<string, ComponentTypeDefinition>();
 
   register(definition: ComponentTypeDefinition): void {
-    if (!definition || typeof definition !== "object" || typeof definition.create !== "function") {
+    if (!definition || typeof definition !== "object") {
+      throw new ComponentRegistrationError(
+        "Component type definition requires a factory function.",
+        [{
+          code: "COMPONENT_INVALID_SCHEMA",
+          severity: "error",
+          message: "Component factory must be a synchronous function.",
+        }],
+      );
+    }
+    const create = definition.create;
+    if (typeof create !== "function") {
       throw new ComponentRegistrationError(
         "Component type definition requires a factory function.",
         [{
@@ -90,7 +101,7 @@ export class ComponentRegistry {
     }
     const registeredDefinition = Object.freeze({
       schema: cloneAndFreezeSchema(validation.value),
-      create: (context: ComponentFactoryContext) => definition.create(context),
+      create: (context: ComponentFactoryContext) => create.call(definition, context),
     });
     this.definitions.set(typeId, registeredDefinition);
   }

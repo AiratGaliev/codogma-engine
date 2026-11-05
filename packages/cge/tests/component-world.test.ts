@@ -671,3 +671,29 @@ test("ComponentRegistry rejects malformed runtime definitions before touching it
   );
   assert.equal(registry.has(schema.typeId), false);
 });
+
+
+test("snapshots the registered component factory and preserves its receiver", () => {
+  const calls: string[] = [];
+  const definition = {
+    schema,
+    marker: "registered-context",
+    create() {
+      calls.push(this.marker);
+      return {};
+    },
+  };
+  const registry = new ComponentRegistry();
+  registry.register(definition);
+  definition.create = () => {
+    calls.push("replacement-factory");
+    return {};
+  };
+
+  const world = new ComponentWorld("scene-factory-snapshot", registry);
+  world.createNode({ id: "node-factory-snapshot", name: "Factory snapshot" });
+  world.attachComponent("node-factory-snapshot", schema.typeId, {}, { instanceId: "factory-snapshot" });
+
+  assert.deepEqual(calls, ["registered-context"]);
+  world.dispose();
+});
