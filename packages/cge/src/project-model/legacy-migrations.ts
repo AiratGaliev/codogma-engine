@@ -482,7 +482,7 @@ function migrateLegacyNode(
 }
 
 function buildValidationContext(options: LegacySceneMigrationOptions): SceneValidationContext {
-  // Mappings assert identity; they must not silently register types that the project does not know.
+  // Mapping подтверждает identity, но не должен неявно регистрировать неизвестный проекту тип.
   return options.validationContext ?? {};
 }
 
