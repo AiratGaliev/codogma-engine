@@ -396,6 +396,25 @@ async function main() {
             await assert.doesNotReject(fs.access(path.join(projectDir, "copy-in-project.txt")),
                 "copied file must exist")
 
+            const renameOk = await api("RenameFile", {
+                oldPath: "copy-in-project.txt",
+                newPath: "renamed-in-project.txt"
+            })
+            assert.equal(renameOk.status, 200, `RenameFile must accept the Host oldPath/newPath DTO: ${renameOk.body}`)
+            await assert.rejects(fs.access(path.join(projectDir, "copy-in-project.txt")), /ENOENT/,
+                "RenameFile must remove the old path after success")
+            await assert.doesNotReject(fs.access(path.join(projectDir, "renamed-in-project.txt")),
+                "RenameFile must create the target file")
+
+            const unsafeRename = await api("RenameFile", {
+                oldPath: "renamed-in-project.txt",
+                newPath: "../outside/renamed.txt"
+            })
+            assert.equal(JSON.parse(unsafeRename.body).error, "invalid path",
+                "RenameFile must reject traversal in the newPath")
+            await assert.doesNotReject(fs.access(path.join(projectDir, "renamed-in-project.txt")),
+                "a rejected rename must keep the source file intact")
+
             // --- create-folder escape attempts ---
             const mkdirEscape = await api("CreateFolder", { path: "outside-link/newdir" })
             assert.equal(JSON.parse(mkdirEscape.body).error, "invalid path",
