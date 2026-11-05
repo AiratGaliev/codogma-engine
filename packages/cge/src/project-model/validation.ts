@@ -41,6 +41,25 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function warnUnknownFields(
+  input: Record<string, unknown>,
+  knownFields: ReadonlySet<string>,
+  path: string,
+  diagnostics: CoreDiagnostic[],
+  entityId?: string,
+): void {
+  for (const key of Object.keys(input)) {
+    if (knownFields.has(key)) continue;
+    diagnostics.push({
+      code: "PROJECT_UNKNOWN_FIELD_PRESERVED",
+      severity: "warning",
+      message: "Unknown JSON-compatible field " + key + " is preserved during validation and serialization.",
+      path: path + "." + key,
+      ...(entityId === undefined ? {} : { entityId }),
+    });
+  }
+}
+
 function validateIdCollection(values: unknown[], path: string, diagnostics: CoreDiagnostic[]): Set<string> {
   const ids = new Set<string>();
   values.forEach((item, index) => {
@@ -69,6 +88,14 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   }
 
   const diagnostics: CoreDiagnostic[] = [];
+  warnUnknownFields(
+    input,
+    new Set(["schemaVersion", "id", "name", "scenes", "assets", "prefabs", "componentModules", "runtime"]),
+    "project",
+    diagnostics,
+    input.id,
+  );
+  warnUnknownFields(input.runtime, new Set(["adapterId", "settings"]), "runtime", diagnostics, input.id);
   const assetIds = validateIdCollection(input.assets, "assets", diagnostics);
   validateIdCollection(input.scenes, "scenes", diagnostics);
   validateIdCollection(input.prefabs, "prefabs", diagnostics);
@@ -82,6 +109,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
         !ASSET_KINDS.includes(asset.kind as (typeof ASSET_KINDS)[number])) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference requires a stable id, safe relative path and supported kind.", "assets[" + index + "]"));
     } else {
+      warnUnknownFields(asset, new Set(["id", "path", "kind", "subResourceId"]), "assets[" + index + "]", diagnostics, asset.id);
       assetsById.set(asset.id, asset);
     }
   });
@@ -91,6 +119,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene reference requires id and assetId.", "scenes[" + index + "]"));
       return;
     }
+    warnUnknownFields(scene, new Set(["id", "assetId"]), "scenes[" + index + "]", diagnostics, scene.id);
     const asset = assetsById.get(scene.assetId);
     if (!asset || asset.kind !== "scene") {
       diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Scene asset " + scene.assetId + " is missing or is not a scene asset.", "scenes[" + index + "].assetId", scene.id));
@@ -102,6 +131,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab reference requires id and assetId.", "prefabs[" + index + "]"));
       return;
     }
+    warnUnknownFields(prefab, new Set(["id", "assetId"]), "prefabs[" + index + "]", diagnostics, prefab.id);
     const asset = assetsById.get(prefab.assetId);
     if (!asset || asset.kind !== "prefab") {
       diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab asset " + prefab.assetId + " is missing or is not a prefab asset.", "prefabs[" + index + "].assetId", prefab.id));
@@ -114,6 +144,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module requires typeId, moduleAssetId and version.", "componentModules[" + index + "]"));
       return;
     }
+    warnUnknownFields(module, new Set(["typeId", "moduleAssetId", "version"]), "componentModules[" + index + "]", diagnostics, module.typeId);
     if (componentTypeIds.has(module.typeId)) {
       diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Duplicate component type id " + module.typeId + ".", "componentModules[" + index + "].typeId"));
     }
@@ -179,6 +210,13 @@ function validatePrefabOverrides(
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab override requires targetNodeId, propertyPath and a JSON-compatible value; targetComponentId must be a non-empty id when present.", overridePath, nodeId));
       return;
     }
+    warnUnknownFields(
+      override,
+      new Set(["targetNodeId", "propertyPath", "value", "targetComponentId"]),
+      overridePath,
+      diagnostics,
+      nodeId,
+    );
 
     const targetNodeId = override.targetNodeId;
     const targetComponentId = typeof override.targetComponentId === "string" ? override.targetComponentId : "";
@@ -214,18 +252,20 @@ function validateNode(
   }
 
   const nodeId = node.id as string;
-  const knownNodeFields = new Set(["id", "name", "active", "transform", "components", "children", "prefabInstance"]);
-  for (const [key, value] of Object.entries(node)) {
-    if (!knownNodeFields.has(key) && !isJsonValue(value)) {
-      diagnostics.push(issue("SCENE_INVALID_NODE", "Unknown node field must be JSON-compatible.", path + "." + key, nodeId));
-    }
-  }
-  const knownTransformFields = new Set(["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]);
-  for (const [key, value] of Object.entries(node.transform)) {
-    if (!knownTransformFields.has(key) && !isJsonValue(value)) {
-      diagnostics.push(issue("SCENE_INVALID_TRANSFORM", "Unknown transform field must be JSON-compatible.", path + ".transform." + key, nodeId));
-    }
-  }
+  warnUnknownFields(
+    node,
+    new Set(["id", "name", "active", "transform", "components", "children", "prefabInstance"]),
+    path,
+    diagnostics,
+    nodeId,
+  );
+  warnUnknownFields(
+    node.transform,
+    new Set(["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]),
+    path + ".transform",
+    diagnostics,
+    nodeId,
+  );
   for (const key of ["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]) {
     const value = node.transform[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -237,11 +277,18 @@ function validateNode(
     const componentPath = path + ".components[" + index + "]";
     if (!isRecord(component) || !isValidStableId(component.id) ||
         !isValidStableId(component.typeId) || typeof component.schemaVersion !== "number" ||
-        !Number.isInteger(component.schemaVersion) || typeof component.enabled !== "boolean" ||
+        !Number.isInteger(component.schemaVersion) || component.schemaVersion < 1 || typeof component.enabled !== "boolean" ||
         !isRecord(component.properties) || !isJsonValue(component)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
       return component;
     }
+    warnUnknownFields(
+      component,
+      new Set(["id", "typeId", "schemaVersion", "enabled", "properties"]),
+      componentPath,
+      diagnostics,
+      nodeId,
+    );
     const componentId = component.id as string;
     const componentTypeId = component.typeId as string;
     if (componentIds.has(componentId)) {
@@ -281,6 +328,13 @@ function validateNode(
     } else if (prefab.sourceNodeId !== undefined && !isValidStableId(prefab.sourceNodeId)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab sourceNodeId must be a non-empty stable id.", path + ".prefabInstance.sourceNodeId", node.id));
     } else {
+      warnUnknownFields(
+        prefab,
+        new Set(["prefabId", "overrides", "sourceNodeId"]),
+        path + ".prefabInstance",
+        diagnostics,
+        nodeId,
+      );
       validatePrefabOverrides(prefab, path + ".prefabInstance", context, node.id, diagnostics);
     }
   }
@@ -300,21 +354,38 @@ export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
-  if (!isRecord(input) || input.schemaVersion !== SCENE_SCHEMA_VERSION ||
-      !isValidStableId(input.id) || !isNonEmptyString(input.name) ||
-      !Array.isArray(input.rootNodes) || !isRecord(input.settings) || !isJsonValue(input.settings)) {
+  if (!isRecord(input) || !isJsonValue(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires stable id/name, rootNodes and JSON settings.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must contain only JSON-compatible plain data.")],
+    };
+  }
+  if (input.schemaVersion !== SCENE_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      diagnostics: [issue(
+        "PROJECT_UNSUPPORTED_VERSION",
+        "Scene schema version " + String(input.schemaVersion) + " is not supported.",
+        "schemaVersion",
+        isValidStableId(input.id) ? input.id : undefined,
+      )],
+    };
+  }
+  if (!isValidStableId(input.id) || !isNonEmptyString(input.name) ||
+      !Array.isArray(input.rootNodes) || !isRecord(input.settings)) {
+    return {
+      valid: false,
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires stable id/name, rootNodes and settings.", "scene")],
     };
   }
   const diagnostics: CoreDiagnostic[] = [];
-  const knownSceneFields = new Set(["schemaVersion", "id", "name", "rootNodes", "settings"]);
-  for (const [key, value] of Object.entries(input)) {
-    if (!knownSceneFields.has(key) && !isJsonValue(value)) {
-      diagnostics.push(issue("SCENE_INVALID_NODE", "Unknown scene field must be JSON-compatible.", key));
-    }
-  }
+  warnUnknownFields(
+    input,
+    new Set(["schemaVersion", "id", "name", "rootNodes", "settings"]),
+    "scene",
+    diagnostics,
+    input.id,
+  );
   const nodeIds = new Set<string>();
   collectNodeIds(input.rootNodes, nodeIds, diagnostics, "rootNodes");
   const componentIds = new Set<string>();
@@ -330,11 +401,27 @@ export function validatePrefabDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
-  if (!isRecord(input) || input.schemaVersion !== PREFAB_SCHEMA_VERSION ||
-      !isValidStableId(input.id) || !isNonEmptyString(input.name) || !isRecord(input.root)) {
+  if (!isRecord(input) || !isJsonValue(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires stable id/name and a root node.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must contain only JSON-compatible plain data.")],
+    };
+  }
+  if (input.schemaVersion !== PREFAB_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      diagnostics: [issue(
+        "PROJECT_UNSUPPORTED_VERSION",
+        "Prefab schema version " + String(input.schemaVersion) + " is not supported.",
+        "schemaVersion",
+        isValidStableId(input.id) ? input.id : undefined,
+      )],
+    };
+  }
+  if (!isValidStableId(input.id) || !isNonEmptyString(input.name) || !isRecord(input.root)) {
+    return {
+      valid: false,
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires stable id/name and a root node.", "prefab")],
     };
   }
   const result = validateSceneDocument({
@@ -344,20 +431,22 @@ export function validatePrefabDocument(
     rootNodes: [input.root],
     settings: {},
   }, context);
-  const knownPrefabFields = new Set(["schemaVersion", "id", "name", "root"]);
-  const extraFieldDiagnostics = Object.entries(input)
-    .filter(([key]) => !knownPrefabFields.has(key))
-    .filter(([, value]) => !isJsonValue(value))
-    .map(([key]) => issue("SCENE_INVALID_NODE", "Unknown prefab field must be JSON-compatible.", key));
-  if (extraFieldDiagnostics.length > 0) {
-    return { valid: false, diagnostics: [...result.diagnostics, ...extraFieldDiagnostics] };
-  }
+  const diagnostics = result.diagnostics.map((item) => {
+    if (item.path?.startsWith("rootNodes[0]")) {
+      return {
+        ...item,
+        path: "root" + item.path.slice("rootNodes[0]".length),
+      };
+    }
+    return item;
+  });
+  warnUnknownFields(input, new Set(["schemaVersion", "id", "name", "root"]), "prefab", diagnostics, input.id);
   if (!result.valid || !result.value?.rootNodes[0]) {
-    return { valid: false, diagnostics: result.diagnostics };
+    return { valid: false, diagnostics };
   }
   return {
     valid: true,
-    diagnostics: result.diagnostics,
+    diagnostics,
     value: { ...input, root: result.value.rootNodes[0] } as unknown as PrefabDocumentV1,
   };
 }
