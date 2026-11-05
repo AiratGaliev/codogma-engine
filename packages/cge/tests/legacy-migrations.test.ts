@@ -333,18 +333,61 @@ test("Scene and Prefab migration is deterministic, idempotent and round-trips th
   assert.deepEqual(object(object(parsedPrefab.value).legacySource), sourcePrefab);
 });
 
-test("malformed legacy collections are preserved with warnings rather than treated as empty authoring data", () => {
-  const source = parseFixture("DinoPrefab.scene");
-  const root = object((source.displayList as unknown[])[0]);
-  const malformed = {
-    ...source,
-    displayList: "not-an-array",
-    plainObjects: [root],
-  };
+test("malformed hierarchy and Component collections are blocking migration errors", () => {
+  const source = parseFixture("Level.scene");
+
+  const malformedDisplayList = { ...source, displayList: "not-an-array" };
   assert.throws(
-    () => migrateLegacyPrefabDocument(malformed),
+    () => migrateLegacySceneDocument(malformedDisplayList),
     (error: unknown) => error instanceof LegacyProjectMigrationError &&
-      error.diagnostics.some((item) => item.path === "displayList"),
+      error.diagnostics.some((item) =>
+        item.severity === "error" &&
+        item.code === "PROJECT_MIGRATION_INVALID_INPUT" &&
+        item.path === "displayList"),
+  );
+
+  const malformedChildList = clone(source);
+  const roots = malformedChildList.displayList as Array<Record<string, unknown>>;
+  roots[0] = { ...roots[0], list: "not-an-array" };
+  assert.throws(
+    () => migrateLegacySceneDocument(malformedChildList),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) =>
+        item.severity === "error" &&
+        item.path === "displayList[0].list"),
+  );
+
+  const malformedComponents = clone(source);
+  const componentRoots = malformedComponents.displayList as Array<Record<string, unknown>>;
+  componentRoots[0] = { ...componentRoots[0], components: "not-an-array" };
+  assert.throws(
+    () => migrateLegacySceneDocument(malformedComponents),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) =>
+        item.severity === "error" &&
+        item.path === "displayList[0].components"),
+  );
+
+  const malformedPrefab = parseFixture("DinoPrefab.scene");
+  assert.throws(
+    () => migrateLegacyPrefabDocument({ ...malformedPrefab, displayList: "not-an-array" }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) =>
+        item.severity === "error" &&
+        item.path === "displayList"),
+  );
+});
+
+test("legacy serializer version is reported without running historical migration extensions", () => {
+  const source = parseFixture("Level.scene");
+  const migrated = migrateLegacySceneDocument(source);
+  assert.equal(migrated.sourceVersion, "legacy-scene-meta-v5");
+  assert.equal(
+    migrated.diagnostics.some((item) =>
+      item.code === "PROJECT_LEGACY_FIELD_PRESERVED" &&
+      item.path === "document.meta.version" &&
+      item.message.includes("not executed")),
+    true,
   );
 });
 
