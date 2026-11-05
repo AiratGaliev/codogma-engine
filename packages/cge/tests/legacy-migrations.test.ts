@@ -13,6 +13,7 @@ import {
   parseSceneDocument,
   serializePrefabDocument,
   serializeSceneDocument,
+  type ComponentTypeSchemaV1,
   type LegacyComponentTypeReference,
   type LegacyPrefabReference,
 } from "../src/index.js";
@@ -30,6 +31,22 @@ const componentInstanceIds = new Map<string, string>([
   [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), "instance-level-push"],
   [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "Tint"), "instance-level-tint"],
 ]);
+const componentSchemas = new Map<string, ComponentTypeSchemaV1>([
+  ["com.codogma.legacy.push-on-click", {
+    schemaVersion: 1,
+    typeId: "com.codogma.legacy.push-on-click",
+    name: "Push On Click",
+    version: "1.0.0",
+    properties: { pushScale: { type: "number", min: 0, max: 1 } },
+  }],
+  ["com.codogma.legacy.tint", {
+    schemaVersion: 1,
+    typeId: "com.codogma.legacy.tint",
+    name: "Tint",
+    version: "1.0.0",
+    properties: {},
+  }],
+]);
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -42,15 +59,27 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function assertNodeSourceTree(actual: unknown, legacy: unknown): void {
+function assertNodeSourceTree(
+  actual: unknown,
+  legacy: unknown,
+  sourcePath: string,
+  collection: "displayList" | "container",
+): void {
   const migrated = object(actual);
   const original = object(legacy);
-  assert.deepEqual(migrated.legacySource, original);
+  assert.equal(migrated.legacySourcePath, sourcePath);
+  assert.equal(migrated.legacyCollection, collection);
+  assert.equal(Object.prototype.hasOwnProperty.call(migrated, "legacySource"), false);
   const expectedChildren = Array.isArray(original.list) ? original.list : [];
   const actualChildren = Array.isArray(migrated.children) ? migrated.children : [];
   assert.equal(actualChildren.length, expectedChildren.length);
   for (let index = 0; index < expectedChildren.length; index += 1) {
-    assertNodeSourceTree(actualChildren[index], expectedChildren[index]);
+    assertNodeSourceTree(
+      actualChildren[index],
+      expectedChildren[index],
+      sourcePath + ".list[" + index + "]",
+      "container",
+    );
   }
 }
 
@@ -101,7 +130,7 @@ test("migrates all 27 real legacy Scene and Prefab fixtures without losing sourc
     assert.equal(migrated.document.schemaVersion, 1, name);
     assert.deepEqual(object(migrated.document).legacySource, source, name);
     migrated.document.rootNodes.forEach((node, index) => {
-      assertNodeSourceTree(node, roots[index]);
+      assertNodeSourceTree(node, roots[index], "displayList[" + index + "]", "displayList");
       assert.equal(object(node).legacyCollection, "displayList");
     });
     if (Array.isArray(source.plainObjects) && source.plainObjects.length > 0) {
@@ -125,10 +154,10 @@ test("migrates all 27 real legacy Scene and Prefab fixtures without losing sourc
     assert.equal(JSON.stringify(source), originalJson, name + " input must remain unchanged");
     assert.equal(migrated.document.id, source.id, name);
     assert.equal(migrated.document.schemaVersion, 1, name);
-    assertNodeSourceTree(migrated.document.root, roots[0]);
+    assertNodeSourceTree(migrated.document.root, roots[0], "displayList[0]", "displayList");
     assert.deepEqual(object(migrated.document).legacySource, source, name);
     assert.deepEqual(
-      object(migrated.document).legacyPrefabProperties ?? [],
+      object(object(migrated.document).legacySource).prefabProperties ?? [],
       source.prefabProperties ?? [],
       name,
     );
@@ -137,6 +166,44 @@ test("migrates all 27 real legacy Scene and Prefab fixtures without losing sourc
 
   assert.equal(legacySceneFixtures.length + legacyPrefabFixtures.length, 27);
   assert.ok(warningCount > 0);
+});
+
+
+test("stores a deep and wide legacy hierarchy once at document level", () => {
+  let nextId = 0;
+  const createNode = (depth: number): Record<string, unknown> => {
+    const id = "synthetic-node-" + (++nextId);
+    return {
+      id,
+      label: id,
+      vendorPayload: "x".repeat(1024),
+      ...(depth === 0 ? {} : { list: Array.from({ length: 3 }, () => createNode(depth - 1)) }),
+    };
+  };
+  const source = {
+    id: "synthetic-legacy-size-scene",
+    sceneType: "SCENE",
+    settings: { sceneKey: "SyntheticSizeFixture" },
+    displayList: [createNode(4)],
+  };
+  const sourceBytes = JSON.stringify(source).length;
+  const migrated = migrateLegacySceneDocument(source).document;
+  let migratedNodeCount = 0;
+  const visit = (nodes: typeof migrated.rootNodes): void => {
+    for (const node of nodes) {
+      migratedNodeCount += 1;
+      assert.equal(Object.prototype.hasOwnProperty.call(node, "legacySource"), false);
+      assert.ok(node.legacySourcePath.length > 0);
+      visit(node.children);
+    }
+  };
+  visit(migrated.rootNodes);
+  assert.equal(migratedNodeCount, 121);
+  assert.deepEqual(migrated.legacySource, source);
+  assert.ok(
+    JSON.stringify(migrated).length < sourceBytes * 1.35,
+    "serialized migration output must not duplicate each ancestor's descendant payload",
+  );
 });
 
 test("converts legacy Component instances and Prefab overrides only from explicit stable mappings", () => {
@@ -170,6 +237,7 @@ test("converts legacy Component instances and Prefab overrides only from explici
         "com.codogma.legacy.push-on-click",
         "com.codogma.legacy.tint",
       ]),
+      componentSchemas,
       prefabs: new Map([["project-prefab-dino", migratedPrefab]]),
     },
   });
@@ -239,6 +307,46 @@ test("does not self-register mapped types or accept dangling Prefab references",
   assert.throws(
     () => migrateLegacySceneDocument(source, {
       componentTypes: mappedTypes,
+      componentInstanceIds: instanceIds,
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "COMPONENT_UNKNOWN_TYPE"),
+  );
+
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      componentTypes: mappedTypes,
+      componentInstanceIds: instanceIds,
+      validationContext: {
+        registeredComponentTypes: new Set(["com.codogma.legacy.push-on-click"]),
+      },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"),
+  );
+
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      componentTypes: mappedTypes,
+      componentInstanceIds: instanceIds,
+      validationContext: {
+        registeredComponentTypes: new Set(["com.codogma.legacy.push-on-click"]),
+        componentSchemas: new Map([["com.codogma.legacy.push-on-click", {
+          schemaVersion: 1,
+          typeId: "com.codogma.legacy.push-on-click",
+          name: "Push On Click",
+          version: "1.0.0",
+          properties: { pushScale: { type: "number", max: 0.5 } },
+        }]]),
+      },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "COMPONENT_INVALID_VALUE"),
+  );
+
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      componentTypes: mappedTypes,
       componentInstanceIds: new Map([
         [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), ""],
       ]),
@@ -277,6 +385,17 @@ test("does not self-register mapped types or accept dangling Prefab references",
     }],
   ]);
   const registeredPrefab = migrateLegacyPrefabDocument(prefab).document;
+
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      prefabReferences: wrongRootMapping,
+      validationContext: { prefabIds: new Set(["registered-prefab"]) },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) =>
+        item.code === "PROJECT_INVALID_REFERENCE" &&
+        item.path?.endsWith(".prefabId")),
+  );
   assert.throws(
     () => migrateLegacySceneDocument(source, {
       prefabReferences: wrongRootMapping,
@@ -321,7 +440,8 @@ test("does not invent IDs, prefab mappings, or hierarchy groups", () => {
     nested.diagnostics.some((item) => item.code === "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED"),
     true,
   );
-  assert.deepEqual(object(nested.document.root).legacySource, object((nestedSource.displayList as unknown[])[0]));
+  assert.equal(nested.document.root.legacySourcePath, "displayList[0]");
+  assert.deepEqual(nested.document.legacySource, nestedSource);
 });
 
 test("reports each preserved compiler and nested Prefab field at its exact path", () => {
@@ -352,7 +472,8 @@ test("reports each preserved compiler and nested Prefab field at its exact path"
       path,
     );
   }
-  assert.deepEqual(object(object(migrated.document.rootNodes[0]).legacySource), roots[0]);
+  assert.equal(migrated.document.rootNodes[0]?.legacySourcePath, "displayList[0]");
+  assert.deepEqual(migrated.document.legacySource, source);
 });
 
 test("defaults malformed Transform values with diagnostics while preserving their original values", () => {
@@ -367,7 +488,10 @@ test("defaults malformed Transform values with diagnostics while preserving thei
       item.path === "displayList[0].x"),
     true,
   );
-  assert.equal(object(object(migrated.document.rootNodes[0]).legacySource).x, "not-a-number");
+  assert.equal(
+    object(object(object(migrated.document.legacySource).displayList as unknown[])[0]).x,
+    "not-a-number",
+  );
 });
 
 test("Scene and Prefab migration is deterministic, idempotent and round-trips through v1 serializers", () => {
