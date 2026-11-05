@@ -307,3 +307,77 @@ test("enforces one stable ID grammar across project, scene and component contrac
     properties: {},
   }).valid, false);
 });
+
+
+test("Project migration deep-copies JSON values and never aliases or mutates the source", () => {
+  const input = {
+    schemaVersion: 0,
+    id: "legacy-project-copy",
+    name: "Copy test",
+    scenes: [],
+    assets: [],
+    nestedPluginData: { values: [1, 2, 3] },
+  };
+  const before = JSON.stringify(input);
+  const result = migrateProjectDocument(input);
+  assert.equal(JSON.stringify(input), before);
+
+  const migratedExtension = (result.document as unknown as Record<string, unknown>).nestedPluginData as { values: number[] };
+  assert.notEqual(migratedExtension, input.nestedPluginData);
+  migratedExtension.values.push(4);
+  assert.deepEqual(input.nestedPluginData.values, [1, 2, 3]);
+});
+
+test("Project v0 migration rejects malformed present fields instead of silently defaulting them", () => {
+  const base = {
+    schemaVersion: 0,
+    id: "legacy-project-malformed",
+    name: "Malformed legacy project",
+  };
+  const malformedFields: Array<[string, unknown]> = [
+    ["scenes", { unexpected: true }],
+    ["assets", "not-an-array"],
+    ["prefabs", 1],
+    ["componentModules", null],
+    ["runtime", "phaser"],
+    ["runtime", { adapterId: "phaser", settings: "not-an-object" }],
+    ["runtime", { adapterId: "", settings: {} }],
+  ];
+
+  for (const [field, value] of malformedFields) {
+    const input = field === "runtime" && typeof value === "object" && value !== null
+      ? { ...base, runtime: value }
+      : { ...base, [field]: value };
+    assert.throws(
+      () => migrateProjectDocument(input),
+      (error: unknown) => error instanceof Error &&
+        "diagnostics" in error &&
+        Array.isArray((error as { diagnostics: unknown }).diagnostics) &&
+        ((error as { diagnostics: Array<{ code?: string; path?: string }> }).diagnostics.some((item) =>
+          item.code === "PROJECT_MIGRATION_INVALID_INPUT" &&
+          (item.path === field || item.path === "runtime.settings" || item.path === "runtime")),
+    );
+  }
+});
+
+test("Project v0 migration defaults only absent optional collections and runtime fields", () => {
+  const migrated = migrateProjectDocument({
+    schemaVersion: 0,
+    id: "legacy-project-defaults",
+    name: "Defaults",
+  });
+  assert.deepEqual(migrated.document.scenes, []);
+  assert.deepEqual(migrated.document.assets, []);
+  assert.deepEqual(migrated.document.prefabs, []);
+  assert.deepEqual(migrated.document.componentModules, []);
+  assert.deepEqual(migrated.document.runtime, { adapterId: "phaser", settings: {} });
+
+  const withRuntime = migrateProjectDocument({
+    schemaVersion: 0,
+    id: "legacy-project-runtime",
+    name: "Runtime",
+    runtime: { adapterId: "phaser", pluginRuntimeData: { keep: true } },
+  });
+  assert.deepEqual(withRuntime.document.runtime.settings, {});
+  assert.deepEqual((withRuntime.document.runtime as unknown as Record<string, unknown>).pluginRuntimeData, { keep: true });
+});
