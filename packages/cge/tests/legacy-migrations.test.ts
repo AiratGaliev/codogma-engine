@@ -271,7 +271,10 @@ test("unknown Component classes, texture keys and Prefab links remain losslessly
   assert.ok(first);
   assert.equal(first.components.length, 0);
   assert.deepEqual(object(first).legacyComponents, ["PushOnClick", "Tint"]);
-  assert.equal(object(object(first).legacySource)["PushOnClick.pushScale"], 0.8);
+  assert.equal(
+    object(object(object(migrated.document.legacySource).displayList as unknown[])[0])["PushOnClick.pushScale"],
+    0.8,
+  );
   assert.equal(
     migrated.diagnostics.some((item) =>
       item.code === "PROJECT_LEGACY_COMPONENT_PRESERVED" && item.severity === "warning"),
