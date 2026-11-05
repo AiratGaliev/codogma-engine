@@ -75,7 +75,7 @@ SolidJS Host:
 
 ## 5. Product UX reference: adopt / adapt / reject
 
-**Unity 6.6 (6000.6), основной 2D UX reference.** Script Component является отдельным script asset: его можно прикрепить к GameObject, а параметры видны в Inspector. Unity Script asset Inspector показывает информацию о файле/preview и предоставляет переход Open; редактирование выполняется в script editor, а не в Inspector. Сохраняем separation между source asset и component instance; адаптируем переход к source в центральный Source view SolidJS Host. Не копируем Unity `MonoBehaviour`, C# serialization semantics или Unity-specific lifecycle. На проверенной странице Unity Manual 6000.6 указано состояние Alpha, поэтому её используем только как UX reference, а не как stable API baseline:
+**Unity 6.6 (6000.6), основной 2D UX reference.** Script Component является отдельным script asset: его можно прикрепить к GameObject, а параметры видны в Inspector. Unity Script asset Inspector показывает информацию о файле/preview и предоставляет переход Open; редактирование выполняется в script editor, а не в Inspector. Сохраняем separation между source asset и component instance; адаптируем переход к source в центральный Source view SolidJS Host. Не копируем Unity `MonoBehaviour`, C# serialization semantics или Unity-specific lifecycle. Unity 6.6 является выпущенным UX reference; её C# APIs и runtime implementation не являются Codogma API requirements:
 - [Create components with scripts](https://docs.unity.cn/6000.6/Documentation/Manual/CreatingComponents.html)
 - [Inspector items](https://docs.unity.com/en-us/engine/6000.6/manual/unity-editor/editor-windows-views-reference/using-the-inspector/inspector-items)
 
@@ -214,7 +214,7 @@ PR #47 закрывает этот конкретный Core contract gap:
 3. `validatePrefabDocument()` использует нормализованный root от общего Scene/Node validator, поэтому тот же storage contract применяется к Prefab serialization.
 4. `acceptance-slice.test.ts` передаёт transient `editorOnly/runtime` значения в `serializeSceneDocument()` и `serializePrefabDocument()`, затем открывает сериализованные документы и проверяет: persisted + unknown JSON fields сохранены, non-persisted values отсутствуют, исходные объекты не изменены.
 
-Это закрывает Core serialization boundary для текущего schema context. Реализация и Core quality suite проверяются в GitHub Actions на head PR; до merge изменение не входит в `dev`. Это **не** закрывает всю COD-27: Host Inspector integration, reference pickers, Undo/Redo и полный Project graph context остаются в её owner scope.
+Это закрывает Core serialization boundary для текущего schema context. Реализация и Core quality suite проверяются в GitHub Actions; merge status и exact CI evidence нужно сверять по текущему `dev` SHA. Это **не** закрывает всю COD-27: Host Inspector integration, reference pickers, Undo/Redo и полный Project graph context остаются в её owner scope.
 
 ### Граница Project module manifest — owner COD-25 / COD-91
 
