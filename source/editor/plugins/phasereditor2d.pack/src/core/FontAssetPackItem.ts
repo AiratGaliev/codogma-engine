@@ -8,6 +8,11 @@ namespace phasereditor2d.pack.core {
 
         private _fontFace: FontFace | null = null;
         private _fontSourceKey: string | null = null;
+        private _loadError: string | null = null;
+
+        getLoadError(): string | null {
+            return this._loadError;
+        }
 
         constructor(pack: AssetPack, data: any) {
             super(pack, data);
@@ -20,7 +25,9 @@ namespace phasereditor2d.pack.core {
             const file = this.getFileFromAssetUrl(url);
 
             if (!url || !file || !file.isFile()) {
-                throw new Error(`Font source file is missing from the project: ${url || "(empty URL)"}`);
+                this._loadError = `Font source file is missing from the project: ${url || "(empty URL)"}`;
+                console.error(this._loadError);
+                return controls.Controls.resolveNothingLoaded();
             }
 
             const fontSet = document.fonts as (FontFaceSet & {
@@ -30,7 +37,9 @@ namespace phasereditor2d.pack.core {
 
             if (!fontSet || typeof FontFace === "undefined"
                 || typeof fontSet.add !== "function" || typeof fontSet.delete !== "function") {
-                throw new Error("The browser does not provide the Font Loading API required by this asset.");
+                this._loadError = "The browser does not provide the Font Loading API required by this asset.";
+                console.error(this._loadError);
+                return controls.Controls.resolveNothingLoaded();
             }
 
             const format = typeof data.format === "string" && data.format.length > 0
@@ -59,12 +68,15 @@ namespace phasereditor2d.pack.core {
                 }
 
                 const detail = error instanceof Error ? error.message : String(error);
-                throw new Error(`Не удалось загрузить шрифт "${key}" из "${url}": ${detail}`);
+                this._loadError = `Не удалось загрузить шрифт "${key}" из "${url}": ${detail}`;
+                console.error(this._loadError, error);
+                return controls.Controls.resolveNothingLoaded();
             }
 
             const previousFont = this._fontFace;
             this._fontFace = font;
             this._fontSourceKey = sourceKey;
+            this._loadError = null;
 
             if (previousFont) {
                 fontSet.delete(previousFont);
@@ -80,6 +92,7 @@ namespace phasereditor2d.pack.core {
 
             this._fontFace = null;
             this._fontSourceKey = null;
+            this._loadError = null;
 
             super.resetCache();
         }
