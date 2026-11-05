@@ -23,20 +23,20 @@ export interface LegacyComponentTypeReference {
 }
 
 export interface LegacyPrefabReference {
-  /** Stable ID used by ProjectDocumentV1.prefabs[].id. */
+  /** Стабильный ID Prefab в ProjectDocumentV1.prefabs[].id. */
   readonly prefabId: string;
-  /** Stable ID of the legacy Prefab root after conversion. */
+  /** Стабильный ID корневого Node мигрированного Prefab. */
   readonly rootNodeId: string;
   readonly propertyNames: ReadonlySet<string>;
 }
 
 export interface LegacySceneMigrationOptions {
   readonly name?: string;
-  /** Explicit legacy class name -> persisted Component type identity. */
+  /** Явное сопоставление legacy-имени класса со стабильным типом Component. */
   readonly componentTypes?: ReadonlyMap<string, LegacyComponentTypeReference>;
-  /** Explicit persisted instance IDs, keyed by legacyComponentInstanceKey(). */
+  /** Явные стабильные ID экземпляров, ключом служит legacyComponentInstanceKey(). */
   readonly componentInstanceIds?: ReadonlyMap<string, string>;
-  /** Explicit legacy Prefab document ID -> current Project Prefab reference mapping. */
+  /** Явное сопоставление ID legacy Prefab с Prefab reference текущего Project. */
   readonly prefabReferences?: ReadonlyMap<string, LegacyPrefabReference>;
   readonly validationContext?: SceneValidationContext;
 }
@@ -94,6 +94,7 @@ function setJsonProperty(target: Record<string, JsonValue>, key: string, value: 
   });
 }
 
+/** Формирует ключ для явного сопоставления legacy Component instance ID. */
 export function legacyComponentInstanceKey(nodeId: string, legacyComponentName: string): string {
   if (!isValidStableId(nodeId) || !isNonEmptyString(legacyComponentName)) {
     throw new TypeError("Legacy Component mapping requires a stable Node ID and a non-empty legacy class name.");
@@ -479,6 +480,7 @@ function assertValidMigration<T>(
   }
 }
 
+/** Конвертирует legacy Scene в Scene v1 без файлового I/O и без исполнения legacy-кода. */
 export function migrateLegacySceneDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
@@ -543,6 +545,7 @@ export function migrateLegacySceneDocument(
   };
 }
 
+/** Конвертирует legacy Prefab в Prefab v1; принимает только один однозначный корневой Node. */
 export function migrateLegacyPrefabDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
@@ -593,6 +596,7 @@ export function migrateLegacyPrefabDocument(
   };
 }
 
+/** Валидирует/клонирует Scene v1 либо явно запускает legacy Scene migration. */
 export function migrateSceneDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
@@ -612,6 +616,7 @@ export function migrateSceneDocument(
   return migrateLegacySceneDocument(input, options);
 }
 
+/** Валидирует/клонирует Prefab v1 либо явно запускает legacy Prefab migration. */
 export function migratePrefabDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
