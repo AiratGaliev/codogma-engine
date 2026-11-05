@@ -228,16 +228,15 @@ export class ComponentWorld {
 
   registerSystem(system: ComponentSystem): void {
     this.assertUsable();
-    if (!system || typeof system !== "object" ||
-        !isValidStableId(system.id) ||
-        typeof system.update !== "function" ||
-        (system.dispose !== undefined && typeof system.dispose !== "function")) {
+    if (!system || typeof system !== "object") {
       throw new TypeError("A component system requires a stable ID, update function and optional dispose function.");
     }
-
-    const systemId = system.id;
-    const update = system.update;
-    const dispose = system.dispose;
+    const { id: systemId, update, dispose } = system;
+    if (!isValidStableId(systemId) ||
+        typeof update !== "function" ||
+        (dispose !== undefined && typeof dispose !== "function")) {
+      throw new TypeError("A component system requires a stable ID, update function and optional dispose function.");
+    }
     const registeredSystem: RegisteredComponentSystem = Object.freeze({
       id: systemId,
       update(deltaSeconds: number, world: ComponentWorld): unknown {
