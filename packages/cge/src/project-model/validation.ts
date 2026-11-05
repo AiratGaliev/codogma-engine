@@ -111,28 +111,64 @@ function warnUnknownFields(
 function validateIdCollection(values: unknown[], path: string, diagnostics: CoreDiagnostic[]): Set<string> {
   const ids = new Set<string>();
   values.forEach((item, index) => {
-    if (!isRecord(item) || !isValidStableId(item.id)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "An item requires a non-empty stable id.", path + "[" + index + "].id"));
+    const itemPath = path + "[" + index + "]";
+    if (!isRecord(item)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "An item must be an object.", itemPath));
       return;
     }
-    if (ids.has(item.id)) diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Duplicate id " + item.id + ".", path + "[" + index + "].id", item.id));
+    if (!isValidStableId(item.id)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "An item requires a stable id.", itemPath + ".id"));
+      return;
+    }
+    if (ids.has(item.id)) diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Duplicate id " + item.id + ".", itemPath + ".id", item.id));
     ids.add(item.id);
   });
   return ids;
 }
 
 export function validateProjectDocument(input: unknown): ValidationResult<ProjectDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input) ||
-      input.schemaVersion !== PROJECT_SCHEMA_VERSION ||
-      !isValidStableId(input.id) || !isNonEmptyString(input.name) ||
-      !Array.isArray(input.scenes) || !Array.isArray(input.assets) ||
-      !Array.isArray(input.prefabs) || !Array.isArray(input.componentModules) ||
-      !isRecord(input.runtime) || !isValidStableId(input.runtime.adapterId) ||
-      !isRecord(input.runtime.settings)) {
+  if (!isRecord(input) || !isJsonValue(input)) {
     return {
       valid: false,
-      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project v1 requires stable id/name, scenes, assets, prefabs, componentModules and runtime configuration.")],
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project document must be a JSON-compatible object.")],
     };
+  }
+  if (input.schemaVersion !== PROJECT_SCHEMA_VERSION) {
+    return {
+      valid: false,
+      diagnostics: [issue(
+        "PROJECT_UNSUPPORTED_VERSION",
+        "Project schema version " + String(input.schemaVersion) + " is not supported.",
+        "schemaVersion",
+      )],
+    };
+  }
+  if (!isValidStableId(input.id)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project id must use the stable ID grammar.", "id")] };
+  }
+  if (!isNonEmptyString(input.name)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project name must be a non-empty string.", "name")] };
+  }
+  if (!Array.isArray(input.scenes)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project scenes must be an array.", "scenes")] };
+  }
+  if (!Array.isArray(input.assets)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project assets must be an array.", "assets")] };
+  }
+  if (!Array.isArray(input.prefabs)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project prefabs must be an array.", "prefabs")] };
+  }
+  if (!Array.isArray(input.componentModules)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project componentModules must be an array.", "componentModules")] };
+  }
+  if (!isRecord(input.runtime)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project runtime configuration must be an object.", "runtime")] };
+  }
+  if (!isValidStableId(input.runtime.adapterId)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Runtime adapterId must use the stable ID grammar.", "runtime.adapterId")] };
+  }
+  if (!isRecord(input.runtime.settings)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Runtime settings must be an object.", "runtime.settings")] };
   }
 
   const diagnostics: CoreDiagnostic[] = [];
@@ -144,30 +180,47 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
     input.id,
   );
   warnUnknownFields(input.runtime, new Set(["adapterId", "settings"]), "runtime", diagnostics, input.id);
-  const assetIds = validateIdCollection(input.assets, "assets", diagnostics);
+  validateIdCollection(input.assets, "assets", diagnostics);
   validateIdCollection(input.scenes, "scenes", diagnostics);
   validateIdCollection(input.prefabs, "prefabs", diagnostics);
   const componentTypeIds = new Set<string>();
   const assetsById = new Map<string, Record<string, unknown>>();
 
   input.assets.forEach((asset, index) => {
-    if (!isRecord(asset) || !isValidStableId(asset.id) ||
-        !isSafeProjectPath(asset.path) ||
-        (asset.subResourceId !== undefined && !isValidStableId(asset.subResourceId)) ||
-        !ASSET_KINDS.includes(asset.kind as (typeof ASSET_KINDS)[number])) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference requires a stable id, safe relative path and supported kind.", "assets[" + index + "]"));
-    } else {
-      warnUnknownFields(asset, new Set(["id", "path", "kind", "subResourceId"]), "assets[" + index + "]", diagnostics, asset.id);
-      assetsById.set(asset.id, asset);
+    const assetPath = "assets[" + index + "]";
+    if (!isRecord(asset)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference must be an object.", assetPath));
+      return;
     }
+    if (!isValidStableId(asset.id)) return;
+    if (!isSafeProjectPath(asset.path)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset path must be a safe project-relative path.", assetPath + ".path", asset.id));
+      return;
+    }
+    if (asset.subResourceId !== undefined && !isValidStableId(asset.subResourceId)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset subResourceId must use the stable ID grammar.", assetPath + ".subResourceId", asset.id));
+      return;
+    }
+    if (!ASSET_KINDS.includes(asset.kind as (typeof ASSET_KINDS)[number])) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset kind is not supported.", assetPath + ".kind", asset.id));
+      return;
+    }
+    warnUnknownFields(asset, new Set(["id", "path", "kind", "subResourceId"]), assetPath, diagnostics, asset.id);
+    assetsById.set(asset.id, asset);
   });
 
   input.scenes.forEach((scene, index) => {
-    if (!isRecord(scene) || !isValidStableId(scene.id) || !isValidStableId(scene.assetId)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene reference requires id and assetId.", "scenes[" + index + "]"));
+    const scenePath = "scenes[" + index + "]";
+    if (!isRecord(scene)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene reference must be an object.", scenePath));
       return;
     }
-    warnUnknownFields(scene, new Set(["id", "assetId"]), "scenes[" + index + "]", diagnostics, scene.id);
+    if (!isValidStableId(scene.id)) return;
+    if (!isValidStableId(scene.assetId)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene assetId must use the stable ID grammar.", scenePath + ".assetId", scene.id));
+      return;
+    }
+    warnUnknownFields(scene, new Set(["id", "assetId"]), scenePath, diagnostics, scene.id);
     const asset = assetsById.get(scene.assetId);
     if (!asset || asset.kind !== "scene") {
       diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Scene asset " + scene.assetId + " is missing or is not a scene asset.", "scenes[" + index + "].assetId", scene.id));
@@ -175,11 +228,17 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   });
 
   input.prefabs.forEach((prefab, index) => {
-    if (!isRecord(prefab) || !isValidStableId(prefab.id) || !isValidStableId(prefab.assetId)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab reference requires id and assetId.", "prefabs[" + index + "]"));
+    const prefabPath = "prefabs[" + index + "]";
+    if (!isRecord(prefab)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab reference must be an object.", prefabPath));
       return;
     }
-    warnUnknownFields(prefab, new Set(["id", "assetId"]), "prefabs[" + index + "]", diagnostics, prefab.id);
+    if (!isValidStableId(prefab.id)) return;
+    if (!isValidStableId(prefab.assetId)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab assetId must use the stable ID grammar.", prefabPath + ".assetId", prefab.id));
+      return;
+    }
+    warnUnknownFields(prefab, new Set(["id", "assetId"]), prefabPath, diagnostics, prefab.id);
     const asset = assetsById.get(prefab.assetId);
     if (!asset || asset.kind !== "prefab") {
       diagnostics.push(issue("PROJECT_INVALID_REFERENCE", "Prefab asset " + prefab.assetId + " is missing or is not a prefab asset.", "prefabs[" + index + "].assetId", prefab.id));
@@ -187,12 +246,24 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   });
 
   input.componentModules.forEach((module, index) => {
-    if (!isRecord(module) || !isValidStableId(module.typeId) ||
-        !isValidStableId(module.moduleAssetId) || !isNonEmptyString(module.version)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module requires typeId, moduleAssetId and version.", "componentModules[" + index + "]"));
+    const modulePath = "componentModules[" + index + "]";
+    if (!isRecord(module)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module reference must be an object.", modulePath));
       return;
     }
-    warnUnknownFields(module, new Set(["typeId", "moduleAssetId", "version"]), "componentModules[" + index + "]", diagnostics, module.typeId);
+    if (!isValidStableId(module.typeId)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module typeId must use the stable ID grammar.", modulePath + ".typeId"));
+      return;
+    }
+    if (!isValidStableId(module.moduleAssetId)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module moduleAssetId must use the stable ID grammar.", modulePath + ".moduleAssetId", module.typeId));
+      return;
+    }
+    if (!isNonEmptyString(module.version)) {
+      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module version must be a non-empty string.", modulePath + ".version", module.typeId));
+      return;
+    }
+    warnUnknownFields(module, new Set(["typeId", "moduleAssetId", "version"]), modulePath, diagnostics, module.typeId);
     if (componentTypeIds.has(module.typeId)) {
       diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Duplicate component type id " + module.typeId + ".", "componentModules[" + index + "].typeId"));
     }
@@ -211,7 +282,11 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
 function collectNodeIds(nodes: unknown[], ids: Set<string>, diagnostics: CoreDiagnostic[], prefix: string): void {
   nodes.forEach((node, index) => {
     const path = prefix + "[" + index + "]";
-    if (!isRecord(node) || !isValidStableId(node.id)) {
+    if (!isRecord(node)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Node must be an object.", path));
+      return;
+    }
+    if (!isValidStableId(node.id)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires a stable non-empty id.", path + ".id"));
       return;
     }
@@ -292,10 +367,35 @@ function validateNode(
   diagnostics: CoreDiagnostic[],
   componentIds: Set<string>,
 ): NodeDocument {
-  if (!isRecord(node) || !isValidStableId(node.id) || !isNonEmptyString(node.name) ||
-      typeof node.active !== "boolean" || !isRecord(node.transform) ||
-      !Array.isArray(node.components) || !Array.isArray(node.children)) {
-    diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires JSON-compatible id/name, active, transform, components and children.", path));
+  if (!isRecord(node) || !isValidStableId(node.id)) {
+    return node as unknown as NodeDocument;
+  }
+
+  let valid = true;
+  if (!isNonEmptyString(node.name)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node name must be a non-empty string.", path + ".name", node.id));
+    valid = false;
+  }
+  if (typeof node.active !== "boolean") {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node active must be a boolean.", path + ".active", node.id));
+    valid = false;
+  }
+  if (!isRecord(node.transform)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node transform must be an object.", path + ".transform", node.id));
+    valid = false;
+  }
+  if (!Array.isArray(node.components)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node components must be an array.", path + ".components", node.id));
+    valid = false;
+  }
+  if (!Array.isArray(node.children)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node children must be an array.", path + ".children", node.id));
+    valid = false;
+  }
+  if (!valid) return node as unknown as NodeDocument;
+
+  if (!isNonEmptyString(node.name) || typeof node.active !== "boolean" ||
+      !isRecord(node.transform) || !Array.isArray(node.components) || !Array.isArray(node.children)) {
     return node as unknown as NodeDocument;
   }
 
@@ -427,12 +527,20 @@ export function validateSceneDocument(
       )],
     };
   }
-  if (!isValidStableId(input.id) || !isNonEmptyString(input.name) ||
-      !Array.isArray(input.rootNodes) || !isRecord(input.settings) || !isJsonValue(input.settings)) {
-    return {
-      valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires stable id/name, rootNodes and settings.", "scene")],
-    };
+  if (!isValidStableId(input.id)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene id must use the stable ID grammar.", "id")] };
+  }
+  if (!isNonEmptyString(input.name)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene name must be a non-empty string.", "name")] };
+  }
+  if (!Array.isArray(input.rootNodes)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene rootNodes must be an array.", "rootNodes")] };
+  }
+  if (!isRecord(input.settings)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene settings must be an object.", "settings")] };
+  }
+  if (!isJsonValue(input.settings)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene settings must contain JSON-compatible data.", "settings")] };
   }
   const diagnostics: CoreDiagnostic[] = [];
   warnUnknownFields(
@@ -474,11 +582,14 @@ export function validatePrefabDocument(
       )],
     };
   }
-  if (!isValidStableId(input.id) || !isNonEmptyString(input.name) || !isRecord(input.root)) {
-    return {
-      valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires stable id/name and a root node.", "prefab")],
-    };
+  if (!isValidStableId(input.id)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Prefab id must use the stable ID grammar.", "id")] };
+  }
+  if (!isNonEmptyString(input.name)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Prefab name must be a non-empty string.", "name")] };
+  }
+  if (!isRecord(input.root)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Prefab root must be a node object.", "root")] };
   }
   const result = validateSceneDocument({
     schemaVersion: SCENE_SCHEMA_VERSION,
