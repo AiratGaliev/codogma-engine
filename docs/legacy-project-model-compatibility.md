@@ -93,6 +93,7 @@ prefabReferences сопоставляет legacy Prefab document ID с теку�
 | Code | Назначение |
 |---|---|
 | PROJECT_MIGRATION_INVALID_INPUT | Невалидный envelope, отсутствие stable identity, неоднозначная Prefab hierarchy или некорректный explicit mapping. |
+| PROJECT_UNKNOWN_FIELD_PRESERVED | Неизвестное JSON-compatible поле Project/Scene/Prefab/Node/Transform/Asset/Component envelope сохранено с точным path; unknown Component property uses COMPONENT_UNKNOWN_PROPERTY. |
 | PROJECT_UNSUPPORTED_VERSION | Неизвестная/будущая версия или попытка передать versioned документ в legacy-only entry point. |
 | PROJECT_LEGACY_FIELD_PRESERVED | Legacy поле не имеет утверждённого эквивалента и сохранено. |
 | PROJECT_LEGACY_TRANSFORM_DEFAULTED | Повреждённый Transform value заменён безопасным v1 default; original value остаётся в source. |
@@ -117,3 +118,6 @@ Core tests exercise all 27 .scene fixtures from the COD-17 inventory (17 SCENE +
 - автоматическая запись мигрированного файла или destructive project-wide rewrite.
 
 Выполнение этих сценариев требует отдельных owner tasks и browser/runtime acceptance. Текущий converter — безопасная граница для дальнейшей явной интеграции, а не заменитель этих подсистем.
+
+
+Для текущих Project/Scene/Prefab v1 validators unknown JSON-compatible envelope fields не отбрасываются: они сохраняются в результате и возвращаются как warning `PROJECT_UNKNOWN_FIELD_PRESERVED` с точным path. Component properties, не описанные schema, отдельно сохраняются с `COMPONENT_UNKNOWN_PROPERTY`. JSON boundary отвергает accessors/getters, custom prototypes, symbols, sparse arrays и cyclic object graphs до обхода полей; getters не исполняются. Future Project/Scene/Prefab versions дают blocking `PROJECT_UNSUPPORTED_VERSION`.
