@@ -54,7 +54,7 @@ JSON-совместимые extension fields сохраняются. Резул�
 
 **plainObjects не добавляются в rootNodes.** В legacy сериализации это отдельная коллекция serializable non-GameObject objects; преобразование её элементов в Node без отдельного типа означало бы изменение модели данных. Аналогично legacy texture key не является Project Asset ID, а Node v1 не имеет самостоятельного Asset-reference поля. До появления утверждённого mapping/contract эти данные сохраняются, а не угадываются.
 
-Каждый мигрированный Node содержит сохранённый legacySource и маркер исходной коллекции; Scene документ содержит полный исходный legacySource. Эти расширения JSON-совместимы и проходят текущую validation/serialization без выкидывания исходных данных.
+Полный исходный legacy JSON хранится ровно один раз на уровне Scene/Prefab документа в legacySource. Мигрированный Node содержит только legacySourcePath (например, displayList[0].list[1]), legacyCollection и, при необходимости, legacyComponents; дочерний list не копируется в payload каждого предка. Исходные Prefab declarations доступны в legacySource.prefabProperties. Такое представление сохраняет данные и ограничивает дополнительный объём path/metadata.
 
 ## 4. Legacy Prefab → Prefab v1
 
@@ -68,7 +68,7 @@ Legacy Prefab — тот же .scene envelope с sceneType: "PREFAB".
 
 ## 5. User Components: только явная идентичность
 
-TypeScript API экспортирует LegacyMigratedNodeDocument, LegacyMigratedSceneDocument и LegacyMigratedPrefabDocument. Явные legacy-only функции возвращают LegacyMigrationResult с этими типами; nested children тоже типизированы как LegacyMigratedNodeDocument. Поэтому вызывающий код имеет типизированный доступ к legacySource, legacyCollection, legacyComponents и legacyPrefabProperties. Универсальные migrateSceneDocument / migratePrefabDocument принимают как текущие v1 документы, так и legacy envelope; sourceVersion различает cge-scene-v1 / cge-prefab-v1 и исходные legacy версии.
+TypeScript API экспортирует LegacyMigratedNodeDocument, LegacyMigratedSceneDocument и LegacyMigratedPrefabDocument. Явные legacy-only функции возвращают LegacyMigrationResult с этими типами; nested children тоже типизированы как LegacyMigratedNodeDocument. Полный legacySource доступен на уровне Scene/Prefab документа; Node предоставляет legacySourcePath, legacyCollection и legacyComponents без дублирования дерева. Prefab declarations читаются из document.legacySource.prefabProperties. Универсальные migrateSceneDocument / migratePrefabDocument принимают как текущие v1 документы, так и legacy envelope; sourceVersion различает cge-scene-v1 / cge-prefab-v1 и исходные legacy версии.
 
 LegacySceneMigrationOptions.componentTypes задаёт legacy class name → typeId + schemaVersion. Это не module manifest и не способ загрузки TypeScript source.
 
@@ -78,11 +78,11 @@ componentInstanceIds задаёт отдельный stable ID для каждо
 
 Если отсутствует type mapping или instance ID, компонент не создаётся. Его class reference и namespaced values остаются в legacySource; diagnostic имеет code PROJECT_LEGACY_COMPONENT_PRESERVED. ID не генерируется из имени класса/узла или индекса массива. Пустой или некорректный переданный instance ID отклоняется как ошибка, а не трактуется как отсутствие mapping.
 
-Component mapping — это утверждение вызывающей стороны о соответствии legacy class и persisted type ID, а не регистрация нового типа. При наличии validationContext.registeredComponentTypes мигратор/validator проверяет, что typeId уже зарегистрирован; validationContext.componentSchemas дополнительно валидирует schemaVersion и properties и применяет persisted/default semantics. Неизвестный зарегистрированному контексту mapped type отклоняется. Без registry/schema context проверяется только корректность явного mapping, но не существование загруженного Component definition. Выполнение старого класса, генерация нового файла и module resolution не входят в миграцию.
+Component mapping — это запрос на конвертацию, а не регистрация нового типа. Если для Node предоставлены одновременно type mapping и instance ID mapping, validationContext обязателен: registeredComponentTypes должен содержать typeId, а componentSchemas — schema с тем же typeId и schemaVersion. Отсутствие registry или schema, а также несовпадение версии завершаются blocking diagnostic; мигратор не создаёт непроверенный ComponentInstance. Доступная schema проверяет mapped properties и применяет persisted/default semantics. Неразмеченные legacy Components остаются в исходном document. Выполнение старого класса, генерация нового файла и module resolution не входят в миграцию.
 
 ## 6. Prefab и resource mappings
 
-prefabReferences сопоставляет legacy Prefab document ID с текущим Project Prefab reference ID, root Node ID и белым списком имён properties, которые разрешено превратить в overrides. Это не автоматическое равенство между legacy document ID, Project Asset ID и Prefab reference ID. Mapping обязателен к регистрации в validationContext.prefabIds или validationContext.prefabs; без подтверждённого Project Prefab reference конвертация завершается PROJECT_INVALID_REFERENCE. Если передан полный validationContext.prefabs, rootNodeId дополнительно должен совпасть со stable ID корня зарегистрированного Prefab.
+prefabReferences сопоставляет legacy Prefab document ID с текущим Project Prefab reference ID, root Node ID и белым списком имён properties, которые разрешено превратить в overrides. Это не автоматическое равенство между legacy document ID, Project Asset ID и Prefab reference ID. Для mapped Prefab обязателен полный документ в validationContext.prefabs: только он позволяет проверить, что rootNodeId совпадает со stable ID фактического корня. Одного validationContext.prefabIds недостаточно и такой mapping отклоняется с PROJECT_INVALID_REFERENCE.
 
 В текущей v1 Node contract нет поля для произвольных asset references. Поэтому legacy texture/atlas/frame keys не превращаются в Node Asset refs. Перенос Asset references возможен только через существующий Project AssetReference и соответствующее typed Component property либо после отдельного утверждения расширения контракта. Asset Pack v2 и importer metadata инвентаризированы в COD-17, но импорт/reimport не запускается этим API.
 
