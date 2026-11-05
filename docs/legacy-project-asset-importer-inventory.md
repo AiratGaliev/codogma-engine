@@ -360,21 +360,21 @@ Frame matching — консервативная геометрическая э�
 | Sprite metadata codogma.assetId | Stable image/spritesheet metadata ID; not available on all other Asset Pack item types. | Reuse only where proven; map other asset IDs explicitly. |
 | Frame key | Asset Pack/Phaser frame lookup key; not stable identity after slicing/reimport. | Core reference includes explicit subResourceId; frame-ID mapping is required. |
 
-Core v1 contract is in packages/cge/src/project-model/contracts.ts; validation in validation.ts enforces stable ID grammar, project-safe paths, asset kinds, optional subResourceId, and reference validation. Current Core serializer migrates Project envelope v0→v1 in memory; Scene/Prefab parsers validate v1. The full legacy .scene→Core converter is still in unmerged PR #41, not in dev.
+Core v1 contract is in packages/cge/src/project-model/contracts.ts; validation in validation.ts enforces stable ID grammar, project-safe paths, asset kinds, optional subResourceId, and reference validation. Current Core serializer migrates Project envelope v0→v1 in memory; Scene/Prefab parsers validate v1. PR #48 later merged a Colibri converter, but the product rejected that compatibility scope in ADR-0007; COD-113 removes it. This inventory does not define a conversion policy.
 
 ### 8.1 Mapping dispositions
 
 | Legacy field/family | Disposition to Project Model v1 | Risk / owner |
 |---|---|---|
-| Document and Node IDs | **Preserve** when present and unique; invalid/missing IDs require blocking diagnostics. | COD-25 |
-| DisplayList / nested list | **Normalize** into ordered rootNodes/children, preserving exact ordering and collection context. | COD-25; real fixtures above |
-| plainObjects, document lists | **Requires explicit mapping**; not equivalent to ordinary Node children and ordering relative to DisplayList is not inherently inferable. | COD-25 |
+| Document and Node IDs | Historical identity observation only; new Codogma IDs are created by the native Project Model contract, not imported from Colibri. | ADR-0007 / COD-25 |
+| DisplayList / nested list | Colibri-specific hierarchy observation; not a transformation rule for native Scene documents. | Historical only |
+| plainObjects, document lists | Colibri-only collections; not present in native Scene schema and not converted. | ADR-0007 |
 | Transform numeric values | **Preserve** finite supported values; invalid/special values block or require explicit correction; defaults must be documented. | COD-25; Core tests |
-| Legacy type and renderer-specific fields | **Preserve in compatibility payload / explicit adapter** until target runtime renderer contract owns them; no generic conversion implied. | COD-25 / COD-103 |
-| Legacy User Components | **Requires explicit mapping** from class name to stable module/type/schema; unsupported definitions/values must be reported. | COD-25 / COD-27 / COD-91 |
-| Prefab link prefabId | **Preserve/map** only when exact target document ID is resolvable. | COD-8 / COD-25 |
+| Legacy type and renderer-specific fields | Historical Colibri-specific data; not a native Node/Component contract. Do not preserve it in the new Project Model. | ADR-0007 / COD-113 |
+| Legacy User Components | Historical class-name based attachments are not converted or mapped. Native Script assets and Component Definitions are authored with explicit stable IDs. | ADR-0007 / COD-113 / COD-91 |
+| Prefab link prefabId | Colibri-only field; native Prefab references use Codogma stable IDs and typed references. | ADR-0007 / COD-8 |
 | Prefab unlock, prefabProperties, nestedPrefabs | **Requires explicit semantics mapping** for instance override targets, rename/remove conflicts and nesting. Keep original payload until resolved. | COD-8 |
-| Asset Pack key/URL | **Requires explicit asset index mapping**; never synthesize stable ID from key/path alone. | COD-25 / COD-86 |
+| Asset Pack key/URL | Old Asset Pack representation; native Codogma Asset documents and importers define their own IDs/metadata. | ADR-0007 / COD-86 |
 | Frame key and Sprite Metadata | **Preserve/map** through explicit asset/frame ID index; use subResourceId for frame-like subresources. | COD-25 / COD-86 |
 | Editor/compiler settings, scope, private_np | **Editor-only/deprecated/compatibility payload**, field-by-field classification required; do not leak into runtime config by default. | COD-25 / COD-97 |
 | Unknown JSON-compatible extension fields | **Preserve** where schema contract allows; otherwise emit loss diagnostic. No silent discard. | COD-25 |
@@ -449,10 +449,10 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 
 | Area | Current dev evidence | What is not proven / owner |
 |---|---|---|
-| Scene model | src/editor/src/domain/scene-model.ts reads/writes legacy .scene shape; tests cover parse/format, unknown fields, IDs, hierarchy operations and supported Image/Text/Container creation. | Not the Core Project Model v1 serializer or runtime Scene Loader; full user workflow is not accepted here. |
-| Prefab model | prefab-model.ts creates legacy-compatible sceneType: PREFAB document, instance prefabId, simple typed prefabProperties and default/override resolution. | Does not establish nested propagation, source-update merge, rename/delete conflict policy, durable save/reopen or integrated Undo/Redo; COD-8. |
+| Scene model | src/editor/src/domain/scene-model.ts currently reads/writes the transitional Colibri .scene shape. | Transitional implementation only; COD-113 replaces it with native Project Model Scene documents. No Colibri format support is part of the product contract. |
+| Prefab model | prefab-model.ts currently uses the transitional Colibri-compatible document shape. | Does not establish nested propagation, source-update merge, rename/delete conflict policy, durable save/reopen or integrated Undo/Redo; COD-8. |
 | Sprite metadata | sprite-asset-model.ts models Image/Spritesheet, metadata, slicing, collision validation and reconcile; unit tests exist. | Atlas/Multiatlas importer adapter and browser import/preview/reimport workflow are not covered by this domain module; COD-86/COD-55. |
-| Core Project Model | packages/cge/src/project-model/* exposes v1 Project/Scene/Prefab validation and deterministic serialization; Project v0→v1 in-memory migration. | Current dev has no integrated legacy .scene/.components/Asset Pack conversion; PR41 remains unmerged; COD-25. |
+| Core Project Model | packages/cge/src/project-model/* exposes v1 Project/Scene/Prefab validation and deterministic serialization; Project v0→v1 in-memory migration. | Colibri converter/adapter is present only as temporary code merged in PR #48; ADR-0007 rejects it and COD-113 removes it. |
 | Storage | Host API has typed tree/read/write/folder/rename/delete wrappers. | Rename body mismatch; incomplete file operation coverage; COD-12/COD-86. |
 | Runtime bridge | Separate packages and adapter tasks own runtime behavior. | Host domain parsing and a green unit suite do not establish generated Phaser runtime or browser acceptance; COD-103/COD-28/CODQA work. |
 
@@ -461,7 +461,7 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 | Risk / observed behavior | Evidence | Owner / disposition |
 |---|---|---|
 | Missing/duplicate document or Node IDs; no safe inference from filename/index | 27 real Scene/Prefab fixtures; Core stable ID validator/tests | [COD-25](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema): blocking diagnostics, explicit mapping and fixtures. |
-| Legacy class names have no stable component type/instance IDs | two .components fixtures; Scene components[]; Core ComponentInstance contract | COD-25 / COD-27 / COD-91: explicit manifest mapping, preserve unknown classes/values, no name guessing. |
+| Legacy class names have no stable component type/instance IDs | two historical .components fixtures and Scene components[] | No name-based conversion; native Component Definitions use explicit Codogma stable IDs. COD-113 removes legacy adapter. |
 | Prefab nested data, overrides, property removal/rename and source propagation do not map 1:1 to Core overrides | Prefab/nested fixtures; legacy prefabId, unlock, nestedPrefabs, prefabProperties; COD-8 criteria | [COD-8](https://linear.app/codogma-engine/issue/COD-8/stabilizirovat-prefab-workflow-vlozhennost-overrides-i-obnovlenie): policy + regression tests; do not infer semantics in COD-17. |
 | displayList, plainObjects, document lists, Node list, nestedPrefabs have different collection meanings | ISceneData/IObjectData/SceneWriter and fixtures | COD-25: explicit field-by-field mapping, collection/order preservation. |
 | Legacy Asset Pack key/URL not stable identity; metadata IDs exist only on certain image/spritesheet entries | AssetPack v2 + Sprite Metadata v1 | COD-25 / COD-86: explicit asset index and subResource ID mapping. |
@@ -484,7 +484,7 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 | Legacy Scene model domain tests | **Automated: present** in src/editor/tests/scene-model.test.ts | Tests SolidJS domain helpers, not Colibri serialization/editor round-trip on browser. |
 | Legacy Prefab domain tests | **Automated: present** in src/editor/tests/prefab-model.test.ts | Basic document/instance/property values; not propagation/merge/undo/reopen. |
 | Sprite Asset domain tests | **Automated: present** in src/editor/tests/sprite-asset-model.test.ts | Host-domain metadata/slicing/reconcile; not exhaustive Colibri importer/browser integration. |
-| Core Project Model tests | **Automated: present** in packages/cge/tests/project-model.test.ts | Project v0/v1 + current Scene/Prefab v1 validation; legacy scene migration tests remain in unmerged PR41. |
+| Core Project Model tests | **Automated: present** in packages/cge/tests/project-model.test.ts | Native Project/Scene/Prefab validation and versioned schema checks. Colibri migration tests are outside product acceptance and removed in COD-113. |
 | Legacy Colibri importer integration tests | **Gap in inspected test tree** | Do not equate Host domain tests with actual legacy importers; COD-12/COD-86. |
 | Real browser import/reimport, large directories, multiple DirectoryReader batches, media/font codecs and GPU/browser matrix | **External QA / not run in COD-17** | CODQA-10 and COD-12 on integrated candidate. |
 | Generated Phaser game compatibility for migrated assets/scene/prefab data | **Not established by this inventory** | COD-103/COD-28 and relevant QA. |
@@ -494,7 +494,7 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 
 | Contract / risk | Existing automated evidence in dev | Reproducible test case still required from owner |
 |---|---|---|
-| Core Project/Scene/Prefab IDs, dangling refs and safe paths | packages/cge/tests/project-model.test.ts: “rejects dangling scene refs, duplicate ids and traversal paths”; “scene validation catches duplicate node ids and invalid transforms”; “rejects malformed optional Asset sub-resource identifiers”; “enforces one stable ID grammar…” | Legacy fixtures должны пройти отдельный converter test после явного mapping; текущие Core tests не импортируют .scene |
+| Core Project/Scene/Prefab IDs, dangling refs and safe paths | packages/cge/tests/project-model.test.ts: native stable-ID, reference and safe-path tests. | Native Codogma fixtures only. Colibri conversion tests are explicitly excluded by ADR-0007 and removed by COD-113. |
 | Sprite metadata and frame reimport | src/editor/tests/sprite-asset-model.test.ts: “describes Image and Spritesheet frame geometry…”; “ensures stable IDs/source fingerprints…”; “reimport preserves compatible frames and archives changed/removed authored metadata” | Это Host-domain tests. Отдельно требуется importer/browser test на legacy AssetPack Image/Spritesheet parser/reimport |
 | Server filesystem trust boundary | tests/path-security.test.mjs: “safeJoin rejects lexical escapes and absolute paths”; “safeJoin rejects symlinks that escape the base”; “readFileSafely rejects a parent-symlink swap…”; “renameProjectEntrySafely anchors destination…”; “copyProjectEntrySafely rejects symbolic-link sources…”; descriptor/bounded-read cases | Тесты подтверждают server filesystem helpers, но не доказывают, что legacy importer URL references автоматически переписываются после move/delete |
 | Importer single-file/batch rollback | No legacy Colibri importer integration test was found in the inspected dev tree | Seed pack with one existing item; autoImport two source files where first succeeds and second fails in preload/build; assert no newly imported item remains and caches reset. Separately fail importMultipleFiles after item creation and assert item removal |
