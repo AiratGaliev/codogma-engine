@@ -66,6 +66,30 @@ to install a second copy of TypeScript under `packages/cge` for this workflow.
 For standalone Core development and its full quality suite, continue to use the
 commands above in the Boundaries section from this package directory.
 
+
+## Persisted Project migrations
+
+Project v0 migration and legacy .scene compatibility converters are explicit in-memory APIs:
+
+- migrateProjectDocument(input) deep-copies JSON data, defaults only absent v0 optional fields and rejects malformed present fields with structured diagnostics.
+- migrateSceneDocument(input, options) and migratePrefabDocument(input, options) validate v1 documents or opt in to conversion from legacy sceneType: "SCENE" | "PREFAB" envelopes.
+- migrateLegacySceneDocument / migrateLegacyPrefabDocument are legacy-only entry points. They preserve source payloads, require stable existing IDs and apply Component/Prefab mappings only when the caller supplies explicit mappings.
+- Their results expose LegacyMigratedSceneDocument / LegacyMigratedPrefabDocument and recursive LegacyMigratedNodeDocument types. The full original JSON is stored once in document-level legacySource; each Node stores only legacySourcePath, legacyCollection and optional legacyComponents. Prefab declarations remain available at legacySource.prefabProperties. The general migrateSceneDocument / migratePrefabDocument APIs return the versioned document or the typed legacy-migrated document; sourceVersion distinguishes cge-scene-v1 / cge-prefab-v1 from legacy source versions.
+- Materializing a mapped Component requires validationContext.registeredComponentTypes and a matching validationContext.componentSchemas entry. A mapped Prefab requires its full document in validationContext.prefabs so rootNodeId can be verified; prefabIds alone is insufficient.
+- Legacy renderer, texture/asset keys, plainObjects, nested Prefab metadata and other unrepresented fields are preserved with diagnostics rather than being assigned invented v1 runtime semantics.
+- A present but malformed hierarchy/Component collection (displayList, Node list or components) is a blocking migration error; the converter does not return a partial Scene tree. Missing optional collections remain empty.
+
+These functions do not perform file I/O, execute project code, resolve arbitrary module paths or rewrite source files. A caller must inspect diagnostics and own the save/confirmation workflow. See docs/legacy-project-model-compatibility.md for the field mapping, limits and fixture evidence.
+
+Run the standalone Core suite from this directory with:
+
+    npm run quality:check
+
 ## Initial contracts
 
 Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically.
+
+
+### Unknown fields and validation diagnostics
+
+Project, Scene, Prefab, Node, Transform, Asset and Component envelope extensions that contain JSON-compatible values are preserved by validation and serialization and produce `PROJECT_UNKNOWN_FIELD_PRESERVED` warnings with the exact document path. Unknown Component property values are preserved separately with `COMPONENT_UNKNOWN_PROPERTY` warnings. Invalid non-JSON values, accessors, custom prototypes, symbol properties, sparse arrays and cyclic object graphs are rejected at the JSON boundary without executing getters. Future Project, Scene and Prefab schema versions are blocking errors.
