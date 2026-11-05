@@ -324,6 +324,37 @@ test("does not invent IDs, prefab mappings, or hierarchy groups", () => {
   assert.deepEqual(object(nested.document.root).legacySource, object((nestedSource.displayList as unknown[])[0]));
 });
 
+test("reports each preserved compiler and nested Prefab field at its exact path", () => {
+  const source = clone(parseFixture("Level.scene"));
+  const roots = source.displayList as Array<Record<string, unknown>>;
+  roots[0] = {
+    ...roots[0],
+    scope: "CLASS",
+    private_np: true,
+    unlock: true,
+    nestedPrefabs: [{ id: "nested-prefab" }],
+  };
+
+  const migrated = migrateLegacySceneDocument(source);
+  const expectedPaths = [
+    "displayList[0].scope",
+    "displayList[0].private_np",
+    "displayList[0].unlock",
+    "displayList[0].nestedPrefabs",
+  ];
+  for (const path of expectedPaths) {
+    assert.equal(
+      migrated.diagnostics.some((item) =>
+        item.path === path &&
+        (item.code === "PROJECT_LEGACY_FIELD_PRESERVED" ||
+          item.code === "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED")),
+      true,
+      path,
+    );
+  }
+  assert.deepEqual(object(object(migrated.document.rootNodes[0]).legacySource), roots[0]);
+});
+
 test("defaults malformed Transform values with diagnostics while preserving their original values", () => {
   const source = parseFixture("Level.scene");
   const displayList = source.displayList as Array<Record<string, unknown>>;
