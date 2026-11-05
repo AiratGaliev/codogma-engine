@@ -66,6 +66,22 @@ to install a second copy of TypeScript under `packages/cge` for this workflow.
 For standalone Core development and its full quality suite, continue to use the
 commands above in the Boundaries section from this package directory.
 
+
+## Persisted Project migrations
+
+Project v0 migration and legacy .scene compatibility converters are explicit in-memory APIs:
+
+- migrateProjectDocument(input) deep-copies JSON data, defaults only absent v0 optional fields and rejects malformed present fields with structured diagnostics.
+- migrateSceneDocument(input, options) and migratePrefabDocument(input, options) validate v1 documents or opt in to conversion from legacy sceneType: "SCENE" | "PREFAB" envelopes.
+- migrateLegacySceneDocument / migrateLegacyPrefabDocument are legacy-only entry points. They preserve source payloads, require stable existing IDs and apply Component/Prefab mappings only when the caller supplies explicit mappings.
+- Legacy renderer, texture/asset keys, plainObjects, nested Prefab metadata and other unrepresented fields are preserved with diagnostics rather than being assigned invented v1 runtime semantics.
+
+These functions do not perform file I/O, execute project code, resolve arbitrary module paths or rewrite source files. A caller must inspect diagnostics and own the save/confirmation workflow. See docs/legacy-project-model-compatibility.md for the field mapping, limits and fixture evidence.
+
+Run the standalone Core suite from this directory with:
+
+    npm run quality:check
+
 ## Initial contracts
 
 Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically.
