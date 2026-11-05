@@ -8,6 +8,17 @@ export const ASSET_KINDS = [
 
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
+/**
+ * Validates an opaque, case-sensitive project/runtime identity.
+ * IDs may use ASCII letters and digits plus ".", "_", ":", "$" and "-";
+ * path separators, whitespace and control characters are deliberately excluded.
+ */
+const STABLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:$-]*$/;
+
+export function isValidStableId(value: unknown): value is string {
+  return typeof value === "string" && STABLE_ID_PATTERN.test(value);
+}
+
 export interface TransformData {
   x: number;
   y: number;

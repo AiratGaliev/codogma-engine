@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ComponentRegistrationError,
   ComponentRegistry,
   ComponentWorld,
   type ComponentBehavior,
+  type ComponentSystem,
+  type ComponentTypeDefinition,
   type ComponentTypeSchemaV1,
 } from "../src/index.js";
 
@@ -574,5 +577,284 @@ test("deep-freezes nested JSON reference properties passed to component factorie
     (received?.target as { nodeId: string }).nodeId = "other-node";
   }, TypeError);
   assert.deepEqual(received.target, { nodeId: "target-node" });
+  world.dispose();
+});
+
+
+test("requires stable IDs at the runtime ComponentWorld boundary", () => {
+  const registry = createRegistry([]);
+  assert.throws(() => new ComponentWorld("scene with spaces", registry), /stable scene ID/i);
+  const world = new ComponentWorld("scene-valid", registry);
+  assert.throws(() => world.createNode({ id: "node/invalid", name: "Invalid" }), /stable IDs/i);
+  world.createNode({ id: "node-valid", name: "Valid" });
+  assert.throws(() => world.attachComponent("node-valid", schema.typeId, {}, { instanceId: "instance invalid" }), /stable ID/i);
+  assert.throws(() => world.attachComponent("node-valid", "type with spaces", {}), /stable Node and type IDs/i);
+  assert.throws(() => world.registerSystem({ id: "system invalid", update: () => undefined }), /stable ID/i);
+  world.dispose();
+});
+
+test("snapshots ComponentSystem identity and callbacks at registration", () => {
+  const world = new ComponentWorld("scene-system-snapshot", new ComponentRegistry());
+  const calls: string[] = [];
+  const system = {
+    id: "system-stable",
+    update() { calls.push("original:update"); },
+    dispose() { calls.push("original:dispose"); },
+  };
+  world.registerSystem(system);
+
+  system.id = "system-renamed";
+  system.update = () => calls.push("replacement:update");
+  system.dispose = () => calls.push("replacement:dispose");
+
+  world.update(0.1);
+  world.removeSystem("system-stable");
+  world.update(0.1);
+  world.dispose();
+
+  assert.deepEqual(calls, ["original:update", "original:dispose"]);
+});
+
+test("rejects asynchronous Component factories and rolls back without leaving an instance", () => {
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: (() => Promise.resolve({ onCreate: () => undefined })) as unknown as ComponentTypeDefinition["create"],
+  });
+  const world = new ComponentWorld("scene-async-factory", registry);
+  world.createNode({ id: "node-async-factory", name: "Async factory" });
+
+  assert.throws(
+    () => world.attachComponent("node-async-factory", schema.typeId, {}, { instanceId: "async-factory" }),
+    /factory failed|synchronously/i,
+  );
+  assert.equal(world.componentCount, 0);
+  assert.deepEqual(world.listComponents(), []);
+  world.dispose();
+});
+
+test("reports async lifecycle and system callbacks instead of silently ignoring Promises", () => {
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: () => ({
+      onCreate: (() => Promise.resolve()) as unknown as () => void,
+    }),
+  });
+  const world = new ComponentWorld("scene-async-lifecycle", registry);
+  world.createNode({ id: "node-async-lifecycle", name: "Async lifecycle" });
+  assert.throws(
+    () => world.attachComponent("node-async-lifecycle", schema.typeId, {}, { instanceId: "async-lifecycle" }),
+    AggregateError,
+  );
+  assert.equal(world.componentCount, 0);
+  world.dispose();
+
+  const systemWorld = new ComponentWorld("scene-async-system", new ComponentRegistry());
+  systemWorld.registerSystem({
+    id: "async-system",
+    update: (() => Promise.reject(new Error("late async failure"))) as unknown as ComponentSystem["update"],
+  });
+  assert.throws(
+    () => systemWorld.update(0.1),
+    (error: unknown) => error instanceof AggregateError &&
+      error.errors.some((item) => item instanceof TypeError && /synchronously/.test(item.message)),
+  );
+  systemWorld.dispose();
+});
+
+test("ComponentRegistry rejects malformed runtime definitions before touching its registry", () => {
+  const registry = new ComponentRegistry();
+  assert.throws(
+    () => registry.register({ schema, create: null } as unknown as ComponentTypeDefinition),
+    ComponentRegistrationError,
+  );
+  assert.equal(registry.has(schema.typeId), false);
+});
+
+
+test("snapshots the registered component factory and preserves its receiver", () => {
+  const calls: string[] = [];
+  const definition = {
+    schema,
+    marker: "registered-context",
+    create() {
+      calls.push(this.marker);
+      return {};
+    },
+  };
+  const registry = new ComponentRegistry();
+  registry.register(definition);
+  definition.create = () => {
+    calls.push("replacement-factory");
+    return {};
+  };
+
+  const world = new ComponentWorld("scene-factory-snapshot", registry);
+  world.createNode({ id: "node-factory-snapshot", name: "Factory snapshot" });
+  world.attachComponent("node-factory-snapshot", schema.typeId, {}, { instanceId: "factory-snapshot" });
+
+  assert.deepEqual(calls, ["registered-context"]);
+  world.dispose();
+});
+
+
+test("protects Node activation state from writes that bypass lifecycle transitions", () => {
+  const log: string[] = [];
+  const world = new ComponentWorld("scene-active-guard", createRegistry(log));
+  const node = world.createNode({ id: "node-active-guard", name: "Actor" });
+  world.attachComponent(node.id, schema.typeId, {}, { instanceId: "active-guard" });
+
+  assert.equal(Reflect.set(node, "active", false), false);
+  assert.equal(node.active, true);
+  assert.equal(Reflect.set(node, "id", "renamed-node"), false);
+  assert.equal(node.id, "node-active-guard");
+  node.transform.x = 42;
+  assert.equal(node.transform.x, 42);
+
+  world.setNodeActive(node.id, false);
+  world.setNodeActive(node.id, true);
+  assert.deepEqual(log, [
+    "create:active-guard:node-active-guard:1",
+    "enable:active-guard",
+    "disable:active-guard",
+    "enable:active-guard",
+  ]);
+  world.destroyNode(node.id);
+  const replacement = world.createNode({ id: node.id, name: "Replacement" });
+  assert.equal(node.active, false, "destroyed Node view must not alias a replacement with the same ID");
+  assert.equal(replacement.active, true);
+  world.dispose();
+});
+
+test("rejects asynchronous system disposal and still completes world teardown", () => {
+  const world = new ComponentWorld("scene-async-dispose", new ComponentRegistry());
+  world.registerSystem({
+    id: "async-dispose",
+    update: () => undefined,
+    dispose: (() => Promise.resolve()) as unknown as NonNullable<ComponentSystem["dispose"]>,
+  });
+
+  assert.throws(() => world.dispose(), AggregateError);
+  assert.equal(world.isDisposed, true);
+  assert.equal(world.nodeCount, 0);
+  assert.equal(world.componentCount, 0);
+  assert.doesNotThrow(() => world.dispose());
+});
+
+
+test("rolls back a component that fails during later activation without skipping siblings", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onCreate: () => calls.push("create:" + instanceId),
+      onEnable: () => {
+        calls.push("enable:" + instanceId);
+        if (instanceId === "failed") throw new Error("activation failed");
+      },
+      onStart: () => calls.push("start:" + instanceId),
+      onUpdate: () => calls.push("update:" + instanceId),
+      onDestroy: () => calls.push("destroy:" + instanceId),
+    }),
+  });
+  const world = new ComponentWorld("scene-enable-rollback", registry);
+  world.createNode({ id: "node-enable-rollback", name: "Inactive", active: false });
+  world.attachComponent("node-enable-rollback", schema.typeId, {}, { instanceId: "failed" });
+  world.attachComponent("node-enable-rollback", schema.typeId, {}, { instanceId: "sibling" });
+
+  assert.throws(() => world.setNodeActive("node-enable-rollback", true), AggregateError);
+  assert.deepEqual(world.listComponents().map((component) => component.id), ["sibling"]);
+  world.update(1 / 60);
+  assert.deepEqual(calls, [
+    "create:failed",
+    "create:sibling",
+    "enable:failed",
+    "destroy:failed",
+    "enable:sibling",
+    "start:sibling",
+    "update:sibling",
+  ]);
+  world.dispose();
+});
+
+
+test("rolls back a component when onDisable fails during an explicit disable transition", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onCreate: () => calls.push("create:" + instanceId),
+      onEnable: () => calls.push("enable:" + instanceId),
+      onDisable: () => {
+        calls.push("disable:" + instanceId);
+        throw new Error("disable failed");
+      },
+      onDestroy: () => calls.push("destroy:" + instanceId),
+      onUpdate: () => calls.push("update:" + instanceId),
+    }),
+  });
+  const world = new ComponentWorld("scene-disable-rollback", registry);
+  world.createNode({ id: "node-disable-rollback", name: "Actor" });
+  world.attachComponent("node-disable-rollback", schema.typeId, {}, { instanceId: "disable-failed" });
+
+  assert.throws(() => world.setComponentEnabled("disable-failed", false), AggregateError);
+  assert.deepEqual(world.listComponents(), []);
+  world.update(1 / 60);
+  assert.deepEqual(calls, [
+    "create:disable-failed",
+    "enable:disable-failed",
+    "disable:disable-failed",
+    "destroy:disable-failed",
+  ]);
+  world.dispose();
+});
+
+
+test("rolls back failed onStart and onUpdate hooks without affecting sibling components", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onEnable: () => calls.push("enable:" + instanceId),
+      onStart: () => {
+        calls.push("start:" + instanceId);
+        if (instanceId === "start-failed") throw new Error("start failed");
+      },
+      onUpdate: () => {
+        calls.push("update:" + instanceId);
+        if (instanceId === "update-failed") throw new Error("update failed");
+      },
+      onDisable: () => calls.push("disable:" + instanceId),
+      onDestroy: () => calls.push("destroy:" + instanceId),
+    }),
+  });
+  const world = new ComponentWorld("scene-start-update-rollback", registry);
+  world.createNode({ id: "node-start-update-rollback", name: "Actor" });
+  for (const instanceId of ["start-failed", "update-failed", "healthy"]) {
+    world.attachComponent("node-start-update-rollback", schema.typeId, {}, { instanceId });
+  }
+
+  assert.throws(() => world.update(1 / 60), AggregateError);
+  assert.deepEqual(world.listComponents().map((component) => component.id), ["healthy"]);
+  world.update(1 / 60);
+  assert.deepEqual(calls, [
+    "enable:start-failed",
+    "enable:update-failed",
+    "enable:healthy",
+    "start:start-failed",
+    "start:update-failed",
+    "update:update-failed",
+    "start:healthy",
+    "update:healthy",
+    "disable:start-failed",
+    "destroy:start-failed",
+    "disable:update-failed",
+    "destroy:update-failed",
+    "update:healthy",
+  ]);
   world.dispose();
 });

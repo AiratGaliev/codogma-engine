@@ -3,6 +3,7 @@ import { isJsonValue, isRecord, isSafeProjectPath } from "../json.js";
 import { validateComponentProperties, type ComponentTypeSchemaV1 } from "../components/component-schema.js";
 import {
   ASSET_KINDS,
+  isValidStableId,
   PROJECT_SCHEMA_VERSION,
   SCENE_SCHEMA_VERSION,
   PREFAB_SCHEMA_VERSION,
@@ -42,7 +43,7 @@ function isNonEmptyString(value: unknown): value is string {
 function validateIdCollection(values: unknown[], path: string, diagnostics: CoreDiagnostic[]): Set<string> {
   const ids = new Set<string>();
   values.forEach((item, index) => {
-    if (!isRecord(item) || !isNonEmptyString(item.id)) {
+    if (!isRecord(item) || !isValidStableId(item.id)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "An item requires a non-empty stable id.", path + "[" + index + "].id"));
       return;
     }
@@ -55,10 +56,10 @@ function validateIdCollection(values: unknown[], path: string, diagnostics: Core
 export function validateProjectDocument(input: unknown): ValidationResult<ProjectDocumentV1> {
   if (!isRecord(input) || !isJsonValue(input) ||
       input.schemaVersion !== PROJECT_SCHEMA_VERSION ||
-      !isNonEmptyString(input.id) || !isNonEmptyString(input.name) ||
+      !isValidStableId(input.id) || !isNonEmptyString(input.name) ||
       !Array.isArray(input.scenes) || !Array.isArray(input.assets) ||
       !Array.isArray(input.prefabs) || !Array.isArray(input.componentModules) ||
-      !isRecord(input.runtime) || !isNonEmptyString(input.runtime.adapterId) ||
+      !isRecord(input.runtime) || !isValidStableId(input.runtime.adapterId) ||
       !isRecord(input.runtime.settings)) {
     return {
       valid: false,
@@ -74,9 +75,9 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   const assetsById = new Map<string, Record<string, unknown>>();
 
   input.assets.forEach((asset, index) => {
-    if (!isRecord(asset) || !isNonEmptyString(asset.id) ||
+    if (!isRecord(asset) || !isValidStableId(asset.id) ||
         !isSafeProjectPath(asset.path) ||
-        (asset.subResourceId !== undefined && !isNonEmptyString(asset.subResourceId)) ||
+        (asset.subResourceId !== undefined && !isValidStableId(asset.subResourceId)) ||
         !ASSET_KINDS.includes(asset.kind as (typeof ASSET_KINDS)[number])) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference requires a stable id, safe relative path and supported kind.", "assets[" + index + "]"));
     } else {
@@ -85,7 +86,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   });
 
   input.scenes.forEach((scene, index) => {
-    if (!isRecord(scene) || !isNonEmptyString(scene.id) || !isNonEmptyString(scene.assetId)) {
+    if (!isRecord(scene) || !isValidStableId(scene.id) || !isValidStableId(scene.assetId)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene reference requires id and assetId.", "scenes[" + index + "]"));
       return;
     }
@@ -96,7 +97,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   });
 
   input.prefabs.forEach((prefab, index) => {
-    if (!isRecord(prefab) || !isNonEmptyString(prefab.id) || !isNonEmptyString(prefab.assetId)) {
+    if (!isRecord(prefab) || !isValidStableId(prefab.id) || !isValidStableId(prefab.assetId)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab reference requires id and assetId.", "prefabs[" + index + "]"));
       return;
     }
@@ -107,8 +108,8 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   });
 
   input.componentModules.forEach((module, index) => {
-    if (!isRecord(module) || !isNonEmptyString(module.typeId) ||
-        !isNonEmptyString(module.moduleAssetId) || !isNonEmptyString(module.version)) {
+    if (!isRecord(module) || !isValidStableId(module.typeId) ||
+        !isValidStableId(module.moduleAssetId) || !isNonEmptyString(module.version)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Component module requires typeId, moduleAssetId and version.", "componentModules[" + index + "]"));
       return;
     }
@@ -130,7 +131,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
 function collectNodeIds(nodes: unknown[], ids: Set<string>, diagnostics: CoreDiagnostic[], prefix: string): void {
   nodes.forEach((node, index) => {
     const path = prefix + "[" + index + "]";
-    if (!isRecord(node) || !isNonEmptyString(node.id)) {
+    if (!isRecord(node) || !isValidStableId(node.id)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires a stable non-empty id.", path + ".id"));
       return;
     }
@@ -157,7 +158,7 @@ function validatePrefabOverrides(
   nodeId: string,
   diagnostics: CoreDiagnostic[],
 ): void {
-  if (!isNonEmptyString(prefabInstance.prefabId) || !Array.isArray(prefabInstance.overrides)) return;
+  if (!isValidStableId(prefabInstance.prefabId) || !Array.isArray(prefabInstance.overrides)) return;
   const prefabId = prefabInstance.prefabId;
   const prefabDocument = context.prefabs?.get(prefabId);
   if (context.prefabs && !prefabDocument) {
@@ -171,9 +172,9 @@ function validatePrefabOverrides(
   prefabInstance.overrides.forEach((override, index) => {
     const overridePath = path + ".overrides[" + index + "]";
     if (!isRecord(override) || !isJsonValue(override) ||
-        !isNonEmptyString(override.targetNodeId) || !isNonEmptyString(override.propertyPath) ||
+        !isValidStableId(override.targetNodeId) || !isNonEmptyString(override.propertyPath) ||
         !Object.prototype.hasOwnProperty.call(override, "value") || !isJsonValue(override.value) ||
-        (override.targetComponentId !== undefined && !isNonEmptyString(override.targetComponentId))) {
+        (override.targetComponentId !== undefined && !isValidStableId(override.targetComponentId))) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab override requires targetNodeId, propertyPath and a JSON-compatible value; targetComponentId must be a non-empty id when present.", overridePath, nodeId));
       return;
     }
@@ -204,7 +205,7 @@ function validateNode(
   diagnostics: CoreDiagnostic[],
   componentIds: Set<string>,
 ): void {
-  if (!isRecord(node) || !isNonEmptyString(node.id) || !isNonEmptyString(node.name) ||
+  if (!isRecord(node) || !isValidStableId(node.id) || !isNonEmptyString(node.name) ||
       typeof node.active !== "boolean" || !isRecord(node.transform) ||
       !Array.isArray(node.components) || !Array.isArray(node.children)) {
     diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires JSON-compatible id/name, active, transform, components and children.", path));
@@ -233,8 +234,8 @@ function validateNode(
 
   node.components.forEach((component, index) => {
     const componentPath = path + ".components[" + index + "]";
-    if (!isRecord(component) || !isNonEmptyString(component.id) ||
-        !isNonEmptyString(component.typeId) || typeof component.schemaVersion !== "number" ||
+    if (!isRecord(component) || !isValidStableId(component.id) ||
+        !isValidStableId(component.typeId) || typeof component.schemaVersion !== "number" ||
         !Number.isInteger(component.schemaVersion) || typeof component.enabled !== "boolean" ||
         !isRecord(component.properties) || !isJsonValue(component)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
@@ -270,10 +271,10 @@ function validateNode(
 
   if (node.prefabInstance !== undefined) {
     const prefab = node.prefabInstance;
-    if (!isRecord(prefab) || !isNonEmptyString(prefab.prefabId) ||
+    if (!isRecord(prefab) || !isValidStableId(prefab.prefabId) ||
         !Array.isArray(prefab.overrides) || !isJsonValue(prefab)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab instance requires a prefabId and JSON overrides.", path + ".prefabInstance", node.id));
-    } else if (prefab.sourceNodeId !== undefined && !isNonEmptyString(prefab.sourceNodeId)) {
+    } else if (prefab.sourceNodeId !== undefined && !isValidStableId(prefab.sourceNodeId)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab sourceNodeId must be a non-empty stable id.", path + ".prefabInstance.sourceNodeId", node.id));
     } else {
       validatePrefabOverrides(prefab, path + ".prefabInstance", context, node.id, diagnostics);
@@ -290,7 +291,7 @@ export function validateSceneDocument(
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
   if (!isRecord(input) || input.schemaVersion !== SCENE_SCHEMA_VERSION ||
-      !isNonEmptyString(input.id) || !isNonEmptyString(input.name) ||
+      !isValidStableId(input.id) || !isNonEmptyString(input.name) ||
       !Array.isArray(input.rootNodes) || !isRecord(input.settings) || !isJsonValue(input.settings)) {
     return {
       valid: false,
@@ -320,7 +321,7 @@ export function validatePrefabDocument(
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
   if (!isRecord(input) || input.schemaVersion !== PREFAB_SCHEMA_VERSION ||
-      !isNonEmptyString(input.id) || !isNonEmptyString(input.name) || !isRecord(input.root)) {
+      !isValidStableId(input.id) || !isNonEmptyString(input.name) || !isRecord(input.root)) {
     return {
       valid: false,
       diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires stable id/name and a root node.")],

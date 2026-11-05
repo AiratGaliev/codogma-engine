@@ -1,4 +1,4 @@
-import { ASSET_KINDS, type AssetKind, type AssetReference } from "../project-model/contracts.js";
+import { ASSET_KINDS, isValidStableId, type AssetKind, type AssetReference } from "../project-model/contracts.js";
 import { hasErrors, type CoreDiagnostic, type ValidationResult } from "../diagnostics.js";
 import { isRecord, isJsonValue, type JsonObject, type JsonValue } from "../json.js";
 
@@ -90,8 +90,8 @@ function validateValue(
     case "enum":
       return typeof value === "string" && schema.options.includes(value) ? [] : fail(name + " must match one of its declared options.");
     case "asset": {
-      if (!isRecord(value) || typeof value.assetId !== "string" || !value.assetId.trim() ||
-          (value.subResourceId !== undefined && typeof value.subResourceId !== "string")) return fail(name + " must contain an assetId reference.");
+      if (!isRecord(value) || !isValidStableId(value.assetId) ||
+          (value.subResourceId !== undefined && !isValidStableId(value.subResourceId))) return fail(name + " must contain an assetId reference.");
       const asset = context.assets?.get(value.assetId);
       if (context.assets && !asset) return [diagnostic("COMPONENT_INVALID_REFERENCE", "Asset " + value.assetId + " referenced by " + name + " does not exist.", name)];
       if (asset && schema.assetKinds && !schema.assetKinds.includes(asset.kind)) {
@@ -100,7 +100,7 @@ function validateValue(
       return [];
     }
     case "node": {
-      if (!isRecord(value) || typeof value.nodeId !== "string" || !value.nodeId.trim()) return fail(name + " must contain a nodeId reference.");
+      if (!isRecord(value) || !isValidStableId(value.nodeId)) return fail(name + " must contain a nodeId reference.");
       if (context.nodeIds && !context.nodeIds.has(value.nodeId)) return [diagnostic("COMPONENT_INVALID_REFERENCE", "Node " + value.nodeId + " referenced by " + name + " does not exist.", name)];
       if (context.ownerNodeId === value.nodeId && schema.allowSelf === false) return [diagnostic("COMPONENT_INVALID_REFERENCE", name + " cannot reference its owning node.", name)];
       return [];
@@ -189,7 +189,7 @@ function validatePropertySchema(name: string, input: unknown): CoreDiagnostic[] 
 
 export function validateComponentTypeSchema(input: unknown): ValidationResult<ComponentTypeSchemaV1> {
   if (!isRecord(input) || !isJsonValue(input) || input.schemaVersion !== COMPONENT_SCHEMA_VERSION ||
-      typeof input.typeId !== "string" || !input.typeId.trim() ||
+      !isValidStableId(input.typeId) ||
       typeof input.name !== "string" || !input.name.trim() ||
       typeof input.version !== "string" || !input.version.trim() ||
       !isRecord(input.properties)) {

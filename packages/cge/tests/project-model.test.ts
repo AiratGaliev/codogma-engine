@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  isValidStableId,
   migrateProjectDocument,
   parseProjectDocument,
   serializeProjectDocument,
+  validateComponentTypeSchema,
   validateProjectDocument,
   validateSceneDocument,
   isJsonValue,
@@ -273,4 +275,35 @@ test("rejects malformed optional Asset sub-resource identifiers", () => {
   assert.equal(invalidNumber.diagnostics.some((item) => item.path === "assets[0]"), true);
   assert.equal(invalidEmpty.valid, false);
   assert.equal(invalidEmpty.diagnostics.some((item) => item.path === "assets[0]"), true);
+});
+
+
+test("enforces one stable ID grammar across project, scene and component contracts", () => {
+  for (const id of [
+    "project-1",
+    "com.codogma.player",
+    "legacy.user-component:MyClass$1",
+    "550e8400-e29b-41d4-a716-446655440000",
+  ]) {
+    assert.equal(isValidStableId(id), true, "expected valid stable ID: " + id);
+  }
+  for (const id of ["", " leading", "trailing ", "node/child", "../node", "node\\child"]) {
+    assert.equal(isValidStableId(id), false, "expected invalid stable ID: " + id);
+  }
+
+  assert.equal(validateProjectDocument({ ...validProject, id: "project/invalid" }).valid, false);
+  assert.equal(validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene/invalid",
+    name: "Invalid Scene",
+    rootNodes: [],
+    settings: {},
+  }).valid, false);
+  assert.equal(validateComponentTypeSchema({
+    schemaVersion: 1,
+    typeId: "com/codogma.invalid",
+    name: "Invalid Component",
+    version: "1.0.0",
+    properties: {},
+  }).valid, false);
 });

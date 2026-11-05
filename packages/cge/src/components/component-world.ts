@@ -1,5 +1,6 @@
 import type { CoreDiagnostic } from "../diagnostics.js";
 import { cloneJsonValue, isJsonValue, type JsonObject, type JsonValue } from "../json.js";
+import { isValidStableId } from "../project-model/contracts.js";
 import { validateComponentProperties, type ComponentSchemaContext } from "./component-schema.js";
 import {
   ComponentRegistry,
@@ -19,8 +20,7 @@ export interface RuntimeTransform {
 }
 
 export interface RuntimeNode extends ComponentNodeContext {
-  active: boolean;
-  transform: RuntimeTransform;
+  readonly transform: RuntimeTransform;
 }
 
 export interface RuntimeComponentSnapshot {
@@ -55,6 +55,23 @@ interface ComponentRecord {
 }
 
 type Mutation = () => void;
+
+interface RuntimeNodeRecord {
+  node: RuntimeNode;
+  active: boolean;
+}
+
+interface RegisteredComponentSystem {
+  readonly id: string;
+  update(deltaSeconds: number, world: ComponentWorld): unknown;
+  dispose?(): unknown;
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function";
+}
 
 function makeRuntimeTransform(input?: Partial<RuntimeTransform>): RuntimeTransform {
   const transform: RuntimeTransform = {
@@ -91,10 +108,10 @@ function defaultIdFactory(): () => string {
 }
 
 export class ComponentWorld {
-  private readonly nodes = new Map<string, RuntimeNode>();
+  private readonly nodes = new Map<string, RuntimeNodeRecord>();
   private readonly components = new Map<string, ComponentRecord>();
   private readonly componentsByNode = new Map<string, string[]>();
-  private readonly systems: ComponentSystem[] = [];
+  private readonly systems: RegisteredComponentSystem[] = [];
   private readonly queuedMutations: Mutation[] = [];
   private readonly idFactory: () => string;
   private readonly schemaContext: Omit<ComponentSchemaContext, "ownerNodeId">;
@@ -108,7 +125,7 @@ export class ComponentWorld {
     private readonly registry: ComponentRegistry,
     options: ComponentWorldOptions = {},
   ) {
-    if (!sceneId.trim()) throw new TypeError("A ComponentWorld requires a stable scene id.");
+    if (!isValidStableId(sceneId)) throw new TypeError("A ComponentWorld requires a valid stable scene ID.");
     this.idFactory = options.idFactory ?? defaultIdFactory();
     this.schemaContext = options.schemaContext ?? {};
   }
@@ -125,21 +142,26 @@ export class ComponentWorld {
   }): RuntimeNode {
     this.assertUsable();
     if (this.updating || this.flushing) throw new Error("Nodes must be created outside a ComponentWorld update boundary.");
-    if (!input.id.trim() || !input.name.trim()) throw new TypeError("Runtime nodes require stable ids and non-empty names.");
+    if (!isValidStableId(input.id) || !input.name.trim()) throw new TypeError("Runtime nodes require valid stable IDs and non-empty names.");
     if (this.nodes.has(input.id)) throw new Error("Runtime node " + input.id + " already exists.");
-    const node: RuntimeNode = {
+    const nodeRecord: RuntimeNodeRecord = {
+      node: undefined as unknown as RuntimeNode,
+      active: input.active ?? true,
+    };
+    const node: RuntimeNode = Object.freeze({
       id: input.id,
       name: input.name,
-      active: input.active ?? true,
+      get active(): boolean { return nodeRecord.active; },
       transform: makeRuntimeTransform(input.transform),
-    };
-    this.nodes.set(node.id, node);
+    });
+    nodeRecord.node = node;
+    this.nodes.set(node.id, nodeRecord);
     this.componentsByNode.set(node.id, []);
     return node;
   }
 
-  getNode(nodeId: string): RuntimeNode | undefined { return this.nodes.get(nodeId); }
-  listNodes(): RuntimeNode[] { return [...this.nodes.values()]; }
+  getNode(nodeId: string): RuntimeNode | undefined { return this.nodes.get(nodeId)?.node; }
+  listNodes(): RuntimeNode[] { return [...this.nodes.values()].map((record) => record.node); }
 
   attachComponent(
     nodeId: string,
@@ -151,7 +173,8 @@ export class ComponentWorld {
     if (!isJsonValue(properties)) throw new TypeError("Component properties must be JSON-compatible.");
     const propertiesSnapshot = cloneJsonValue(properties);
     const instanceId = options.instanceId ?? this.idFactory();
-    if (!instanceId.trim()) throw new TypeError("A component instance requires a stable id.");
+    if (!isValidStableId(instanceId)) throw new TypeError("A component instance requires a valid stable ID.");
+    if (!isValidStableId(nodeId) || !isValidStableId(typeId)) throw new TypeError("Component attachment requires stable Node and type IDs.");
     const enabled = options.enabled ?? true;
     this.schedule(() => this.attachComponentNow(nodeId, typeId, propertiesSnapshot, instanceId, enabled));
     return instanceId;
@@ -176,12 +199,12 @@ export class ComponentWorld {
   setNodeActive(nodeId: string, active: boolean): void {
     this.assertUsable();
     this.schedule(() => {
-      const node = this.nodes.get(nodeId);
-      if (!node) throw new Error("Runtime node " + nodeId + " was not found.");
-      if (node.active === active) return;
-      node.active = active;
+      const nodeRecord = this.nodes.get(nodeId);
+      if (!nodeRecord) throw new Error("Runtime node " + nodeId + " was not found.");
+      if (nodeRecord.active === active) return;
+      nodeRecord.active = active;
       const errors: unknown[] = [];
-      for (const id of this.componentsByNode.get(nodeId) ?? []) {
+      for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) {
         const component = this.components.get(id);
         if (!component) continue;
         try {
@@ -204,6 +227,8 @@ export class ComponentWorld {
       for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) {
         this.removeComponentNow(id, errors);
       }
+      const nodeRecord = this.nodes.get(nodeId);
+      if (nodeRecord) nodeRecord.active = false;
       this.componentsByNode.delete(nodeId);
       this.nodes.delete(nodeId);
       if (errors.length > 0) {
@@ -214,11 +239,30 @@ export class ComponentWorld {
 
   registerSystem(system: ComponentSystem): void {
     this.assertUsable();
-    const systemId = system.id;
-    if (!systemId.trim()) throw new TypeError("A component system requires a stable id.");
+    if (!system || typeof system !== "object") {
+      throw new TypeError("A component system requires a stable ID, update function and optional dispose function.");
+    }
+    const { id: systemId, update, dispose } = system;
+    if (!isValidStableId(systemId) ||
+        typeof update !== "function" ||
+        (dispose !== undefined && typeof dispose !== "function")) {
+      throw new TypeError("A component system requires a stable ID, update function and optional dispose function.");
+    }
+    const registeredSystem: RegisteredComponentSystem = Object.freeze({
+      id: systemId,
+      update(deltaSeconds: number, world: ComponentWorld): unknown {
+        return update.call(system, deltaSeconds, world);
+      },
+      ...(dispose === undefined ? {} : {
+        dispose(): unknown {
+          return dispose.call(system);
+        },
+      }),
+    });
+
     this.schedule(() => {
       if (this.systems.some((item) => item.id === systemId)) throw new Error("Component system " + systemId + " is already registered.");
-      this.systems.push(system);
+      this.systems.push(registeredSystem);
     });
   }
 
@@ -229,8 +273,13 @@ export class ComponentWorld {
       if (index < 0) return;
       const system = this.systems[index];
       this.systems.splice(index, 1);
-      try { system?.dispose?.(); }
-      catch (error) { throw new AggregateError([error], "Component system disposal failed."); }
+      const errors: unknown[] = [];
+      try {
+        this.assertSynchronous(system?.dispose?.(), errors, "ComponentSystem.dispose");
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length > 0) throw new AggregateError(errors, "Component system disposal failed.");
     });
   }
 
@@ -254,21 +303,30 @@ export class ComponentWorld {
     const errors: unknown[] = [];
     this.updating = true;
     try {
-      for (const node of this.nodes.values()) {
-        if (!node.active) continue;
+      for (const nodeRecord of this.nodes.values()) {
+        if (!nodeRecord.active) continue;
+        const node = nodeRecord.node;
         for (const id of [...(this.componentsByNode.get(node.id) ?? [])]) {
           const component = this.components.get(id);
-          if (!component || !component.enabled || component.destroyed) continue;
+          if (!component || !component.enabled || !component.activeNotified || component.destroyed) continue;
           if (!component.started) {
-            if (!this.invoke(component.behavior, component.behavior.onStart, errors)) continue;
+            if (!this.invoke(component.behavior, component.behavior.onStart, errors)) {
+              this.schedule(() => this.removeComponentNow(component.id));
+              continue;
+            }
             component.started = true;
           }
-          this.invoke(component.behavior, component.behavior.onUpdate, errors, deltaSeconds);
+          if (!this.invoke(component.behavior, component.behavior.onUpdate, errors, deltaSeconds)) {
+            this.schedule(() => this.removeComponentNow(component.id));
+          }
         }
       }
       for (const system of [...this.systems]) {
-        try { system.update(deltaSeconds, this); }
-        catch (error) { errors.push(error); }
+        try {
+          this.assertSynchronous(system.update(deltaSeconds, this), errors, "ComponentSystem.update");
+        } catch (error) {
+          errors.push(error);
+        }
       }
     } finally {
       this.updating = false;
@@ -299,7 +357,7 @@ export class ComponentWorld {
     enabled: boolean,
   ): void {
     if (this.components.has(instanceId)) throw new Error("Component instance " + instanceId + " already exists.");
-    const node = this.nodes.get(nodeId);
+    const node = this.nodes.get(nodeId)?.node;
     if (!node) throw new Error("Runtime node " + nodeId + " was not found.");
     const definition = this.registry.get(typeId);
     if (!definition) throw new ComponentWorldError("CORE_UNKNOWN_COMPONENT", "Component type " + typeId + " is not registered.");
@@ -310,12 +368,19 @@ export class ComponentWorld {
     if (!validation.valid || !validation.value) {
       throw new ComponentWorldError("COMPONENT_INVALID_VALUE", "Properties for component " + typeId + " are invalid.", validation.diagnostics);
     }
-    const behavior = definition.create({
+    const factoryResult: unknown = definition.create({
       instanceId,
       node,
       properties: freezeJsonValue(cloneJsonValue(validation.value)),
     });
-    if (!behavior || typeof behavior !== "object") throw new TypeError("Factory for component " + typeId + " did not return a behavior object.");
+    if (isThenable(factoryResult)) {
+      void Promise.resolve(factoryResult).catch(() => undefined);
+      throw new TypeError("Component factories must complete synchronously; Promise results are not supported.");
+    }
+    if (!factoryResult || typeof factoryResult !== "object") {
+      throw new TypeError("Factory for component " + typeId + " did not return a behavior object.");
+    }
+    const behavior = factoryResult as ComponentBehavior;
 
     const record: ComponentRecord = {
       id: instanceId,
@@ -377,6 +442,7 @@ export class ComponentWorld {
     const callback = nextActive ? component.behavior.onEnable : component.behavior.onDisable;
     const success = this.invoke(component.behavior, callback, errors);
     component.activeNotified = nextActive && success;
+    if (!success) this.removeComponentNow(component.id, errors);
     if (errors.length > 0) throw new AggregateError(errors, "Component " + component.typeId + " could not change enabled state.");
   }
 
@@ -429,10 +495,14 @@ export class ComponentWorld {
   private disposeNow(errors: unknown[]): void {
     for (const id of [...this.components.keys()]) this.removeComponentNow(id, errors);
     for (const system of [...this.systems].reverse()) {
-      try { system.dispose?.(); }
-      catch (error) { errors.push(error); }
+      try {
+        this.assertSynchronous(system.dispose?.(), errors, "ComponentSystem.dispose");
+      } catch (error) {
+        errors.push(error);
+      }
     }
     this.systems.length = 0;
+    for (const nodeRecord of this.nodes.values()) nodeRecord.active = false;
     this.nodes.clear();
     this.components.clear();
     this.componentsByNode.clear();
@@ -447,13 +517,23 @@ export class ComponentWorld {
   ): boolean {
     if (!callback) return true;
     try {
-      if (deltaSeconds === undefined) (callback as () => void).call(receiver);
-      else (callback as (deltaSeconds: number) => void).call(receiver, deltaSeconds);
-      return true;
+      const result = deltaSeconds === undefined
+        ? (callback as () => unknown).call(receiver)
+        : (callback as (deltaSeconds: number) => unknown).call(receiver, deltaSeconds);
+      return this.assertSynchronous(result, errors, "Component lifecycle callbacks");
     } catch (error) {
       errors.push(error);
       return false;
     }
+  }
+
+  private assertSynchronous(result: unknown, errors: unknown[], owner: string): boolean {
+    if (!isThenable(result)) return true;
+    // Lifecycle operations are host-tick owned and therefore synchronous.
+    // Consume an eventual rejection before rolling back the current operation.
+    void Promise.resolve(result).catch(() => undefined);
+    errors.push(new TypeError(owner + " must complete synchronously; Promise results are not supported."));
+    return false;
   }
 
   private assertUsable(): void {
