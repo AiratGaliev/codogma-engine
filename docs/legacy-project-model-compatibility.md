@@ -36,14 +36,15 @@ JSON-совместимые extension fields сохраняются. Резул�
 
 ## 3. Legacy Scene → Scene v1
 
-В legacy .scene версия сериализации находится в meta.version (fixtures показывают версии 2, 3, 5 и отсутствие поля). Это не schemaVersion Project Model. Legacy документ распознаётся по sceneType: "SCENE"; исходная версия возвращается как sourceVersion, а исходный JSON сохраняется.
+В legacy .scene версия сериализации находится в meta.version (fixtures показывают версии 2, 3, 5 и отсутствие поля). Это не schemaVersion Project Model. Legacy документ распознаётся по sceneType: "SCENE"; исходная версия возвращается как sourceVersion, а исходный JSON сохраняется. Наличие meta.version сопровождается warning: converter фиксирует историческую версию, но не исполняет старые Colibri SceneDataMigrationExtension цепочки.
 
 | Legacy field | Scene v1 mapping |
 |---|---|
 | id | Тот же stable Scene ID. Если ID отсутствует/невалиден — ошибка, не генерация нового ID. |
 | settings.sceneKey / name | Название Scene (fallback — существующий ID). |
-| displayList[] | Упорядоченные rootNodes[]. |
-| Node list[] | Упорядоченные children[]; hierarchy не flatten-ится. |
+| displayList[] | Упорядоченные rootNodes[]; если поле отсутствует — пустой Scene; если присутствует не как массив — blocking PROJECT_MIGRATION_INVALID_INPUT. |
+| Node list[] | Упорядоченные children[]; hierarchy не flatten-ится. Отсутствующее поле означает отсутствие children; присутствующее не-массивом — blocking error, чтобы не выдать частичное дерево. |
+| components[] | Отсутствующее поле означает отсутствие Component instances; присутствующее не-массивом — blocking error. Имена классов без явного mapping остаются в legacySource с warning. | |
 | label / name | Node name (fallback — существующий Node ID). |
 | active | Node active; при отсутствующем значении используется v1 default true, некорректное присутствующее значение сопровождается warning. |
 | x/y/rotation/scaleX/scaleY/originX/originY | TransformData; finite numbers переносятся. Некорректные значения default-ятся по v1 Transform с diagnostic. |
