@@ -49,7 +49,7 @@ export interface LegacyMigrationResult<T> {
 
 export type LegacyNodeCollection = "displayList" | "container";
 
-/** Typed shape returned for Nodes that carry the original legacy payload. */
+/** Типизированный Node, содержащий сохранённый исходный legacy payload. */
 export interface LegacyMigratedNodeDocument extends NodeDocument {
   readonly legacySource: JsonObject;
   readonly legacyCollection: LegacyNodeCollection;
@@ -57,13 +57,13 @@ export interface LegacyMigratedNodeDocument extends NodeDocument {
   readonly children: LegacyMigratedNodeDocument[];
 }
 
-/** Scene v1 with its preserved legacy document and per-Node source payloads. */
+/** Scene v1 с исходным legacy документом и payload каждого Node. */
 export interface LegacyMigratedSceneDocument extends Omit<SceneDocumentV1, "rootNodes"> {
   readonly rootNodes: LegacyMigratedNodeDocument[];
   readonly legacySource: JsonObject;
 }
 
-/** Prefab v1 with its preserved legacy document, root payload and declarations. */
+/** Prefab v1 с исходным legacy документом, payload корня и декларациями. */
 export interface LegacyMigratedPrefabDocument extends Omit<PrefabDocumentV1, "root"> {
   readonly root: LegacyMigratedNodeDocument;
   readonly legacyPrefabProperties: JsonValue;
@@ -253,19 +253,35 @@ function reportUnknownNodeFields(
       nodeId,
     ));
   }
-  if (source.scope !== undefined || source.private_np !== undefined) {
+  if (source.scope !== undefined) {
     diagnostics.push(diagnostic(
       "PROJECT_LEGACY_FIELD_PRESERVED",
-      "Legacy compiler/editor metadata is preserved and is not part of the persisted runtime Node contract.",
-      path,
+      "Legacy compiler scope metadata remains in legacySource and is not interpreted as a runtime Node contract.",
+      path + ".scope",
       nodeId,
     ));
   }
-  if (source.unlock !== undefined || source.nestedPrefabs !== undefined) {
+  if (source.private_np !== undefined) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "Legacy private_np editor metadata remains in legacySource and is not interpreted as a runtime Node contract.",
+      path + ".private_np",
+      nodeId,
+    ));
+  }
+  if (source.unlock !== undefined) {
     diagnostics.push(diagnostic(
       "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
-      "Legacy Prefab unlock/nested override data requires the separate COD-8 authoring contract and remains in legacySource.",
-      path + (source.unlock !== undefined ? ".unlock" : ".nestedPrefabs"),
+      "Legacy Prefab unlock metadata requires the separate COD-8 authoring contract and remains in legacySource.",
+      path + ".unlock",
+      nodeId,
+    ));
+  }
+  if (source.nestedPrefabs !== undefined) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_PREFAB_OVERRIDE_PRESERVED",
+      "Legacy nested Prefab metadata requires the separate COD-8 authoring contract and remains in legacySource.",
+      path + ".nestedPrefabs",
       nodeId,
     ));
   }
