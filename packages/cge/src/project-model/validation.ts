@@ -402,9 +402,10 @@ function validateNode(
     const componentPath = path + ".components[" + index + "]";
     if (!isRecord(component) || !isValidStableId(component.id) ||
         !isValidStableId(component.typeId) || typeof component.schemaVersion !== "number" ||
-        !Number.isInteger(component.schemaVersion) || typeof component.enabled !== "boolean" ||
+        !Number.isInteger(component.schemaVersion) || component.schemaVersion < 1 ||
+        typeof component.enabled !== "boolean" ||
         !isRecord(component.properties) || !isJsonValue(component)) {
-      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, positive integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
       return;
     }
     warnUnknownFields(component, new Set(["id", "typeId", "schemaVersion", "enabled", "properties"]), componentPath, diagnostics, nodeId);
@@ -531,10 +532,16 @@ export function validatePrefabDocument(
       )],
     };
   }
-  if (!isNonEmptyString(input.name) || !isRecord(input.root)) {
+  if (!isNonEmptyString(input.name)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires name and a root node.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires a non-empty name.", "name", isValidStableId(input.id) ? input.id : undefined)],
+    };
+  }
+  if (!isRecord(input.root)) {
+    return {
+      valid: false,
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab v1 requires a root node object.", "root", isValidStableId(input.id) ? input.id : undefined)],
     };
   }
   if (!isValidStableId(input.id)) {
@@ -551,7 +558,15 @@ export function validatePrefabDocument(
     settings: {},
   }, context);
   const knownPrefabFields = new Set(["schemaVersion", "id", "name", "root"]);
-  const diagnostics = [...result.diagnostics];
+  const diagnostics = result.diagnostics.map((item) => {
+    if (item.path?.startsWith("rootNodes[0]")) {
+      return {
+        ...item,
+        path: "root" + item.path.slice("rootNodes[0]".length),
+      };
+    }
+    return item;
+  });
   warnUnknownFields(input, knownPrefabFields, "prefab", diagnostics, input.id);
   if (!isJsonValue(input) && !hasErrors(diagnostics)) {
     diagnostics.push(issue(

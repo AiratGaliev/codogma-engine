@@ -56,6 +56,8 @@ The mapping rules are intentionally conservative:
 - Legacy Component names are converted only when the caller supplies both `componentTypes` (stable `typeId` + `schemaVersion`) and `componentInstanceIds` (stable instance ID keyed by `legacyComponentInstanceKey(nodeId, legacyName)`). Namespaced values such as `PushOnClick.pushScale` then become typed Component properties. Without either mapping the legacy reference and values remain in `legacySource` with warnings; IDs are never derived from names or array positions.
 - Prefab instance overrides are emitted only when the caller supplies an explicit `prefabReferences` mapping with root Node ID and the set of exposed property names. Without it, raw values remain available in `legacySource`; the migration does not guess which fields are overrides.
 - Prefab exposed-property declarations, editor metadata, renderer-specific fields and the complete original JSON payload remain in extension data under `legacySource` / `legacyPrefabProperties`. They are not falsely presented as already converted runtime renderer or Inspector contracts.
+- A missing legacy `active` value defaults to `true`. A present non-boolean value also uses that fallback, but emits a `PROJECT_LEGACY_FIELD_PRESERVED` warning at the exact field path; the source value remains in `legacySource`.
+- Non-array legacy Prefab `displayList` / `plainObjects` values are not interpreted as roots and emit a field-preservation warning, matching Scene migration.
 - A legacy Prefab with multiple independent roots is rejected rather than silently changing the hierarchy into parent/child nodes. Supply a separately reviewed grouping migration if that legacy pattern is encountered.
 
 The conversion result contains structured diagnostics. A caller must resolve warnings, register compatible component definitions and provide the appropriate Project/Prefab validation context before treating the converted document as load-ready. Scene hydration into a ComponentWorld remains COD-103.
@@ -95,7 +97,7 @@ Legacy scene component lists do not carry persisted instance IDs. The migration 
 
 ### Future schema version policy
 
-Project, Scene and Prefab validators reject unsupported schema versions with the blocking `PROJECT_UNSUPPORTED_VERSION` diagnostic at `schemaVersion`. They do not attempt to parse future documents as v1 or serialize them. Project migration operates on a deep JSON clone, does not mutate the caller's input and does not share nested mutable values with the returned migrated document.
+Project, Scene and Prefab validators reject unsupported schema versions with the blocking `PROJECT_UNSUPPORTED_VERSION` diagnostic at `schemaVersion`. The public Scene/Prefab migration entry points reject any present unsupported `schemaVersion` with the same diagnostic instead of falling through to legacy-shape detection. They do not attempt to parse future documents as v1 or serialize them. Project migration operates on a deep JSON clone, does not mutate the caller's input and does not share nested mutable values with the returned migrated document.
 
 
 ## Legacy compatibility test scope

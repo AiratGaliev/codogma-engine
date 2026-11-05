@@ -89,6 +89,29 @@ function fail(message: string, path?: string): never {
   ]);
 }
 
+function assertSupportedLegacyDocumentVersion(
+  input: unknown,
+  expectedVersion: number,
+  documentName: "Scene" | "Prefab",
+): void {
+  if (!isRecord(input) || !isJsonValue(input) ||
+      !Object.prototype.hasOwnProperty.call(input, "schemaVersion") ||
+      input.schemaVersion === expectedVersion) {
+    return;
+  }
+
+  const message = documentName + " schemaVersion is unsupported; expected version " + expectedVersion + ".";
+  throw new LegacyProjectMigrationError(message, [
+    diagnostic(
+      "PROJECT_UNSUPPORTED_VERSION",
+      "error",
+      message,
+      "schemaVersion",
+      isValidStableId(input.id) ? input.id : undefined,
+    ),
+  ]);
+}
+
 type LegacySceneDocumentInput = Record<string, unknown> & { readonly id: string };
 
 function asLegacyDocument(input: unknown, expectedType: "SCENE" | "PREFAB"): LegacySceneDocumentInput {
@@ -132,6 +155,33 @@ function resolveDocumentName(
   }
   if (isNonEmptyString(document.name)) return document.name;
   return String(document.id);
+}
+
+function resolveLegacyRootCollections(
+  source: Record<string, unknown>,
+  diagnostics: CoreDiagnostic[],
+): { displayList: unknown[]; plainObjects: unknown[] } {
+  const displayList: unknown[] = Array.isArray(source.displayList) ? source.displayList : [];
+  const plainObjects: unknown[] = Array.isArray(source.plainObjects) ? source.plainObjects : [];
+
+  if (source.displayList !== undefined && !Array.isArray(source.displayList)) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "warning",
+      "Legacy displayList is not an array; the original value remains in legacySource.",
+      "displayList",
+    ));
+  }
+  if (source.plainObjects !== undefined && !Array.isArray(source.plainObjects)) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "warning",
+      "Legacy plainObjects is not an array; the original value remains in legacySource.",
+      "plainObjects",
+    ));
+  }
+
+  return { displayList, plainObjects };
 }
 
 function migrateTransform(
@@ -441,6 +491,15 @@ function migrateLegacyNode(
   }
 
   const nodeId = input.id;
+  if (input.active !== undefined && typeof input.active !== "boolean") {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "warning",
+      "Legacy active is not a boolean; the v1 default true is used and the original value remains in legacySource.",
+      path + ".active",
+      nodeId,
+    ));
+  }
   const name = isNonEmptyString(input.label)
     ? input.label
     : isNonEmptyString(input.name)
@@ -495,28 +554,11 @@ export function migrateLegacySceneDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
 ): LegacyMigrationResult<SceneDocumentV1> {
+  assertSupportedLegacyDocumentVersion(input, SCENE_SCHEMA_VERSION, "Scene");
   const legacy = asLegacyDocument(input, "SCENE");
   const diagnostics: CoreDiagnostic[] = [];
   reportUnmappedLegacyDocumentFields(legacy, "document", diagnostics);
-  const displayList = Array.isArray(legacy.displayList) ? legacy.displayList : [];
-  const plainObjects = Array.isArray(legacy.plainObjects) ? legacy.plainObjects : [];
-
-  if (legacy.displayList !== undefined && !Array.isArray(legacy.displayList)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_FIELD_PRESERVED",
-      "warning",
-      "Legacy displayList is not an array; the original document is retained in legacySource.",
-      "displayList",
-    ));
-  }
-  if (legacy.plainObjects !== undefined && !Array.isArray(legacy.plainObjects)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_FIELD_PRESERVED",
-      "warning",
-      "Legacy plainObjects is not an array; the original document is retained in legacySource.",
-      "plainObjects",
-    ));
-  }
+  const { displayList, plainObjects } = resolveLegacyRootCollections(legacy, diagnostics);
 
   const rootNodes = [
     ...displayList.map((node, index) =>
@@ -549,11 +591,11 @@ export function migrateLegacyPrefabDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
 ): LegacyMigrationResult<PrefabDocumentV1> {
+  assertSupportedLegacyDocumentVersion(input, PREFAB_SCHEMA_VERSION, "Prefab");
   const legacy = asLegacyDocument(input, "PREFAB");
   const diagnostics: CoreDiagnostic[] = [];
   reportUnmappedLegacyDocumentFields(legacy, "document", diagnostics);
-  const displayList = Array.isArray(legacy.displayList) ? legacy.displayList : [];
-  const plainObjects = Array.isArray(legacy.plainObjects) ? legacy.plainObjects : [];
+  const { displayList, plainObjects } = resolveLegacyRootCollections(legacy, diagnostics);
   const roots = [
     ...displayList.map((node, index) =>
       migrateLegacyNode(node, "displayList[" + index + "]", "displayList", options, diagnostics)),

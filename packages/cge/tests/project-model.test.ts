@@ -574,3 +574,73 @@ test("rejects cyclic Scene Node object graphs without recursing indefinitely", (
     item.code === "SCENE_INVALID_NODE" &&
     item.path === "rootNodes[0].children[0]"), true);
 });
+
+
+test("rejects zero and negative Component instance schema versions", () => {
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-component-version",
+    name: "Component version",
+    settings: {},
+    rootNodes: [{
+      id: "node-component-version",
+      name: "Node",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-invalid-version",
+        typeId: "com.codogma.example",
+        schemaVersion: 0,
+        enabled: true,
+        properties: {},
+      }],
+      children: [],
+    }],
+  };
+
+  const result = validateSceneDocument(scene);
+  assert.equal(result.valid, false);
+  assert.equal(result.diagnostics.some((item) =>
+    item.code === "SCENE_INVALID_NODE" &&
+    item.path === "rootNodes[0].components[0]"), true);
+});
+
+test("maps Prefab root validation diagnostics to the actual Prefab document paths", () => {
+  const result = validatePrefabDocument({
+    schemaVersion: 1,
+    id: "prefab-root-diagnostics",
+    name: "Prefab",
+    root: {
+      id: "prefab-root-node",
+      name: "Root",
+      active: true,
+      transform: { x: Number.NaN, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "prefab-root-component",
+        typeId: "com.codogma.example",
+        schemaVersion: 0,
+        enabled: true,
+        properties: {},
+      }],
+      children: [],
+    },
+  });
+
+  assert.equal(result.valid, false);
+  const paths = result.diagnostics.map((item) => item.path);
+  assert.equal(paths.includes("root.transform.x"), true);
+  assert.equal(paths.includes("root.components[0]"), true);
+  assert.equal(paths.some((path) => path?.startsWith("rootNodes[0]")), false);
+});
+
+test("reports a missing or malformed Prefab root at root", () => {
+  const result = validatePrefabDocument({
+    schemaVersion: 1,
+    id: "prefab-missing-root",
+    name: "Prefab",
+    root: null,
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(result.diagnostics[0]?.path, "root");
+});

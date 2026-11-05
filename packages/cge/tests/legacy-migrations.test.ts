@@ -572,3 +572,74 @@ test("keeps both real legacy User Component definition formats inspectable witho
   assert.equal(behaviors.outputLang, "TYPE_SCRIPT");
   assert.equal(awake.outputLang, "TYPE_SCRIPT");
 });
+
+
+test("reports unsupported Scene and Prefab schema versions through migration entry points", () => {
+  const unsupported = (error: unknown): boolean =>
+    error instanceof LegacyProjectMigrationError &&
+    error.diagnostics.some((item) =>
+      item.code === "PROJECT_UNSUPPORTED_VERSION" &&
+      item.path === "schemaVersion" &&
+      item.severity === "error");
+
+  assert.throws(
+    () => migrateSceneDocument({ schemaVersion: 9, id: "scene-future", name: "Future", rootNodes: [], settings: {} }),
+    unsupported,
+  );
+  assert.throws(
+    () => migratePrefabDocument({ schemaVersion: 9, id: "prefab-future", name: "Future", root: {} }),
+    unsupported,
+  );
+});
+
+test("warns when an invalid legacy active value is defaulted and preserves the original value", () => {
+  const source = {
+    id: "scene-invalid-active",
+    sceneType: "SCENE",
+    displayList: [{ id: "node-invalid-active", active: "false" }],
+    plainObjects: [],
+  };
+
+  const result = migrateLegacySceneDocument(source);
+  assert.equal(result.document.rootNodes[0]?.active, true);
+  assert.equal(
+    result.diagnostics.some((item) =>
+      item.code === "PROJECT_LEGACY_FIELD_PRESERVED" &&
+      item.path === "displayList[0].active" &&
+      item.entityId === "node-invalid-active"),
+    true,
+  );
+  assert.deepEqual(object(object(result.document).legacySource), source);
+});
+
+test("warns when malformed legacy Prefab root collections are ignored", () => {
+  const fixtureSource = JSON.parse(fixture("DinoPrefab.scene")) as Record<string, unknown>;
+  const root = object((fixtureSource.displayList as unknown[])[0]);
+
+  const malformedDisplayList = {
+    ...fixtureSource,
+    displayList: "not-an-array",
+    plainObjects: [root],
+  };
+  const migratedDisplayList = migrateLegacyPrefabDocument(malformedDisplayList);
+  assert.equal(migratedDisplayList.document.root.id, root.id);
+  assert.equal(
+    migratedDisplayList.diagnostics.some((item) =>
+      item.code === "PROJECT_LEGACY_FIELD_PRESERVED" && item.path === "displayList"),
+    true,
+  );
+  assert.deepEqual(object(object(migratedDisplayList.document).legacySource), malformedDisplayList);
+
+  const malformedPlainObjects = {
+    ...fixtureSource,
+    plainObjects: "not-an-array",
+  };
+  const migratedPlainObjects = migrateLegacyPrefabDocument(malformedPlainObjects);
+  assert.equal(migratedPlainObjects.document.root.id, root.id);
+  assert.equal(
+    migratedPlainObjects.diagnostics.some((item) =>
+      item.code === "PROJECT_LEGACY_FIELD_PRESERVED" && item.path === "plainObjects"),
+    true,
+  );
+  assert.deepEqual(object(object(migratedPlainObjects.document).legacySource), malformedPlainObjects);
+});
