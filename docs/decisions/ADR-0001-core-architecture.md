@@ -2,7 +2,7 @@
 
 **Статус:** принято для первого вертикального среза; подробные API signatures и формат сериализации закрепляются тестами/контрактами при реализации.  
 **Дата:** 27.10.2026  
-**Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [матрица возможностей](../capability-matrix.md), [ADR-0002: TypeScript toolchain](ADR-0002-typescript-toolchain.md), [ADR-0003: package architecture](ADR-0003-package-architecture-and-management.md), [ADR-0004: optional Data-Oriented ECS](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+**Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [матрица возможностей](../capability-matrix.md), [ADR-0002: TypeScript toolchain](ADR-0002-typescript-toolchain.md), [ADR-0003: package architecture](ADR-0003-package-architecture-and-management.md), [ADR-0004: optional Data-Oriented ECS](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), [ADR-0007: native Codogma Project Model](ADR-0007-native-codogma-project-model.md).
 
 ## Контекст
 
@@ -14,15 +14,15 @@
 
 Состояние проекта хранится как versioned, валидируемые данные. Editor UI и runtime не должны быть источником истины друг для друга: обе стороны работают с Project Model и явно синхронизированными runtime instances. Сериализованное описание Scene — каноническое представление содержимого уровня; runtime hierarchy и Preview являются его производными представлениями.
 
-Целевой Core загружает scene data через loader, разрешающий явный registry/module manifest зарегистрированных TypeScript-компонентов и управляемые asset/prefab references. **Отдельный генерируемый TypeScript-класс на каждую сцену не является обязательным источником, авторинг-артефактом или условием запуска/build.** Компонент — независимый переиспользуемый модуль, привязанный к Node через стабильный type ID и сериализуемые свойства; никаких предположений о названии класса/файла сцены быть не должно. Текущий codegen сохраняется как legacy compatibility workflow до приёмки нового loader и отдельного решения о миграции.
+Целевой Core загружает scene data через loader, разрешающий явный registry/module manifest зарегистрированных TypeScript-компонентов и управляемые asset/prefab references. **Per-scene TypeScript-класс или companion-файл для каждой Scene запрещён как продуктовый authoring/build contract.** Scene — самостоятельный документ; Script — отдельный project asset; Component Definition имеет стабильный typeId, а каждое назначение — отдельный instanceId. Имя Scene не влияет на имя Script, экспорт или runtime identity. Scene Loader/Preview/Build потребляют сериализованные данные и явно разрешённые modules. Старый Colibri codegen не является fallback или compatibility target. См. ADR-0007.
 
 Persisted component properties и transient runtime state — разные области данных. Схема компонента явно определяет, какие свойства сохраняются в Project Model; runtime Inspector может показывать transient values, но они не изменяют source data автоматически. Запуск Preview привязывается к snapshot/ревизии модели; изменения проекта после запуска не должны незаметно менять соответствующую runtime-сессию.
 
 - У сцен/узлов/компонентов должны быть стабильные IDs; имя/путь файла не является идентичностью объекта.
 - Формат имеет версию схемы и тестируемую migration path. Любые внешние JSON/plugin/project inputs проходят runtime validation до использования.
 - Serialization должна быть детерминированной для одинакового семантического состояния, насколько это требуется для diff/review; неопределённый порядок объектов/ключей и скрытые runtime references не должны случайно менять project files.
-- Изменение формата сопровождается fixtures для старой версии, миграции, round-trip save/reopen и диагностируемого отказа от некорректных данных.
-- На первом этапе не обещать backwards compatibility для ещё не опубликованного Core API; версия формата и стратегия migration всё равно обязательны.
+- Изменение нативного Codogma schema сопровождается fixtures предыдущей реально опубликованной версии, миграции, round-trip save/reopen и диагностируемым отказом от некорректных данных. Colibri fixtures не являются migration baseline.
+- До первого публичного выпуска собственного формата допускаются breaking changes без compatibility obligations для внутренних экспериментальных snapshots. После публикации поддерживаются миграции только между выпущенными версиями Codogma schema.
 - Загрузка сцены выполняет проверку формата и поддерживаемой версии, затем зарегистрированные миграции в памяти и полную schema/ref validation до активации; отсутствие component registration, неподдерживаемая версия схемы или сломанная ссылка возвращаются как диагностируемая ошибка и не оставляют частично созданную сцену.
 - Загрузчик сначала создаёт таблицу стабильных Node IDs/иерархию, затем component instances и разрешает ссылки по ID, после чего активирует lifecycle; ошибки и отмена во время загрузки выполняют rollback/cleanup.
 - Component type ID отличается от component instance ID. Повторное использование одного зарегистрированного модуля не должно приводить к разделяемым mutable values между экземплярами.
@@ -75,14 +75,14 @@ Data-Oriented ECS не входит в обязательный `@codogma/cge`. 
 | Переписать всю Colibri/editor архитектуру до Core | Отклонено: слишком широкий объём и отсутствие доказательства, что это требуется для первого сценария |
 | Вынести весь текущий editor в один агрегирующий package | Отклонено: смешивает UI, runtime, build/devtools и платформенные обязанности |
 | Использовать Phaser-specific scene/game objects как публичную модель данных | Отклонено: привязывает проектный формат и пользовательский API к текущему adapter |
-| Использовать обязательный генерируемый TS-класс как каноническое представление каждой сцены | Отклонено для нового Core: связывает сериализованные данные с codegen и заставляет делать build/preview зависимыми от scene-specific source; генерация сохраняется только как legacy/optional workflow до проверенной миграции |
+| Использовать обязательный генерируемый TS-класс как каноническое представление каждой сцены | Отклонено: Scene остаётся versioned data document; per-scene source file не создаётся и не нужен для Preview/Build |
 | Подключить EVA.js как второй runtime/ECS | Отложено: риск двойного lifecycle/game loop без доказанной потребности |
 | Сразу заменить Phaser на PixiJS или добавить несколько physics engines | Отложено до PoC и сравнимого functional/performance baseline |
 | Начать с оптимизированного data-oriented ECS | Отложено: сначала нужен рабочий component-object slice и измерения |
 
 ## Последствия и открытые решения
 
-**Положительные:** первый Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; legacy Colibri может поддерживаться только для compatibility/security fixes на переходе, а пользовательские workflows развиваются в самостоятельном SolidJS Host; runtime adapter можно менять через явные границы.
+**Положительные:** Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; временный Colibri UI изолирован от нативного Project Model; пользовательские workflows развиваются в самостоятельном SolidJS Host; runtime adapter можно менять через явные границы.
 
 **Компромиссы:** потребуется явно определить schema/version/migration, component metadata и lifecycle contracts. Эти элементы нельзя оставлять implicit в generated source или UI state.
 
@@ -92,9 +92,9 @@ Data-Oriented ECS не входит в обязательный `@codogma/cge`. 
 
 PR #39 introduces the first host-neutral contract implementation under `packages/cge/`: Project/Scene/Prefab v1 types and validation, in-memory Project v0 migration, deterministic serializers, structured diagnostics, versioned Component Schema, explicit registry and a component-object world updated only by an external tick. This realizes the first testable portion of this ADR without coupling the Core package to Phaser, the DOM, Colibri or the SolidJS Host.
 
-The legacy SolidJS Host workflow consumes the Core schema through a compatibility adapter for current `.components` documents. That adapter's `legacy.user-component:<class-name>` identifier is deliberately transitional; it is not a stable runtime type ID or module registration. TypeScript source editing and syntax diagnostics are also Host features, not runtime module loading.
+The first Host implementation contains a transitional adapter for the old `.components` workflow. This is not an accepted Project Model contract and is scheduled for removal under COD-113. The native Host workflow creates Script assets and Component definitions through the explicit Project Model module manifest; no class-name or legacy format mapping is permitted.
 
-**Not yet implemented:** Project Model-aware scene loader, explicit project module manifest resolver, Phaser runtime adapter, Preview Host/live runtime identity, lifecycle integration into Phaser ticks, and data-driven standalone HTML5 build. The implementation must not be described as an end-to-end runtime migration until the acceptance sequence in [Core acceptance slice](../core-component-acceptance-slice.md) is complete. Legacy `.scene`/generated-code workflows remain compatible and are not rewritten by this PR.
+**Not yet implemented:** Project Model-aware scene loader, explicit project module manifest resolver, Phaser runtime adapter, Preview Host/live runtime identity, lifecycle integration into Phaser ticks, and data-driven standalone HTML5 build. The implementation must not be described as an end-to-end runtime migration until the acceptance sequence in [Core acceptance slice](../core-component-acceptance-slice.md) is complete. Colibri `.scene` and generated-scene workflows are outside the native Project Model contract. They are not opened or converted by the new Core; COD-113 removes the compatibility code already merged in PR #48.
 
 
 
@@ -122,15 +122,15 @@ The legacy SolidJS Host workflow consumes the Core schema through a compatibilit
 
 Состояние проекта хранится как versioned, валидируемые данные. Editor UI и runtime не должны быть источником истины друг для друга: обе стороны работают с Project Model и явно синхронизированными runtime instances. Сериализованное описание Scene — каноническое представление содержимого уровня; runtime hierarchy и Preview являются его производными представлениями.
 
-Целевой Core загружает scene data через loader, разрешающий явный registry/module manifest зарегистрированных TypeScript-компонентов и управляемые asset/prefab references. **Отдельный генерируемый TypeScript-класс на каждую сцену не является обязательным источником, авторинг-артефактом или условием запуска/build.** Компонент — независимый переиспользуемый модуль, привязанный к Node через стабильный type ID и сериализуемые свойства; никаких предположений о названии класса/файла сцены быть не должно. Текущий codegen сохраняется как legacy compatibility workflow до приёмки нового loader и отдельного решения о миграции.
+Целевой Core загружает scene data через loader, разрешающий явный registry/module manifest зарегистрированных TypeScript-компонентов и управляемые asset/prefab references. **Per-scene TypeScript-класс или companion-файл для каждой Scene запрещён как продуктовый authoring/build contract.** Scene — самостоятельный документ; Script — отдельный project asset; Component Definition имеет стабильный typeId, а каждое назначение — отдельный instanceId. Имя Scene не влияет на имя Script, экспорт или runtime identity. Scene Loader/Preview/Build потребляют сериализованные данные и явно разрешённые modules. Старый Colibri codegen не является fallback или compatibility target. См. ADR-0007.
 
 Persisted component properties и transient runtime state — разные области данных. Схема компонента явно определяет, какие свойства сохраняются в Project Model; runtime Inspector может показывать transient values, но они не изменяют source data автоматически. Запуск Preview привязывается к snapshot/ревизии модели; изменения проекта после запуска не должны незаметно менять соответствующую runtime-сессию.
 
 - У сцен/узлов/компонентов должны быть стабильные IDs; имя/путь файла не является идентичностью объекта.
 - Формат имеет версию схемы и тестируемую migration path. Любые внешние JSON/plugin/project inputs проходят runtime validation до использования.
 - Serialization должна быть детерминированной для одинакового семантического состояния, насколько это требуется для diff/review; неопределённый порядок объектов/ключей и скрытые runtime references не должны случайно менять project files.
-- Изменение формата сопровождается fixtures для старой версии, миграции, round-trip save/reopen и диагностируемого отказа от некорректных данных.
-- На первом этапе не обещать backwards compatibility для ещё не опубликованного Core API; версия формата и стратегия migration всё равно обязательны.
+- Изменение нативного Codogma schema сопровождается fixtures предыдущей реально опубликованной версии, миграции, round-trip save/reopen и диагностируемым отказом от некорректных данных. Colibri fixtures не являются migration baseline.
+- До первого публичного выпуска собственного формата допускаются breaking changes без compatibility obligations для внутренних экспериментальных snapshots. После публикации поддерживаются миграции только между выпущенными версиями Codogma schema.
 - Загрузка сцены выполняет проверку формата и поддерживаемой версии, затем зарегистрированные миграции в памяти и полную schema/ref validation до активации; отсутствие component registration, неподдерживаемая версия схемы или сломанная ссылка возвращаются как диагностируемая ошибка и не оставляют частично созданную сцену.
 - Загрузчик сначала создаёт таблицу стабильных Node IDs/иерархию, затем component instances и разрешает ссылки по ID, после чего активирует lifecycle; ошибки и отмена во время загрузки выполняют rollback/cleanup.
 - Component type ID отличается от component instance ID. Повторное использование одного зарегистрированного модуля не должно приводить к разделяемым mutable values между экземплярами.
@@ -181,14 +181,14 @@ Persisted component properties и transient runtime state — разные об�
 | Переписать всю Colibri/editor архитектуру до Core | Отклонено: слишком широкий объём и отсутствие доказательства, что это требуется для первого сценария |
 | Вынести весь текущий editor в один агрегирующий package | Отклонено: смешивает UI, runtime, build/devtools и платформенные обязанности |
 | Использовать Phaser-specific scene/game objects как публичную модель данных | Отклонено: привязывает проектный формат и пользовательский API к текущему adapter |
-| Использовать обязательный генерируемый TS-класс как каноническое представление каждой сцены | Отклонено для нового Core: связывает сериализованные данные с codegen и заставляет делать build/preview зависимыми от scene-specific source; генерация сохраняется только как legacy/optional workflow до проверенной миграции |
+| Использовать обязательный генерируемый TS-класс как каноническое представление каждой сцены | Отклонено: Scene остаётся versioned data document; per-scene source file не создаётся и не нужен для Preview/Build |
 | Подключить EVA.js как второй runtime/ECS | Отложено: риск двойного lifecycle/game loop без доказанной потребности |
 | Сразу заменить Phaser на PixiJS или добавить несколько physics engines | Отложено до PoC и сравнимого functional/performance baseline |
 | Начать с оптимизированного data-oriented ECS | Отложено: сначала нужен рабочий component-object slice и измерения |
 
 ## Последствия и открытые решения
 
-**Положительные:** первый Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; legacy Colibri может поддерживаться только для compatibility/security fixes на переходе, а пользовательские workflows развиваются в самостоятельном SolidJS Host; runtime adapter можно менять через явные границы.
+**Положительные:** Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; временный Colibri UI изолирован от нативного Project Model; пользовательские workflows развиваются в самостоятельном SolidJS Host; runtime adapter можно менять через явные границы.
 
 **Компромиссы:** потребуется явно определить schema/version/migration, component metadata и lifecycle contracts. Эти элементы нельзя оставлять implicit в generated source или UI state.
 
@@ -198,9 +198,9 @@ Persisted component properties и transient runtime state — разные об�
 
 PR #39 introduces the first host-neutral contract implementation under `packages/cge/`: Project/Scene/Prefab v1 types and validation, in-memory Project v0 migration, deterministic serializers, structured diagnostics, versioned Component Schema, explicit registry and a component-object world updated only by an external tick. This realizes the first testable portion of this ADR without coupling the Core package to Phaser, the DOM, Colibri or the SolidJS Host.
 
-The legacy SolidJS Host workflow consumes the Core schema through a compatibility adapter for current `.components` documents. That adapter's `legacy.user-component:<class-name>` identifier is deliberately transitional; it is not a stable runtime type ID or module registration. TypeScript source editing and syntax diagnostics are also Host features, not runtime module loading.
+The first Host implementation contains a transitional adapter for the old `.components` workflow. This is not an accepted Project Model contract and is scheduled for removal under COD-113. The native Host workflow creates Script assets and Component definitions through the explicit Project Model module manifest; no class-name or legacy format mapping is permitted.
 
-**Not yet implemented:** Project Model-aware scene loader, explicit project module manifest resolver, Phaser runtime adapter, Preview Host/live runtime identity, lifecycle integration into Phaser ticks, and data-driven standalone HTML5 build. The implementation must not be described as an end-to-end runtime migration until the acceptance sequence in [Core acceptance slice](../core-component-acceptance-slice.md) is complete. Legacy `.scene`/generated-code workflows remain compatible and are not rewritten by this PR.
+**Not yet implemented:** Project Model-aware scene loader, explicit project module manifest resolver, Phaser runtime adapter, Preview Host/live runtime identity, lifecycle integration into Phaser ticks, and data-driven standalone HTML5 build. The implementation must not be described as an end-to-end runtime migration until the acceptance sequence in [Core acceptance slice](../core-component-acceptance-slice.md) is complete. Colibri `.scene` and generated-scene workflows are outside the native Project Model contract. They are not opened or converted by the new Core; COD-113 removes the compatibility code already merged in PR #48.
 
 
 
