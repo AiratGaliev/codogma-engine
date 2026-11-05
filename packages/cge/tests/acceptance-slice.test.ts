@@ -1,35 +1,47 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import test from "node:test";
 import {
+  ComponentRegistry,
+  parsePrefabDocument,
   parseProjectDocument,
   parseSceneDocument,
+  serializeComponentProperties,
+  serializePrefabDocument,
+  serializeProjectDocument,
   serializeSceneDocument,
   validateComponentTypeSchema,
   validateProjectDocument,
+  type ComponentTypeDefinition,
   type ComponentTypeSchemaV1,
+  type PrefabDocumentV1,
   type SceneDocumentV1,
 } from "../src/index.js";
+import {
+  componentDefinition as followTargetDefinition,
+  moduleVersion as followTargetModuleVersion,
+} from "./fixtures/acceptance-project/src/FollowTarget.js";
 
 const fixtures = resolve(process.cwd(), "tests/fixtures");
+const projectRoot = resolve(fixtures, "acceptance-project");
+const componentDefinition: ComponentTypeDefinition = followTargetDefinition;
+const componentSchema: ComponentTypeSchemaV1 = componentDefinition.schema;
+
 const readFixture = (name: string): string =>
   readFileSync(resolve(fixtures, name), "utf8");
 
-const componentSchema: ComponentTypeSchemaV1 = {
-  schemaVersion: 1,
-  typeId: "com.codogma.acceptance.follow-target",
-  name: "Follow Target",
-  version: "1.0.0",
-  properties: {
-    sprite: { type: "asset", assetKinds: ["image"], required: true },
-    target: { type: "node", allowSelf: false, required: true },
-    speed: { type: "number", min: 0, defaultValue: 1 },
-  },
-};
+function readProjectAsset(relativePath: string): string {
+  const absolutePath = resolve(projectRoot, relativePath);
+  assert.ok(
+    absolutePath.startsWith(projectRoot + sep),
+    "Fixture asset paths must stay inside the acceptance project.",
+  );
+  return readFileSync(absolutePath, "utf8");
+}
 
 function loadContext() {
-  const parsedProject = parseProjectDocument(readFixture("acceptance-project-v1.json"));
+  const parsedProject = parseProjectDocument(readProjectAsset("project.json"));
   assert.ok(parsedProject.value);
   const project = parsedProject.value;
   const assets = new Map(project.assets.map((asset) => [asset.id, asset] as const));
@@ -43,20 +55,74 @@ function loadContext() {
   };
 }
 
+function loadScene(
+  project: ReturnType<typeof loadContext>["project"],
+  context: ReturnType<typeof loadContext>["context"],
+) {
+  const sceneAssetId = project.scenes[0]?.assetId;
+  assert.ok(sceneAssetId);
+  const sceneAsset = project.assets.find((asset) => asset.id === sceneAssetId);
+  assert.ok(sceneAsset);
+  assert.equal(sceneAsset.kind, "scene");
+  return parseSceneDocument(readProjectAsset(sceneAsset.path), context);
+}
+
 function cloneScene(scene: SceneDocumentV1): SceneDocumentV1 {
   return JSON.parse(JSON.stringify(scene)) as SceneDocumentV1;
 }
 
+test("acceptance project is self-contained and declares a real Core component definition", () => {
+  const { project } = loadContext();
+  const moduleReference = project.componentModules[0];
+  assert.ok(moduleReference);
+  assert.equal(moduleReference.typeId, componentSchema.typeId);
+  assert.equal(moduleReference.version, followTargetModuleVersion);
+  assert.equal(componentSchema.version, moduleReference.version);
+  assert.equal(componentSchema.schemaVersion, 1);
+
+  const moduleAsset = project.assets.find((asset) => asset.id === moduleReference.moduleAssetId);
+  assert.ok(moduleAsset);
+  assert.equal(moduleAsset.kind, "script");
+  assert.equal(moduleAsset.path, "src/FollowTarget.ts");
+  assert.equal(readProjectAsset(moduleAsset.path).includes(componentSchema.typeId), true);
+
+  const sceneAssetId = project.scenes[0]?.assetId;
+  assert.ok(sceneAssetId);
+  const sceneAsset = project.assets.find((asset) => asset.id === sceneAssetId);
+  assert.ok(sceneAsset);
+  assert.equal(sceneAsset.path, "scenes/Level.cge-scene.json");
+
+  for (const asset of project.assets) {
+    const assetPath = resolve(projectRoot, asset.path);
+    assert.ok(assetPath.startsWith(projectRoot + sep), "Project asset must not escape the fixture root.");
+    assert.equal(existsSync(assetPath), true, "Missing fixture asset: " + asset.path);
+  }
+
+  const registry = new ComponentRegistry();
+  registry.register(componentDefinition);
+  const registeredDefinition = registry.get(moduleReference.typeId);
+  assert.ok(registeredDefinition);
+  assert.equal(registeredDefinition.schema.typeId, moduleReference.typeId);
+  assert.equal(registeredDefinition.schema.version, moduleReference.version);
+
+  const createContext = (instanceId: string, nodeId: string) => ({
+    instanceId,
+    node: { id: nodeId, name: nodeId, active: true },
+    properties: {},
+  });
+  const first = registeredDefinition.create(createContext("component-first", "node-player")) as ReturnType<typeof followTargetDefinition.create>;
+  const second = registeredDefinition.create(createContext("component-second", "node-enemy")) as ReturnType<typeof followTargetDefinition.create>;
+  first.onUpdate?.(0.25);
+  assert.equal(first.instanceId, "component-first");
+  assert.equal(second.instanceId, "component-second");
+  assert.equal(first.elapsedSeconds, 0.25);
+  assert.equal(second.elapsedSeconds, 0);
+  assert.notEqual(first, second);
+});
+
 test("acceptance fixture connects Project, Scene, module identity and two component instances", () => {
   const { project, context } = loadContext();
-  assert.equal(project.componentModules[0]?.typeId, componentSchema.typeId);
-  assert.match(readFixture("FollowTarget.ts"), /com\.codogma\.acceptance\.follow-target/);
-  assert.equal(
-    project.assets.find((asset) => asset.id === project.componentModules[0]?.moduleAssetId)?.kind,
-    "script",
-  );
-
-  const scene = parseSceneDocument(readFixture("acceptance-scene-v1.json"), context);
+  const scene = loadScene(project, context);
   assert.ok(scene.value);
   assert.equal(scene.value.rootNodes.length, 2);
 
@@ -64,22 +130,109 @@ test("acceptance fixture connects Project, Scene, module identity and two compon
   const second = scene.value.rootNodes[1];
   assert.ok(first);
   assert.ok(second);
+  assert.equal(first.id, "node-player");
+  assert.equal(second.id, "node-enemy");
   assert.equal(first.components[0]?.typeId, componentSchema.typeId);
   assert.equal(second.components[0]?.typeId, componentSchema.typeId);
   assert.notEqual(first.components[0]?.id, second.components[0]?.id);
   assert.deepEqual(first.components[0]?.properties.target, { nodeId: second.id });
   assert.deepEqual(second.components[0]?.properties.target, { nodeId: first.id });
 
-  const serialized = serializeSceneDocument(scene.value, context);
+  const transientScene = cloneScene(scene.value);
+  const transientComponent = transientScene.rootNodes[0]?.components[0];
+  assert.ok(transientComponent);
+  transientComponent.properties.editorLabel = "Selected in Inspector";
+  transientComponent.properties.runtimeElapsedSeconds = 12;
+
+  const serialized = serializeSceneDocument(transientScene, context);
+  assert.equal(Object.hasOwn(transientComponent.properties, "editorLabel"), true);
+  assert.equal(Object.hasOwn(transientComponent.properties, "runtimeElapsedSeconds"), true);
+
+  const savedScene = JSON.parse(serialized) as SceneDocumentV1;
+  const savedComponent = savedScene.rootNodes[0]?.components[0];
+  assert.ok(savedComponent);
+  assert.equal(Object.hasOwn(savedComponent.properties, "editorLabel"), false);
+  assert.equal(Object.hasOwn(savedComponent.properties, "runtimeElapsedSeconds"), false);
+  assert.deepEqual(savedComponent.properties.pluginExtension, { retained: true });
+
   const reopened = parseSceneDocument(serialized, context);
   assert.ok(reopened.value);
   assert.deepEqual(reopened.value, scene.value);
+
+  const prefabRoot = cloneScene(scene.value).rootNodes[0];
+  const prefabTarget = cloneScene(scene.value).rootNodes[1];
+  assert.ok(prefabRoot);
+  assert.ok(prefabTarget);
+  prefabRoot.children = [prefabTarget];
+  const prefabComponent = prefabRoot.components[0];
+  assert.ok(prefabComponent);
+  prefabComponent.properties.editorLabel = "Prefab Inspector selection";
+  prefabComponent.properties.runtimeElapsedSeconds = 24;
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-acceptance",
+    name: "Acceptance Prefab",
+    root: prefabRoot,
+  };
+
+  const serializedPrefab = serializePrefabDocument(prefab, context);
+  assert.equal(Object.hasOwn(prefabComponent.properties, "editorLabel"), true);
+  assert.equal(Object.hasOwn(prefabComponent.properties, "runtimeElapsedSeconds"), true);
+
+  const savedPrefab = JSON.parse(serializedPrefab) as PrefabDocumentV1;
+  const savedPrefabComponent = savedPrefab.root.components[0];
+  assert.ok(savedPrefabComponent);
+  assert.equal(Object.hasOwn(savedPrefabComponent.properties, "editorLabel"), false);
+  assert.equal(Object.hasOwn(savedPrefabComponent.properties, "runtimeElapsedSeconds"), false);
+  assert.deepEqual(savedPrefabComponent.properties.pluginExtension, { retained: true });
+
+  const reopenedPrefab = parsePrefabDocument(serializedPrefab, context);
+  assert.ok(reopenedPrefab.value);
+  assert.deepEqual(reopenedPrefab.value, savedPrefab);
   assert.deepEqual((reopened.value as unknown as Record<string, unknown>).unknownSceneData, { retained: true });
   assert.deepEqual(
     reopened.value.rootNodes[0]?.components[0]?.properties.pluginExtension,
     { retained: true },
   );
-  assert.deepEqual((reopened.value.rootNodes[0] as unknown as Record<string, unknown>)?.unknownNodeData, { retained: ["one", "two"] });
+  assert.deepEqual(
+    (reopened.value.rootNodes[0] as unknown as Record<string, unknown>)?.unknownNodeData,
+    { retained: ["one", "two"] },
+  );
+
+  const serializedProject = serializeProjectDocument(project);
+  const reopenedProject = parseProjectDocument(serializedProject);
+  assert.ok(reopenedProject.value);
+  assert.deepEqual(
+    (reopenedProject.value as unknown as Record<string, unknown>).unknownPluginData,
+    { keep: true },
+  );
+});
+
+test("component property serialization keeps persisted extensions and omits editor/runtime state", () => {
+  const { context } = loadContext();
+  const serialized = serializeComponentProperties(
+    componentSchema,
+    {
+      sprite: { assetId: "asset-player-sprite" },
+      target: { nodeId: "node-enemy" },
+      speed: 3,
+      editorLabel: "Selected in Inspector",
+      runtimeElapsedSeconds: 12,
+      pluginExtension: { retained: true },
+    },
+    {
+      assets: context.assets,
+      nodeIds: new Set(["node-player", "node-enemy"]),
+      ownerNodeId: "node-player",
+    },
+  );
+
+  assert.deepEqual(serialized, {
+    sprite: { assetId: "asset-player-sprite" },
+    target: { nodeId: "node-enemy" },
+    speed: 3,
+    pluginExtension: { retained: true },
+  });
 });
 
 test("negative fixture vectors produce structured Project and Scene diagnostics", () => {
@@ -90,14 +243,19 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
     duplicateNodeId: string;
     unknownComponentTypeId: string;
     missingScriptAssetId: string;
+    missingModuleTypeId: string;
+    invalidComponentSchema: unknown;
+    invalidPropertyValue: { property: string; value: number };
+    incompatibleComponentSchemaVersion: number;
     unsupportedProjectVersion: number;
   };
   const { project, context } = loadContext();
-  const sourceScene = parseSceneDocument(readFixture("acceptance-scene-v1.json"), context);
+  const sourceScene = loadScene(project, context);
   assert.ok(sourceScene.value);
 
   const brokenAsset = cloneScene(sourceScene.value);
   const assetValue = brokenAsset.rootNodes[0]?.components[0]?.properties.sprite as { assetId: string };
+  assert.ok(assetValue);
   assetValue.assetId = negative.brokenAssetId;
   assert.equal(
     parseSceneDocument(JSON.stringify(brokenAsset), context).diagnostics.some((item) => item.code === "COMPONENT_INVALID_REFERENCE"),
@@ -106,6 +264,7 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
 
   const brokenNode = cloneScene(sourceScene.value);
   const nodeValue = brokenNode.rootNodes[0]?.components[0]?.properties.target as { nodeId: string };
+  assert.ok(nodeValue);
   nodeValue.nodeId = negative.brokenNodeId;
   assert.equal(
     parseSceneDocument(JSON.stringify(brokenNode), context).diagnostics.some((item) => item.code === "COMPONENT_INVALID_REFERENCE"),
@@ -141,12 +300,50 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
     true,
   );
 
-  const projectWithoutModule = {
+  const projectWithoutModule = { ...project, componentModules: [] };
+  assert.equal(validateProjectDocument(projectWithoutModule).valid, true);
+  assert.equal(projectWithoutModule.componentModules.length, 0);
+  const missingModuleScene = cloneScene(sourceScene.value);
+  const missingModuleComponent = missingModuleScene.rootNodes[0]?.components[0];
+  assert.ok(missingModuleComponent);
+  missingModuleComponent.typeId = negative.missingModuleTypeId;
+  assert.equal(
+    parseSceneDocument(JSON.stringify(missingModuleScene), {
+      assets: context.assets,
+      componentSchemas: new Map<string, ComponentTypeSchemaV1>(),
+      registeredComponentTypes: new Set<string>(),
+    }).diagnostics.some((item) => item.code === "COMPONENT_UNKNOWN_TYPE"),
+    true,
+  );
+
+  const projectWithoutModuleAsset = {
     ...project,
     assets: project.assets.filter((asset) => asset.id !== negative.missingScriptAssetId),
   };
   assert.equal(
-    validateProjectDocument(projectWithoutModule).diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"),
+    validateProjectDocument(projectWithoutModuleAsset).diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"),
+    true,
+  );
+
+  const invalidSchema = validateComponentTypeSchema(negative.invalidComponentSchema);
+  assert.equal(invalidSchema.valid, false);
+  assert.equal(invalidSchema.diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"), true);
+
+  const invalidProperty = cloneScene(sourceScene.value);
+  const firstPropertyComponent = invalidProperty.rootNodes[0]?.components[0];
+  assert.ok(firstPropertyComponent);
+  firstPropertyComponent.properties[negative.invalidPropertyValue.property] = negative.invalidPropertyValue.value;
+  assert.equal(
+    parseSceneDocument(JSON.stringify(invalidProperty), context).diagnostics.some((item) => item.code === "COMPONENT_INVALID_VALUE"),
+    true,
+  );
+
+  const incompatibleSchema = cloneScene(sourceScene.value);
+  const incompatibleComponent = incompatibleSchema.rootNodes[0]?.components[0];
+  assert.ok(incompatibleComponent);
+  incompatibleComponent.schemaVersion = negative.incompatibleComponentSchemaVersion;
+  assert.equal(
+    parseSceneDocument(JSON.stringify(incompatibleSchema), context).diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"),
     true,
   );
 
@@ -157,15 +354,4 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
     })).diagnostics.some((item) => item.code === "PROJECT_UNSUPPORTED_VERSION"),
     true,
   );
-});
-
-test("acceptance schema rejects contradictory property constraints", () => {
-  const invalid = validateComponentTypeSchema({
-    ...componentSchema,
-    properties: {
-      speed: { type: "number", min: 5, max: 1 },
-    },
-  });
-  assert.equal(invalid.valid, false);
-  assert.equal(invalid.diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"), true);
 });

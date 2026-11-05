@@ -132,6 +132,7 @@ test("round-trips Scene component values using the same schema and stable resour
   assert.deepEqual(player?.components[0]?.properties, {
     speed: 150,
     mode: "instant",
+    enabled: true,
     texture: { assetId: "image-player" },
     target: { nodeId: "node-enemy" },
   });
