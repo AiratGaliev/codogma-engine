@@ -582,8 +582,14 @@ test("rejects Scene and Prefab accessors without executing their getters", () =>
   };
 
   const prefabRoot = {
-    ...sceneNode,
     id: "prefab-accessor-root",
+    name: "Prefab root",
+    active: true,
+    transform: {
+      x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
+    },
+    components: [],
+    children: [],
   };
   Object.defineProperty(prefabRoot, "extensionData", {
     enumerable: true,
