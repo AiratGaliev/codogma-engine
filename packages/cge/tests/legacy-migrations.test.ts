@@ -404,7 +404,7 @@ test("malformed hierarchy and Component collections are blocking migration error
 });
 
 test("legacy serializer version is reported without running historical migration extensions", () => {
-  const source = parseFixture("Level.scene");
+  const source = parseFixture("AgentLevel.scene");
   const migrated = migrateLegacySceneDocument(source);
   assert.equal(migrated.sourceVersion, "legacy-scene-meta-v5");
   assert.equal(
