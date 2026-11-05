@@ -429,7 +429,7 @@ export class ComponentWorld {
     const callback = nextActive ? component.behavior.onEnable : component.behavior.onDisable;
     const success = this.invoke(component.behavior, callback, errors);
     component.activeNotified = nextActive && success;
-    if (nextActive && !success) this.removeComponentNow(component.id, errors);
+    if (!success) this.removeComponentNow(component.id, errors);
     if (errors.length > 0) throw new AggregateError(errors, "Component " + component.typeId + " could not change enabled state.");
   }
 

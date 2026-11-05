@@ -774,3 +774,36 @@ test("rolls back a component that fails during later activation without skipping
   ]);
   world.dispose();
 });
+
+
+test("rolls back a component when onDisable fails during an explicit disable transition", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onCreate: () => calls.push("create:" + instanceId),
+      onEnable: () => calls.push("enable:" + instanceId),
+      onDisable: () => {
+        calls.push("disable:" + instanceId);
+        throw new Error("disable failed");
+      },
+      onDestroy: () => calls.push("destroy:" + instanceId),
+      onUpdate: () => calls.push("update:" + instanceId),
+    }),
+  });
+  const world = new ComponentWorld("scene-disable-rollback", registry);
+  world.createNode({ id: "node-disable-rollback", name: "Actor" });
+  world.attachComponent("node-disable-rollback", schema.typeId, {}, { instanceId: "disable-failed" });
+
+  assert.throws(() => world.setComponentEnabled("disable-failed", false), AggregateError);
+  assert.deepEqual(world.listComponents(), []);
+  world.update(1 / 60);
+  assert.deepEqual(calls, [
+    "create:disable-failed",
+    "enable:disable-failed",
+    "disable:disable-failed",
+    "destroy:disable-failed",
+  ]);
+  world.dispose();
+});
