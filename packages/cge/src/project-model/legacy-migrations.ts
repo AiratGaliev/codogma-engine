@@ -308,7 +308,7 @@ function mapLegacyComponents(
     }
 
     const instanceId = options.componentInstanceIds?.get(legacyComponentInstanceKey(nodeId, entry));
-    if (!instanceId) {
+    if (instanceId === undefined) {
       unresolved.push(entry);
       diagnostics.push(diagnostic(
         "PROJECT_LEGACY_COMPONENT_PRESERVED",
@@ -380,6 +380,25 @@ function mapPrefabInstance(
   }
   if (!isValidStableId(mapping.prefabId) || !isValidStableId(mapping.rootNodeId)) {
     fail("Legacy Prefab mapping must provide stable Project Prefab and root Node IDs.", path + ".prefabId");
+  }
+
+  const validationContext = options.validationContext;
+  const registeredPrefab = validationContext?.prefabs?.get(mapping.prefabId);
+  const prefabIsRegistered = registeredPrefab !== undefined ||
+    validationContext?.prefabIds?.has(mapping.prefabId) === true;
+  if (!prefabIsRegistered) {
+    fail(
+      "Legacy Prefab mapping must resolve to a Prefab registered in validationContext.prefabIds or validationContext.prefabs.",
+      path + ".prefabId",
+      "PROJECT_INVALID_REFERENCE",
+    );
+  }
+  if (registeredPrefab && registeredPrefab.root.id !== mapping.rootNodeId) {
+    fail(
+      "Legacy Prefab mapping rootNodeId does not match the registered Prefab root.",
+      path + ".prefabId",
+      "PROJECT_INVALID_REFERENCE",
+    );
   }
 
   const overrides: Array<{ targetNodeId: string; propertyPath: string; value: JsonValue }> = [];
@@ -463,12 +482,8 @@ function migrateLegacyNode(
 }
 
 function buildValidationContext(options: LegacySceneMigrationOptions): SceneValidationContext {
-  const registered = new Set(options.validationContext?.registeredComponentTypes ?? []);
-  for (const mapping of options.componentTypes?.values() ?? []) registered.add(mapping.typeId);
-  return {
-    ...(options.validationContext ?? {}),
-    ...(registered.size === 0 ? {} : { registeredComponentTypes: registered }),
-  };
+  // Mappings assert identity; they must not silently register types that the project does not know.
+  return options.validationContext ?? {};
 }
 
 function assertValidMigration<T>(
@@ -524,6 +539,13 @@ export function migrateLegacySceneDocument(
     ));
   }
   const meta = isRecord(legacy.meta) ? legacy.meta : {};
+  if (legacy.meta !== undefined && !isRecord(legacy.meta)) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "Legacy metadata is not an object; the original value remains unchanged in legacySource.",
+      "document.meta",
+    ));
+  }
   const document = {
     schemaVersion: SCENE_SCHEMA_VERSION,
     id: legacy.id,
