@@ -400,12 +400,20 @@ function validateNode(
 
   node.components.forEach((component, index) => {
     const componentPath = path + ".components[" + index + "]";
-    if (!isRecord(component) || !isValidStableId(component.id) ||
-        !isValidStableId(component.typeId) || typeof component.schemaVersion !== "number" ||
-        !Number.isInteger(component.schemaVersion) || component.schemaVersion < 1 ||
-        typeof component.enabled !== "boolean" ||
-        !isRecord(component.properties) || !isJsonValue(component)) {
-      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, positive integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
+    if (!isRecord(component) || !isJsonValue(component) ||
+        !isValidStableId(component.id) || !isValidStableId(component.typeId) ||
+        typeof component.enabled !== "boolean" || !isRecord(component.properties)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires stable id/typeId, enabled state and JSON properties.", componentPath, nodeId));
+      return;
+    }
+    if (typeof component.schemaVersion !== "number" ||
+        !Number.isInteger(component.schemaVersion) || component.schemaVersion < 1) {
+      diagnostics.push(issue(
+        "COMPONENT_INVALID_SCHEMA",
+        "Component instance schemaVersion must be a positive integer.",
+        componentPath + ".schemaVersion",
+        nodeId,
+      ));
       return;
     }
     warnUnknownFields(component, new Set(["id", "typeId", "schemaVersion", "enabled", "properties"]), componentPath, diagnostics, nodeId);

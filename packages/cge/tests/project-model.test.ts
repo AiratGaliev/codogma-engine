@@ -576,33 +576,35 @@ test("rejects cyclic Scene Node object graphs without recursing indefinitely", (
 });
 
 
-test("rejects zero and negative Component instance schema versions", () => {
-  const scene = {
-    schemaVersion: 1,
-    id: "scene-component-version",
-    name: "Component version",
-    settings: {},
-    rootNodes: [{
-      id: "node-component-version",
-      name: "Node",
-      active: true,
-      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
-      components: [{
-        id: "component-invalid-version",
-        typeId: "com.codogma.example",
-        schemaVersion: 0,
-        enabled: true,
-        properties: {},
+test("rejects zero, negative and fractional Component instance schema versions at the version field", () => {
+  for (const schemaVersion of [0, -1, 1.5]) {
+    const scene = {
+      schemaVersion: 1,
+      id: "scene-component-version",
+      name: "Component version",
+      settings: {},
+      rootNodes: [{
+        id: "node-component-version",
+        name: "Node",
+        active: true,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [{
+          id: "component-invalid-version",
+          typeId: "com.codogma.example",
+          schemaVersion,
+          enabled: true,
+          properties: {},
+        }],
+        children: [],
       }],
-      children: [],
-    }],
-  };
+    };
 
-  const result = validateSceneDocument(scene);
-  assert.equal(result.valid, false);
-  assert.equal(result.diagnostics.some((item) =>
-    item.code === "SCENE_INVALID_NODE" &&
-    item.path === "rootNodes[0].components[0]"), true);
+    const result = validateSceneDocument(scene);
+    assert.equal(result.valid, false);
+    assert.equal(result.diagnostics.some((item) =>
+      item.code === "COMPONENT_INVALID_SCHEMA" &&
+      item.path === "rootNodes[0].components[0].schemaVersion"), true);
+  }
 });
 
 test("maps Prefab root validation diagnostics to the actual Prefab document paths", () => {
@@ -629,7 +631,7 @@ test("maps Prefab root validation diagnostics to the actual Prefab document path
   assert.equal(result.valid, false);
   const paths = result.diagnostics.map((item) => item.path);
   assert.equal(paths.includes("root.transform.x"), true);
-  assert.equal(paths.includes("root.components[0]"), true);
+  assert.equal(paths.includes("root.components[0].schemaVersion"), true);
   assert.equal(paths.some((path) => path?.startsWith("rootNodes[0]")), false);
 });
 
