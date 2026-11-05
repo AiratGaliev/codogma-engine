@@ -302,10 +302,15 @@ export class ComponentWorld {
           const component = this.components.get(id);
           if (!component || !component.enabled || !component.activeNotified || component.destroyed) continue;
           if (!component.started) {
-            if (!this.invoke(component.behavior, component.behavior.onStart, errors)) continue;
+            if (!this.invoke(component.behavior, component.behavior.onStart, errors)) {
+              this.schedule(() => this.removeComponentNow(component.id));
+              continue;
+            }
             component.started = true;
           }
-          this.invoke(component.behavior, component.behavior.onUpdate, errors, deltaSeconds);
+          if (!this.invoke(component.behavior, component.behavior.onUpdate, errors, deltaSeconds)) {
+            this.schedule(() => this.removeComponentNow(component.id));
+          }
         }
       }
       for (const system of [...this.systems]) {

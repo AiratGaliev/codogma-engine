@@ -807,3 +807,50 @@ test("rolls back a component when onDisable fails during an explicit disable tra
   ]);
   world.dispose();
 });
+
+
+test("rolls back failed onStart and onUpdate hooks without affecting sibling components", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onEnable: () => calls.push("enable:" + instanceId),
+      onStart: () => {
+        calls.push("start:" + instanceId);
+        if (instanceId === "start-failed") throw new Error("start failed");
+      },
+      onUpdate: () => {
+        calls.push("update:" + instanceId);
+        if (instanceId === "update-failed") throw new Error("update failed");
+      },
+      onDisable: () => calls.push("disable:" + instanceId),
+      onDestroy: () => calls.push("destroy:" + instanceId),
+    }),
+  });
+  const world = new ComponentWorld("scene-start-update-rollback", registry);
+  world.createNode({ id: "node-start-update-rollback", name: "Actor" });
+  for (const instanceId of ["start-failed", "update-failed", "healthy"]) {
+    world.attachComponent("node-start-update-rollback", schema.typeId, {}, { instanceId });
+  }
+
+  assert.throws(() => world.update(1 / 60), AggregateError);
+  assert.deepEqual(world.listComponents().map((component) => component.id), ["healthy"]);
+  world.update(1 / 60);
+  assert.deepEqual(calls, [
+    "enable:start-failed",
+    "enable:update-failed",
+    "enable:healthy",
+    "start:start-failed",
+    "start:update-failed",
+    "update:update-failed",
+    "start:healthy",
+    "update:healthy",
+    "disable:start-failed",
+    "destroy:start-failed",
+    "disable:update-failed",
+    "destroy:update-failed",
+    "update:healthy",
+  ]);
+  world.dispose();
+});
