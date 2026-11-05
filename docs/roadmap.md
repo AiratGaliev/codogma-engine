@@ -50,11 +50,11 @@ Unity 6.6 (6000.6, Beta на дату проверки) — основной UX-
 ### Что можно выполнять параллельно Editor UI migration
 
 - Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и всех legacy project configs. Эти сведения пополняются по мере работы и до публикации/массовой архитектурной миграции; они не должны задерживать изолированную исправимую задачу.
-- Реализация нового Project Model/Core, runtime adapter или оптимизированного ECS. Это следующий архитектурный поток, а не предусловие для каждой правки текущего Scene Editor, Inspector или Asset Pack.
+- Реализация нового Project Model/Core, runtime adapter и отдельного optional Data-Oriented ECS. ECS не является предусловием для правок текущего Scene Editor, Inspector или Asset Pack и не входит в обязательный `@codogma/cge`.
 - Создание нового SolidJS Editor Host в `src/editor/` и последующее удаление legacy Colibri client из `source/editor/` — отдельная staged UI migration по `docs/editor-ui-migration.md`; это не механическое перемещение старого дерева. npm Workspaces остаются отдельной инфраструктурной миграцией.
 - Реализация нового Project Model/Core, runtime adapter, Preview Host и HTML5 build pipeline. Они могут идти отдельными потоками, если сохраняются совместимые contracts; готовность Core не является предварительным условием для первого нового Editor Host slice.
 - Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
-- Tauri, замена Phaser на PixiJS, второй ECS/runtime, дополнительные physics backends и public package registry. Они не входят в основной scope этого этапа.
+- Tauri, замена Phaser на PixiJS, второй независимый Game/Scene/Ticker loop, дополнительные physics backends и public package registry не входят в основной scope UI migration. Отдельный optional `@codogma/ecs` теперь является утверждённым архитектурным направлением (ADR-0004), но реализуется отдельными задачами COD-111/112.
 
 ### Что не следует делать параллельно «на всякий случай»
 
@@ -63,7 +63,7 @@ Unity 6.6 (6000.6, Beta на дату проверки) — основной UX-
 - Не сводить модернизацию к замене цветов/иконок: визуальная работа должна включать и функциональные состояния, клавиатурный workflow, layout панелей и связанные пользовательские сценарии.
 - Не оставлять icon migration только в виде карты: после инвентаризации выполнить внедрение в согласованном UI scope, с отдельными light/dark variants и attribution.
 - Не вводить сразу строгий lint/format gate на все legacy-пакеты, не менять все lockfiles/путь editor и не переводить всё на Workspaces одной операцией.
-- Не заменять Phaser, не добавлять EVA.js как второй runtime и не вводить ECS-оптимизацию без доказанного gap, PoC и измерений.
+- Не заменять Phaser и не подключать EVA.js как второй runtime/Game/Ticker. Optional Data-Oriented ECS разрешён как самостоятельный package (ADR-0004), но реализация и performance claims требуют representative browser/device benchmark; не переносить ECS в `@codogma/cge` и не создавать второй game loop.
 - Не отмечать runtime-функции завершёнными по одному лишь TypeScript build, наличию кнопки или генерации исходника.
 - Не добавлять зависимости «на будущее». У каждой зависимости должны быть используемая функция, лицензия, scope, критерии приёмки и доказательство, почему текущей реализации недостаточно.
 
@@ -201,7 +201,7 @@ Legacy Colibri используется как источник требован
 
 ---
 
-## Этап 2 — Project Model и собственный TypeScript Component/ECS Core
+## Этап 2 — Project Model и host-neutral TypeScript Component Core
 
 **Реализационный baseline (03.11.2026):** начальная реализация Project/Scene/Prefab v1, Component Schema/Registry/World, in-memory Project v0 migration и deterministic serialization добавлена в `packages/cge/` (PR #39). Это закрывает контрактный/тестовый фундамент, но не loader/Phaser adapter/Preview/build. Точная граница и acceptance sequence: [Core acceptance slice](core-component-acceptance-slice.md).
 
@@ -217,7 +217,7 @@ Legacy Colibri используется как источник требован
 3. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, сериализация, валидация и runtime adapter используют единый контракт.
 4. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
 5. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
-6. **Отдельное решение, а не предположение:** data-oriented ECS и дополнительные physics backends не входят в минимальный Core автоматически. Сравнить component-object API и нужные physics capabilities на fixture; усложнять модель только если это оправдано тестами/измерениями.
+6. **Граница optional ECS:** базовый ComponentWorld в `@codogma/cge` остаётся object/component runtime. Data-Oriented ECS не входит в минимальный Core и реализуется отдельным optional `@codogma/ecs` (COD-111); optional Phaser integration — `@codogma/ecs-phaser` (COD-112). Сравнение должно включать object-component baseline и centralized object systems, а не только synthetic no-op ECS benchmark.
 
 ### Задачи
 
@@ -234,13 +234,13 @@ Legacy Colibri используется как источник требован
 - [ ] Определить версионирование формата и механизм миграции; подготовить compatibility fixtures для текущих проектов.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
 - [ ] Утвердить границы API для Input (mouse/keyboard/touch и coordinate spaces), Time/Tween/scheduler и Scene Manager (async load, transition, cancellation, disposal); отдельные необязательные capabilities не должны проникать во все компоненты.
-- [ ] Прототипировать ECS/component core: registry компонентов, system scheduler, детерминированный lifecycle, структурные изменения и disposal.
+- [ ] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
 - [ ] Интегрировать runtime core в управляемые фазы Phaser tick; не заводить независимый `requestAnimationFrame`.
 - [ ] Добавить Component Schema/Metadata для полей Inspector, валидации, default values и ссылок на ресурсы.
 - [ ] Создать Phaser adapter для выбранного среза: сущность ↔ sprite/view, Transform ↔ display transform, physics body и lifecycle.
 - [ ] Обеспечить одну точку истины для каждого значения. При переносе HP/Transform/AI-state старое поле не должно продолжать независимо изменяться.
-- [ ] Изучить EVA.js (GameObject/Component/System, lifecycle, metadata, component observer) как reference. Не подключать его целиком до проверки дублирования Scene/Game/Ticker и renderer dependencies.
-- [ ] Сравнить удобство component-object API и необходимость data-oriented ECS на реальном сценарии; не усложнять всё ядро ради неподтверждённого выигрыша FPS.
+- [ ] Изучить EVA.js v2 как reference композиции GameObject/Component/System, lifecycle, metadata и модульных пакетов; не подключать его целиком и не переносить второй Game/Scene/Ticker, Pixi renderer или global Resource singleton.
+- [ ] Зафиксировать отдельный optional Data-Oriented ECS package scope по ADR-0004; его storage strategy и применение выбирать по browser/device performance fixture, не по фиксированному entity-count порогу.
 
 ### Критерии приёмки
 
@@ -262,6 +262,24 @@ Legacy Colibri используется как источник требован
 **Gate:** прежде чем массово переписывать текущие игровые сущности, Core проходит отдельный пилот на одной законченной механике. Интеграция с Last Hero может использоваться как дополнительная реальная проверка через отдельную ветку/репозиторий, но Codogma не должен получать жёсткую зависимость на код игры.
 
 ---
+
+## Отдельный optional workstream — Data-Oriented ECS
+
+Это самостоятельная возможность для проектов с массовыми однотипными сущностями, а не обязательная часть Core и не блокер базового Project Model → Preview → Build acceptance.
+
+### Порядок
+
+1. **COD-111 — `@codogma/ecs`:** независимые Entity/World handles, component storage, Queries, Systems/scheduler, safe structural mutation и deterministic disposal. Выбор archetypes/table chunks, sparse sets или комбинации подтверждается сравнением.
+2. **COD-112 — `@codogma/ecs-phaser`:** отдельный optional adapter к Phaser 4; базовый `@codogma/runtime-phaser` не зависит от ECS.
+3. Сохранить `@codogma/cge` ComponentWorld как object/component path. Не переносить Data-Oriented storage в cge и не переписывать базовый Core ради ECS.
+4. Разделить persisted Project Model Node/component IDs и runtime ECS handles; обеспечить явный mapping и одного owner каждого mutable значения. Component Schema/Inspector metadata не отождествлять автоматически с ECS storage.
+5. Использовать Phaser-controlled tick; не создавать второй Game/Scene/Ticker/requestAnimationFrame. Physics bindings являются отдельной optional capability.
+6. Сравнить object-component baseline, centralized systems и Data-Oriented ECS на одинаковом representative browser workload, затем отдельно измерить adapter overhead. Профиль включает p50/p95/p99 frame time, main-thread/system/query time, physics/render breakdown, allocations/GC и heap.
+7. Только после package implementation и измерений подключить `runtime.ecs` / `runtime.ecs-phaser` в Feature Registry и подтвердить физическое исключение disabled ECS в production artifact.
+
+**Не входит:** массовая миграция существующих игровых проектов, обязательная установка ECS всеми разработчиками, автоматическое использование ECS для каждого Scene Node, второй runtime loop, Worker/SharedArrayBuffer/WASM/multithreading без отдельных PoC/ADR.
+
+См. [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage), [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) и [performance baseline](performance-baseline.md).
 
 ## Этап 3 — Game Preview Host, live Inspector и runtime debugging
 
@@ -324,7 +342,7 @@ Legacy Colibri используется как источник требован
 - [ ] Инвентаризировать используемые builder/bundler-инструменты и расширять существующий pipeline, прежде чем вводить новый.
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
-- [ ] Проверить, можно ли заменить текущий вендорный Phaser bundle на совместимый upstream variant или воспроизводимую кастомную сборку; на fixture сравнить runtime/API coverage, raw/gzip size и фактическое inclusion/exclusion. Если модуль нельзя исключить проверяемо, зафиксировать ограничение и не заявлять селективную сборку только на основании feature metadata.
+- [ ] Проверить варианты Phaser 4.2.1: текущий vendored full bundle, upstream UMD `phaser-arcade-physics(.min)` без Matter.js и допустимый custom/ESM path. Сравнить API coverage/generated code, external runtime requirements, raw/gzip size, parse/startup/time-to-first-frame и фактический output manifest. У upstream v4.2.1 нет package `exports` subpath для Arcade-only artifact; не выдумывать import path. ESM/named exports сами по себе не доказывают tree shaking; решение подтверждать fixture/browser smoke.
 - [ ] Ввести минимальный Feature/Capability Registry contract для встроенных функций и test fixture (stable feature IDs, provider, scopes/targets, declared requirements/conflicts); первая сборочная версия не должна зависеть от готовности UI Package Manager.
 - [ ] Хранить выбор необязательных features в версионируемой project/target configuration отдельно от установленного npm dependency tree; defaults и required features должны быть явными. На этапе 4A допускается встроенный registry и mock/fixture provider; интеграцию реальных package-provided descriptors через `codogma` metadata выполнить на этапе 8 после утверждения package metadata schema.
 - [ ] На основе выбранных features и target вычислять declared feature-dependency closure, проверять недостающих provider packages, конфликты и unsupported scopes/targets; выдавать machine-readable diagnostics, не устанавливая npm dependencies автоматически.
@@ -490,6 +508,9 @@ Legacy Colibri используется как источник требован
 
 ### Приоритеты
 
+Performance acceptance для optional ECS ведётся отдельно от ComponentWorld benchmark: одинаковые browser/device fixtures сравнивают object-component, centralized systems, Data-Oriented ECS и ECS↔Phaser bridge. Фиксируются frame p50/p95/p99, main-thread/system/query time, physics/render, allocations/GC и heap; универсальный порог entity count или фиксированная квота Core не задаются.
+
+
 Проверки сдвигаются влево и вводятся одновременно с каждой подсистемой: не откладывать unit/typecheck/lint до завершения всей архитектуры. Самостоятельный этап QA нужен для объединения telemetry, regression baselines, широкого browser acceptance и release checklist, а не для первого появления тестов.
 
 ### Задачи
@@ -653,10 +674,10 @@ Legacy Colibri используется как источник требован
 
 ### Задачи
 
-- [ ] Сформировать taxonomy пакетов по ответственности и scope: Core/shared, editor-extension, runtime, build/CLI, platform adapter и tooling. Имя пакета не обязано начинаться с `plugin-`.
+- [ ] Сформировать taxonomy пакетов по ответственности и scope: Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter и tooling. Имя пакета не обязано начинаться с `plugin-`.
 - [ ] Поддерживать исходники самостоятельных пакетов в `packages/<name>/` с собственными manifests, публичными exports, тестами и документацией; не создавать отдельный пакет на каждый класс. Пакет можно разрабатывать в монорепозитории до публичной публикации.
 - [ ] Настроить npm Workspaces для локальной разработки пакетов и проверить, что workspace linkage не приводит к установке всех пакетов как dependencies каждого потребительского проекта. После миграции редактора включить `src/editor` в согласованную workspace-схему.
-- [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP или платформенных SDK.
+- [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP, платформенных SDK или optional ECS packages.
 - [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`: kind, scopes/targets, совместимость с Engine/Editor API, explicit entry points и предоставляемые Feature/Capability descriptors (inline или явной ссылкой на декларативное описание). Metadata не дублирует npm dependency tree и не заменяет npm resolver.
 - [ ] Утвердить versioned Feature/Capability Registry contract для встроенных и package-provided capabilities: stable IDs, provider, scopes/targets, requirements/conflicts, required/optional/default policy и build/editor entry points. Неоднозначный выбор нескольких providers должен давать diagnostic, если явная multi-provider policy не утверждена. Точная schema и место хранения подтверждаются ADR/PoC.
 - [ ] Не дробить Phaser-подсистемы на формальные wrapper-пакеты ради видимости модульности: сначала доказать, что выбранный runtime packaging/build path действительно позволяет независимо выбирать эти подсистемы и исключать ненужный код.
@@ -669,8 +690,8 @@ Legacy Colibri используется как источник требован
 - [ ] Разделить область установки и исполнения: base Editor Host dependencies, project-level packages и активные editor extensions не должны случайно смешиваться. В целевом сценарии Extension API получает список пакетов активного проекта и активирует только совместимые расширения с явным entry point и разрешённым scope.
 - [ ] Обеспечить package-level registrations для команд, меню/shortcuts, panels/views, settings, Inspector property editors, schema validators, asset import/reimport handlers, Scene Editor gizmos/brushes, profiler overlays, build hooks и target profiles.
 - [ ] Установку/обновление/удаление сопровождать проверкой metadata/API compatibility и понятной диагностикой. Добавить project-level activation/disable для editor extensions так, чтобы отключение не требовало изменения npm dependency tree и не повреждало проектные данные.
-- [ ] Проверить, что editor-only/build-only зависимости не попадают в production game bundle; build pipeline должен анализировать declared scopes/targets и фактический dependency graph.
-- [ ] Проверить, что выбранные в проекте features собираются только для совместимых targets, их обязательные feature dependencies включаются прозрачно, а выключенные features не подключаются скрыто.
+- [ ] Проверить, что editor-only/build-only/QA зависимости не попадают в production game bundle; optional runtime packages включаются только по явному project dependency и enabled target feature. Build pipeline должен анализировать scopes/targets, imports, dynamic entry points и фактический output artifact.
+- [ ] Проверить, что выбранные в проекте features собираются только для совместимых targets, их обязательные feature dependencies включаются прозрачно, а выключенные features не подключаются скрыто. Для `runtime.ecs` provider — `@codogma/ecs`, для `runtime.ecs-phaser` — `@codogma/ecs-phaser`; установка/provider/enablement/target inclusion остаются разными состояниями.
 - [ ] Подготовить machine-readable report с feature IDs, участвующими packages/entry points, причинами включения и диагностикой; корректно обрабатывать dynamic imports и modules с side effects вместо обещаний автоматического удаления.
 - [ ] Поддержать источники по очереди: npm registry/scoped registry и local/file packages сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
 - [ ] Разделить package manifest (npm package.json + namespaced codogma metadata), registry packument/version metadata, project manifest/lockfile и optional curated catalogue record. Не складывать технические и каталожные сведения в один manifest; фиксировать provenance и приоритет источников. См. [package management reference](package-management-reference.md) и OpenUPM.

@@ -2,7 +2,7 @@
 
 **Статус:** принято для первого вертикального среза; подробные API signatures и формат сериализации закрепляются тестами/контрактами при реализации.  
 **Дата:** 27.10.2026  
-**Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [матрица возможностей](../capability-matrix.md), [ADR-0002: TypeScript toolchain](ADR-0002-typescript-toolchain.md), [ADR-0003: package architecture](ADR-0003-package-architecture-and-management.md).
+**Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [матрица возможностей](../capability-matrix.md), [ADR-0002: TypeScript toolchain](ADR-0002-typescript-toolchain.md), [ADR-0003: package architecture](ADR-0003-package-architecture-and-management.md), [ADR-0004: optional Data-Oriented ECS](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ## Контекст
 
@@ -35,11 +35,13 @@ Persisted component properties и transient runtime state — разные об�
 - Editor Host использует публичные типизированные API; private deep imports из Colibri запрещены для межпакетной интеграции.
 - Node/server и browser/runtime роли отделяются на границе модулей, чтобы target HTML5 bundle не включал editor-only или Node-only зависимости.
 
-### 3. Component-object model раньше оптимизированного ECS
+### 3. Object/component Core и optional Data-Oriented ECS — отдельные уровни
 
-Первый acceptance scenario использует понятную объектно-компонентную модель: Project → Scene → Node/Transform → один пользовательский TypeScript Component. Data-oriented ECS storage, entity archetypes и дополнительные runtime frameworks не вводить, пока профилирование и реальный workload не докажут потребность.
+Первый Core acceptance scenario использует понятную object/component модель: Project → Scene → Node/Transform → пользовательский TypeScript Component. Это базовый workflow для Inspector, Prefab, сериализации и большинства обычных игровых объектов.
 
-Это не запрет ECS как направления. Решение откладывает оптимизированную реализацию до наличия измеримых требований и стабильного lifecycle contract. EVA.js и другие проекты — references, а не дополнительные runtime-зависимости.
+Data-Oriented ECS не входит в обязательный `@codogma/cge`. Для массовых однотипных сущностей предусмотрен отдельный optional package `@codogma/ecs`; его реализация, benchmark и package lifecycle ведутся независимо от Core. Проект без ECS не устанавливает и не импортирует этот runtime. Одновременное использование object/component модели и ECS допускается только через явный adapter/mapping с одним владельцем каждого mutable runtime value.
+
+Подробное решение, package boundaries, EVA.js reuse policy, Phaser adapter и browser performance acceptance закреплены в [ADR-0004](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ### 4. Явный lifecycle и host-neutral preview
 
@@ -102,7 +104,7 @@ The legacy SolidJS Host workflow consumes the Core schema through a compatibilit
 
 **EVA.js reference review:** the public [eva-engine/eva.js](https://github.com/eva-engine/eva.js) documentation describes a `Game` entry point that manages systems, scenes, its own ticker and start/pause/resume/destroy lifecycle, plus a `GameObject` hierarchy and Component/System hooks (`init`, `awake`, `start`, `update`, `lateUpdate`, pause/resume/destroy). Its package model splits the core from renderer and feature plugins. Useful references adopted/adapted for Codogma are explicit component instances, system scheduling, a well-defined lifecycle and feature boundaries. The second Game/ticker, global resource manager and implicit scene singleton are deliberately not adopted: Codogma already has a concrete host/runtime owner (Phaser) and a persisted Project Model that must remain the source of truth. Introducing another loop would duplicate scheduling and create ambiguous update order, pause and disposal semantics. EVA.js is evaluated as an architecture reference only; it is not a dependency or a compatibility target.
 
-**Why not data-oriented ECS now:** three successful CI Fast runs on Node 22.23.4 Linux x64, using the synthetic no-op component workload and 25 measured ticks after warm-up, produced these average update-tick ranges: 0.035–0.063 ms at 100 nodes/components, 0.233–0.472 ms at 1,000, and 1.436–2.767 ms at 10,000 (approximately 3.61–6.97 million component updates/second at 10,000). The 10,000-component samples straddle the illustrative 10% of a 60 Hz frame budget (1.67 ms), demonstrating material CI timing variability. These are single-run averages from one CI runner, not p95 latency, a target-browser/mobile measurement or a representative production workload. Use reproducible browser/device profiling before deciding whether the frame budget is exceeded or a data-oriented ECS prototype is warranted. Start an ECS prototype only if target-browser/device measurements with representative production systems and 10,000+ active components consistently show p95 Core simulation above 1.67 ms or measurable allocation/GC frame misses after ordinary profiling/optimization. Any prototype must compare the same workload, lifecycle semantics, memory, update p50/p95 and integration complexity; do not replace the public object API based on synthetic component count alone.
+**CI benchmark interpretation and superseding ECS decision (05.11.2026):** the synthetic no-op ComponentWorld benchmark on Node 22.23.4 Linux x64 produced average update-tick ranges of 0.035–0.063 ms at 100 nodes/components, 0.233–0.472 ms at 1,000 and 1.436–2.767 ms at 10,000 across three successful CI runs. These measurements remain useful as a scheduler regression baseline, but they are not browser/device p95, do not include real game systems, Phaser physics/rendering or representative allocation/GC pressure, and must not be converted into a universal 10,000-component gate or a fixed 1.67 ms Core budget. ADR-0004 supersedes the earlier deferral: the architecture now explicitly approves a separate optional `@codogma/ecs` package and a separate `@codogma/ecs-phaser` adapter. Implementation and performance claims require controlled browser/device comparisons; Core object/component contracts remain intact.
 
 **Stable ID contract:** Project Model and runtime identities share one validator. IDs are opaque and case-sensitive; they begin with an ASCII letter or digit and may then contain ASCII letters/digits, `.`, `_`, `:`, `# ADR-0001: Архитектура Core, Project Model и Runtime Adapter
 

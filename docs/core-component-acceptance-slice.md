@@ -152,4 +152,19 @@ CI Fast runs `npm run benchmark` from `packages/cge/` after the strict typecheck
 
 The benchmark records Node.js version, OS/architecture and raw durations in the Actions log. It intentionally has no absolute pass/fail latency threshold: shared GitHub runners are noisy, so the measurement is evidence for comparisons on the same runner/runtime, not a cross-machine performance claim. Changes to internal storage/scheduler must preserve functional tests and compare this baseline before claiming an optimization.
 
-ADR-0001 defers an optimized data-oriented ECS until real workloads and profiles justify it; EVA.js remains an architecture reference and is not a runtime dependency. The benchmark measures the current object-component model rather than asserting ECS performance.
+ADR-0004 supersedes the earlier deferral wording: Data-Oriented ECS is an approved optional package direction, but it is not part of this Core acceptance slice and is not implemented by COD-26/PR #43. The current benchmark measures only the object-component ComponentWorld; it is not ECS performance evidence. EVA.js remains an architecture/package reference, not a runtime dependency.
+
+## 11. Граница optional Data-Oriented ECS
+
+Этот acceptance slice остаётся независимым от optional ECS. Он должен завершить базовый host-neutral object/component путь и не блокируется реализацией Data-Oriented storage.
+
+- `@codogma/cge` / `ComponentWorld` — object/component Core для Project Model, Component Schema, Inspector, lifecycle и базовых пользовательских компонентов.
+- `@codogma/ecs` (COD-111) — отдельный optional runtime package для Data-Oriented storage, Queries и Systems. Он не является зависимостью Core, не входит в обязательный acceptance первого Project Model/Preview/Build пути и не должен появляться в consumer project автоматически.
+- `@codogma/ecs-phaser` (COD-112) — отдельный optional Phaser adapter. Базовый `@codogma/runtime-phaser` остаётся независимым от ECS.
+- Persisted Component Schema / Inspector metadata описывает authoring data; ECS component storage описывает runtime memory layout. Между ними нужен явный mapping/serializer contract, а не автоматическое отождествление.
+- Project Model Node IDs и ECS runtime Entity handles различны. Их mapping привязан к scene/runtime session и имеет явный lifecycle. Каждый mutable runtime value должен иметь одного owner.
+- ECS не создаёт второй Game/Scene/Ticker/requestAnimationFrame. Любая интеграция использует внешний host tick и документированные phases.
+- Отсутствие ECS в project dependencies должно физически исключать ECS packages/modules из production game artifact. Это проверяется отдельными consumer/build fixtures и не подменяется feature checkbox.
+
+Для COD-26 benchmark остаётся базовой регрессией object-component ComponentWorld. Он не задаёт порог 10 000 entities, 1.67 ms или любой другой универсальный критерий запуска ECS. Data-Oriented ECS сравнивается в отдельном browser/device workload по ADR-0004 и [performance baseline](performance-baseline.md): object-component, centralized object systems, ECS storage и ECS+Phaser adapter, с frame/system CPU, p50/p95/p99, allocations/GC и heap metrics.
+
