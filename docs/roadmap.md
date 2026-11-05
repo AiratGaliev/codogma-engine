@@ -229,7 +229,7 @@ Legacy Colibri используется как источник требован
 - [ ] Подтвердить, что один независимо написанный TypeScript component module можно повторно использовать несколькими узлами и сценами без копирования логики в scene-specific code; type ID и instance ID различаются, значения каждого экземпляра независимы.
 - [ ] Разделить persisted properties, editor-only metadata и transient runtime state в общей component schema; Inspector, serializer, validator и runtime adapter читают один schema contract.
 - [ ] Зафиксировать разрешение ссылок на узлы/компоненты по стабильным ID и поведение отсутствующей цели/неподдерживаемой циклической ссылки.
-- [ ] Сохранить текущий scene codegen как legacy/compatibility path до приёмки data-driven loader; отдельно описать совместимость и миграцию существующих проектов, не удалять генератор данным архитектурным шагом.
+- [ ] Реализовать native SceneDocument loader и Build path; per-scene generated source и старый Colibri codegen не входят в target contract. Старый генератор удаляется вместе с Colibri-specific consumers по отдельной implementation задаче.
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 - [ ] Определить versioning и миграции между реально выпущенными версиями Codogma Project Model; внутренние experiment formats не поддерживать.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
@@ -297,7 +297,7 @@ Legacy Colibri используется как источник требован
 ### Задачи
 
 - [ ] Выделить Game Preview Host с отдельным контрактом от Tauri/Electron и текущего HTTP сервера.
-- [ ] Запускать новый Core Preview из Project Model через тот же loader/adapter contract, который используют runtime/build; legacy generated-code preview поддерживается отдельно, пока не выполнен переход.
+- [ ] Запускать Core Preview из native Project Model через тот же loader/adapter contract, который используют runtime/build. Colibri generated-code preview не поддерживается новым Preview.
 - [ ] Реализовать управление preview: Play, Pause, Resume, Restart/Stop, resize viewport и передачу log/error events.
 - [ ] Поддержать Embedded Game View для быстрой итерации.
 - [ ] Поддержать запуск игры в отдельном окне, чтобы проверять fullscreen, input, scaling и поведение без панелей редактора.
@@ -393,7 +393,7 @@ Legacy Colibri используется как источник требован
 
 Нормативный product/UX и implementation-reference baseline для всех UI/authoring slices — [стандарт reference для 2D Editor Host](editor-reference-standard.md). На каждую задачу проверять конкретные Unity 6.6 и Cocos Creator 4.0 2D workflows, а при наличии релевантной подсистемы изучать Godot source на закреплённом commit; в issue/PR фиксировать ссылки на страницы/файлы и adopt/adapt/reject. Godot не является UX pass/fail target; Colibri не использовать как визуальную или архитектурную спецификацию.
 
-**Цель:** завершить поэтапную замену пользовательского UI на самостоятельный SolidJS Editor Host. COD-80 уже реализовал первый Workbench/Scene slice; далее новые workflows создаются в src/editor отдельными вертикальными срезами. Legacy Colibri в source/editor используется только как read-only reference/compatibility client и для критических временных fixes. Полезные user workflows, data formats, import/reimport contracts, runtime semantics и ограничения можно изучать и переиспользовать; UI mechanisms, private APIs, plugin registry и внутреннюю Colibri архитектуру переносить нельзя. Фаза завершается browser/runtime acceptance, cutover и последующим отдельным cleanup.
+**Цель:** завершить поэтапную замену временного Colibri UI на самостоятельный SolidJS Editor Host. COD-80 уже реализовал первый Workbench/Scene slice; далее новые workflows создаются в `src/editor/` отдельными вертикальными срезами. Colibri остаётся только UI rollback client и историческим reference interaction patterns. Старые project files, data formats, import/reimport serialization, serializers и runtime/codegen semantics не переносятся; новый Host работает на нативном Codogma Project Model. Фаза завершается browser/runtime acceptance, cutover и последующим отдельным UI cleanup.
 
 **Зависимости:** текущие project/file/serialization/codegen/Undo-Redo/runtime contracts, собственные Host services и согласованные lifecycle/session boundaries. src/editor уже существует как отдельное SolidJS приложение с собственным package/lockfile. source/editor не переносится и не становится зависимостью нового Host; оба клиента сосуществуют до cutover. Новые Core/Preview/HTML5 contracts развиваются как отдельные engine streams.
 
