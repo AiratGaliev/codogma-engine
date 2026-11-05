@@ -188,10 +188,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
 
   input.assets.forEach((asset, index) => {
     const assetPath = "assets[" + index + "]";
-    if (!isRecord(asset)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference must be an object.", assetPath));
-      return;
-    }
+    if (!isRecord(asset)) return;
     if (!isValidStableId(asset.id)) return;
     if (!isSafeProjectPath(asset.path)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset path must be a safe project-relative path.", assetPath + ".path", asset.id));
@@ -211,10 +208,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
 
   input.scenes.forEach((scene, index) => {
     const scenePath = "scenes[" + index + "]";
-    if (!isRecord(scene)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene reference must be an object.", scenePath));
-      return;
-    }
+    if (!isRecord(scene)) return;
     if (!isValidStableId(scene.id)) return;
     if (!isValidStableId(scene.assetId)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene assetId must use the stable ID grammar.", scenePath + ".assetId", scene.id));
@@ -229,10 +223,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
 
   input.prefabs.forEach((prefab, index) => {
     const prefabPath = "prefabs[" + index + "]";
-    if (!isRecord(prefab)) {
-      diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab reference must be an object.", prefabPath));
-      return;
-    }
+    if (!isRecord(prefab)) return;
     if (!isValidStableId(prefab.id)) return;
     if (!isValidStableId(prefab.assetId)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab assetId must use the stable ID grammar.", prefabPath + ".assetId", prefab.id));
