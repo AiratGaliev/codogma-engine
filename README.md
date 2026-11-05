@@ -243,9 +243,9 @@ By default, these checks exercise server-side MCP capabilities. Optional checks 
 The current implementation has three main runtime areas:
 
 1. **New Editor Host** — the independent SolidJS application under <code>src/editor/</code>, target for all new UI and authoring workflows.
-2. **Legacy Editor client** — the Colibri-based TypeScript application under <code>source/editor/</code>, retained temporarily for compatibility and workflow reference only; no new user-facing features are developed there.
+2. **Temporary Colibri UI** — the old TypeScript application under <code>source/editor/</code>, retained only as a bounded UI rollback client until COD-87/COD-88; it is not a data-format/runtime compatibility mode and receives no new features.
 3. **Local server** — <code>server/server.mjs</code> serves the legacy client until cutover, exposes shared project/file APIs and hosts MCP/bridge services used by both editor applications.
-4. **Game project/runtime** — the editable project is selected by <code>PROJECT_DIR</code>. The editor integrates with Phaser 4.2.1 and generates game code; the game project's runtime dependencies still need to be appropriate for the code it uses.
+4. **Game project/runtime** — the editable project is selected by <code>PROJECT_DIR</code>. The transitional Colibri workflow has a legacy Phaser/code-generation path; the target Codogma workflow loads native Scene data and registered Script/Component modules. Runtime dependencies must match the native project/build contract.
 
 The server also integrates with the optional AI Chat backend. That backend is a separate service and can be run independently.
 
