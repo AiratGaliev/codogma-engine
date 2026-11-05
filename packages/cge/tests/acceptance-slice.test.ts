@@ -133,7 +133,23 @@ test("acceptance fixture connects Project, Scene, module identity and two compon
   assert.deepEqual(first.components[0]?.properties.target, { nodeId: second.id });
   assert.deepEqual(second.components[0]?.properties.target, { nodeId: first.id });
 
-  const serialized = serializeSceneDocument(scene.value, context);
+  const transientScene = cloneScene(scene.value);
+  const transientComponent = transientScene.rootNodes[0]?.components[0];
+  assert.ok(transientComponent);
+  transientComponent.properties.editorLabel = "Selected in Inspector";
+  transientComponent.properties.runtimeElapsedSeconds = 12;
+
+  const serialized = serializeSceneDocument(transientScene, context);
+  assert.equal(Object.hasOwn(transientComponent.properties, "editorLabel"), true);
+  assert.equal(Object.hasOwn(transientComponent.properties, "runtimeElapsedSeconds"), true);
+
+  const savedScene = JSON.parse(serialized) as SceneDocumentV1;
+  const savedComponent = savedScene.rootNodes[0]?.components[0];
+  assert.ok(savedComponent);
+  assert.equal(Object.hasOwn(savedComponent.properties, "editorLabel"), false);
+  assert.equal(Object.hasOwn(savedComponent.properties, "runtimeElapsedSeconds"), false);
+  assert.deepEqual(savedComponent.properties.pluginExtension, { retained: true });
+
   const reopened = parseSceneDocument(serialized, context);
   assert.ok(reopened.value);
   assert.deepEqual(reopened.value, scene.value);

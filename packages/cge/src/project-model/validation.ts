@@ -8,6 +8,7 @@ import {
   SCENE_SCHEMA_VERSION,
   PREFAB_SCHEMA_VERSION,
   type AssetReference,
+  type NodeDocument,
   type ProjectDocumentV1,
   type SceneDocumentV1,
   type PrefabDocumentV1,
@@ -286,6 +287,40 @@ function validateNode(
   );
 }
 
+
+function normalizeNodeComponentProperties(
+  node: unknown,
+  nodeIds: ReadonlySet<string>,
+  context: SceneValidationContext,
+): unknown {
+  if (!isRecord(node)) return node;
+
+  const nodeId = typeof node.id === "string" ? node.id : undefined;
+  const components = Array.isArray(node.components)
+    ? node.components.map((component) => {
+      if (!isRecord(component) || !isRecord(component.properties) || typeof component.typeId !== "string") {
+        return component;
+      }
+      const schema = context.componentSchemas?.get(component.typeId);
+      if (!schema) return component;
+
+      const result = validateComponentProperties(schema, component.properties, {
+        ...(context.assets === undefined ? {} : { assets: context.assets }),
+        nodeIds,
+        ...(nodeId === undefined ? {} : { ownerNodeId: nodeId }),
+      });
+      return result.valid && result.value
+        ? { ...component, properties: result.value }
+        : component;
+    })
+    : node.components;
+  const children = Array.isArray(node.children)
+    ? node.children.map((child) => normalizeNodeComponentProperties(child, nodeIds, context))
+    : node.children;
+
+  return { ...node, components, children };
+}
+
 export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
@@ -311,9 +346,16 @@ export function validateSceneDocument(
   input.rootNodes.forEach((node, index) =>
     validateNode(node, "rootNodes[" + index + "]", nodeIds, context, diagnostics, componentIds),
   );
-  return hasErrors(diagnostics)
-    ? { valid: false, diagnostics }
-    : { valid: true, diagnostics, value: input as unknown as SceneDocumentV1 };
+  if (hasErrors(diagnostics)) return { valid: false, diagnostics };
+
+  const rootNodes = input.rootNodes.map((node) =>
+    normalizeNodeComponentProperties(node, nodeIds, context),
+  ) as NodeDocument[];
+  return {
+    valid: true,
+    diagnostics,
+    value: { ...input, rootNodes } as unknown as SceneDocumentV1,
+  };
 }
 
 export function validatePrefabDocument(
@@ -342,7 +384,12 @@ export function validatePrefabDocument(
   if (extraFieldDiagnostics.length > 0) {
     return { valid: false, diagnostics: [...result.diagnostics, ...extraFieldDiagnostics] };
   }
-  return result.valid
-    ? { valid: true, diagnostics: result.diagnostics, value: input as unknown as PrefabDocumentV1 }
-    : { valid: false, diagnostics: result.diagnostics };
+  if (!result.valid || !result.value?.rootNodes[0]) {
+    return { valid: false, diagnostics: result.diagnostics };
+  }
+  return {
+    valid: true,
+    diagnostics: result.diagnostics,
+    value: { ...input, root: result.value.rootNodes[0] } as unknown as PrefabDocumentV1,
+  };
 }
