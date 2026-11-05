@@ -205,12 +205,12 @@ function validateNode(
   context: SceneValidationContext,
   diagnostics: CoreDiagnostic[],
   componentIds: Set<string>,
-): void {
+): NodeDocument {
   if (!isRecord(node) || !isValidStableId(node.id) || !isNonEmptyString(node.name) ||
       typeof node.active !== "boolean" || !isRecord(node.transform) ||
       !Array.isArray(node.components) || !Array.isArray(node.children)) {
     diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires JSON-compatible id/name, active, transform, components and children.", path));
-    return;
+    return node as unknown as NodeDocument;
   }
 
   const nodeId = node.id as string;
@@ -233,14 +233,14 @@ function validateNode(
     }
   }
 
-  node.components.forEach((component, index) => {
+  const components = node.components.map((component, index) => {
     const componentPath = path + ".components[" + index + "]";
     if (!isRecord(component) || !isValidStableId(component.id) ||
         !isValidStableId(component.typeId) || typeof component.schemaVersion !== "number" ||
         !Number.isInteger(component.schemaVersion) || typeof component.enabled !== "boolean" ||
         !isRecord(component.properties) || !isJsonValue(component)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
-      return;
+      return component;
     }
     const componentId = component.id as string;
     const componentTypeId = component.typeId as string;
@@ -252,22 +252,25 @@ function validateNode(
       diagnostics.push(issue("COMPONENT_UNKNOWN_TYPE", "Component type " + componentTypeId + " is not registered.", componentPath + ".typeId", nodeId));
     }
     const schema = context.componentSchemas?.get(componentTypeId);
-    if (schema) {
-      if (component.schemaVersion !== schema.schemaVersion) {
-        diagnostics.push(issue("COMPONENT_INVALID_SCHEMA", "Component instance schema version does not match the registered schema.", componentPath + ".schemaVersion", nodeId));
-      }
-      const result = validateComponentProperties(schema, component.properties, {
-        ...(context.assets === undefined ? {} : { assets: context.assets }),
-        nodeIds,
-        ownerNodeId: nodeId,
-      });
-      diagnostics.push(...result.diagnostics.map((item) => ({
-        ...item,
-        path: componentPath + ".properties" + (item.propertyName ? "." + item.propertyName : ""),
-        entityId: nodeId,
-        componentInstanceId: componentId,
-      })));
+    if (!schema) return component;
+
+    if (component.schemaVersion !== schema.schemaVersion) {
+      diagnostics.push(issue("COMPONENT_INVALID_SCHEMA", "Component instance schema version does not match the registered schema.", componentPath + ".schemaVersion", nodeId));
     }
+    const result = validateComponentProperties(schema, component.properties, {
+      ...(context.assets === undefined ? {} : { assets: context.assets }),
+      nodeIds,
+      ownerNodeId: nodeId,
+    });
+    diagnostics.push(...result.diagnostics.map((item) => ({
+      ...item,
+      path: componentPath + ".properties" + (item.propertyName ? "." + item.propertyName : ""),
+      entityId: nodeId,
+      componentInstanceId: componentId,
+    })));
+    return result.valid && result.value
+      ? { ...component, properties: result.value }
+      : component;
   });
 
   if (node.prefabInstance !== undefined) {
@@ -282,43 +285,15 @@ function validateNode(
     }
   }
 
-  node.children.forEach((child, index) =>
+  const children = node.children.map((child, index) =>
     validateNode(child, path + ".children[" + index + "]", nodeIds, context, diagnostics, componentIds),
   );
-}
-
-
-function normalizeNodeComponentProperties(
-  node: unknown,
-  nodeIds: ReadonlySet<string>,
-  context: SceneValidationContext,
-): unknown {
-  if (!isRecord(node)) return node;
-
-  const nodeId = typeof node.id === "string" ? node.id : undefined;
-  const components = Array.isArray(node.components)
-    ? node.components.map((component) => {
-      if (!isRecord(component) || !isRecord(component.properties) || typeof component.typeId !== "string") {
-        return component;
-      }
-      const schema = context.componentSchemas?.get(component.typeId);
-      if (!schema) return component;
-
-      const result = validateComponentProperties(schema, component.properties, {
-        ...(context.assets === undefined ? {} : { assets: context.assets }),
-        nodeIds,
-        ...(nodeId === undefined ? {} : { ownerNodeId: nodeId }),
-      });
-      return result.valid && result.value
-        ? { ...component, properties: result.value }
-        : component;
-    })
-    : node.components;
-  const children = Array.isArray(node.children)
-    ? node.children.map((child) => normalizeNodeComponentProperties(child, nodeIds, context))
-    : node.children;
-
-  return { ...node, components, children };
+  return {
+    ...node,
+    transform: { ...node.transform },
+    components,
+    children,
+  } as unknown as NodeDocument;
 }
 
 export function validateSceneDocument(
@@ -343,19 +318,12 @@ export function validateSceneDocument(
   const nodeIds = new Set<string>();
   collectNodeIds(input.rootNodes, nodeIds, diagnostics, "rootNodes");
   const componentIds = new Set<string>();
-  input.rootNodes.forEach((node, index) =>
+  const rootNodes = input.rootNodes.map((node, index) =>
     validateNode(node, "rootNodes[" + index + "]", nodeIds, context, diagnostics, componentIds),
   );
-  if (hasErrors(diagnostics)) return { valid: false, diagnostics };
-
-  const rootNodes = input.rootNodes.map((node) =>
-    normalizeNodeComponentProperties(node, nodeIds, context),
-  ) as NodeDocument[];
-  return {
-    valid: true,
-    diagnostics,
-    value: { ...input, rootNodes } as unknown as SceneDocumentV1,
-  };
+  return hasErrors(diagnostics)
+    ? { valid: false, diagnostics }
+    : { valid: true, diagnostics, value: { ...input, rootNodes } as unknown as SceneDocumentV1 };
 }
 
 export function validatePrefabDocument(

@@ -4,15 +4,18 @@ import { resolve, sep } from "node:path";
 import test from "node:test";
 import {
   ComponentRegistry,
+  parsePrefabDocument,
   parseProjectDocument,
   parseSceneDocument,
   serializeComponentProperties,
+  serializePrefabDocument,
   serializeProjectDocument,
   serializeSceneDocument,
   validateComponentTypeSchema,
   validateProjectDocument,
   type ComponentTypeDefinition,
   type ComponentTypeSchemaV1,
+  type PrefabDocumentV1,
   type SceneDocumentV1,
 } from "../src/index.js";
 import {
@@ -153,6 +156,34 @@ test("acceptance fixture connects Project, Scene, module identity and two compon
   const reopened = parseSceneDocument(serialized, context);
   assert.ok(reopened.value);
   assert.deepEqual(reopened.value, scene.value);
+
+  const prefabRoot = cloneScene(scene.value).rootNodes[0];
+  const prefabTarget = cloneScene(scene.value).rootNodes[1];
+  assert.ok(prefabRoot);
+  assert.ok(prefabTarget);
+  prefabRoot.children = [prefabTarget];
+  const prefabComponent = prefabRoot.components[0];
+  assert.ok(prefabComponent);
+  prefabComponent.properties.editorLabel = "Prefab Inspector selection";
+  prefabComponent.properties.runtimeElapsedSeconds = 24;
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-acceptance",
+    name: "Acceptance Prefab",
+    root: prefabRoot,
+  };
+
+  const serializedPrefab = serializePrefabDocument(prefab, context);
+  const savedPrefab = JSON.parse(serializedPrefab) as PrefabDocumentV1;
+  const savedPrefabComponent = savedPrefab.root.components[0];
+  assert.ok(savedPrefabComponent);
+  assert.equal(Object.hasOwn(savedPrefabComponent.properties, "editorLabel"), false);
+  assert.equal(Object.hasOwn(savedPrefabComponent.properties, "runtimeElapsedSeconds"), false);
+  assert.deepEqual(savedPrefabComponent.properties.pluginExtension, { retained: true });
+
+  const reopenedPrefab = parsePrefabDocument(serializedPrefab, context);
+  assert.ok(reopenedPrefab.value);
+  assert.deepEqual(reopenedPrefab.value, savedPrefab);
   assert.deepEqual((reopened.value as unknown as Record<string, unknown>).unknownSceneData, { retained: true });
   assert.deepEqual(
     reopened.value.rootNodes[0]?.components[0]?.properties.pluginExtension,
