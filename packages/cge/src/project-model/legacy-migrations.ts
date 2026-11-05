@@ -177,6 +177,19 @@ function reportUnknownDocumentFields(
       "document.prefabProperties",
     ));
   }
+  if (source.meta !== undefined && !isRecord(source.meta)) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "Legacy metadata is not an object; the original value remains unchanged in legacySource.",
+      "document.meta",
+    ));
+  } else if (isRecord(source.meta) && source.meta.version !== undefined) {
+    diagnostics.push(diagnostic(
+      "PROJECT_LEGACY_FIELD_PRESERVED",
+      "Legacy meta.version is recorded as source metadata only; historical Colibri SceneDataMigrationExtension transformations are not executed by this converter.",
+      "document.meta.version",
+    ));
+  }
 }
 
 function reportUnknownNodeFields(
@@ -270,13 +283,10 @@ function mapLegacyComponents(
   const components: ComponentInstanceDocument[] = [];
   const unresolved: string[] = [];
   if (source.components !== undefined && !Array.isArray(source.components)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_COMPONENT_PRESERVED",
-      "Legacy components value is not an array; the complete source object remains in legacySource.",
+    fail(
+      "Legacy components must be an array when present; migration will not produce a partial Node without its Component attachments.",
       path + ".components",
-      nodeId,
-    ));
-    return { components, unresolved };
+    );
   }
 
   const names = Array.isArray(source.components) ? source.components : [];
@@ -449,18 +459,16 @@ function migrateLegacyNode(
   }
 
   const components = mapLegacyComponents(input, nodeId, path, options, diagnostics);
+  if (input.list !== undefined && !Array.isArray(input.list)) {
+    fail(
+      "Legacy Node list must be an array when present; migration will not omit an unknown child hierarchy.",
+      path + ".list",
+    );
+  }
   const children = Array.isArray(input.list)
     ? input.list.map((child, index) =>
       migrateLegacyNode(child, path + ".list[" + index + "]", "container", options, diagnostics))
     : [];
-  if (input.list !== undefined && !Array.isArray(input.list)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_FIELD_PRESERVED",
-      "Legacy Container list is not an array; original data remains in legacySource.",
-      path + ".list",
-      nodeId,
-    ));
-  }
 
   reportUnknownNodeFields(input, nodeId, path, diagnostics);
   const prefabInstance = mapPrefabInstance(input, nodeId, path, options, diagnostics);
@@ -504,15 +512,13 @@ export function migrateLegacySceneDocument(
   const diagnostics: CoreDiagnostic[] = [];
   reportUnknownDocumentFields(legacy, diagnostics);
 
-  const displayList = legacy.displayList === undefined ? [] :
-    Array.isArray(legacy.displayList) ? legacy.displayList : [];
   if (legacy.displayList !== undefined && !Array.isArray(legacy.displayList)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_FIELD_PRESERVED",
-      "Legacy displayList is not an array; no hierarchy is inferred from the malformed value.",
-      "document.displayList",
-    ));
+    fail(
+      "Legacy Scene displayList must be an array when present; migration will not produce a Scene with an omitted root hierarchy.",
+      "displayList",
+    );
   }
+  const displayList = Array.isArray(legacy.displayList) ? legacy.displayList : [];
 
   if (legacy.plainObjects !== undefined && !Array.isArray(legacy.plainObjects)) {
     diagnostics.push(diagnostic(
@@ -539,13 +545,6 @@ export function migrateLegacySceneDocument(
     ));
   }
   const meta = isRecord(legacy.meta) ? legacy.meta : {};
-  if (legacy.meta !== undefined && !isRecord(legacy.meta)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_FIELD_PRESERVED",
-      "Legacy metadata is not an object; the original value remains unchanged in legacySource.",
-      "document.meta",
-    ));
-  }
   const document = {
     schemaVersion: SCENE_SCHEMA_VERSION,
     id: legacy.id,
@@ -576,15 +575,13 @@ export function migrateLegacyPrefabDocument(
   const diagnostics: CoreDiagnostic[] = [];
   reportUnknownDocumentFields(legacy, diagnostics);
 
-  const displayList = legacy.displayList === undefined ? [] :
-    Array.isArray(legacy.displayList) ? legacy.displayList : [];
   if (legacy.displayList !== undefined && !Array.isArray(legacy.displayList)) {
-    diagnostics.push(diagnostic(
-      "PROJECT_LEGACY_FIELD_PRESERVED",
-      "Legacy Prefab displayList is not an array and remains unchanged in legacySource.",
-      "document.displayList",
-    ));
+    fail(
+      "Legacy Prefab displayList must be an array when present.",
+      "displayList",
+    );
   }
+  const displayList = Array.isArray(legacy.displayList) ? legacy.displayList : [];
   if (legacy.plainObjects !== undefined) {
     diagnostics.push(diagnostic(
       "PROJECT_LEGACY_FIELD_PRESERVED",
