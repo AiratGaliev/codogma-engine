@@ -12,7 +12,7 @@ test("renameProjectFile sends the server RenameFile oldPath/newPath DTO", async 
   }) as typeof fetch;
 
   try {
-    await renameProjectFile("assets\\\\hero.png", "hero-renamed.png");
+    await renameProjectFile("assets\\hero.png", "hero-renamed.png");
 
     assert.deepEqual(requestBody, {
       method: "RenameFile",
