@@ -1,3 +1,5 @@
+/// <reference path="./AssetPackItem.ts" />
+
 namespace phasereditor2d.pack.core {
 
     import controls = colibri.ui.controls;
@@ -21,7 +23,10 @@ namespace phasereditor2d.pack.core {
                 throw new Error(`Font source file is missing from the project: ${url || "(empty URL)"}`);
             }
 
-            const fontSet = document.fonts;
+            const fontSet = document.fonts as (FontFaceSet & {
+                add(font: FontFace): FontFaceSet;
+                delete(font: FontFace): boolean;
+            }) | undefined;
 
             if (!fontSet || typeof FontFace === "undefined"
                 || typeof fontSet.add !== "function" || typeof fontSet.delete !== "function") {
