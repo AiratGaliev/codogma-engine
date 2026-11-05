@@ -56,10 +56,10 @@ const TRANSFORM_FIELDS = [
 
 function diagnostic(
   code: CoreDiagnostic["code"],
-  severity: CoreDiagnostic["severity"],
   message: string,
   path?: string,
   entityId?: string,
+  severity: CoreDiagnostic["severity"] = "warning",
 ): CoreDiagnostic {
   return {
     code,
@@ -72,7 +72,7 @@ function diagnostic(
 
 function fail(message: string, path?: string, code: CoreDiagnostic["code"] = "PROJECT_MIGRATION_INVALID_INPUT"): never {
   throw new LegacyProjectMigrationError(message, [
-    diagnostic(code, "error", message, path),
+    diagnostic(code, message, path, undefined, "error"),
   ]);
 }
 
