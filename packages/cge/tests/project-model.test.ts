@@ -10,6 +10,7 @@ import {
   validateComponentTypeSchema,
   validateProjectDocument,
   validateSceneDocument,
+  validatePrefabDocument,
   isJsonValue,
   stableStringify,
   type ComponentTypeSchemaV1,
@@ -402,4 +403,233 @@ test("Project migration rejects future schema versions without modifying source 
           item.path === "schemaVersion"),
   );
   assert.equal(JSON.stringify(future), before);
+});
+
+
+test("preserves unknown Project and Asset fields with structured warnings", () => {
+  const input = {
+    ...validProject,
+    extensionData: { source: "plugin", retained: true },
+    runtime: {
+      ...validProject.runtime,
+      pluginRuntimeData: { retained: true },
+    },
+    assets: [{
+      ...validProject.assets[0]!,
+      importMetadata: { importer: "legacy", retained: true },
+    }],
+  };
+
+  const result = validateProjectDocument(input);
+  assert.equal(result.valid, true);
+  assert.deepEqual(
+    result.diagnostics
+      .filter((item) => item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED")
+      .map((item) => item.path)
+      .sort(),
+    ["assets[0].importMetadata", "project.extensionData", "runtime.pluginRuntimeData"],
+  );
+  assert.deepEqual(
+    (result.value as unknown as Record<string, unknown>).extensionData,
+    input.extensionData,
+  );
+});
+
+test("preserves unknown Scene, Node, Transform and Component fields with exact diagnostics", () => {
+  const schema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.test.follow-target",
+    name: "Follow Target",
+    version: "1.0.0",
+    properties: {
+      speed: { type: "number" },
+    },
+  };
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-extensions",
+    name: "Extensions",
+    settings: {},
+    extensionMetadata: { keep: true },
+    rootNodes: [{
+      id: "node-extensions",
+      name: "Root",
+      active: true,
+      editorMetadata: { selected: true },
+      transform: {
+        x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
+        legacyPivot: { keep: true },
+      },
+      components: [{
+        id: "component-extensions",
+        typeId: schema.typeId,
+        schemaVersion: 1,
+        enabled: true,
+        customComponentMetadata: { keep: true },
+        properties: {
+          speed: 2,
+          pluginProperty: { keep: true },
+        },
+      }],
+      children: [],
+    }],
+  };
+
+  const result = validateSceneDocument(scene, {
+    componentSchemas: new Map([[schema.typeId, schema]]),
+  });
+  assert.equal(result.valid, true);
+  const warnings = result.diagnostics.filter((item) =>
+    item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED" ||
+    item.code === "COMPONENT_UNKNOWN_PROPERTY");
+  assert.deepEqual(
+    warnings.map((item) => item.path).sort(),
+    [
+      "rootNodes[0].components[0].customComponentMetadata",
+      "rootNodes[0].components[0].properties.pluginProperty",
+      "rootNodes[0].editorMetadata",
+      "rootNodes[0].transform.legacyPivot",
+      "scene.extensionMetadata",
+    ],
+  );
+  assert.deepEqual(
+    (result.value!.rootNodes[0] as unknown as Record<string, unknown>).editorMetadata,
+    { selected: true },
+  );
+});
+
+test("preserves unknown Prefab and root Node fields with document-relative paths", () => {
+  const prefab = {
+    schemaVersion: 1,
+    id: "prefab-extensions",
+    name: "Extensions",
+    pluginMetadata: { keep: true },
+    root: {
+      id: "prefab-root",
+      name: "Root",
+      active: true,
+      transform: {
+        x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
+      },
+      components: [],
+      children: [],
+      customNodeMetadata: { keep: true },
+    },
+  };
+
+  const result = validatePrefabDocument(prefab);
+  assert.equal(result.valid, true);
+  assert.deepEqual(
+    result.diagnostics
+      .filter((item) => item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED")
+      .map((item) => item.path)
+      .sort(),
+    ["prefab.pluginMetadata", "root.customNodeMetadata"],
+  );
+  assert.deepEqual(
+    (result.value!.root as unknown as Record<string, unknown>).customNodeMetadata,
+    { keep: true },
+  );
+});
+
+test("rejects future Scene and Prefab versions with explicit version diagnostics", () => {
+  const scene = {
+    schemaVersion: 2,
+    id: "scene-future",
+    name: "Future",
+    rootNodes: [],
+    settings: {},
+  };
+  const prefab = {
+    schemaVersion: 3,
+    id: "prefab-future",
+    name: "Future",
+    root: {},
+  };
+
+  for (const result of [validateSceneDocument(scene), validatePrefabDocument(prefab)]) {
+    assert.equal(result.valid, false);
+    assert.equal(result.diagnostics[0]?.code, "PROJECT_UNSUPPORTED_VERSION");
+    assert.equal(result.diagnostics[0]?.path, "schemaVersion");
+  }
+});
+
+test("rejects Scene and Prefab accessors without executing their getters", () => {
+  let getterCalls = 0;
+  const sceneNode = {
+    id: "scene-accessor-node",
+    name: "Node",
+    active: true,
+    transform: {
+      x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
+    },
+    components: [],
+    children: [],
+  };
+  Object.defineProperty(sceneNode, "extensionData", {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return { unsafe: true };
+    },
+  });
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-accessor",
+    name: "Accessor Scene",
+    rootNodes: [sceneNode],
+    settings: {},
+  };
+
+  const prefabRoot = {
+    ...sceneNode,
+    id: "prefab-accessor-root",
+  };
+  Object.defineProperty(prefabRoot, "extensionData", {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return { unsafe: true };
+    },
+  });
+  const prefab = {
+    schemaVersion: 1,
+    id: "prefab-accessor",
+    name: "Accessor Prefab",
+    root: prefabRoot,
+  };
+
+  assert.equal(validateSceneDocument(scene).valid, false);
+  assert.equal(validatePrefabDocument(prefab).valid, false);
+  assert.equal(getterCalls, 0);
+});
+
+test("rejects Component instance schemaVersion values below one", () => {
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-invalid-component-version",
+    name: "Invalid Component",
+    rootNodes: [{
+      id: "node-invalid-component-version",
+      name: "Node",
+      active: true,
+      transform: {
+        x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
+      },
+      components: [{
+        id: "component-invalid-version",
+        typeId: "com.codogma.test.invalid-version",
+        schemaVersion: 0,
+        enabled: true,
+        properties: {},
+      }],
+      children: [],
+    }],
+    settings: {},
+  };
+  const result = validateSceneDocument(scene);
+  assert.equal(result.valid, false);
+  assert.ok(result.diagnostics.some((item) =>
+    item.code === "COMPONENT_INVALID_SCHEMA" &&
+    item.path === "rootNodes[0].components[0].schemaVersion"));
 });
