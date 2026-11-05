@@ -383,3 +383,23 @@ test("Project v0 migration defaults only absent optional collections and runtime
   assert.deepEqual(withRuntime.document.runtime.settings, {});
   assert.deepEqual((withRuntime.document.runtime as unknown as Record<string, unknown>).pluginRuntimeData, { keep: true });
 });
+
+
+test("Project migration rejects future schema versions without modifying source data", () => {
+  const future = {
+    ...validProject,
+    schemaVersion: 2,
+    futureExtension: { nested: ["keep", true] },
+  };
+  const before = JSON.stringify(future);
+  assert.throws(
+    () => migrateProjectDocument(future),
+    (error: unknown) => error instanceof Error &&
+      "diagnostics" in error &&
+      (error as Error & { diagnostics: Array<{ code?: string; path?: string }> })
+        .diagnostics.some((item) =>
+          item.code === "PROJECT_UNSUPPORTED_VERSION" &&
+          item.path === "schemaVersion"),
+  );
+  assert.equal(JSON.stringify(future), before);
+});
