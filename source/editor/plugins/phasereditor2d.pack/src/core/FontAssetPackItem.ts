@@ -1,10 +1,11 @@
-/// <reference path="./AssetPackItem.ts" />
-
 namespace phasereditor2d.pack.core {
 
     import controls = colibri.ui.controls;
 
     export class FontAssetPackItem extends AssetPackItem {
+
+        private _fontFace: FontFace | null = null;
+        private _fontSourceKey: string | null = null;
 
         constructor(pack: AssetPack, data: any) {
             super(pack, data);
@@ -12,54 +13,70 @@ namespace phasereditor2d.pack.core {
 
         async preload(): Promise<controls.PreloadResult> {
 
-            // Code taken from Phaser code: https://github.com/phaserjs/phaser/blob/97e3e67ac679863e30d4225d2b29a49a6f0de3e9/src/loader/filetypes/FontFile.js#L89
-            const key = this.getKey();
-            const fontSet = document.fonts;
-            
-            // Check if font is already loaded
-            let fontAlreadyLoaded = false;
-            try {
-                for (const f of (fontSet as any)) {
-                    if (f.family === key) {
-                        fontAlreadyLoaded = true;
-                        break;
-                    }
-                }
-            } catch (e) {
-                // FontFaceSet might not be iterable in some environments
+            const data = this.getData();
+            const url = typeof data.url === "string" ? data.url : "";
+            const file = this.getFileFromAssetUrl(url);
+
+            if (!url || !file || !file.isFile()) {
+                throw new Error(`Font source file is missing from the project: ${url || "(empty URL)"}`);
             }
-            if (fontAlreadyLoaded) {
+
+            const fontSet = document.fonts;
+
+            if (!fontSet || typeof FontFace === "undefined"
+                || typeof fontSet.add !== "function" || typeof fontSet.delete !== "function") {
+                throw new Error("The browser does not provide the Font Loading API required by this asset.");
+            }
+
+            const format = typeof data.format === "string" && data.format.length > 0
+                ? data.format : "truetype";
+            const descriptors = data.descriptors && typeof data.descriptors === "object"
+                && !Array.isArray(data.descriptors) ? data.descriptors : {};
+            const sourceKey = JSON.stringify([url, format, descriptors]);
+
+            if (this._fontFace && this._fontSourceKey === sourceKey
+                && this._fontFace.status === "loaded") {
                 return controls.Controls.resolveNothingLoaded();
             }
-            
-            let font;
-            const { url, format, descriptors } = this.getData();
-            const file = this.getFileFromAssetUrl(url);
-            if (file) {
-                const publicUrl = file.getUrl();
-                const source = `url(${publicUrl}) format("${format}")`;
-                if (descriptors) {
-                    console.log("Font descriptors", descriptors);
-                    font = new FontFace(key, source, descriptors);
+
+            const publicUrl = file.getUrl();
+            const source = `url(${JSON.stringify(publicUrl)}) format(${JSON.stringify(format)})`;
+            const key = this.getKey();
+            let font: FontFace | null = null;
+
+            try {
+                font = new FontFace(key, source, descriptors);
+                await font.load();
+                fontSet.add(font);
+            } catch (error) {
+                if (font) {
+                    fontSet.delete(font);
                 }
-                else {
-                    font = new FontFace(key, source);
-                }
-                try {
-                    await font.load();
-                    (fontSet as any).add(font);
-                    console.log("Font loaded", key, source);
-                    document.body.classList.add("fonts-loaded");
-                    return controls.Controls.resolveResourceLoaded();
-                }
-                catch (e) {
-                    console.error("Error loading font", source, e);
-                }
+
+                const detail = error instanceof Error ? error.message : String(error);
+                throw new Error(`Не удалось загрузить шрифт "${key}" из "${url}": ${detail}`);
             }
-            else {
-                console.error("Font file not found", url);
+
+            const previousFont = this._fontFace;
+            this._fontFace = font;
+            this._fontSourceKey = sourceKey;
+
+            if (previousFont) {
+                fontSet.delete(previousFont);
             }
-            return controls.Controls.resolveNothingLoaded();
+
+            return controls.Controls.resolveResourceLoaded();
+        }
+
+        resetCache(): void {
+            if (this._fontFace && typeof document !== "undefined" && document.fonts) {
+                document.fonts.delete(this._fontFace);
+            }
+
+            this._fontFace = null;
+            this._fontSourceKey = null;
+
+            super.resetCache();
         }
     }
 }
