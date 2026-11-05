@@ -190,7 +190,7 @@ test("converts legacy Component instances and Prefab overrides only from explici
     node.prefabInstance?.prefabId === "project-prefab-dino");
   assert.ok(prefabInstance?.prefabInstance);
   assert.deepEqual(prefabInstance.prefabInstance.overrides, [{
-    targetNodeId: String(prefabRoot.id),
+    targetNodeId: migratedPrefab.root.id,
     propertyPath: "rotating",
     value: true,
   }]);
