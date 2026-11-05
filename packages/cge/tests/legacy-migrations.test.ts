@@ -161,7 +161,13 @@ test("converts legacy Component instances and Prefab overrides only from explici
     componentTypes,
     componentInstanceIds: instanceIds,
     prefabReferences,
-    validationContext: { prefabIds: new Set(["project-prefab-dino"]) },
+    validationContext: {
+      registeredComponentTypes: new Set([
+        "com.codogma.legacy.push-on-click",
+        "com.codogma.legacy.tint",
+      ]),
+      prefabIds: new Set(["project-prefab-dino"]),
+    },
   });
   const first = migrated.document.rootNodes[0];
   assert.ok(first);
@@ -205,6 +211,59 @@ test("unknown Component classes, texture keys and Prefab links remain losslessly
     true,
   );
   assert.deepEqual(object(migrated.document).legacySource, source);
+});
+
+test("does not self-register mapped types or accept dangling Prefab references", () => {
+  const source = parseFixture("Level.scene");
+  const mappedTypes = new Map<string, LegacyComponentTypeReference>([
+    ["PushOnClick", { typeId: "com.codogma.legacy.push-on-click", schemaVersion: 1 }],
+  ]);
+  const instanceIds = new Map<string, string>([
+    [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), "instance-push"],
+  ]);
+
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      componentTypes: mappedTypes,
+      componentInstanceIds: instanceIds,
+      validationContext: { registeredComponentTypes: new Set() },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "COMPONENT_UNKNOWN_TYPE"),
+  );
+
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      componentTypes: mappedTypes,
+      componentInstanceIds: new Map([
+        [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "PushOnClick"), ""],
+      ]),
+      validationContext: {
+        registeredComponentTypes: new Set(["com.codogma.legacy.push-on-click"]),
+      },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "PROJECT_MIGRATION_INVALID_INPUT"),
+  );
+
+  const prefab = parseFixture("DinoPrefab.scene");
+  const prefabRoot = object((prefab.displayList as unknown[])[0]);
+  const legacyPrefabId = String(prefab.id);
+  const danglingPrefabReferences = new Map<string, LegacyPrefabReference>([
+    [legacyPrefabId, {
+      prefabId: "not-registered-in-project",
+      rootNodeId: String(prefabRoot.id),
+      propertyNames: new Set(["rotating"]),
+    }],
+  ]);
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      prefabReferences: danglingPrefabReferences,
+      validationContext: { prefabIds: new Set() },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"),
+  );
 });
 
 test("does not invent IDs, prefab mappings, or hierarchy groups", () => {
