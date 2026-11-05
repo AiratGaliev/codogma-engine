@@ -134,15 +134,25 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
       )],
     };
   }
-  if (!isNonEmptyString(input.name) ||
-      !Array.isArray(input.scenes) || !Array.isArray(input.assets) ||
-      !Array.isArray(input.prefabs) || !Array.isArray(input.componentModules) ||
-      !isRecord(input.runtime) || !isNonEmptyString(input.runtime.adapterId) ||
-      !isRecord(input.runtime.settings)) {
-    return {
-      valid: false,
-      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project v1 requires name, scenes, assets, prefabs, componentModules and runtime configuration.")],
-    };
+  if (!isNonEmptyString(input.name)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project name must be a non-empty string.", "name")] };
+  }
+  for (const field of ["scenes", "assets", "prefabs", "componentModules"] as const) {
+    if (!Array.isArray(input[field])) {
+      return {
+        valid: false,
+        diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project " + field + " must be an array.", field)],
+      };
+    }
+  }
+  if (!isRecord(input.runtime)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project runtime configuration must be an object.", "runtime")] };
+  }
+  if (!isNonEmptyString(input.runtime.adapterId)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Runtime adapterId must be a non-empty string.", "runtime.adapterId")] };
+  }
+  if (!isRecord(input.runtime.settings)) {
+    return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Runtime settings must be an object.", "runtime.settings")] };
   }
   if (!isValidStableId(input.id)) {
     return {
@@ -389,16 +399,39 @@ function validateNode(
   componentIds: Set<string>,
   visitedNodes: WeakSet<object>,
 ): void {
-  if (!isRecord(node) || !isValidStableId(node.id) || !isNonEmptyString(node.name) ||
-      typeof node.active !== "boolean" || !isRecord(node.transform) ||
-      !Array.isArray(node.components) || !Array.isArray(node.children)) {
-    diagnostics.push(issue("SCENE_INVALID_NODE", "Node requires JSON-compatible id/name, active, transform, components and children.", path));
+  if (!isRecord(node)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node must be an object.", path));
     return;
   }
+  if (!isValidStableId(node.id)) return;
+
+  let valid = true;
+  if (!isNonEmptyString(node.name)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node name must be a non-empty string.", path + ".name", node.id));
+    valid = false;
+  }
+  if (typeof node.active !== "boolean") {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node active must be a boolean.", path + ".active", node.id));
+    valid = false;
+  }
+  if (!isRecord(node.transform)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node transform must be an object.", path + ".transform", node.id));
+    valid = false;
+  }
+  if (!Array.isArray(node.components)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node components must be an array.", path + ".components", node.id));
+    valid = false;
+  }
+  if (!Array.isArray(node.children)) {
+    diagnostics.push(issue("SCENE_INVALID_NODE", "Node children must be an array.", path + ".children", node.id));
+    valid = false;
+  }
+  if (!valid) return;
+
   if (visitedNodes.has(node)) return;
   visitedNodes.add(node);
 
-  const nodeId = node.id as string;
+  const nodeId = node.id;
   const knownNodeFields = new Set(["id", "name", "active", "transform", "components", "assetReferences", "children", "prefabInstance"]);
   warnUnknownFields(node, knownNodeFields, path, diagnostics, nodeId);
   const knownTransformFields = new Set(["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"]);
@@ -520,12 +553,14 @@ export function validateSceneDocument(
       )],
     };
   }
-  if (!isNonEmptyString(input.name) || !Array.isArray(input.rootNodes) ||
-      !isRecord(input.settings)) {
-    return {
-      valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires name, rootNodes and JSON settings.")],
-    };
+  if (!isNonEmptyString(input.name)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene name must be a non-empty string.", "name")] };
+  }
+  if (!Array.isArray(input.rootNodes)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene rootNodes must be an array.", "rootNodes")] };
+  }
+  if (!isRecord(input.settings)) {
+    return { valid: false, diagnostics: [issue("SCENE_INVALID_NODE", "Scene settings must be an object.", "settings")] };
   }
   if (!isValidStableId(input.id)) {
     return {

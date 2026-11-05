@@ -721,3 +721,43 @@ test("rejects Scene and Prefab accessors without executing their getters", () =>
   assert.equal(validatePrefabDocument(prefab).valid, false);
   assert.equal(getterCalls, 0);
 });
+
+
+test("reports Project, Scene and Node envelope errors at exact field paths", () => {
+  const invalidProject = validateProjectDocument({
+    ...validProject,
+    runtime: { adapterId: "phaser", settings: [] },
+  });
+  assert.equal(invalidProject.valid, false);
+  assert.equal(invalidProject.diagnostics[0]?.path, "runtime.settings");
+
+  const invalidScene = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene-invalid-envelope",
+    name: "Scene",
+    rootNodes: "not-an-array",
+    settings: {},
+  });
+  assert.equal(invalidScene.valid, false);
+  assert.equal(invalidScene.diagnostics[0]?.path, "rootNodes");
+
+  const invalidNode = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene-invalid-node-field",
+    name: "Scene",
+    settings: {},
+    rootNodes: [{
+      id: "node-invalid-active",
+      name: "Node",
+      active: "true",
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    }],
+  });
+  assert.equal(invalidNode.valid, false);
+  assert.equal(
+    invalidNode.diagnostics.some((item) => item.path === "rootNodes[0].active"),
+    true,
+  );
+});
