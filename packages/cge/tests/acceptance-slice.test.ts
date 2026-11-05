@@ -252,7 +252,15 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
   const projectWithoutModule = { ...project, componentModules: [] };
   assert.equal(validateProjectDocument(projectWithoutModule).valid, true);
   assert.equal(
-    parseSceneDocument(sourceSceneJson, {
+    projectWithoutModule.componentModules.some((module) => module.typeId === negative.missingModuleTypeId),
+    false,
+  );
+  const missingModuleScene = cloneScene(sourceScene.value);
+  const missingModuleComponent = missingModuleScene.rootNodes[0]?.components[0];
+  assert.ok(missingModuleComponent);
+  missingModuleComponent.typeId = negative.missingModuleTypeId;
+  assert.equal(
+    parseSceneDocument(JSON.stringify(missingModuleScene), {
       assets: context.assets,
       componentSchemas: new Map<string, ComponentTypeSchemaV1>(),
       registeredComponentTypes: new Set<string>(),
