@@ -1,6 +1,6 @@
 # Совместимость Project Model с legacy Project / Scene / Prefab
 
-**Статус:** реализация COD-25 находится в отдельной feature-ветке PR #48 от актуального dev; code-bearing CI Fast #42054802021 и итоговый CI Fast #42055379829 завершились success. PR открыт для review; merge ещё не выполнен, поэтому изменение пока не является частью dev.  
+**Статус:** реализация COD-25 находится в отдельной feature-ветке PR #48 от актуального dev. Последний полный CI Fast run #751 (`42062632448`) завершился success на точном HEAD `341109e559c5a860274d0a8f054a461cff4e2769`: `fast-checks` и `editor-host` успешны; Core tests 79/79, root tests 188/188, localization 81/81, MCP 8/8. PR открыт для review; merge ещё не выполнен, поэтому изменение пока не является частью dev.  
 **Проверенная база:** dev / d8496b06085f3d90db45acbd0bb8343dc9c111fd (2026-11-05).  
 **Источники legacy evidence:** [inventory COD-17](legacy-project-asset-importer-inventory.md), 27 checked-in .scene fixtures, две .components definitions и Asset Pack v2 fixture.
 
