@@ -486,6 +486,25 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 | Generated Phaser game compatibility for migrated assets/scene/prefab data | **Not established by this inventory** | COD-103/COD-28 and relevant QA. |
 | Save/reopen + rename/move/deleted source + stale reference behavior across a complete project | **Partially traced, integration evidence missing** | COD-8/COD-12/COD-25/COD-86. |
 
+### Existing automated evidence и недостающие reproducible regression cases
+
+| Contract / risk | Existing automated evidence in dev | Reproducible test case still required from owner |
+|---|---|---|
+| Core Project/Scene/Prefab IDs, dangling refs and safe paths | packages/cge/tests/project-model.test.ts: “rejects dangling scene refs, duplicate ids and traversal paths”; “scene validation catches duplicate node ids and invalid transforms”; “rejects malformed optional Asset sub-resource identifiers”; “enforces one stable ID grammar…” | Legacy fixtures должны пройти отдельный converter test после явного mapping; текущие Core tests не импортируют .scene |
+| Sprite metadata and frame reimport | src/editor/tests/sprite-asset-model.test.ts: “describes Image and Spritesheet frame geometry…”; “ensures stable IDs/source fingerprints…”; “reimport preserves compatible frames and archives changed/removed authored metadata” | Это Host-domain tests. Отдельно требуется importer/browser test на legacy AssetPack Image/Spritesheet parser/reimport |
+| Server filesystem trust boundary | tests/path-security.test.mjs: “safeJoin rejects lexical escapes and absolute paths”; “safeJoin rejects symlinks that escape the base”; “readFileSafely rejects a parent-symlink swap…”; “renameProjectEntrySafely anchors destination…”; “copyProjectEntrySafely rejects symbolic-link sources…”; descriptor/bounded-read cases | Тесты подтверждают server filesystem helpers, но не доказывают, что legacy importer URL references автоматически переписываются после move/delete |
+| Importer single-file/batch rollback | No legacy Colibri importer integration test was found in the inspected dev tree | Seed pack with one existing item; autoImport two source files where first succeeds and second fails in preload/build; assert no newly imported item remains and caches reset. Separately fail importMultipleFiles after item creation and assert item removal |
+| AssetPackEditor post-import rollback | No dedicated Colibri AssetPackEditor import integration test was found | Inject failure into final preload/build or refreshBlocks during importData_async(); assert new entries are deleted, cache reset, refresh error is not substituted for original error, and dirty/Undo snapshot remain consistent |
+| Reimport rollback and error distinction | Host-domain metadata tests exist; no legacy Importer.reimportItem integration test was found | Reimport with missing source and malformed image; assert old item JSON restored. Add second case where restoring preload itself fails; assert original reimport error remains primary and restore failure is observable |
+| Texture reimport eligibility mismatch | No regression test in dev | Build a TextureAssetPackItem with url:{IMG:"assets/dino.png"}; assert the UI does not expose an incompatible Reimport action or the importer resolves IMG as the source URL. Current code reaches “Reimport requires a single project-relative source URL.” |
+| FileStorageChange rename Map defect | No automated Colibri FileStorageChange regression test was found | recordRename("assets/a.png","assets/b.png"); assert isRenamed("assets/a.png") and getRenameTo("assets/a.png") return the recorded mapping; current property access fails Map semantics |
+| SolidJS Host/backend RenameFile DTO | No Host/server contract test covering this pair was found | Call renameProjectFile("assets/a.png","b.png"); assert request body uses the backend oldPath/newPath contract and verify the actual server handler renames the file |
+| Tiled JSON content-type heuristic | No Tiled JSON resolver fixture/test was found | Positive valid JSON plus negative cases with missing tileheight, string tileheight, missing tilewidth, zero/negative dimensions and malformed layers/tilesets; current typeof(tileheight) expression accepts missing/string values |
+| UndoManager async execute rejection | No rejection-path test was found | Operation.execute() rejects after UndoManager.add(); assert failed operation does not remain as a successful undo entry and redo history policy is explicit. AssetPackEditorOperation currently inherits the base no-op execute(), so do not misreport this generic risk as a proven Asset Pack snapshot failure |
+| Multi-section AssetPack round-trip | Checked-in asset-pack.json covers only one section and one image item | Add a fixture with multiple root sections, unknown root/meta fields and custom item fields; assert explicit preserve/drop diagnostics across fromJSON()/toJSON() |
+
+The test descriptions above distinguish **existing tests** from **test scenarios specified for owner implementation**. No regression test is claimed to have been added for the legacy importer/Colibri findings in this documentation-only COD-17 PR.
+
 ### Checks actually performed for this inventory
 
 - Read current repository instructions AGENTS.md / CLAUDE.md, root README, relevant docs, Skills registry/lock, and applicable code paths.
@@ -526,5 +545,12 @@ All source links below refer to the inspected dev branch unless the row explicit
 - [SolidJS Host API](https://github.com/AiratGaliev/codogma-engine/blob/dev/src/editor/src/services/editor-api.ts)
 - [Core Project Model contracts](https://github.com/AiratGaliev/codogma-engine/tree/dev/packages/cge/src/project-model)
 - [Core Project Model tests](https://github.com/AiratGaliev/codogma-engine/blob/dev/packages/cge/tests/project-model.test.ts)
+- [Core JSON/path validation](https://github.com/AiratGaliev/codogma-engine/blob/dev/packages/cge/src/json.ts)
+- [Server filesystem security helpers](https://github.com/AiratGaliev/codogma-engine/blob/dev/server/path-security.mjs)
+- [Filesystem security regression tests](https://github.com/AiratGaliev/codogma-engine/blob/dev/tests/path-security.test.mjs)
+- [Legacy Asset Pack importer registration](https://github.com/AiratGaliev/codogma-engine/blob/dev/source/editor/plugins/phasereditor2d.pack/src/ui/DefaultAssetPackExtension.ts)
+- [Legacy Asset Pack reimport UI predicate](https://github.com/AiratGaliev/codogma-engine/blob/dev/source/editor/plugins/phasereditor2d.pack/src/ui/editor/properties/AssetReimportSection.ts)
+- [Legacy FileStorageChange](https://github.com/AiratGaliev/codogma-engine/blob/dev/source/editor/plugins/colibri/src/core/io/FileStorageChange.ts)
+- [COD-12 confirmed legacy defect owners](https://linear.app/codogma-engine/issue/COD-12/zakryt-defekty-asset-pack-importyorov-i-brauzernyh-api)
 - [COD-17](https://linear.app/codogma-engine/issue/COD-17/inventarizirovat-formaty-scenprefabassetov-i-kontrakty-importyorov)
 - [COD-25 migration PR #41 — open/draft, not integrated](https://github.com/AiratGaliev/codogma-engine/pull/41)
