@@ -38,6 +38,10 @@ export interface LegacySceneMigrationOptions {
   readonly componentInstanceIds?: ReadonlyMap<string, string>;
   /** Явное сопоставление ID legacy Prefab с Prefab reference текущего Project. */
   readonly prefabReferences?: ReadonlyMap<string, LegacyPrefabReference>;
+  /**
+   * Required for mapped Components (registered type + matching schema) and
+   * mapped Prefabs (the full Prefab document is required to validate rootNodeId).
+   */
   readonly validationContext?: SceneValidationContext;
 }
 
@@ -49,24 +53,24 @@ export interface LegacyMigrationResult<T> {
 
 export type LegacyNodeCollection = "displayList" | "container";
 
-/** Типизированный Node, содержащий сохранённый исходный legacy payload. */
+/** Типизированный Node с указателем на исходный фрагмент document-level legacySource. */
 export interface LegacyMigratedNodeDocument extends NodeDocument {
-  readonly legacySource: JsonObject;
+  /** Путь вида displayList[0].list[1] в полном исходном документе. */
+  readonly legacySourcePath: string;
   readonly legacyCollection: LegacyNodeCollection;
   readonly legacyComponents?: string[];
   readonly children: LegacyMigratedNodeDocument[];
 }
 
-/** Scene v1 с исходным legacy документом и payload каждого Node. */
+/** Scene v1 хранит полный исходный legacy JSON ровно один раз на уровне документа. */
 export interface LegacyMigratedSceneDocument extends Omit<SceneDocumentV1, "rootNodes"> {
   readonly rootNodes: LegacyMigratedNodeDocument[];
   readonly legacySource: JsonObject;
 }
 
-/** Prefab v1 с исходным legacy документом, payload корня и декларациями. */
+/** Prefab v1 хранит полный исходный legacy JSON; свойства читаются из legacySource.prefabProperties. */
 export interface LegacyMigratedPrefabDocument extends Omit<PrefabDocumentV1, "root"> {
   readonly root: LegacyMigratedNodeDocument;
-  readonly legacyPrefabProperties: JsonValue;
   readonly legacySource: JsonObject;
 }
 
@@ -370,6 +374,30 @@ function mapLegacyComponents(
       fail("Legacy Component instance mapping for " + entry + " must provide a valid stable ID.", entryPath);
     }
 
+    const validationContext = options.validationContext;
+    if (!validationContext?.registeredComponentTypes?.has(mapping.typeId)) {
+      fail(
+        "Mapped legacy Component requires validationContext.registeredComponentTypes to contain " + mapping.typeId + ".",
+        entryPath,
+        "COMPONENT_UNKNOWN_TYPE",
+      );
+    }
+    const componentSchema = validationContext.componentSchemas?.get(mapping.typeId);
+    if (!componentSchema) {
+      fail(
+        "Mapped legacy Component requires its registered schema in validationContext.componentSchemas.",
+        entryPath,
+        "COMPONENT_INVALID_SCHEMA",
+      );
+    }
+    if (componentSchema.typeId !== mapping.typeId || componentSchema.schemaVersion !== mapping.schemaVersion) {
+      fail(
+        "Legacy Component mapping must match the registered Component schema typeId and schemaVersion.",
+        entryPath,
+        "COMPONENT_INVALID_SCHEMA",
+      );
+    }
+
     const properties: JsonObject = {};
     const prefix = entry + ".";
     for (const [key, value] of Object.entries(source)) {
@@ -430,18 +458,15 @@ function mapPrefabInstance(
     fail("Legacy Prefab mapping must provide stable Project Prefab and root Node IDs.", path + ".prefabId");
   }
 
-  const validationContext = options.validationContext;
-  const registeredPrefab = validationContext?.prefabs?.get(mapping.prefabId);
-  const prefabIsRegistered = registeredPrefab !== undefined ||
-    validationContext?.prefabIds?.has(mapping.prefabId) === true;
-  if (!prefabIsRegistered) {
+  const registeredPrefab = options.validationContext?.prefabs?.get(mapping.prefabId);
+  if (!registeredPrefab) {
     fail(
-      "Legacy Prefab mapping must resolve to a Prefab registered in validationContext.prefabIds or validationContext.prefabs.",
+      "Legacy Prefab mapping requires the full Prefab document in validationContext.prefabs; prefabIds alone cannot validate rootNodeId.",
       path + ".prefabId",
       "PROJECT_INVALID_REFERENCE",
     );
   }
-  if (registeredPrefab && registeredPrefab.root.id !== mapping.rootNodeId) {
+  if (registeredPrefab.root.id !== mapping.rootNodeId) {
     fail(
       "Legacy Prefab mapping rootNodeId does not match the registered Prefab root.",
       path + ".prefabId",
@@ -519,7 +544,7 @@ function migrateLegacyNode(
     transform: migrateTransform(input, nodeId, path, diagnostics),
     components: components.components,
     children,
-    legacySource: cloneJsonValue(input as JsonValue),
+    legacySourcePath: path,
     legacyCollection: collection,
     ...(components.unresolved.length === 0 ? {} : { legacyComponents: components.unresolved }),
     ...(prefabInstance === undefined ? {} : { prefabInstance }),
@@ -640,7 +665,6 @@ export function migrateLegacyPrefabDocument(
     id: legacy.id,
     name: resolveDocumentName(legacy, options),
     root,
-    legacyPrefabProperties: cloneLegacy(legacy.prefabProperties ?? []),
     legacySource: cloneJsonValue(legacy as unknown as JsonValue),
   } as PrefabDocumentV1 & Record<string, unknown>;
 
