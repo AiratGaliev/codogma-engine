@@ -16,10 +16,34 @@
 | `mini-services/ai-chat` | `z-ai-web-dev-sdk` | `^0.0.18` | Необязательный отдельный LLM backend | Не является обязательной зависимостью старта IDE; нужен отдельный security/privacy/dependency review перед production exposure |
 | `mini-services/phaser-editor-mcp` | `@phaserjs/editor-mcp-server` | `^1.0.6` | Самостоятельный bridge package | Имеет отдельный manifest/lockfile; не смешивать с root server/MCP path без решения |
 | `mini-services/phaser-editor-mcp` | `ws` | `^8.22.0` | WebSocket transport standalone bridge | Проверить отдельно, требуется ли поддерживать этот альтернативный bridge в текущем product workflow |
-| Editor/runtime artifacts | Phaser runtime bundle | `4.2.1` (вендорный) | `scripts/phaser.min.js` production и `scripts/phaser.js` development, подключаются через editor plugin | Phaser не входит в root/editor npm dependency graph; TypeScript declarations не поставляют runtime; feature-pruned bundle не доказан |
+| Editor/runtime artifacts | Phaser runtime bundle | `4.2.1` (вендорный) | `scripts/phaser.min.js` production и `scripts/phaser.js` development, подключаются через editor plugin | Текущий путь использует full bundle; upstream v4.2.1 содержит отдельный UMD `phaser-arcade-physics(.min)` без Matter.js, но package root не объявляет public `exports` subpath для Arcade-only artifact. ESM entry point не доказывает tree shaking; feature-pruned output не доказан |
 | Текущие сгенерированные игровые проекты (legacy editor/codegen path) | `PhaserBox2D.js` | Внешний runtime-файл | Box2D API/runtime, необходимый отдельным сценариям текущего codegen | Это зависимость текущего legacy-пути, а не требование к будущему data-driven Core по умолчанию. Не считать ambient `phaser-box2d.ts` поставкой runtime; нужна проверка зависимости и acceptance экспортированной игры.
 | Legacy editor client | Colibri / Phaser Editor 2D-derived source | Вендорный/сохранённый source tree | `source/editor/plugins/colibri` и `phasereditor2d.*` plugins | Сохранять исходные notices и license compliance; не считать такую vendor dependency управляемой как обычный npm package |
 | Root + new SolidJS Host | ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, strict TypeScript and test tooling | Root quality tools in root manifest; Host TypeScript 5.9.3, Node node:test, Playwright 1.64.1 in src/editor | Scoped checks for engine-owned modules and new Host | Extend only within reviewed scopes. Do not enable repo-wide blocking lint/format over the entire legacy Colibri tree |
+
+## Planned optional runtime packages — не активные зависимости
+
+Следующие package boundaries утверждены архитектурно, но на момент этой ревизии **не существуют в `packages/` и не являются активными npm dependencies**:
+
+| Package | Status | Intended scope | Dependency / exclusion rule | Linear owner |
+|---|---|---|---|---|
+| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Не является зависимостью `@codogma/cge`; не импортирует Phaser, DOM, Editor, Node-only APIs или platform SDK | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
+| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Отдельная peer dependency/adapter; не делает базовый `@codogma/runtime-phaser` зависимым от ECS | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
+
+Project feature IDs proposed for Feature Registry:
+- `runtime.ecs` → `@codogma/ecs`
+- `runtime.ecs-phaser` → `@codogma/ecs-phaser`, requiring `runtime.ecs` and the compatible Phaser runtime provider.
+
+Installation, feature availability, project enablement, target inclusion and runtime activation are distinct. Projects without ECS must not receive these dependencies transitively. Release fixtures must prove physical exclusion of both package code and adapter modules when disabled; metadata or a UI checkbox alone is insufficient.
+
+Object/component `ComponentWorld` in `@codogma/cge` and Data-Oriented ECS storage are different runtime models. Project Model Node IDs and ECS runtime entity handles use explicit mapping; persisted Component Schema/Inspector metadata is not automatically the ECS storage schema.
+
+## Phaser 4.2.1 bundle analysis constraints
+
+- Codogma's current integration is a vendored full Phaser bundle, not a tree-shaken npm ESM consumer.
+- Upstream v4.2.1 offers the separate UMD `phaser-arcade-physics` variant, which excludes Matter.js; the package manifest's root ESM export is a bundled artifact and does not prove internal dead-code elimination.
+- No public package `exports` subpath for the Arcade-only file is declared in the checked v4.2.1 manifest. Do not invent an import path. Any direct artifact consumption or custom build needs a reproducible fixture and explicit distribution contract.
+- Compare API coverage, generated code compatibility, external helper requirements, raw/gzip size, parse/startup and browser behavior before choosing a new delivery path. Until then the current vendor bundle remains the verified integration path, and its feature-pruning is unverified.
 
 ## Lockfiles и установка
 

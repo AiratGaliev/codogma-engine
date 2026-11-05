@@ -42,7 +42,7 @@ Codogma Engine должен развиться в самостоятельный
 
 Каждый gate подтверждается отдельно. Для текущих editor features не требуется ждать реализации нового Core, если изменение безопасно работает с существующими форматами и contracts. Если функция зависит от новой модели или runtime service, зависимую часть нужно выделить, не блокируя независимые UI и bug fixes.
 
-**Не входят в первый migration slice:** переписывание всего UI одним PR; замена Phaser на PixiJS; EVA.js как второй runtime; data-oriented ECS без измеримого сценария; несколько physics backends; обязательная Tauri-упаковка; публичная plugin/npm ecosystem; все платформенные интеграции одновременно. Выбор SolidJS + Tailwind CSS 4 уже принят как окончательное направление UI. Повторный framework bake-off и отдельный SolidJS PoC не требуются: реализация начинается непосредственно с полноценного Unity-подобного Editor Workbench и продолжается вертикальными feature slices.
+**Не входят в первый migration slice:** переписывание всего UI одним PR; замена Phaser на PixiJS; EVA.js как второй runtime; реализация Data-Oriented ECS внутри обязательного Core или без подтверждённого browser workload; несколько physics backends; обязательная Tauri-упаковка; публичная plugin/npm ecosystem; все платформенные интеграции одновременно. Отдельный optional `@codogma/ecs` и `@codogma/ecs-phaser` зафиксированы как самостоятельное архитектурное направление в ADR-0004, вне обязательного Core migration slice. Выбор SolidJS + Tailwind CSS 4 уже принят как окончательное направление UI. Повторный framework bake-off и отдельный SolidJS PoC не требуются: реализация начинается непосредственно с полноценного Unity-подобного Editor Workbench и продолжается вертикальными feature slices.
 
 P0/P1/P2 в разделе 9.3 задаёт относительный приоритет возможностей 2D-редактора и не означает выполнять весь уровень одним большим спринтом. Практическая очередность и зависимые gates определяются [дорожной картой](roadmap.md).
 
@@ -84,7 +84,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 - завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, migrations/validation/serialization, component schema/registry/world), но не является законченным runtime;
 - data-driven загрузчик сцен из сериализуемой Project Model с разрешением зарегистрированных TypeScript modules, rollback и связью с Phaser adapter (не реализован как завершённый workflow);
-- законченная runtime ECS/component-модель, интегрированная с Editor Inspector, Project Model loader и Phaser runtime; текущие Core lifecycle tests изолированы от UI/runtime;
+- завершённая object/component runtime-модель Core, интегрированная с Editor Inspector, Project Model loader и базовым Phaser adapter; текущие Core lifecycle tests пока изолированы от UI/runtime. Optional Data-Oriented ECS и его Phaser adapter не реализованы и развиваются отдельными package tasks COD-111/112;
 - синхронизация Inspector с реальными экземплярами компонентов работающей игры;
 - полноценный Game Preview Host с embedded, standalone и внешним browser preview;
 - специализированный runtime debugger и профайлер с измерениями CPU/кадра/ресурсов;
@@ -293,25 +293,36 @@ Codogma должен давать разработчику удобную ком
 - уничтожение и освобождение ресурсов;
 - поведение при pause/resume, смене сцены и повторной загрузке.
 
-### 6.3. ECS: заимствовать принципы, не создавать второй runtime
+### 6.3. Object/component Core и optional Data-Oriented ECS
 
-Из [репозитория EVA.js](https://github.com/eva-engine/eva.js) и его [руководстве по Game runtime](https://eva.js.org/docs/tutorials/game/) полезно изучить организацию GameObject/Component/System, жизненный цикл, реакцию на изменения компонентов, metadata для Inspector и принципы модульности. У EVA есть отдельные пакеты Core, renderer, text и sprite; это полезный пример модульных границ, но архитектуру нужно сверить с актуальным исходным кодом и лицензией перед любым повторным использованием. **Подключать EVA.js целиком как второй runtime не является целевым решением по умолчанию**: у него собственные модели Game/Scene/GameObject/Ticker, а renderer-плагин связан с PixiJS. Сочетание двух моделей и независимых игровых циклов создаёт риск дублирования истины.
+Базовый `@codogma/cge` предоставляет host-neutral object/component модель для Project Model, Scene/Node/Transform, Component Schema, Inspector, сериализации, lifecycle и обычных игровых объектов. Она не должна автоматически превращаться в обязательную data-oriented систему для каждой игры.
 
-Требования к Codogma Core:
+Для массовых однотипных сущностей предусматривается отдельный optional runtime package `@codogma/ecs`. Он не входит в обязательные dependencies `@codogma/cge`; пользовательская игра устанавливает его только при осознанном выборе. Отдельный Phaser integration package `@codogma/ecs-phaser` связывает ECS с Phaser, не делая базовый `@codogma/runtime-phaser` зависимым от ECS.
 
-- стабильный EntityId и единый владелец каждого сериализуемого игрового свойства;
-- registry типов компонентов, schema/metadata для Inspector и сериализации;
-- детерминированный scheduler/lifecycle компонентов и систем;
-- контролируемая обработка структурных изменений;
-- корректная очистка и освобождение связанных ресурсов;
-- диагностика идентичности, компонентов и времени исполнения систем;
-- интеграционный слой, который связывает Core с runtime-объектами без появления второго неконтролируемого игрового цикла.
+Это совместное существование разных runtime моделей, а не требование применять обе модели везде:
+- object/component Core остаётся основной простой моделью для обычных Node, уникальных объектов, authoring и Inspector;
+- Data-Oriented ECS предназначен для workloads, где массовые Queries и обработка однотипных сущностей дают измеримую пользу;
+- маленькие проекты могут не устанавливать ECS вообще;
+- проект может использовать обе модели только через явно заданный mapping/adapter; одно mutable runtime значение имеет одного owner.
 
-При работе с Phaser ECS/Core должен обновляться в управляемых фазах игрового цикла или явно выбранного scheduler. Не создавать независимый requestAnimationFrame, который конкурирует с Phaser по времени и паузам.
+**Разделение данных обязательно:**
+- Project Model Node IDs, Component type/instance IDs и runtime ECS Entity handles — разные идентичности, связываемые явным mapping;
+- persisted Component Schema для Inspector/serialization не тождественна Data-Oriented ECS storage layout;
+- ECS storage по умолчанию содержит transient runtime state; сохранение/загрузка ECS data требует отдельного явного serializer/adapter contract;
+- не дублировать HP, Transform, AI state или physics state одновременно в Phaser objects, ComponentWorld и ECS.
 
-Обычные игровые объекты должны иметь понятную компонентную модель для разработчика и редактора. Высокопроизводительное data-oriented ECS-хранилище для массовых сущностей — отдельная оптимизация, оправданная профилированием, а не обязательное усложнение всех компонентов.
+**ECS package contract:**
+- host-neutral World, runtime entity handles, component storage, typed Queries, deterministic Systems/scheduler и безопасные structural mutation boundaries;
+- storage strategy (archetypes/table chunks, sparse sets или их сочетание) выбирается по benchmark и не раскрывается как обязательная часть public API;
+- lifecycle, system ordering, pause/disable/destroy, error handling и disposal проверяются на корректность;
+- никакого собственного Game, Scene Manager, renderer, physics world, requestAnimationFrame или ticker: внешний host владеет игровым циклом и передаёт управляемые update/fixed-step phases;
+- worker, SharedArrayBuffer, WASM и multithreading не следуют из самого наличия ECS и требуют отдельных PoC/ADR и browser-host acceptance.
 
-EVA.js следует изучать как архитектурный reference и возможный источник отдельных MIT-модулей только после проверки лицензии и совместимости конкретного кода. Перед заимствованием исходников нужно сохранить необходимые уведомления. Чужая реализация не становится частью Codogma автоматически только потому, что её лицензия допускает reuse.
+**EVA.js reference policy:** изучать Core/GameObject/Component/System composition, lifecycle, metadata и модульные feature packages по актуальной ветке [EVA.js v2](https://github.com/eva-engine/eva.js/tree/v2). Не переносить второй Game/Ticker/Scene Manager, Pixi renderer или глобальный Resource singleton в Codogma: Phaser/Runtime Host остаётся владельцем loop и renderer. Object-based component/system model EVA.js — полезный reference, но не доказательство выигрыша Data-Oriented ECS. Повторное использование исходников допускается только после проверки конкретного кода, версии, MIT notices, зависимостей, совместимости и тестов; EVA.js не является обязательной runtime dependency.
+
+**Performance evidence:** решение о Data-Oriented storage опирается на одинаковые representative workloads в target browsers/devices, сравнивающие object-component baseline, centralized systems на тех же объектах, ECS storage и ECS+Phaser adapter. Измерять frame p50/p95/p99, CPU/system/query time, physics/render отдельно, allocations/GC, heap, startup и teardown. Не использовать универсальный порог по entity count или фиксированную долю frame budget как условие включения ECS. Синтетические Node benchmarks остаются package regression tests, но не доказывают mobile/browser выигрыша.
+
+Подробное нормативное решение и owners: [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); задачи COD-111 (`@codogma/ecs`) и COD-112 (`@codogma/ecs-phaser`).
 
 ### 6.4. Inspector и пользовательские компоненты
 
@@ -759,6 +770,25 @@ Headless CLI — самостоятельный интерфейс к тем ж�
 
 Не подключать несколько библиотек одного назначения без обоснования. Все кандидаты проходят проверку лицензии, актуальности, безопасности, TypeScript-типов, browser support, совместимости и размера production bundle.
 
+### 10.4. Анализ модулей Phaser и физический состав production bundle
+
+Текущий Codogma baseline подключает Phaser 4.2.1 через vendored runtime bundle. Это не является выборочной сборкой по использованным возможностям. Build Pipeline должен отдельно анализировать:
+- Codogma package dependencies и их public entry points;
+- выбранные Feature/Capability descriptors и их declared dependency closure;
+- Project Model Scene/Prefab/component-module imports;
+- Phaser/runtime requirements, которые реально нужны generated output;
+- physics backend и внешние runtime-файлы (например, Box2D helpers), если их требует выбранная сцена/adapter;
+- assets, atlas/texture variants, fonts, audio, tilemaps и ресурсы, достижимые из Project Model graph;
+- Editor-only, build-only, MCP, QA и development-only modules, которые обязаны отсутствовать в Release output.
+
+**Phaser 4.2.1 — известные upstream варианты:**
+- `phaser` / `phaser.min` — полная UMD-сборка.
+- `phaser-arcade-physics` / `phaser-arcade-physics.min` — альтернативная UMD-сборка, исключающая Matter.js.
+- `phaser.esm` / `phaser.esm.min` — ESM entry point, но его named exports не доказывают, что внутренние подсистемы Phaser могут быть безопасно удалены текущим consumer bundler. В `package.json` v4.2.1 нет объявленного public `exports` subpath для Arcade-only artifact; нельзя выдумывать import path или считать файл доступным через package export без fixture.
+
+Сравнение Phaser вариантов выполняется на representative generated-game fixtures с одинаковыми сценами, generated APIs и assets. Отчёт включает runtime/API coverage, raw и gzip/Brotli size, JS parse/compile/startup, time-to-first-frame, реальные module inclusions/exclusions и любые внешние файлы, которые должен доставить проект/хостинг. Выбранная стратегия должна быть воспроизводимой и совместимой с Phaser version pin. Если Arcade-only build не покрывает требуемый API или усложняет npm/public exports, сохраняется full bundle с зафиксированным размером — не маскировать ограничение под tree shaking.
+
+**Output-level proof обязательна:** выключенный package/feature отсутствует в final JS chunks и build manifest, а не только отмечен как disabled в UI. Включённый feature показывает цепочку причин: project dependency → provider → feature dependency → entry point → emitted module. Dynamic imports, side effects, runtime plugin registration и reflection-like discovery требуют явных manifests/allowlists; неиспользуемый код исключается только там, где bundler доказывает это безопасно.
 ## 11. Platform Services: модульный пакет интеграции Yandex Games и VK Games
 
 Codogma должен предусматривать **единый расширяемый пакет интеграции с игровыми платформами**, организованный по модульному принципу и сопоставимый по назначению с [Unity PluginYG-2](https://github.com/JustPlay-Max/Unity-PluginYG-2). Это архитектурный reference для границ модулей, developer workflow и набора платформенных сервисов, а не требование копировать его реализацию, C#-код или внутреннюю архитектуру Unity.
@@ -839,6 +869,8 @@ codogma-engine/
 ├── packages/
 │   ├── cge/                     # @codogma/cge — Core / public API
 │   ├── editor-api/              # типизированные контракты Extension API
+│   ├── ecs/                     # @codogma/ecs — optional Data-Oriented ECS runtime
+│   ├── ecs-phaser/              # @codogma/ecs-phaser — optional Phaser bridge for ECS
 │   ├── runtime-phaser/          # адаптер текущего runtime
 │   ├── build-html5/             # HTML5 build tooling
 │   ├── platform-services/       # общие контракты игровых платформ
@@ -955,7 +987,9 @@ Tool schemas и протоколы должны быть versioned, иметь �
 #### Core package
 
 - Целевое имя публичного ядра — `@codogma/cge`; его исходный корень в монорепозитории — `packages/cge/`.
-- `@codogma/cge` — Core/public API, а не агрегатор всего продукта. Он не должен автоматически подтягивать Editor UI, desktop shell, MCP, build-only tools или платформенные SDK.
+- `@codogma/cge` — Core/public API, а не агрегатор всего продукта. Он не должен автоматически подтягивать Editor UI, desktop shell, MCP, build-only tools, платформенные SDK или optional ECS packages.
+- `@codogma/ecs` — самостоятельный optional runtime package для Data-Oriented ECS; это не часть `@codogma/cge` и не обязательная зависимость базового Phaser runtime.
+- `@codogma/ecs-phaser` — отдельный optional adapter между `@codogma/ecs` и Phaser; он не делает `@codogma/runtime-phaser` зависимым от ECS. Оба пакета являются целевым направлением COD-111/112, а не уже существующими каталогами.
 - `cge` — внутреннее сокращение Codogma Game Engine и часть имени Core package; это не название каталога, куда требуется помещать все исходники движка.
 - Другие самостоятельные пакеты имеют собственные каталоги в `packages/`. Каталог `src/cge/` не является целевым корнем исходников пакетов.
 - Core не зависит от Editor/Colibri/desktop shell/конкретной реализации Phaser/platform SDK. Runtime не импортирует editor-only, MCP, server и build-time код. Editor и CLI/build используют общие Project Model/schema contracts.
@@ -974,9 +1008,9 @@ Tool schemas и протоколы должны быть versioned, иметь �
 - Целевая структура исходников: `packages/*` для самостоятельных пакетов и `src/editor` для Editor Host. Корневой `package.json` в целевой модели использует npm Workspaces для локальной разработки и связывания этих пакетов; точная конфигурация внедряется после аудита manifests, scripts, lockfiles и успешного PoC.
 - Текущее состояние переходное: в репозитории есть root npm project, legacy npm project в source/editor и самостоятельный новый Host npm project в src/editor, каждый со своим manifest/lockfile. npm Workspaces и единый workspace lockfile ещё не существуют. Не выполнять механический перенос legacy editor; возможную workspace/lockfile консолидацию проверять отдельно, без смешивания с Host UI migration.
 - В пользовательский игровой проект устанавливаются **только прямо выбранные пакеты и их транзитивные зависимости**, а не весь monorepo Codogma. Его manifest и `package-lock.json` принадлежат пользовательскому проекту; `node_modules` — результат установки, а не место разработки и хранения исходников пакетов.
-- Пакеты по назначению могут быть Core/shared, editor-extension, runtime, build/CLI, platform adapter или tooling. Названия не обязаны содержать `plugin-`; смысл пакета задаётся его ответственностью, public exports и проверяемыми engine-specific metadata.
+- Пакеты по назначению могут быть Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter или tooling. Названия не обязаны содержать `plugin-`; смысл пакета задаётся его ответственностью, public exports и проверяемыми engine-specific metadata.
 - Пакет может содержать несколько внутренних модулей и exports; независимое версионирование и подключение не требуют отдельного пакета на каждый компонент или файл.
-- Editor-only пакеты и их зависимости не должны попадать в production game bundle. Build pipeline обязан проверять состав конечного bundle по разрешённым scopes/targets, а не полагаться только на наличие пакета в `node_modules`.
+- Editor-only, build-only и QA packages и их зависимости не должны попадать в production game bundle. Optional runtime packages (например `@codogma/ecs`) включаются только при явной project dependency и target feature selection. Build pipeline обязан проверять фактический import graph и конечный bundle по разрешённым scopes/targets, а не полагаться только на наличие пакета в `node_modules`.
 
 #### npm как источник истины
 
@@ -995,7 +1029,7 @@ Tool schemas и протоколы должны быть versioned, иметь �
 - Состояния не взаимозаменяемы: **пакет установлен** через npm; **функция объявлена и доступна** при корректной metadata и совместимых зависимостях; **функция включена в конфигурации проекта**; **функция выбрана для конкретного target/build**; **функция активирована в текущей runtime/editor-сессии**, когда для неё существует такой lifecycle. Наличие одного состояния не должно автоматически включать остальные.
 - Выбор функций хранится в версионируемой конфигурации проекта и при необходимости в target-specific build profiles. Точное поле/файл определяется PoC; пользовательский выбор должен быть воспроизводимым и пригодным для CI, а не зависеть от последнего состояния открытого UI.
 - Реестр проверяет feature dependency closure, несовместимые функции, targets/scopes и version/API compatibility. Feature dependencies не равны npm dependencies: npm остаётся единственным механизмом установки и разрешения package dependencies. Если для выбранной функции нет требуемого package provider, система выдаёт структурированную ошибку и может предложить действие в Package Manager UI, но реестр самостоятельно не устанавливает пакеты и не реализует второй resolver.
-- Build pipeline получает явный набор включённых функций для target, проверяет все обязательные feature dependencies, формирует dependency closure из объявленных entry points, исключает несовместимые и editor-only пути и выдаёт machine-readable build report с выбранными функциями, package/module contributions, причинами включения и диагностикой. Конкретная сборочная реализация должна подтверждать исключение кода на fixture; registry metadata не гарантирует сама по себе безопасное удаление модулей с side effects или динамической регистрацией.
+- Build pipeline получает явный набор включённых функций для target, проверяет все обязательные feature dependencies, формирует dependency closure из объявленных entry points, исключает несовместимые и editor-only пути и выдаёт machine-readable build report с выбранными функциями, package/module contributions, причинами включения/исключения и диагностикой. Для optional ECS feature IDs должны быть разделены: `runtime.ecs` (provider `@codogma/ecs`) и `runtime.ecs-phaser` (provider `@codogma/ecs-phaser`); наличие одного не должно неявно устанавливать или включать другое. Конкретная сборочная реализация должна подтверждать исключение кода на fixture; registry metadata не гарантирует сама по себе безопасное удаление модулей с side effects или динамической регистрацией.
 - Editor Host, Inspector, project validation, runtime services и CLI/build должны потреблять согласованные descriptors/diagnostics, а не поддерживать независимые дублирующие каталоги capabilities.
 - Curated feature sets (преднастроенные группы функций/пакетов) могут появиться позже как UX-удобство. Они не заменяют реестр и не должны становиться обязательным механизмом разрешения зависимостей для MVP.
 
@@ -1034,7 +1068,7 @@ Normative detail: [docs/package-management-reference.md](package-management-refe
 
 Цели «1000 файлов открываются за 3 секунды», «500+ объектов без просадок» и «холодный старт за 2 секунды» не являются подтверждёнными характеристиками. Прежде чем сделать их release gate, надо определить fixture, тестовую машину, методику и baseline текущей версии.
 
-Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять нужно по отдельности время до готового UI, frame time, память, загрузку ресурсов, производительность editor и preview. Не делать вывод о преимуществе Tauri/Electron или ECS только по размеру приложения либо теоретической модели.
+Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять отдельно время до готового UI, frame time p50/p95/p99, main-thread CPU, время gameplay systems, physics, rendering, память/heap high-water, allocations/GC, загрузку ресурсов и startup/teardown editor и preview. Сравнение ECS требует одинаковых browser/device workloads для object-component baseline, centralized systems, Data-Oriented ECS и ECS+runtime adapter. Не делать вывод о преимуществе Tauri/Electron или ECS только по размеру приложения, числу entities или синтетическому Node benchmark. Универсального порога 10 000 entities или фиксированной квоты 1.67 ms для Core не устанавливать; budgets определять из повторяемых measurements на целевых устройствах.
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
@@ -1042,7 +1076,9 @@ Profiler должен сначала собирать воспроизводим
 - TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
 - Server/MCP: серверный smoke, быстрые package contract/schema tests и security checks. E2E-сценарии для сквозных MCP workflows поддерживаются вместе с соответствующей подсистемой; полный MCP E2E suite выполняется в обязательном promotion gate.
 - Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures; отдельный fixture должен запустить сцену из данных с зарегистрированным пользовательским TypeScript-компонентом **без генерируемого файла класса сцены** и проверить диагностику отсутствующего компонента/ресурса без частично созданной runtime-сцены. Проверить ссылки между узлами, повторное использование typeId при независимых instance IDs/значениях, отмену загрузки и отделение временного runtime state от сохранённых данных.
-- Engine API/ECS: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты на согласованность Phaser adapter.
+- Engine API / ComponentWorld: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты согласованности базового Phaser adapter.
+- Optional Data-Oriented ECS (COD-111): correctness/query/storage/system tests, structural mutation and teardown fixtures, plus browser-side comparison against object-component and centralized-system baselines. Measure p50/p95/p99 frame time, system/query time, allocations/GC and memory; do not use Node synthetic benchmark as browser-performance evidence.
+- Optional ECS Phaser adapter (COD-112): integration tests for one-owner Transform mapping, tick ownership, pause/resume, scene shutdown and resource cleanup; measure adapter overhead separately from ECS systems and Phaser renderer/physics.
 - Physics: contract tests для body lifecycle, collision filters, fixed timestep, contacts, supported joints, debug geometry и корректного освобождения ресурсов для каждого поддерживаемого backend.
 - 2D rendering/performance: измеримые fixtures для frame time, batching/texture/resource counts в пределах доступной instrumentation; тесты изменения/освобождения Graphics/particle resources и отсутствия ненужных повторных allocation loops. Atlas analysis покрывает rendered/culled sprites, page count и usage; Tilemap metrics отделяют render/update/collision processing.
 - Asset pipeline/CLI: validate/build без GUI, stable asset references, migration/import metadata, dependency graph, deterministic output и корректные exit codes.
