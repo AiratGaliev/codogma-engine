@@ -10,10 +10,23 @@ namespace phasereditor2d.pack.core {
             super(pack, data);
         }
 
-        getUrl(): string {
+        getSourceUrl(): string | null {
+            const value: unknown = this.getData()?.url;
 
-            const data = this.getData();
-            return data.url.IMG;
+            if (typeof value === "string" && value.length > 0) {
+                return value;
+            }
+
+            if (value && typeof value === "object" && !Array.isArray(value)) {
+                const imageUrl = (value as Record<string, unknown>).IMG;
+                return typeof imageUrl === "string" && imageUrl.length > 0 ? imageUrl : null;
+            }
+
+            return null;
+        }
+
+        getUrl(): string {
+            return this.getSourceUrl();
         }
 
         static sortUrlKeys(data: any) {

@@ -138,10 +138,10 @@ namespace phasereditor2d.pack.ui.importers {
             }
 
             const previousData = JSON.parse(JSON.stringify(item.getData()));
-            const sourceUrl = previousData.url;
+            const sourceUrl = item.getSourceUrl();
 
-            if (typeof sourceUrl !== "string" || !sourceUrl) {
-                throw new Error("Reimport requires a single project-relative source URL.");
+            if (typeof sourceUrl !== "string" || sourceUrl.length === 0) {
+                throw new Error("Reimport requires a valid project-relative source URL.");
             }
 
             const sourceFile = item.getFileFromAssetUrl(sourceUrl);
@@ -151,10 +151,21 @@ namespace phasereditor2d.pack.ui.importers {
             }
 
             const importedData = this.createItemData(pack, sourceFile);
+            let nextUrl = importedData.url;
+
+            // Texture entries store URL variants in one object. Refresh IMG from
+            // the source file but preserve ETC/ASTC/PVR and future loader variants.
+            if (previousData.url && typeof previousData.url === "object"
+                && !Array.isArray(previousData.url)
+                && importedData.url && typeof importedData.url === "object"
+                && !Array.isArray(importedData.url)) {
+                nextUrl = Object.assign({}, previousData.url, importedData.url);
+            }
+
             const nextData = Object.assign({}, importedData, previousData, {
                 type: previousData.type,
                 key: previousData.key,
-                url: importedData.url
+                url: nextUrl
             });
 
             try {

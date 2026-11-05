@@ -19,10 +19,14 @@ namespace phasereditor2d.pack.core.contentTypes {
 
                     const data = JSON.parse(content);
 
-                    if (Array.isArray(data.layers)
+                    const isPositiveTileDimension = (value: unknown): boolean =>
+                        typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+
+                    if (data && typeof data === "object" && !Array.isArray(data)
+                        && Array.isArray(data.layers)
                         && Array.isArray(data.tilesets)
-                        && typeof (data.tilewidth === "number")
-                        && typeof (data.tileheight)) {
+                        && isPositiveTileDimension(data.tilewidth)
+                        && isPositiveTileDimension(data.tileheight)) {
 
                         return CONTENT_TYPE_TILEMAP_TILED_JSON;
                     }

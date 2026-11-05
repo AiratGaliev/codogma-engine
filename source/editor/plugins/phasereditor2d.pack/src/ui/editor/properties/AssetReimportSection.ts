@@ -60,8 +60,8 @@ namespace phasereditor2d.pack.ui.editor.properties {
             this.addUpdater(() => {
 
                 const item = this.getSelectionFirstElement();
-                const url = item && item.getData().url;
-                const file = typeof url === "string" ? item.getFileFromAssetUrl(url) : null;
+                const url = item && item.getSourceUrl();
+                const file = url ? item.getFileFromAssetUrl(url) : null;
 
                 button.disabled = !file || !file.isFile();
 
