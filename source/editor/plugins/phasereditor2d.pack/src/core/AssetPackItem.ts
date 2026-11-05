@@ -26,6 +26,11 @@ namespace phasereditor2d.pack.core {
             return AssetPackUtils.getFileFromPackUrl(this.getPack(), url);
         }
 
+        getSourceUrl(): string | null {
+            const value: unknown = this._data?.url;
+            return typeof value === "string" && value.length > 0 ? value : null;
+        }
+
         computeUsedFiles(files: Set<io.FilePath>) {
 
             this.addFilesFromDataKey(files, "url");
