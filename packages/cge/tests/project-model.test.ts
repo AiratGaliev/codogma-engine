@@ -350,16 +350,18 @@ test("Project v0 migration rejects malformed present fields instead of silently 
       : { ...base, [field]: value };
     assert.throws(
       () => migrateProjectDocument(input),
-      (error: unknown) => error instanceof Error &&
-        "diagnostics" in error &&
-        Array.isArray((error as { diagnostics: unknown }).diagnostics) &&
-        ((error as { diagnostics: Array<{ code?: string; path?: string }> }).diagnostics.some((item) =>
+      (error: unknown): boolean => {
+        if (!(error instanceof Error) || !("diagnostics" in error)) return false;
+        const diagnostics = (error as Error & {
+          diagnostics: Array<{ code?: string; path?: string }>;
+        }).diagnostics;
+        return diagnostics.some((item) =>
           item.code === "PROJECT_MIGRATION_INVALID_INPUT" &&
-          (item.path === field || item.path === "runtime.settings" || item.path === "runtime")),
+          (item.path === field || item.path === "runtime.settings" || item.path === "runtime"));
+      },
     );
   }
 });
-
 test("Project v0 migration defaults only absent optional collections and runtime fields", () => {
   const migrated = migrateProjectDocument({
     schemaVersion: 0,
