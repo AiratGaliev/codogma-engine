@@ -105,8 +105,8 @@ test("acceptance project is self-contained and declares a real Core component de
     node: { id: nodeId, name: nodeId, active: true },
     properties: {},
   });
-  const first = registeredDefinition.create(createContext("component-first", "node-player"));
-  const second = registeredDefinition.create(createContext("component-second", "node-enemy"));
+  const first = followTargetDefinition.create(createContext("component-first", "node-player"));
+  const second = followTargetDefinition.create(createContext("component-second", "node-enemy"));
   first.onUpdate?.(0.25);
   assert.equal(first.instanceId, "component-first");
   assert.equal(second.instanceId, "component-second");
@@ -200,7 +200,6 @@ test("negative fixture vectors produce structured Project and Scene diagnostics"
   const { project, context } = loadContext();
   const sourceScene = loadScene(project, context);
   assert.ok(sourceScene.value);
-  const sourceSceneJson = readProjectAsset("scenes/Level.cge-scene.json");
 
   const brokenAsset = cloneScene(sourceScene.value);
   const assetValue = brokenAsset.rootNodes[0]?.components[0]?.properties.sprite as { assetId: string };
