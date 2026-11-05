@@ -44,6 +44,42 @@ Colibri используется ниже только как legacy evidence. �
 
 Полные относительные пути находятся в tests/workspace/test-typescript/scenes/. Эти файлы — реальные fixture data, а не synthetic примеры. Их наличие доказывает только представленные варианты одного test workspace.
 
+### Per-fixture source, format и version inventory
+
+Все пути ниже относительны корня репозитория. Значение missing означает, что поле meta.version отсутствует в исходном JSON; версия не выводится из имени файла или даты.
+
+| Source fixture | Format / sceneType | meta.version | displayList entries | plainObjects | lists |
+|---|---|---:|---:|---:|---:|
+| tests/workspace/test-typescript/scenes/AgentLevel.scene | .scene / SCENE | 5 | 4 | 1 | 0 |
+| tests/workspace/test-typescript/scenes/CoinPrefab.scene | .scene / PREFAB | 5 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/CoinRush.scene | .scene / SCENE | 5 | 4 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/DinoPrefab.scene | .scene / PREFAB | missing | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/DoubleDinoPrefab.scene | .scene / PREFAB | missing | 1 | 0 | 1 |
+| tests/workspace/test-typescript/scenes/Level.scene | .scene / SCENE | missing | 5 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/MyGame.scene | .scene / SCENE | 5 | 2 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/TestListFieldScene.scene | .scene / SCENE | missing | 1 | 0 | 2 |
+| tests/workspace/test-typescript/scenes/OfficialE2E.scene | .scene / SCENE | 5 | 2 | 1 | 1 |
+| tests/workspace/test-typescript/scenes/TestOneObjectScene.scene | .scene / SCENE | missing | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/TestTileSpriteSizeInInspector.scene | .scene / SCENE | 3 | 2 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/TextWordWrapScene.scene | .scene / SCENE | missing | 2 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/box2d-acceptance.scene | .scene / SCENE | 5 | 5 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/componentsAwake/TestComponentsAwakeEvent.scene | .scene / SCENE | missing | 3 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/fx-acceptance.scene | .scene / SCENE | 5 | 4 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/issue147/Issue147.scene | .scene / SCENE | 3 | 2 | 0 | 1 |
+| tests/workspace/test-typescript/scenes/issue154/BaseContainerPrefab.scene | .scene / PREFAB | 2 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/issue154/DerivedContainer1Prefab.scene | .scene / PREFAB | 2 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/issue154/Issue154.scene | .scene / SCENE | 2 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/nestedPrefabInContanerIssue/AnotherPrefabPrefab.scene | .scene / PREFAB | 3 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/nestedPrefabInContanerIssue/NestedInsideContainerPrefabInstanceScene.scene | .scene / SCENE | 3 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/nestedPrefabInContanerIssue/NestedPrefabInContainerPrefab.scene | .scene / PREFAB | 3 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/originMigration/OriginMigration.scene | .scene / SCENE | 3 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/originMigration/TextWithOriginPrefab.scene | .scene / PREFAB | 3 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/prefabAwake/PrefabAwakeTest.scene | .scene / SCENE | missing | 2 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/prefabAwake/WithAwakeEventPrefab.scene | .scene / PREFAB | 3 | 1 | 0 | 0 |
+| tests/workspace/test-typescript/scenes/prefabAwake/WithoutAwakeEventPrefab.scene | .scene / PREFAB | missing | 1 | 0 | 0 |
+
+Итог по выборке: meta.version=2 — 3 файла; version=3 — 8; version=5 — 7; поле отсутствует — 9. Все 27 JSON документов имеют id. Все файлы являются .scene и используют legacy Scene content-type resolver; SCENE/PREFAB определяется полем sceneType. displayList entries — только верхнеуровневые элементы списка, не рекурсивный total node count.
+
 Дополнительно проверены:
 
 - tests/workspace/test-typescript/components/Behaviors.components — definitions PushOnClick и Tint; gameObjectType = Phaser.GameObjects.Image; числовое свойство pushScale с default 0.5; option tint со значениями red/green/blue; generateAwakeEvent; outputLang: TYPE_SCRIPT.
