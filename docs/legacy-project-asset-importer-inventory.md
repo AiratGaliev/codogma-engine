@@ -143,7 +143,7 @@ Object payload также содержит type-specific поля: transform, te
 - Serializer разрешает object type через legacy extension. Отсутствующее расширение для указанного type — ошибка, а не generic Node fallback.
 - Legacy Scene migration реализована отдельными SceneDataMigrationExtension implementations: UnlockPositionMigration_v1_to_v2, OriginMigration_v2_to_v3 и TextAlignMigration. Первые две учитывают старые документы без версии как version 1; миграции работают с вложенными списками. Origin migration специально пропускает fix-up сломанного Prefab reference, чтобы не остановить обработку остальных children.
 - В проверенном dev не найден полный declarative registry всех возможных переходов Scene v1→v5 с доказательством исчерпывающего покрытия. Нельзя выводить из CURRENT_VERSION = 5, что любой старый документ уже полностью мигрируется.
-- Автоматический legacy Scene → Core Project Model v1 converter в текущем dev отсутствует. Его opt-in реализация находится в неслитом PR #41.
+- В PR #48 Colibri Scene/Prefab converter был добавлен и смержен в `dev`, но ADR-0007 явно отвергает эту функциональность; COD-113 удаляет converter, его exports, fixtures и tests. PR #41 закрыт без merge и не является источником требований.
 
 ## 4. User Components: definition и instance — разные данные
 
@@ -173,7 +173,7 @@ Scene object components содержит имена классов (наприм
 - enabled и properties — persisted component state;
 - Project component-module manifest — явное разрешение modules/types, а не поиск source files по имени.
 
-**Правило совместимости:** legacy class name → Core typeId разрешается только явной таблицей/manifest с известной schemaVersion; instance ID должен существовать отдельно. Не выводить IDs из имени класса, файла или индекса массива. Неизвестный class/component, custom property или value не удаляется молча: это требует structured diagnostic и решения COD-25/COD-27.
+**Никакого mapping/compatibility contract нет:** legacy class names, namespaced properties и class-based attachments не импортируются в Codogma. Native Script assets и Component Definitions создаются заново с собственными stable IDs; старые неизвестные поля не переносятся и не сохраняются как source payload.
 
 ## 5. Asset Pack v2 и legacy Asset IDs
 
@@ -345,22 +345,22 @@ Frame matching — консервативная геометрическая э�
 - Phaser 4.2.1 NineSlice не поддерживает trimmed textures; NineSlice и TileSprite не предоставляют setCrop(). Для несовместимого применения требуется явная диагностика/ошибка.
 - Текущий Arcade bridge автоматически мапит только одну Rectangle или Circle collision shape. Polygon не является поддержанным автоматическим Arcade Body shape.
 
-## 8. Asset reference и path semantics: legacy → Project Model v1
+## 8. Исторические отличия Colibri references от нативной Asset Model
 
-| Legacy | Что означает фактически | Core v1 / требуемое решение |
+| Историческое поле Colibri | Наблюдаемая семантика старого формата | Нативная политика Codogma (без преобразования) |
 |---|---|---|
-| Scene id / Prefab id | Document ID; Prefab instance prefabId resolves by ID through SceneFinder. | Сохранять как explicit stable document/asset identity после проверки уникальности/валидности. |
-| Node id | Object identity в Scene/Prefab; часть fixtures содержит вложенные node identities. | Core Node stable ID. Missing/duplicate IDs — diagnostic/blocker, не генерировать по label/index. |
-| type | Legacy object extension discriminator, часто Phaser/editor-specific. | Не отождествлять с runtime Node/component typeId; нужен явный adapter/mapping и lossless legacy payload policy. |
-| components[] class names | Legacy name-based attachment refs. | Explicit component module manifest + stable typeId + instance ID + schema version. |
-| prefabId | Legacy document ID link, не source path. | Map to explicit Prefab AssetReference / Prefab identity; validate target. |
-| unlock[] and component namespaced values | Legacy per-property override allowlist. | Explicit target node/component/property-path overrides; no automatic guess when property was renamed/removed. |
-| Asset Pack key | Runtime cache lookup key; can collide/rename/change. | Not an Asset ID; create stable Asset ID through explicit project mapping. |
-| Asset Pack url / atlasURL / textureURL etc. | Project-relative/public-relative file locator. Moving/renaming source can invalidate it. | Core AssetReference{id,path,kind,subResourceId?}; path validation and explicit path mapping. |
-| Sprite metadata codogma.assetId | Stable image/spritesheet metadata ID; not available on all other Asset Pack item types. | Reuse only where proven; map other asset IDs explicitly. |
-| Frame key | Asset Pack/Phaser frame lookup key; not stable identity after slicing/reimport. | Core reference includes explicit subResourceId; frame-ID mapping is required. |
+| Scene id / Prefab id | Document ID; Prefab instance prefabId resolves by ID through SceneFinder. | Не импортировать. Native Scene/Prefab создаются как новые Codogma documents со своими IDs. |
+| Node id | Object identity в Scene/Prefab; часть fixtures содержит вложенные node identities. | Не переносить. Native Nodes получают новые stable IDs при создании документа; native duplicates/missing IDs валидируются и диагностируются. |
+| type | Legacy object extension discriminator, часто Phaser/editor-specific. | Не преобразовывать и не сохранять. Native Node/Component definitions задаются собственными discriminators и registered stable type IDs. |
+| components[] class names | Legacy name-based attachment refs. | Не преобразовывать class names. Native Script asset, definition и instance создаются через собственный module manifest и stable IDs. |
+| prefabId | Legacy document ID link, не source path. | Не переносить. Нативный Prefab получает собственный Codogma ID и typed references. |
+| unlock[] and component namespaced values | Legacy per-property override allowlist. | Не переносить. Native Prefab override semantics проектируются и сериализуются независимо, без сохранения Colibri unlock/payload. |
+| Asset Pack key | Runtime cache lookup key; can collide/rename/change. | Не импортировать ключи. Нативный Asset получает новый stable ID. |
+| Asset Pack url / atlasURL / textureURL etc. | Project-relative/public-relative file locator. Moving/renaming source can invalidate it. | Не переносить старые locator/URL. Нативный AssetReference создаётся собственным importer/project contract. |
+| Sprite metadata codogma.assetId | Stable image/spritesheet metadata ID; not available on all other Asset Pack item types. | Не импортировать старые metadata IDs. Новые Asset/Frame IDs принадлежат Codogma importer/authoring workflow. |
+| Frame key | Asset Pack/Phaser frame lookup key; not stable identity after slicing/reimport. | Не отображать старые Frame keys в native IDs. Новый importer создаёт собственные subResource IDs. |
 
-Core v1 contract is in packages/cge/src/project-model/contracts.ts; validation in validation.ts enforces stable ID grammar, project-safe paths, asset kinds, optional subResourceId, and reference validation. Current Core serializer migrates Project envelope v0→v1 in memory; Scene/Prefab parsers validate v1. PR #48 later merged a Colibri converter, but the product rejected that compatibility scope in ADR-0007; COD-113 removes it. This inventory does not define a conversion policy.
+Core v1 contracts/validation define native identity, safe paths, asset kinds, subResource IDs and reference validation. `Project v0→v1` was an unpublished internal experiment (`@codogma/cge` is private) and is removed by COD-113 rather than becoming a supported migration. PR #48's Colibri converter is also rejected by ADR-0007 and removed by COD-113. This archive is not a conversion policy.
 
 ### 8.1 Mapping dispositions
 
@@ -373,13 +373,13 @@ Core v1 contract is in packages/cge/src/project-model/contracts.ts; validation i
 | Legacy type and renderer-specific fields | Historical Colibri-specific data; not a native Node/Component contract. Do not preserve it in the new Project Model. | ADR-0007 / COD-113 |
 | Legacy User Components | Historical class-name based attachments are not converted or mapped. Native Script assets and Component Definitions are authored with explicit stable IDs. | ADR-0007 / COD-113 / COD-91 |
 | Prefab link prefabId | Colibri-only field; native Prefab references use Codogma stable IDs and typed references. | ADR-0007 / COD-8 |
-| Prefab unlock, prefabProperties, nestedPrefabs | **Requires explicit semantics mapping** for instance override targets, rename/remove conflicts and nesting. Keep original payload until resolved. | COD-8 |
+| Prefab unlock, prefabProperties, nestedPrefabs | Do not import or preserve these Colibri fields. Native Prefab override/propagation semantics are defined independently. | COD-8 (native contract only) |
 | Asset Pack key/URL | Old Asset Pack representation; native Codogma Asset documents and importers define their own IDs/metadata. | ADR-0007 / COD-86 |
-| Frame key and Sprite Metadata | **Preserve/map** through explicit asset/frame ID index; use subResourceId for frame-like subresources. | COD-25 / COD-86 |
-| Editor/compiler settings, scope, private_np | **Editor-only/deprecated/compatibility payload**, field-by-field classification required; do not leak into runtime config by default. | COD-25 / COD-97 |
-| Unknown JSON-compatible extension fields | **Preserve** where schema contract allows; otherwise emit loss diagnostic. No silent discard. | COD-25 |
+| Frame key and Sprite Metadata | Do not map old frame keys or metadata IDs. Native importer/authoring assigns new Asset and subResource IDs. | COD-86 (native importer contract) |
+| Editor/compiler settings, scope, private_np | Do not transfer old Colibri settings or metadata. Native Project Settings are designed from scratch with explicit typed ownership. | COD-97 (native settings only) |
+| Unknown JSON-compatible extension fields | Do not import unknown Colibri fields. Native schema may preserve only extension values created within its own contract, per ADR-0007. | ADR-0007 |
 
-This table is a compatibility decision register, not an implementation of the mappings.
+This table is an archival comparison only; none of the rows defines a mapping, compatibility promise or migration requirement.
 
 ## 9. IFileStorage, HTTP API and path lifecycle
 
@@ -452,7 +452,7 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 | Scene model | src/editor/src/domain/scene-model.ts currently reads/writes the transitional Colibri .scene shape. | Transitional implementation only; COD-113 replaces it with native Project Model Scene documents. No Colibri format support is part of the product contract. |
 | Prefab model | prefab-model.ts currently uses the transitional Colibri-compatible document shape. | Does not establish nested propagation, source-update merge, rename/delete conflict policy, durable save/reopen or integrated Undo/Redo; COD-8. |
 | Sprite metadata | sprite-asset-model.ts models Image/Spritesheet, metadata, slicing, collision validation and reconcile; unit tests exist. | Atlas/Multiatlas importer adapter and browser import/preview/reimport workflow are not covered by this domain module; COD-86/COD-55. |
-| Core Project Model | packages/cge/src/project-model/* exposes v1 Project/Scene/Prefab validation and deterministic serialization; Project v0→v1 in-memory migration. | Colibri converter/adapter is present only as temporary code merged in PR #48; ADR-0007 rejects it and COD-113 removes it. |
+| Core Project Model | packages/cge/src/project-model/* exposes v1 Project/Scene/Prefab validation and deterministic serialization; unpublished Project v0→v1 in-memory migration (internal-only; removed by COD-113). | Colibri converter/adapter is present only as temporary code merged in PR #48; ADR-0007 rejects it and COD-113 removes it. |
 | Storage | Host API has typed tree/read/write/folder/rename/delete wrappers. | Rename body mismatch; incomplete file operation coverage; COD-12/COD-86. |
 | Runtime bridge | Separate packages and adapter tasks own runtime behavior. | Host domain parsing and a green unit suite do not establish generated Phaser runtime or browser acceptance; COD-103/COD-28/CODQA work. |
 
@@ -460,14 +460,14 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 
 | Risk / observed behavior | Evidence | Owner / disposition |
 |---|---|---|
-| Missing/duplicate document or Node IDs; no safe inference from filename/index | 27 real Scene/Prefab fixtures; Core stable ID validator/tests | [COD-25](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema): blocking diagnostics, explicit mapping and fixtures. |
+| Missing/duplicate document or Node IDs in old files | 27 historical Colibri Scene/Prefab fixtures | No ID import or mapping. Native Codogma documents create and validate their own stable IDs under COD-25. |
 | Legacy class names have no stable component type/instance IDs | two historical .components fixtures and Scene components[] | No name-based conversion; native Component Definitions use explicit Codogma stable IDs. COD-113 removes legacy adapter. |
 | Prefab nested data, overrides, property removal/rename and source propagation do not map 1:1 to Core overrides | Prefab/nested fixtures; legacy prefabId, unlock, nestedPrefabs, prefabProperties; COD-8 criteria | [COD-8](https://linear.app/codogma-engine/issue/COD-8/stabilizirovat-prefab-workflow-vlozhennost-overrides-i-obnovlenie): policy + regression tests; do not infer semantics in COD-17. |
-| displayList, plainObjects, document lists, Node list, nestedPrefabs have different collection meanings | ISceneData/IObjectData/SceneWriter and fixtures | COD-25: explicit field-by-field mapping, collection/order preservation. |
-| Legacy Asset Pack key/URL not stable identity; metadata IDs exist only on certain image/spritesheet entries | AssetPack v2 + Sprite Metadata v1 | COD-25 / COD-86: explicit asset index and subResource ID mapping. |
+| displayList, plainObjects, document lists, Node list, nestedPrefabs have different collection meanings | ISceneData/IObjectData/SceneWriter and fixtures | No import or collection mapping; native hierarchy and ordering are authored and validated under the Codogma Scene schema. |
+| Legacy Asset Pack key/URL not stable identity; metadata IDs exist only on certain image/spritesheet entries | AssetPack v2 + Sprite Metadata v1 | No Colibri Asset Pack identity mapping; native Asset/Frame IDs are assigned by Codogma importer and Project Model contracts. |
 | Atlas/Multiatlas metadata/reimport and authoring adapters incomplete; PSD absent; Aseprite limited; TMX absent | importer list/resolvers, reimport section, source tree | COD-86 base workflow; COD-55 atlas analysis; COD-59 PSD/Aseprite; COD-12 importer robustness. |
 | Tiled JSON heuristic fails to validate tileheight type/presence; TMX importer absent | TilemapTiledJSONContentTypeResolver.ts, importer registry | COD-12 / COD-86: add parser fixtures/negative cases before claiming robust Tiled support. |
-| Legacy AssetPack serializer normalizes all sections to section1 and emits narrow meta | AssetPack.fromJSON() / toJSON() | COD-25 / COD-86: decide which vendor/root fields are contractually preserved; round-trip fixtures. |
+| Legacy AssetPack serializer normalizes all sections to section1 and emits narrow meta | AssetPack.fromJSON() / toJSON() | No old AssetPack serializer or vendor/root compatibility. COD-86 defines native asset import and metadata contracts independently. |
 | File rename event map does not register Map entries | FileStorageChange.recordRename() / isRenamed() | Minimal regression: recordRename("assets/a.png","assets/b.png"); assert isRenamed(old) === true and getRenameTo(old) === new; current Map property assignment fails. No automated Colibri test exists in inspected tree | COD-12: fix/test Map semantics and consumers. |
 | Host rename body does not match backend parameter names | editor-api.ts vs server.mjs / Colibri server_renameFile() | COD-12 / COD-86: align a typed Host API request contract; add contract/integration test. |
 | Texture AssetPackItem is shown by Image-based reimport eligibility despite url being an object, while generic reimport requires a string | AssetReimportSection.canEdit() ImageAssetPackItem inheritance; TextureAssetPackItem.getUrl() reads url.IMG; Importer.reimportItem() rejects non-string previousData.url | Reproduction: add type=texture entry with url:{IMG:"assets/dino.png"}, invoke AssetPackEditor.reimportItem_async(); current importer throws “Reimport requires a single project-relative source URL.” Assert UI does not offer unsupported action or importer handles IMG source without data loss. No regression test exists yet | COD-12: align reimport eligibility and data contract; COD-86 must use explicit supported type allowlist. |
@@ -523,12 +523,12 @@ The test descriptions above distinguish **existing tests** from **test scenarios
 
 ## 14. Decision summary
 
-1. **Retain as compatibility evidence:** exact legacy Scene/Prefab fields, serializer behavior, actual fixtures, Asset Pack v2 entry shapes, importer-specific URL/config, Sprite Metadata v1 and source reimport behavior.
+1. **Keep as historical archive only:** exact old Colibri Scene/Prefab fields, serializer behavior, checked-in fixtures and importer observations. None of these becomes a supported Codogma format or acceptance fixture.
 2. **Redesign for Host/Core:** explicit typed services and versioned model contracts for project files, asset IDs/references, importer extensions, diagnostics and Undo/Redo. New Host APIs must not inherit Colibri globals or private extension lifecycle.
-3. **Defer to owners:** Prefab propagation/override semantics (COD-8), Project Model and mapping (COD-25), Component Schema mapping (COD-27), generic asset/API defects (COD-12), Asset Browser/authoring migration (COD-86), atlas analyzer (COD-55), PSD/Aseprite format extensions (COD-59), Host extension lifecycle (COD-53).
-4. **Do not claim:** complete compatibility for arbitrary external projects, native PSD/Aseprite/TMX support, Atlas reimport, automatic path rewrite, end-to-end browser/runtime acceptance, or full legacy-to-Core conversion in current dev.
+3. **New contracts have independent owners:** native Prefab semantics (COD-8), Project Model schema (COD-25), Component Schema/Script authoring (COD-27/COD-91), native Asset Browser/importers (COD-86/COD-59), atlas analyzer (COD-55), Host extension lifecycle (COD-53). They must not map or preserve Colibri formats.
+4. **Product boundary:** Codogma does not support Colibri project compatibility or conversion. Native PSD/Aseprite/TMX support, Atlas reimport, automatic native path repair and end-to-end browser/runtime acceptance require their own independent evidence.
 
-COD-17 covers the inventory, observed compatibility policy and follow-up ownership map. It does not implement importer extensions, new serializers/migrations, Editor UI or runtime integrations. Every registered legacy importer route is listed with source recognition, entry data, metadata/reimport behavior and exact fixture availability; shared error/rollback rules and the known Texture reimport mismatch are stated separately. No external-format browser/runtime support is claimed without a source fixture and acceptance. The open/draft legacy migration PR #41 is supplemental COD-25 work and is not a dependency for completing this inventory. COD-12 owns legacy importer/storage defects, COD-8 Prefab semantics, COD-25 Project Model mapping, COD-55 atlas analysis, COD-59 new PSD/Aseprite extensions and COD-86 new Host authoring workflows. COD-17 can move to Done after this inventory PR is reviewed and merged; those implementation tasks proceed independently under their owners.
+COD-17 covers the inventory, observed compatibility policy and follow-up ownership map. It does not implement importer extensions, new serializers/migrations, Editor UI or runtime integrations. Every registered legacy importer route is listed with source recognition, entry data, metadata/reimport behavior and exact fixture availability; shared error/rollback rules and the known Texture reimport mismatch are stated separately. No external-format browser/runtime support is claimed without a source fixture and acceptance. PR #41 is closed without merge; PR #48 is merged but its Colibri converter is rejected and removed by COD-113. COD-12 records historical defects in the old importer/storage layer; new asset behavior belongs to native COD-86/COD-59 contracts. COD-8 owns only native Prefab semantics; COD-25 owns only the native Project Model schema and released-version migrations. COD-17 can move to Done after this inventory PR is reviewed and merged; those implementation tasks proceed independently under their owners.
 
 ## 15. Source index
 
@@ -557,4 +557,4 @@ All source links below refer to the inspected dev branch unless the row explicit
 - [Legacy FileStorageChange](https://github.com/AiratGaliev/codogma-engine/blob/dev/source/editor/plugins/colibri/src/core/io/FileStorageChange.ts)
 - [COD-12 confirmed legacy defect owners](https://linear.app/codogma-engine/issue/COD-12/zakryt-defekty-asset-pack-importyorov-i-brauzernyh-api)
 - [COD-17](https://linear.app/codogma-engine/issue/COD-17/inventarizirovat-formaty-scenprefabassetov-i-kontrakty-importyorov)
-- [COD-25 migration PR #41 — open/draft, not integrated](https://github.com/AiratGaliev/codogma-engine/pull/41)
+- [COD-25 historical PR #41 — closed without merge](https://github.com/AiratGaliev/codogma-engine/pull/41)
