@@ -456,7 +456,7 @@ Current src/editor/src/services/editor-api.ts exposes typed wrappers for project
 3. **Defer to owners:** Prefab propagation/override semantics (COD-8), Project Model and mapping (COD-25), Component Schema mapping (COD-27), generic asset/API defects (COD-12), Asset Browser/authoring migration (COD-86), atlas analyzer (COD-55), PSD/Aseprite format extensions (COD-59), Host extension lifecycle (COD-53).
 4. **Do not claim:** complete compatibility for arbitrary external projects, native PSD/Aseprite/TMX support, Atlas reimport, automatic path rewrite, end-to-end browser/runtime acceptance, or full legacy-to-Core conversion in current dev.
 
-COD-17 should remain **In Progress** until the inventory is reviewed against the still-unmerged migration evidence and the listed ownership/test follow-ups are accepted. This document is an evidence-backed engineering deliverable, not grounds to close the issue automatically.
+COD-17 is now **In Review**: the inventory is ready for review in [PR #45](https://github.com/AiratGaliev/codogma-engine/pull/45). The inventory deliverable is the evidence and ownership map above; implementation of the routed importer, Host, Prefab and migration follow-ups belongs to COD-12, COD-8, COD-86, COD-55, COD-59 and COD-25 respectively, and is not a prerequisite for closing this inventory task. The task can move to Done after the inventory PR is reviewed and merged and its follow-up ownership is accepted. This document does not claim arbitrary user-project compatibility or browser/runtime acceptance.
 
 ## 15. Source index
 
