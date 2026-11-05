@@ -75,6 +75,7 @@ Project v0 migration and legacy .scene compatibility converters are explicit in-
 - migrateSceneDocument(input, options) and migratePrefabDocument(input, options) validate v1 documents or opt in to conversion from legacy sceneType: "SCENE" | "PREFAB" envelopes.
 - migrateLegacySceneDocument / migrateLegacyPrefabDocument are legacy-only entry points. They preserve source payloads, require stable existing IDs and apply Component/Prefab mappings only when the caller supplies explicit mappings.
 - Legacy renderer, texture/asset keys, plainObjects, nested Prefab metadata and other unrepresented fields are preserved with diagnostics rather than being assigned invented v1 runtime semantics.
+- A present but malformed hierarchy/Component collection (displayList, Node list or components) is a blocking migration error; the converter does not return a partial Scene tree. Missing optional collections remain empty.
 
 These functions do not perform file I/O, execute project code, resolve arbitrary module paths or rewrite source files. A caller must inspect diagnostics and own the save/confirmation workflow. See docs/legacy-project-model-compatibility.md for the field mapping, limits and fixture evidence.
 
