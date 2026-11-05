@@ -77,6 +77,7 @@ namespace phasereditor2d.pack.core {
             this._fontFace = font;
             this._fontSourceKey = sourceKey;
             this._loadError = null;
+            document.body.classList.add("fonts-loaded");
 
             if (previousFont) {
                 fontSet.delete(previousFont);
