@@ -92,8 +92,10 @@ test("migrates all 27 real legacy Scene and Prefab fixtures without losing sourc
 
   for (const name of legacySceneFixtures) {
     const source = parseFixture(name);
+    const originalJson = JSON.stringify(source);
     const roots = Array.isArray(source.displayList) ? source.displayList : [];
     const migrated = migrateLegacySceneDocument(source);
+    assert.equal(JSON.stringify(source), originalJson, name + " input must remain unchanged");
     assert.equal(migrated.document.id, source.id, name);
     assert.equal(migrated.document.rootNodes.length, roots.length, name);
     assert.equal(migrated.document.schemaVersion, 1, name);
@@ -116,9 +118,11 @@ test("migrates all 27 real legacy Scene and Prefab fixtures without losing sourc
 
   for (const name of legacyPrefabFixtures) {
     const source = parseFixture(name);
+    const originalJson = JSON.stringify(source);
     const roots = Array.isArray(source.displayList) ? source.displayList : [];
     assert.equal(roots.length, 1, name);
     const migrated = migrateLegacyPrefabDocument(source);
+    assert.equal(JSON.stringify(source), originalJson, name + " input must remain unchanged");
     assert.equal(migrated.document.id, source.id, name);
     assert.equal(migrated.document.schemaVersion, 1, name);
     assertNodeSourceTree(migrated.document.root, roots[0]);
@@ -138,12 +142,12 @@ test("migrates all 27 real legacy Scene and Prefab fixtures without losing sourc
 test("converts legacy Component instances and Prefab overrides only from explicit stable mappings", () => {
   const source = parseFixture("Level.scene");
   const prefab = parseFixture("DinoPrefab.scene");
-  const prefabRoot = object((prefab.displayList as unknown[])[0]);
+  const migratedPrefab = migrateLegacyPrefabDocument(prefab).document;
   const legacyPrefabId = String(prefab.id);
   const prefabReferences = new Map<string, LegacyPrefabReference>([
     [legacyPrefabId, {
       prefabId: "project-prefab-dino",
-      rootNodeId: String(prefabRoot.id),
+      rootNodeId: migratedPrefab.root.id,
       propertyNames: new Set(["rotating", "origin"]),
     }],
   ]);
@@ -166,7 +170,7 @@ test("converts legacy Component instances and Prefab overrides only from explici
         "com.codogma.legacy.push-on-click",
         "com.codogma.legacy.tint",
       ]),
-      prefabIds: new Set(["project-prefab-dino"]),
+      prefabs: new Map([["project-prefab-dino", migratedPrefab]]),
     },
   });
   const first = migrated.document.rootNodes[0];
@@ -263,6 +267,27 @@ test("does not self-register mapped types or accept dangling Prefab references",
     }),
     (error: unknown) => error instanceof LegacyProjectMigrationError &&
       error.diagnostics.some((item) => item.code === "PROJECT_INVALID_REFERENCE"),
+  );
+
+  const wrongRootMapping = new Map<string, LegacyPrefabReference>([
+    [legacyPrefabId, {
+      prefabId: "registered-prefab",
+      rootNodeId: "wrong-prefab-root",
+      propertyNames: new Set(["rotating"]),
+    }],
+  ]);
+  const registeredPrefab = migrateLegacyPrefabDocument(prefab).document;
+  assert.throws(
+    () => migrateLegacySceneDocument(source, {
+      prefabReferences: wrongRootMapping,
+      validationContext: {
+        prefabs: new Map([["registered-prefab", registeredPrefab]]),
+      },
+    }),
+    (error: unknown) => error instanceof LegacyProjectMigrationError &&
+      error.diagnostics.some((item) =>
+        item.code === "PROJECT_INVALID_REFERENCE" &&
+        item.path?.endsWith(".prefabId")),
   );
 });
 
