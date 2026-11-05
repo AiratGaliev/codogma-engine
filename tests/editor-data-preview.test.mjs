@@ -1489,3 +1489,373 @@ test("ImageParser keeps the real height of a non-square image canvas", () => {
         packCore.AssetPackUtils.getImageFromPackUrl = originalGetImage
     }
 })
+
+
+/* ====================== COD-12 Asset Pack/browser regressions ====================== */
+
+test("FileStorageChange records and resolves renames through its Map contract", () => {
+    const change = new globalThis.colibri.core.io.FileStorageChange()
+
+    change.recordRename("assets/old.png", "assets/new.png")
+
+    assert.equal(change.isRenamed("assets/old.png"), true)
+    assert.equal(change.getRenameTo("assets/old.png"), "assets/new.png")
+    assert.equal(change.wasRenamed("assets/new.png"), true)
+    assert.equal(change.wasRenamed("assets/old.png"), false)
+    assert.deepEqual([...change.getRenameFromRecords()], ["assets/old.png"])
+    assert.deepEqual([...change.getRenameToRecords()], ["assets/new.png"])
+})
+
+test("Tiled JSON resolver accepts only positive integer tile dimensions", async () => {
+    const resolver = new packCore.contentTypes.TilemapTiledJSONContentTypeResolver()
+    const originalRead = FileUtils.preloadAndGetFileString
+    let content = ""
+
+    FileUtils.preloadAndGetFileString = async () => content
+
+    try {
+        const file = { getExtension: () => "json" }
+        const valid = {
+            layers: [],
+            tilesets: [],
+            tilewidth: 32,
+            tileheight: 16
+        }
+        const expected = packCore.contentTypes.CONTENT_TYPE_TILEMAP_TILED_JSON
+
+        content = JSON.stringify(valid)
+        assert.equal(await resolver.computeContentType(file), expected)
+
+        for (const invalid of [
+            { layers: [], tilesets: [], tilewidth: 32 },
+            { layers: [], tilesets: [], tilewidth: 32, tileheight: "16" },
+            { layers: [], tilesets: [], tilewidth: "32", tileheight: 16 },
+            { layers: [], tilesets: [], tilewidth: 0, tileheight: 16 },
+            { layers: [], tilesets: [], tilewidth: 32, tileheight: 0 },
+            { layers: [], tilesets: [], tilewidth: -1, tileheight: 16 },
+            { layers: [], tilesets: [], tilewidth: 32, tileheight: -1 },
+            { layers: [], tilesets: [], tilewidth: 1.5, tileheight: 16 },
+            { layers: {}, tilesets: [], tilewidth: 32, tileheight: 16 },
+            { layers: [], tilesets: {}, tilewidth: 32, tileheight: 16 },
+            null,
+            []
+        ]) {
+            content = JSON.stringify(invalid)
+            assert.equal(
+                await resolver.computeContentType(file),
+                globalThis.colibri.core.CONTENT_TYPE_ANY,
+                `invalid Tiled JSON must not be classified as Tiled: ${content}`
+            )
+        }
+
+        content = "{"
+        assert.equal(await resolver.computeContentType(file), globalThis.colibri.core.CONTENT_TYPE_ANY)
+    } finally {
+        FileUtils.preloadAndGetFileString = originalRead
+    }
+})
+
+test("Texture Asset Pack reimport resolves IMG and preserves compressed URL variants", async () => {
+    const sourceFile = {
+        isFile: () => true,
+        getSize: () => 4096,
+        getModTime: () => 12345
+    }
+    const pack = {
+        getUrlFromAssetFile: () => "assets/hero.png"
+    }
+    const item = new packCore.TextureAssetPackItem(pack, {
+        type: "texture",
+        key: "hero",
+        url: {
+            IMG: "assets/hero.png",
+            ETC1: "assets/hero.pvr",
+            ASTC: "assets/hero.ktx2"
+        },
+        customImporterField: { keep: true }
+    })
+    const frame = {
+        getName: () => "0",
+        getWidth: () => 32,
+        getHeight: () => 24,
+        getFrameData: () => ({
+            src: { x: 0, y: 0, w: 32, h: 24 },
+            dst: { x: 0, y: 0, w: 32, h: 24 },
+            srcSize: { x: 32, y: 24 }
+        })
+    }
+
+    item.getFileFromAssetUrl = () => sourceFile
+    item.preload = async () => controls.PreloadResult.NOTHING_LOADED
+    item.build = async () => {}
+    item.getFrames = () => [frame]
+    item.resetCache = () => {}
+
+    assert.equal(item.getSourceUrl(), "assets/hero.png")
+    assert.equal(item.getUrl(), "assets/hero.png")
+
+    const importer = new packUi.importers.TextureImporter()
+    await importer.reimportItem(pack, item)
+
+    assert.deepEqual(item.getData().url, {
+        IMG: "assets/hero.png",
+        ETC1: "assets/hero.pvr",
+        ASTC: "assets/hero.ktx2"
+    })
+    assert.deepEqual(item.getData().customImporterField, { keep: true })
+    assert.equal(item.getData().codogma.schemaVersion, 1)
+})
+
+test("FontAssetPackItem retries failed loads and releases its owned FontFace", async () => {
+    const previousFonts = document.fonts
+    const previousFontFace = globalThis.FontFace
+    const fontFaces = new Set()
+    const fontSet = {
+        add(font) { fontFaces.add(font); return this },
+        delete(font) { return fontFaces.delete(font) },
+        has(font) { return fontFaces.has(font) }
+    }
+    let attempts = 0
+    let createdFaces = 0
+
+    class TestFontFace {
+        constructor(family, source, descriptors) {
+            this.family = family
+            this.source = source
+            this.descriptors = descriptors
+            this.status = "unloaded"
+            createdFaces++
+        }
+
+        async load() {
+            attempts++
+            if (attempts === 1) {
+                throw new Error("simulated decode failure")
+            }
+            this.status = "loaded"
+            return this
+        }
+    }
+
+    document.fonts = fontSet
+    globalThis.FontFace = TestFontFace
+
+    try {
+        const sourceFile = {
+            isFile: () => true,
+            getUrl: () => "/project/fonts/game.woff2"
+        }
+        const item = new packCore.FontAssetPackItem(null, {
+            type: "font",
+            key: "game-font",
+            url: "fonts/game.woff2",
+            format: "woff2",
+            descriptors: { weight: "400" }
+        })
+        item.getFileFromAssetUrl = () => sourceFile
+
+        await assert.rejects(item.preload(), /simulated decode failure/)
+        assert.equal(fontFaces.size, 0, "failed FontFace must never enter document.fonts")
+
+        const loaded = await item.preload()
+        assert.equal(loaded, controls.PreloadResult.RESOURCES_LOADED)
+        assert.equal(fontFaces.size, 1)
+        assert.equal(attempts, 2)
+        assert.equal(createdFaces, 2)
+
+        const cached = await item.preload()
+        assert.equal(cached, controls.PreloadResult.NOTHING_LOADED)
+        assert.equal(attempts, 2, "a successfully loaded face must not be loaded again on every preload")
+
+        item.resetCache()
+        assert.equal(fontFaces.size, 0, "resetCache must remove the FontFace owned by this asset item")
+    } finally {
+        document.fonts = previousFonts
+        if (previousFontFace === undefined) {
+            delete globalThis.FontFace
+        } else {
+            globalThis.FontFace = previousFontFace
+        }
+    }
+})
+
+test("DirectoryReader drains every readEntries batch and keeps valid siblings after a file error", async () => {
+    const uploadUtils = globalThis.phasereditor2d.files.ui.dialogs.UploadUtils
+    const originalError = console.error
+    const batches = [
+        [
+            {
+                isFile: true,
+                fullPath: "/sprites/broken.png",
+                file(_resolve, reject) { reject(new Error("simulated read failure")) }
+            },
+            {
+                isFile: true,
+                fullPath: "/sprites/one.png",
+                file(resolve) { resolve({ name: "one.png" }) }
+            },
+            {
+                isFile: true,
+                fullPath: "/sprites/two.png",
+                file(resolve) { resolve({ name: "two.png" }) }
+            }
+        ],
+        [
+            {
+                isFile: true,
+                fullPath: "/sprites/three.png",
+                file(resolve) { resolve({ name: "three.png" }) }
+            }
+        ],
+        []
+    ]
+    let readCalls = 0
+    const directory = {
+        isFile: false,
+        fullPath: "/sprites",
+        createReader() {
+            return {
+                readEntries(resolve) {
+                    const batch = batches[readCalls++] || []
+                    resolve(batch)
+                }
+            }
+        }
+    }
+
+    console.error = () => {}
+    try {
+        const files = await uploadUtils.getFilesFromDragEvent({
+            dataTransfer: {
+                items: [{
+                    kind: "file",
+                    webkitGetAsEntry: () => directory,
+                    getAsFile: () => null
+                }]
+            }
+        })
+
+        assert.equal(readCalls, 3, "the reader must continue until it receives an empty batch")
+        assert.deepEqual(
+            files.map(entry => entry.fullPath),
+            ["/sprites/one.png", "/sprites/two.png", "/sprites/three.png"]
+        )
+    } finally {
+        console.error = originalError
+    }
+})
+
+test("UploadDialog continues after a failed file and keeps only failed files queued for retry", async () => {
+    const filesUi = globalThis.phasereditor2d.files.ui
+    const controls = globalThis.colibri.ui.controls
+    const FileUtils = globalThis.colibri.ui.ide.FileUtils
+    const Workbench = globalThis.colibri.ui.ide.Workbench
+    const BlocksPlugin = globalThis.phasereditor2d.blocks.BlocksPlugin
+    const originals = {
+        ProgressDialog: controls.dialogs.ProgressDialog,
+        uploadFile: FileUtils.uploadFile_async,
+        getWorkbench: Workbench.getWorkbench,
+        getBlocksPlugin: BlocksPlugin.getInstance
+    }
+    const queued = [
+        { name: "fail-first.png" },
+        { name: "success-one.png" },
+        { name: "success-two.png" }
+    ]
+    const attempted = []
+    const selected = []
+    let failFirst = true
+    let closeCount = 0
+
+    class TestProgressDialog {
+        create() {}
+        setTitle() {}
+        setCloseWithEscapeKey() {}
+        addButton() { return { innerText: "Cancel" } }
+        setProgress() {}
+        close() {}
+    }
+
+    const view = {
+        getViewer: () => ({
+            setSelection: values => selected.push(...values),
+            reveal() {},
+            repaint() {}
+        })
+    }
+    const workbench = {
+        getContentTypeRegistry: () => ({ preload: async () => {} }),
+        getActiveWindow: () => ({ getView: () => view })
+    }
+
+    controls.dialogs.ProgressDialog = TestProgressDialog
+    FileUtils.uploadFile_async = async (_folder, file) => {
+        attempted.push(file.name)
+        if (file.name === "fail-first.png" && failFirst) {
+            throw new Error("simulated upload failure")
+        }
+        return { getName: () => file.name }
+    }
+    Workbench.getWorkbench = () => workbench
+    BlocksPlugin.getInstance = () => ({ refreshBlocksView() {} })
+
+    try {
+        const dialog = Object.create(filesUi.dialogs.UploadDialog.prototype)
+        dialog._uploadFolder = {}
+        dialog._uploadBtnElement = { disabled: false, textContent: "" }
+        dialog._uploadStatusElement = { textContent: "" }
+        dialog.close = () => { closeCount++ }
+
+        const viewer = {
+            getInput: () => queued,
+            setInput(values) {
+                queued.splice(0, queued.length, ...values)
+            },
+            repaint() {}
+        }
+
+        await dialog.uploadSelectedFiles_async(viewer)
+
+        assert.deepEqual(attempted, ["fail-first.png", "success-one.png", "success-two.png"])
+        assert.deepEqual(queued.map(file => file.name), ["fail-first.png"])
+        assert.deepEqual(selected.map(file => file.getName()), ["success-one.png", "success-two.png"])
+        assert.match(dialog._uploadStatusElement.textContent, /fail-first\.png/)
+        assert.equal(dialog._uploadBtnElement.disabled, false)
+        assert.equal(dialog._uploadBtnElement.textContent, "Upload 1 Files")
+        assert.equal(closeCount, 0, "dialog must remain open while failed files can be retried")
+
+        failFirst = false
+        await dialog.uploadSelectedFiles_async(viewer)
+
+        assert.deepEqual(queued, [])
+        assert.equal(dialog._uploadBtnElement.disabled, true)
+        assert.equal(dialog._uploadStatusElement.textContent, "")
+        assert.equal(closeCount, 1, "dialog closes after all queued files are uploaded")
+    } finally {
+        controls.dialogs.ProgressDialog = originals.ProgressDialog
+        FileUtils.uploadFile_async = originals.uploadFile
+        Workbench.getWorkbench = originals.getWorkbench
+        BlocksPlugin.getInstance = originals.getBlocksPlugin
+    }
+})
+
+test("Audio and video preview release their media source when the section is hidden", () => {
+    for (const [Section, property] of [
+        [packUi.properties.AudioPreviewSection, "_audioElement"],
+        [packUi.properties.VideoPreviewSection, "_videoElement"]
+    ]) {
+        const calls = []
+        const section = Object.create(Section.prototype)
+        section[property] = {
+            removeAttribute: name => calls.push(["removeAttribute", name]),
+            load: () => calls.push(["load"])
+        }
+
+        section.onSectionHidden()
+
+        assert.deepEqual(calls, [
+            ["removeAttribute", "src"],
+            ["load"]
+        ])
+    }
+})
