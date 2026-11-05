@@ -273,9 +273,9 @@ test("rejects malformed optional Asset sub-resource identifiers", () => {
   });
 
   assert.equal(invalidNumber.valid, false);
-  assert.equal(invalidNumber.diagnostics.some((item) => item.path === "assets[0]"), true);
+  assert.equal(invalidNumber.diagnostics.some((item) => item.path === "assets[0].subResourceId"), true);
   assert.equal(invalidEmpty.valid, false);
-  assert.equal(invalidEmpty.diagnostics.some((item) => item.path === "assets[0]"), true);
+  assert.equal(invalidEmpty.diagnostics.some((item) => item.path === "assets[0].subResourceId"), true);
 });
 
 
