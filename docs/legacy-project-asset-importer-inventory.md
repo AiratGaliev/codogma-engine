@@ -183,6 +183,17 @@ Importer registration находится в DefaultAssetPackExtension.createImpo
 | htmlTexture | HTML content type | url, defaults width/height 512. |
 | binary | Generic binary content type | Generic file url; no type-specific data guarantee. |
 
+### Import transaction и error/rollback semantics
+
+Путь импорта состоит из двух уровней, и их гарантии нужно различать:
+
+1. Importer.autoImport() выбирает один из двух контрактов: обычный importer вызывает importFile() для каждого файла; multi-file importer получает весь массив и создаёт один item через importMultipleFiles().
+2. importFile()/importMultipleFiles() добавляет entry в Asset Pack до preload/build. Если отдельный item не строится, importer удаляет его и сбрасывает cache. Внешний autoImport() при ошибке также удаляет все entries, которые успели успешно импортироваться в рамках текущего batch, и сбрасывает их caches. Частичный результат не остаётся в Asset Pack.
+3. AssetPackEditor.importData_async() делает snapshot до импорта, получает items от importer, повторно выполняет preload/build для списка импортированных items, обновляет viewer/blocks и создаёт snapshot Undo operation после успеха. Если последующий шаг завершается ошибкой, editor удаляет созданные entries, очищает caches, пробует обновить blocks и повторно выбрасывает исходную ошибку.
+4. Таким образом, заявленная атомарность относится к in-memory Asset Pack entries/cache и editor snapshot operation. Она не означает transaction для копирования/изменения source files на диске и не доказывает rollback внешних побочных эффектов importer-а.
+
+Это фактический legacy контракт. Новому Host нужен эквивалентный typed transaction/error policy, но не импорт Colibri editor classes.
+
 ### Content type detection — фактическая строгость
 
 Resolver не равен полноценному validator:
@@ -421,6 +432,7 @@ All source links below refer to the inspected dev branch unless the row explicit
 - [Component fixtures](https://github.com/AiratGaliev/codogma-engine/tree/dev/tests/workspace/test-typescript/components)
 - [Asset Pack fixture](https://github.com/AiratGaliev/codogma-engine/blob/dev/tests/workspace/test-typescript/assets/asset-pack.json)
 - [Asset Pack implementation/importers](https://github.com/AiratGaliev/codogma-engine/tree/dev/source/editor/plugins/phasereditor2d.pack/src)
+- [Importer transaction implementation](https://github.com/AiratGaliev/codogma-engine/tree/dev/source/editor/plugins/phasereditor2d.pack/src/ui/importers)
 - [Sprite Metadata v1 contract](sprite-asset-metadata.md)
 - [Colibri storage contracts](https://github.com/AiratGaliev/codogma-engine/tree/dev/source/editor/plugins/colibri/src/core/io)
 - [Legacy Undo/Redo](https://github.com/AiratGaliev/codogma-engine/tree/dev/source/editor/plugins/colibri/src/ui/ide/undo)
