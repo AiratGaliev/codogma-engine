@@ -633,9 +633,40 @@ test("rejects Component instance schemaVersion values below one", () => {
     }],
     settings: {},
   };
-  const result = validateSceneDocument(scene);
+  for (const schemaVersion of [0, -1, 1.5]) {
+    const input = structuredClone(scene);
+    input.rootNodes[0]!.components[0]!.schemaVersion = schemaVersion;
+    const result = validateSceneDocument(input);
+    assert.equal(result.valid, false);
+    assert.ok(result.diagnostics.some((item) =>
+      item.code === "COMPONENT_INVALID_SCHEMA" &&
+      item.path === "rootNodes[0].components[0].schemaVersion"));
+  }
+});
+
+test("rejects cyclic Scene Node graphs before recursive validation", () => {
+  const root: {
+    id: string;
+    name: string;
+    active: boolean;
+    transform: { x: number; y: number; rotation: number; scaleX: number; scaleY: number; originX: number; originY: number };
+    components: unknown[];
+    children: unknown[];
+  } = {
+    id: "node-cycle",
+    name: "Cycle",
+    active: true,
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+    components: [],
+    children: [],
+  };
+  root.children.push(root);
+  const result = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene-cycle",
+    name: "Cycle",
+    rootNodes: [root],
+    settings: {},
+  });
   assert.equal(result.valid, false);
-  assert.ok(result.diagnostics.some((item) =>
-    item.code === "COMPONENT_INVALID_SCHEMA" &&
-    item.path === "rootNodes[0].components[0].schemaVersion"));
 });
