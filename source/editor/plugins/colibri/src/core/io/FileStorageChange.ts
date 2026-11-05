@@ -54,12 +54,12 @@ namespace colibri.core.io {
             this._renameRecords_fromPath.add(fromPath);
             this._renameRecords_toPath.add(toPath);
 
-            this._renameFromToMap[fromPath] = toPath;
+            this._renameFromToMap.set(fromPath, toPath);
         }
 
         getRenameTo(fromPath: string) {
 
-            return this._renameFromToMap[fromPath];
+            return this._renameFromToMap.get(fromPath);
         }
 
         isRenamed(fromPath: string) {
