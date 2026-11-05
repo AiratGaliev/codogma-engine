@@ -11,6 +11,32 @@ Host-neutral contracts and the first component-object Core slice.
 - A scene host owns one ComponentWorld lifetime per active scene. Replacing a scene disposes the previous world before creating the next one.
 - Component modules are supplied through explicit registration. Project data stores stable type/module references; it never supplies executable import paths or source code.
 
+## Public runtime contract
+
+### Component definitions and registry
+
+- `ComponentTypeDefinition` is registered explicitly by its schema `typeId`; class names, filenames and UI labels are not identities.
+- `typeId` identifies a component kind, while each attachment receives its own instance ID. The registry rejects duplicate type IDs, including attempts to register another version under an already registered ID.
+- `schemaVersion` versions the property contract; `version` identifies the implementation/authoring definition. Keep a type ID stable for compatible changes. Incompatible property-contract changes require a schema-version change and an explicit migration policy.
+- Registration validates and deep-freezes a schema snapshot and captures the factory function. Mutating the source definition after registration does not replace the registered factory.
+- `unregister(typeId)` only affects future attachments. Existing worlds retain their captured definition until their components are destroyed or the world is disposed. Re-registering a removed ID does not hot-swap existing instances.
+
+### Node and component lifecycle
+
+- A `ComponentWorld` owns one scene-local Node/component lifetime. Node identity and activation are read-only through `getNode()` / `listNodes()`; update activation through `setNodeActive()`. Transform values remain mutable runtime state.
+- Components are created in Node insertion and attachment order. For each active/enabled instance the Core invokes `onCreate`, `onEnable`, then on the first host update `onStart` followed by `onUpdate`; disabling/removing invokes `onDisable` when active and then `onDestroy`.
+- A failed `onEnable`, `onDisable`, `onStart` or `onUpdate` removes the affected instance, attempts the remaining cleanup callbacks, continues processing siblings and aggregates errors. Failed activation never advances to start/update.
+- Factories and lifecycle callbacks are synchronous. Promise-like results are rejected; perform asynchronous loading in an explicit host/service phase before attaching or activating components.
+- Component properties are validated, cloned at the mutation request boundary and passed to factories as a deeply frozen JSON snapshot. Component behavior owns its external resources: acquire them in `onCreate`, release subscriptions/handles in `onDestroy`. Core invokes cleanup but does not own external resource implementations.
+
+### Systems, update and disposal
+
+- The host is the sole tick owner and calls `ComponentWorld.update(deltaSeconds)`. Delta must be finite and non-negative. Core creates no Game, Scene Manager, ticker or `requestAnimationFrame` loop.
+- Component callbacks run in Node insertion / component attachment order; registered systems run afterwards in registration order. System registration/removal requested during update is queued to the operation boundary. Each system registration captures its ID and callbacks; removal disposes it once, and world disposal disposes remaining systems in reverse registration order.
+- Structural mutations requested during update or lifecycle callbacks are drained FIFO at the safe boundary, with a 10,000-operation guard against an endlessly self-enqueuing callback chain.
+- World disposal is idempotent, rejects reentrant mutations while disposing, attempts all component/system cleanup, aggregates failures and clears world-owned state even when a callback throws.
+- The Phaser adapter owns the concrete Phaser tick binding (COD-28); Project Model hydration, live Inspector mapping and Preview session are separate integration responsibilities (COD-103, COD-31 and COD-30).
+
 ## Commands
 
 Run from this directory:
