@@ -113,7 +113,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 6. До общего Preview Host/MCP session ownership не подключать новый Host к legacy broadcast SSE bridge и не допускать concurrent write в один PROJECT_DIR. Session-aware MCP routing ведётся в COD-85.
 7. После принятия migration inventory выполнить COD-87 cutover с rollback window, затем отдельную COD-88 cleanup после consumer/provenance/license audit.
 
-Legacy Colibri используется как источник требований, поведения и fixtures, а не как implementation blueprint. `src/editor/` уже существует как самостоятельное приложение; `source/editor/` не переносится. npm Workspaces и единая lockfile-консолидация остаются отдельным инфраструктурным решением, не предусловием для текущего Host workflow.
+Colibri используется исключительно как историческое UI evidence: наблюдаемые пользовательские workflows и interaction edge cases. Его project formats, serialized fields, fixtures, serializers, Component/Prefab identities, importer contracts, runtime semantics и codegen не являются требованиями, входными данными или acceptance baseline нового Codogma. `src/editor/` уже существует как самостоятельное приложение; `source/editor/` не переносится. npm Workspaces и единая lockfile-консолидация остаются отдельным инфраструктурным решением, не предусловием для текущего Host workflow.
 
 ### Подготовленные reference-документы — использовать, не пересоздавать
 
