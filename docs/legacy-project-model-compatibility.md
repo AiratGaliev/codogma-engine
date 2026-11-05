@@ -73,13 +73,13 @@ componentInstanceIds задаёт отдельный stable ID для каждо
 
     legacyComponentInstanceKey(nodeId, legacyComponentName)
 
-Если отсутствует type mapping или instance ID, компонент не создаётся. Его class reference и namespaced values остаются в legacySource; diagnostic имеет code PROJECT_LEGACY_COMPONENT_PRESERVED. ID не генерируется из имени класса/узла или индекса массива.
+Если отсутствует type mapping или instance ID, компонент не создаётся. Его class reference и namespaced values остаются в legacySource; diagnostic имеет code PROJECT_LEGACY_COMPONENT_PRESERVED. ID не генерируется из имени класса/узла или индекса массива. Пустой или некорректный переданный instance ID отклоняется как ошибка, а не трактуется как отсутствие mapping.
 
-При предоставленном validationContext.componentSchemas текущий Scene validator проверяет mapped properties и применяет persisted/default semantics. Дополнительно registeredComponentTypes проверяет наличие явной регистрации typeId. Выполнение старого класса, генерация нового файла и module resolution не входят в миграцию.
+Component mapping — это утверждение вызывающей стороны о соответствии legacy class и persisted type ID, а не регистрация нового типа. При наличии validationContext.registeredComponentTypes мигратор/validator проверяет, что typeId уже зарегистрирован; validationContext.componentSchemas дополнительно валидирует schemaVersion и properties и применяет persisted/default semantics. Неизвестный зарегистрированному контексту mapped type отклоняется. Без registry/schema context проверяется только корректность явного mapping, но не существование загруженного Component definition. Выполнение старого класса, генерация нового файла и module resolution не входят в миграцию.
 
 ## 6. Prefab и resource mappings
 
-prefabReferences сопоставляет legacy Prefab document ID с текущим Project Prefab reference ID, root Node ID и белым списком имён properties, которые разрешено превратить в overrides. Это не автоматическое равенство между legacy document ID, Project Asset ID и Prefab reference ID. Ссылка без mapping остаётся в source с diagnostic; переданный mapping проверяется через validationContext.prefabIds / prefabs.
+prefabReferences сопоставляет legacy Prefab document ID с текущим Project Prefab reference ID, root Node ID и белым списком имён properties, которые разрешено превратить в overrides. Это не автоматическое равенство между legacy document ID, Project Asset ID и Prefab reference ID. Mapping обязателен к регистрации в validationContext.prefabIds или validationContext.prefabs; без подтверждённого Project Prefab reference конвертация завершается PROJECT_INVALID_REFERENCE. Если передан полный validationContext.prefabs, rootNodeId дополнительно должен совпасть со stable ID корня зарегистрированного Prefab.
 
 В текущей v1 Node contract нет поля для произвольных asset references. Поэтому legacy texture/atlas/frame keys не превращаются в Node Asset refs. Перенос Asset references возможен только через существующий Project AssetReference и соответствующее typed Component property либо после отдельного утверждения расширения контракта. Asset Pack v2 и importer metadata инвентаризированы в COD-17, но импорт/reimport не запускается этим API.
 
