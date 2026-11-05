@@ -68,6 +68,8 @@ Legacy Prefab — тот же .scene envelope с sceneType: "PREFAB".
 
 ## 5. User Components: только явная идентичность
 
+TypeScript API экспортирует LegacyMigratedNodeDocument, LegacyMigratedSceneDocument и LegacyMigratedPrefabDocument. Явные legacy-only функции возвращают LegacyMigrationResult с этими типами; nested children тоже типизированы как LegacyMigratedNodeDocument. Поэтому вызывающий код имеет типизированный доступ к legacySource, legacyCollection, legacyComponents и legacyPrefabProperties. Универсальные migrateSceneDocument / migratePrefabDocument принимают как текущие v1 документы, так и legacy envelope; sourceVersion различает cge-scene-v1 / cge-prefab-v1 и исходные legacy версии.
+
 LegacySceneMigrationOptions.componentTypes задаёт legacy class name → typeId + schemaVersion. Это не module manifest и не способ загрузки TypeScript source.
 
 componentInstanceIds задаёт отдельный stable ID для каждого attachment по ключу:
