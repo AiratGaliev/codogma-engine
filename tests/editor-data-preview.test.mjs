@@ -1665,6 +1665,7 @@ test("FontAssetPackItem retries failed loads and releases its owned FontFace", a
         assert.equal(fontFaces.size, 1)
         assert.equal(attempts, 2)
         assert.equal(createdFaces, 2)
+        assert.equal(item.getLoadError(), null, "successful retry must clear the previous load error")
 
         const cached = await item.preload()
         assert.equal(cached, controls.PreloadResult.NOTHING_LOADED)
