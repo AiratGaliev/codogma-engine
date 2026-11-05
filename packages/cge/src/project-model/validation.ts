@@ -427,6 +427,9 @@ function validateNode(
     valid = false;
   }
   if (!valid) return;
+  if (!isNonEmptyString(node.name) || typeof node.active !== "boolean" ||
+      !isRecord(node.transform) || !Array.isArray(node.components) ||
+      !Array.isArray(node.children)) return;
 
   if (visitedNodes.has(node)) return;
   visitedNodes.add(node);
