@@ -18,7 +18,7 @@
 
 **Другие открытые инженерные reference.** Godot не должен становиться единственным источником implementation ideas. Для конкретной задачи можно выбирать Defold, Fyrox, o2, GDevelop, ezEngine, Stride и специализированные проекты из [каталога Editor Engineering References](editor-engineering-references.md). Каталог разделяет полноценные интегрированные редакторы, 2D-focused и исторические tools, фиксирует revisions/licensing и связывает решения с COD issues. Он не меняет UX-priority Unity → Cocos и не расширяет продуктовый scope.
 
-**Версионное уточнение:** официальный Unity Manual для 6000.6 на дату проверки маркирует Unity 6.6 как **Beta**, а не как stable release. Поэтому Unity 6.6 — основной UX/product reference по запросу проекта, но beta-only APIs/features нельзя принимать за стабильный технический baseline или автоматически включать в Codogma. Для утверждений о стабильности и доступности сверять релизные/LTS материалы Unity отдельно. Cocos Creator 4.0 User Manual обозначен как **4.0 LTS**. Не смешивать его с Cocos Creator 3.x docs или с отдельным репозиторием исходников cocos/cocos4.
+**Версионное уточнение:** официальный Unity Manual для 6000.6 на дату проверки маркирует Unity 6.6 как **Released**, а не как stable release. Поэтому Unity 6.6 — основной UX/product reference по запросу проекта, но beta-only APIs/features нельзя принимать за стабильный технический baseline или автоматически включать в Codogma. Для утверждений о стабильности и доступности сверять релизные/LTS материалы Unity отдельно. Cocos Creator 4.0 User Manual обозначен как **4.0 LTS**. Не смешивать его с Cocos Creator 3.x docs или с отдельным репозиторием исходников cocos/cocos4.
 
 ## 2. Жёсткая граница: 2D, не 2D/3D
 
@@ -63,18 +63,18 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 
 - реальные операции, которые уже выполняют пользователи;
 - формат входных данных/проектов, сериализацию и совместимые поля;
-- текущую связь с Phaser 4.2.1, codegen, runtime, import/reimport и MCP;
+- исторические UI-сценарии, панели, команды, состояния и пользовательские edge cases; технические детали старого runtime допускаются только как справочная информация, не как целевой Codogma contract;
 - edge cases, ошибки, регрессии, known limitations и test fixtures;
 - поведение, которое нужно сохранить ради обратной совместимости существующих проектов.
 
 ### Запрещено переносить автоматически
 
 - Workbench/Parts/controls, меню, диалоги и визуальные композиции как эталон нового Host;
-- Colibri plugin registry, global state, lifecycle, event bus, service locator, private imports и UI coupling;
+- Colibri plugin registry, global state, lifecycle, event bus, service locator, private imports, UI coupling, legacy project serializers и format mappings;
 - неудобные/непоследовательные interaction patterns, устаревшие UX-компромиссы, скрытые состояния и поведение, противоречащее реальным runtime contracts;
 - функции только потому, что «они уже есть в Colibri».
 
-Для каждой legacy-возможности принимай отдельное решение: **retain** (есть доказанная ценность и валидный contract), **redesign** (ценная операция, но новый 2D interaction), **defer** (нет доказанной потребности или runtime readiness), **retire** (не нужна/небезопасна/дублирует лучшее решение). Фиксируй причину. Не считать историческое наличие или Done issue автоматическим требованием к новому Host.
+Для каждого исторического UI-workflow принимай решение: **redesign**, **defer** или **retire**. Не сохраняй старый формат/serializer/Component identity под видом retain: новое поведение должно иметь самостоятельный Codogma contract и native fixtures. Фиксируй причину и owner. Наличие в Colibri или Done issue не создаёт требования совместимости.
 
 ## 5. Обязательный процесс для каждой UI/authoring задачи
 
@@ -105,9 +105,9 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 3. Unity 6.6 — основной UX reference; учитывать Beta status для релизных/технических выводов.
 4. Cocos Creator 4.0 LTS — дополнительный workflow reference и cross-check.
 5. Godot — implementation reference по релевантным редакторским подсистемам, но не продуктовый UX-reference, не runtime dependency и не критерий acceptance.
-6. Colibri — только compatibility/workflow/data/runtime evidence; не UX/architecture authority.
+6. Colibri — только историческое UI/workflow evidence; не UX/architecture authority и не источник форматов, schemas, serialization или runtime contracts нового Codogma.
 
-Если референс предполагает API или feature, которых нет в текущем Phaser/runtime contract, не симулировать поддержку UI-заглушкой. Либо сузить workflow до реально работающего поведения, либо отдельно обосновать и проверить runtime/Core изменение с fixtures, migration plan и acceptance.
+Если reference предполагает API или feature, которых нет в текущем Codogma/Phaser contract, не симулировать поддержку UI-заглушкой. Спроектировать собственный типизированный contract, native fixtures, implementation и acceptance. Не вводить compatibility shim со старой Colibri schema.
 
 ## 7. Официальные источники
 
