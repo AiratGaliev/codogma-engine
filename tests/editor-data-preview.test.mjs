@@ -1654,7 +1654,10 @@ test("FontAssetPackItem retries failed loads and releases its owned FontFace", a
         })
         item.getFileFromAssetUrl = () => sourceFile
 
-        await assert.rejects(item.preload(), /simulated decode failure/)
+        const failed = await item.preload()
+        assert.equal(failed, controls.PreloadResult.NOTHING_LOADED,
+            "a failed optional font must not abort loading the whole Asset Pack")
+        assert.match(item.getLoadError(), /simulated decode failure/)
         assert.equal(fontFaces.size, 0, "failed FontFace must never enter document.fonts")
 
         const loaded = await item.preload()
