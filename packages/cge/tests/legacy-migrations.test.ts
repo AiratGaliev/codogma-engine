@@ -31,6 +31,10 @@ const componentInstanceIds = new Map<string, string>([
   [legacyComponentInstanceKey("dbf996fe-97a4-4a56-8978-ba3fb5d1e5ae", "Tint"), "instance-level-tint"],
 ]);
 
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Expected a JSON object.");
@@ -205,7 +209,7 @@ test("unknown Component classes, texture keys and Prefab links remain losslessly
 
 test("does not invent IDs, prefab mappings, or hierarchy groups", () => {
   const scene = parseFixture("Level.scene");
-  const missingNodeId = structuredClone(scene);
+  const missingNodeId = clone(scene);
   const displayList = missingNodeId.displayList as Array<Record<string, unknown>>;
   delete displayList[0]?.id;
   assert.throws(
@@ -215,9 +219,9 @@ test("does not invent IDs, prefab mappings, or hierarchy groups", () => {
   );
 
   const prefab = parseFixture("DinoPrefab.scene");
-  const roots = structuredClone(prefab);
+  const roots = clone(prefab);
   const prefabRoots = roots.displayList as Array<Record<string, unknown>>;
-  const secondRoot = structuredClone(object(prefabRoots[0]));
+  const secondRoot = clone(object(prefabRoots[0]));
   secondRoot.id = "second-prefab-root";
   prefabRoots.push(secondRoot);
   assert.throws(
