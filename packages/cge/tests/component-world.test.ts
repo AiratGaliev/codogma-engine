@@ -728,7 +728,7 @@ test("rejects asynchronous system disposal and still completes world teardown", 
   world.registerSystem({
     id: "async-dispose",
     update: () => undefined,
-    dispose: (() => Promise.resolve()) as unknown as ComponentSystem["dispose"],
+    dispose: (() => Promise.resolve()) as unknown as NonNullable<ComponentSystem["dispose"]>,
   });
 
   assert.throws(() => world.dispose(), AggregateError);
