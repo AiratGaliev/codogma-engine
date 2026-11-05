@@ -62,7 +62,7 @@ export function migrateProjectDocument(input: unknown): ProjectMigrationResult {
       runtime = { adapterId: "phaser", settings: {} };
     } else {
       if (!isRecord(source.runtime) || typeof source.runtime.adapterId !== "string" ||
-          source.adapterId === "") {
+          source.runtime.adapterId.trim() === "") {
         throw migrationError(
           "Project v0 runtime must be an object with a string adapterId when present; malformed data is not replaced with defaults.",
           "runtime",
