@@ -131,7 +131,7 @@ SolidJS Host:
 - `src/FollowTarget.ts` экспортирует для Core явный `ComponentTypeDefinition` contract: stable `typeId`, `schemaVersion`, definition/module version и factory. Имя файла/экспорта/display name не является runtime identity. Тест импортирует definition и регистрирует её в `ComponentRegistry`; это не доказывает runtime module resolution или исполнение внутри Preview.
 - `assets/player.svg` — реальный локальный image asset. Test проверяет, что каждый путь из Project manifest существует и остаётся внутри fixture root.
 - Fixture schema объявляет `persisted`, `editorOnly` и `runtime` свойства, чтобы property serializer contract проверялся на одном реальном definition.
-- `packages/cge/tests/fixtures/acceptance-negative-cases.json` содержит отрицательные входы. Ожидаемые diagnostics перечислены в `12.
+- `packages/cge/tests/fixtures/acceptance-negative-cases.json` содержит отрицательные входы. Ожидаемые diagnostics перечислены в разделе 12.
 
 Automated Core evidence: `packages/cge/tests/acceptance-slice.test.ts` проверяет Project/Scene parsing, manifest→definition identity, registry registration, два независимых factory state, positive asset/node references, Project/Scene round-trip и unknown fields, property-level persisted filtering и negative diagnostics. `packages/cge/tests/component-world.test.ts` независимо покрывает lifecycle/instance isolation на ручных Core Nodes.
 
@@ -211,7 +211,7 @@ PR #47 закрывает этот конкретный Core contract gap:
 3. `validatePrefabDocument()` использует нормализованный root от общего Scene/Node validator, поэтому тот же storage contract применяется к Prefab serialization.
 4. `acceptance-slice.test.ts` передаёт transient `editorOnly/runtime` значения в `serializeSceneDocument()` и `serializePrefabDocument()`, затем открывает сериализованные документы и проверяет: persisted + unknown JSON fields сохранены, non-persisted values отсутствуют, исходные объекты не изменены.
 
-Это закрывает Core serialization boundary для текущего schema context. На PR #47 CI Fast #718 завершился success, включая Core quality suite; однако PR ещё не смёржен, поэтому изменение пока не входит в `dev`. Это **не** закрывает всю COD-27: Host Inspector integration, reference pickers, Undo/Redo и полный Project graph context остаются в её owner scope.
+Это закрывает Core serialization boundary для текущего schema context. Реализация и Core quality suite проверяются в GitHub Actions на head PR; до merge изменение не входит в `dev`. Это **не** закрывает всю COD-27: Host Inspector integration, reference pickers, Undo/Redo и полный Project graph context остаются в её owner scope.
 
 ### Граница Project module manifest — owner COD-25 / COD-91
 

@@ -176,6 +176,9 @@ test("acceptance fixture connects Project, Scene, module identity and two compon
   };
 
   const serializedPrefab = serializePrefabDocument(prefab, context);
+  assert.equal(Object.hasOwn(prefabComponent.properties, "editorLabel"), true);
+  assert.equal(Object.hasOwn(prefabComponent.properties, "runtimeElapsedSeconds"), true);
+
   const savedPrefab = JSON.parse(serializedPrefab) as PrefabDocumentV1;
   const savedPrefabComponent = savedPrefab.root.components[0];
   assert.ok(savedPrefabComponent);
