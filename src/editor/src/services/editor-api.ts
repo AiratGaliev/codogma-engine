@@ -107,7 +107,36 @@ export async function createProjectFolder(relativePath: string): Promise<void> {
 }
 
 export async function renameProjectFile(relativePath: string, newName: string): Promise<void> {
-  await callEditorApi("RenameFile", { path: relativePath, newName });
+  const normalizedPath = relativePath.replace(/\\/g, "/");
+  const segments = normalizedPath.split("/");
+
+  if (
+    !normalizedPath ||
+    normalizedPath.startsWith("/") ||
+    /^[a-zA-Z]:/.test(normalizedPath) ||
+    segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    throw new Error("Cannot rename a project file with an invalid relative path.");
+  }
+
+  if (
+    !newName ||
+    newName === "." ||
+    newName === ".." ||
+    newName.includes("/") ||
+    newName.includes("\\") ||
+    newName.includes(String.fromCharCode(0))
+  ) {
+    throw new Error("The new file name must be a single non-empty path segment.");
+  }
+
+  const parentPath = segments.slice(0, -1).join("/");
+  const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+
+  await callEditorApi("RenameFile", {
+    oldPath: normalizedPath,
+    newPath,
+  });
 }
 
 export async function deleteProjectFiles(relativePaths: string[]): Promise<void> {
