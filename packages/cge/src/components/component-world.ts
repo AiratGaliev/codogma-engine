@@ -56,6 +56,11 @@ interface ComponentRecord {
 
 type Mutation = () => void;
 
+interface RuntimeNodeRecord {
+  node: RuntimeNode;
+  active: boolean;
+}
+
 interface RegisteredComponentSystem {
   readonly id: string;
   update(deltaSeconds: number, world: ComponentWorld): unknown;
@@ -103,8 +108,7 @@ function defaultIdFactory(): () => string {
 }
 
 export class ComponentWorld {
-  private readonly nodes = new Map<string, RuntimeNode>();
-  private readonly nodeActivation = new WeakMap<RuntimeNode, { active: boolean }>();
+  private readonly nodes = new Map<string, RuntimeNodeRecord>();
   private readonly components = new Map<string, ComponentRecord>();
   private readonly componentsByNode = new Map<string, string[]>();
   private readonly systems: RegisteredComponentSystem[] = [];
@@ -140,21 +144,24 @@ export class ComponentWorld {
     if (this.updating || this.flushing) throw new Error("Nodes must be created outside a ComponentWorld update boundary.");
     if (!isValidStableId(input.id) || !input.name.trim()) throw new TypeError("Runtime nodes require valid stable IDs and non-empty names.");
     if (this.nodes.has(input.id)) throw new Error("Runtime node " + input.id + " already exists.");
-    const activation = { active: input.active ?? true };
+    const nodeRecord: RuntimeNodeRecord = {
+      node: undefined as unknown as RuntimeNode,
+      active: input.active ?? true,
+    };
     const node: RuntimeNode = Object.freeze({
       id: input.id,
       name: input.name,
-      get active(): boolean { return activation.active; },
+      get active(): boolean { return nodeRecord.active; },
       transform: makeRuntimeTransform(input.transform),
     });
-    this.nodeActivation.set(node, activation);
-    this.nodes.set(node.id, node);
+    nodeRecord.node = node;
+    this.nodes.set(node.id, nodeRecord);
     this.componentsByNode.set(node.id, []);
     return node;
   }
 
-  getNode(nodeId: string): RuntimeNode | undefined { return this.nodes.get(nodeId); }
-  listNodes(): RuntimeNode[] { return [...this.nodes.values()]; }
+  getNode(nodeId: string): RuntimeNode | undefined { return this.nodes.get(nodeId)?.node; }
+  listNodes(): RuntimeNode[] { return [...this.nodes.values()].map((record) => record.node); }
 
   attachComponent(
     nodeId: string,
@@ -192,12 +199,10 @@ export class ComponentWorld {
   setNodeActive(nodeId: string, active: boolean): void {
     this.assertUsable();
     this.schedule(() => {
-      const node = this.nodes.get(nodeId);
-      if (!node) throw new Error("Runtime node " + nodeId + " was not found.");
-      const activation = this.nodeActivation.get(node);
-      if (!activation) throw new Error("Runtime node activation state is unavailable.");
-      if (activation.active === active) return;
-      activation.active = active;
+      const nodeRecord = this.nodes.get(nodeId);
+      if (!nodeRecord) throw new Error("Runtime node " + nodeId + " was not found.");
+      if (nodeRecord.active === active) return;
+      nodeRecord.active = active;
       const errors: unknown[] = [];
       for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) {
         const component = this.components.get(id);
@@ -222,6 +227,8 @@ export class ComponentWorld {
       for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) {
         this.removeComponentNow(id, errors);
       }
+      const nodeRecord = this.nodes.get(nodeId);
+      if (nodeRecord) nodeRecord.active = false;
       this.componentsByNode.delete(nodeId);
       this.nodes.delete(nodeId);
       if (errors.length > 0) {
@@ -296,8 +303,9 @@ export class ComponentWorld {
     const errors: unknown[] = [];
     this.updating = true;
     try {
-      for (const node of this.nodes.values()) {
-        if (!node.active) continue;
+      for (const nodeRecord of this.nodes.values()) {
+        if (!nodeRecord.active) continue;
+        const node = nodeRecord.node;
         for (const id of [...(this.componentsByNode.get(node.id) ?? [])]) {
           const component = this.components.get(id);
           if (!component || !component.enabled || !component.activeNotified || component.destroyed) continue;
@@ -349,7 +357,7 @@ export class ComponentWorld {
     enabled: boolean,
   ): void {
     if (this.components.has(instanceId)) throw new Error("Component instance " + instanceId + " already exists.");
-    const node = this.nodes.get(nodeId);
+    const node = this.nodes.get(nodeId)?.node;
     if (!node) throw new Error("Runtime node " + nodeId + " was not found.");
     const definition = this.registry.get(typeId);
     if (!definition) throw new ComponentWorldError("CORE_UNKNOWN_COMPONENT", "Component type " + typeId + " is not registered.");
@@ -494,6 +502,7 @@ export class ComponentWorld {
       }
     }
     this.systems.length = 0;
+    for (const nodeRecord of this.nodes.values()) nodeRecord.active = false;
     this.nodes.clear();
     this.components.clear();
     this.componentsByNode.clear();

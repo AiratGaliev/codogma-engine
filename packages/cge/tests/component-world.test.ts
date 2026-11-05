@@ -720,6 +720,10 @@ test("protects Node activation state from writes that bypass lifecycle transitio
     "disable:active-guard",
     "enable:active-guard",
   ]);
+  world.destroyNode(node.id);
+  const replacement = world.createNode({ id: node.id, name: "Replacement" });
+  assert.equal(node.active, false, "destroyed Node view must not alias a replacement with the same ID");
+  assert.equal(replacement.active, true);
   world.dispose();
 });
 
