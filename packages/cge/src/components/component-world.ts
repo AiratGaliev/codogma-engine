@@ -199,7 +199,7 @@ export class ComponentWorld {
       if (activation.active === active) return;
       activation.active = active;
       const errors: unknown[] = [];
-      for (const id of this.componentsByNode.get(nodeId) ?? []) {
+      for (const id of [...(this.componentsByNode.get(nodeId) ?? [])]) {
         const component = this.components.get(id);
         if (!component) continue;
         try {
@@ -300,7 +300,7 @@ export class ComponentWorld {
         if (!node.active) continue;
         for (const id of [...(this.componentsByNode.get(node.id) ?? [])]) {
           const component = this.components.get(id);
-          if (!component || !component.enabled || component.destroyed) continue;
+          if (!component || !component.enabled || !component.activeNotified || component.destroyed) continue;
           if (!component.started) {
             if (!this.invoke(component.behavior, component.behavior.onStart, errors)) continue;
             component.started = true;
@@ -429,6 +429,7 @@ export class ComponentWorld {
     const callback = nextActive ? component.behavior.onEnable : component.behavior.onDisable;
     const success = this.invoke(component.behavior, callback, errors);
     component.activeNotified = nextActive && success;
+    if (nextActive && !success) this.removeComponentNow(component.id, errors);
     if (errors.length > 0) throw new AggregateError(errors, "Component " + component.typeId + " could not change enabled state.");
   }
 

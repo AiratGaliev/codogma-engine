@@ -737,3 +737,40 @@ test("rejects asynchronous system disposal and still completes world teardown", 
   assert.equal(world.componentCount, 0);
   assert.doesNotThrow(() => world.dispose());
 });
+
+
+test("rolls back a component that fails during later activation without skipping siblings", () => {
+  const calls: string[] = [];
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema,
+    create: ({ instanceId }) => ({
+      onCreate: () => calls.push("create:" + instanceId),
+      onEnable: () => {
+        calls.push("enable:" + instanceId);
+        if (instanceId === "failed") throw new Error("activation failed");
+      },
+      onStart: () => calls.push("start:" + instanceId),
+      onUpdate: () => calls.push("update:" + instanceId),
+      onDestroy: () => calls.push("destroy:" + instanceId),
+    }),
+  });
+  const world = new ComponentWorld("scene-enable-rollback", registry);
+  world.createNode({ id: "node-enable-rollback", name: "Inactive", active: false });
+  world.attachComponent("node-enable-rollback", schema.typeId, {}, { instanceId: "failed" });
+  world.attachComponent("node-enable-rollback", schema.typeId, {}, { instanceId: "sibling" });
+
+  assert.throws(() => world.setNodeActive("node-enable-rollback", true), AggregateError);
+  assert.deepEqual(world.listComponents().map((component) => component.id), ["sibling"]);
+  world.update(1 / 60);
+  assert.deepEqual(calls, [
+    "create:failed",
+    "create:sibling",
+    "enable:failed",
+    "destroy:failed",
+    "enable:sibling",
+    "start:sibling",
+    "update:sibling",
+  ]);
+  world.dispose();
+});
