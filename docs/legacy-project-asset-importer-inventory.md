@@ -1,6 +1,10 @@
-# Legacy Project, Scene, Prefab и Asset Pack: форматный и importer inventory
+# Архив: Legacy Project, Scene, Prefab и Asset Pack — исторический format/importer inventory
 
-> Статус: фактический inventory текущего dev, не новая спецификация сериализатора и не заявление о полной обратной совместимости.  
+> **АРХИВ, НЕ НОРМАТИВНАЯ СПЕЦИФИКАЦИЯ (05.11.2026).** Этот документ фиксирует наблюдаемое поведение Colibri/Phaser Editor в старом исходном коде и checked-in fixtures. Он не определяет native Codogma Project Model, не задаёт migration requirements и не означает поддержку старых файлов новым Host/Core/Preview/Build.
+>
+> Новый продукт использует только native Codogma Project Model. Импорт/миграция Colibri `.scene`, `.components`, старого Prefab и Asset Pack явно отклонены в [ADR-0007](decisions/ADR-0007-native-codogma-project-model.md). Конвертер PR #48 удаляется по [COD-113](https://linear.app/codogma-engine/issue/COD-113/udalit-colibri-format-compatibility-iz-core-i-novogo-editor-host). Этот inventory можно использовать только для forensic/debugging и аудита старого UI, не как спецификацию или acceptance source.
+>
+> Статус: historical inventory, не новая спецификация сериализатора и не заявление о полной обратной совместимости.  
 > Проверенная база: dev / eecd989224d1f5807578dee08937a51d65141626 (2026-11-05).  
 > Охват: checked-in test workspace и исходники репозитория; пользовательские проекты вне workspace не исследовались.
 
