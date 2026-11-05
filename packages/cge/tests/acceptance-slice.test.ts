@@ -102,14 +102,16 @@ test("acceptance project is self-contained and declares a real Core component de
   registry.register(componentDefinition);
   const registeredDefinition = registry.get(moduleReference.typeId);
   assert.ok(registeredDefinition);
+  assert.equal(registeredDefinition.schema.typeId, moduleReference.typeId);
+  assert.equal(registeredDefinition.schema.version, moduleReference.version);
 
   const createContext = (instanceId: string, nodeId: string) => ({
     instanceId,
     node: { id: nodeId, name: nodeId, active: true },
     properties: {},
   });
-  const first = followTargetDefinition.create(createContext("component-first", "node-player"));
-  const second = followTargetDefinition.create(createContext("component-second", "node-enemy"));
+  const first = registeredDefinition.create(createContext("component-first", "node-player")) as ReturnType<typeof followTargetDefinition.create>;
+  const second = registeredDefinition.create(createContext("component-second", "node-enemy")) as ReturnType<typeof followTargetDefinition.create>;
   first.onUpdate?.(0.25);
   assert.equal(first.instanceId, "component-first");
   assert.equal(second.instanceId, "component-second");

@@ -211,7 +211,7 @@ PR #47 закрывает этот конкретный Core contract gap:
 3. `validatePrefabDocument()` использует нормализованный root от общего Scene/Node validator, поэтому тот же storage contract применяется к Prefab serialization.
 4. `acceptance-slice.test.ts` передаёт transient `editorOnly/runtime` значения в `serializeSceneDocument()` и `serializePrefabDocument()`, затем открывает сериализованные документы и проверяет: persisted + unknown JSON fields сохранены, non-persisted values отсутствуют, исходные объекты не изменены.
 
-Это закрывает Core serialization boundary для текущего schema context. Это **не** закрывает всю COD-27: Host Inspector integration, reference pickers, Undo/Redo и полный Project graph context остаются в её owner scope. До прохождения CI и merge PR #47 fix не считается частью `dev`.
+Это закрывает Core serialization boundary для текущего schema context. На PR #47 CI Fast #718 завершился success, включая Core quality suite; однако PR ещё не смёржен, поэтому изменение пока не входит в `dev`. Это **не** закрывает всю COD-27: Host Inspector integration, reference pickers, Undo/Redo и полный Project graph context остаются в её owner scope.
 
 ### Граница Project module manifest — owner COD-25 / COD-91
 
