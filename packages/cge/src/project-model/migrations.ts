@@ -11,7 +11,14 @@ export interface ProjectMigrationResult {
 }
 
 export function migrateProjectDocument(input: unknown): ProjectMigrationResult {
-  if (!isRecord(input) || typeof input.schemaVersion !== "number") {
+  if (!isRecord(input) || !isJsonValue(input)) {
+    throw new ProjectMigrationError("Project migration accepts JSON-compatible input only.", [{
+      code: "PROJECT_INVALID_DOCUMENT",
+      severity: "error",
+      message: "Project migration input must be a JSON-compatible object.",
+    }]);
+  }
+  if (typeof input.schemaVersion !== "number") {
     throw new ProjectMigrationError("Project schemaVersion is missing or invalid.", [{
       code: "PROJECT_INVALID_DOCUMENT",
       severity: "error",
@@ -19,18 +26,32 @@ export function migrateProjectDocument(input: unknown): ProjectMigrationResult {
       path: "schemaVersion",
     }]);
   }
-  if (!isJsonValue(input)) {
-    throw new ProjectMigrationError("Project migration accepts JSON-compatible input only.", [{
-      code: "PROJECT_INVALID_DOCUMENT",
-      severity: "error",
-      message: "Project migration input must be a JSON-compatible object.",
-    }]);
-  }
   const source = cloneJsonValue(input as unknown as JsonValue) as Record<string, unknown>;
   const fromVersion = source.schemaVersion as number;
   let migrated: unknown = source;
   if (fromVersion === 0) {
     const legacy = source as unknown as ProjectDocumentV0;
+    for (const field of ["scenes", "assets", "prefabs", "componentModules"] as const) {
+      if (source[field] !== undefined && !Array.isArray(source[field])) {
+        const message = "Project v0 field " + field + " must be an array when present; migration will not replace malformed data with an empty collection.";
+        throw new ProjectMigrationError(message, [{
+          code: "PROJECT_MIGRATION_INVALID_INPUT",
+          severity: "error",
+          message,
+          path: field,
+        }]);
+      }
+    }
+    if (source.runtime !== undefined &&
+        (!isRecord(source.runtime) || typeof source.runtime.adapterId !== "string")) {
+      const message = "Project v0 runtime must contain a string adapterId when present; migration will not replace malformed data with the default runtime.";
+      throw new ProjectMigrationError(message, [{
+        code: "PROJECT_MIGRATION_INVALID_INPUT",
+        severity: "error",
+        message,
+        path: "runtime",
+      }]);
+    }
     migrated = {
       ...legacy,
       schemaVersion: PROJECT_SCHEMA_VERSION,

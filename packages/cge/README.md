@@ -42,7 +42,7 @@ commands above in the Boundaries section from this package directory.
 
 ## Initial contracts
 
-Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically.
+Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically. Missing optional v0 collections/runtime configuration receive documented defaults, while present malformed values are rejected with field-specific diagnostics rather than silently replaced.
 
 
 ## Legacy Scene/Prefab migration (explicit opt-in)

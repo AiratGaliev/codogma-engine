@@ -655,8 +655,10 @@ export function migrateSceneDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
 ): LegacyMigrationResult<SceneDocumentV1> {
-  if (isRecord(input) && input.schemaVersion === SCENE_SCHEMA_VERSION) {
-    if (!isJsonValue(input)) return fail("Scene v1 input must be JSON-compatible.");
+  if (!isRecord(input) || !isJsonValue(input)) {
+    return fail("Scene migration input must be a JSON-compatible object.");
+  }
+  if (input.schemaVersion === SCENE_SCHEMA_VERSION) {
     const document = cloneJsonValue(input as JsonValue) as unknown as SceneDocumentV1;
     const validation = validateSceneDocument(document, buildValidationContext(options));
     assertValidMigration(validation, "Scene v1 document is invalid.");
@@ -673,8 +675,10 @@ export function migratePrefabDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
 ): LegacyMigrationResult<PrefabDocumentV1> {
-  if (isRecord(input) && input.schemaVersion === PREFAB_SCHEMA_VERSION) {
-    if (!isJsonValue(input)) return fail("Prefab v1 input must be JSON-compatible.");
+  if (!isRecord(input) || !isJsonValue(input)) {
+    return fail("Prefab migration input must be a JSON-compatible object.");
+  }
+  if (input.schemaVersion === PREFAB_SCHEMA_VERSION) {
     const document = cloneJsonValue(input as JsonValue) as unknown as PrefabDocumentV1;
     const validation = validatePrefabDocument(document, buildValidationContext(options));
     assertValidMigration(validation, "Prefab v1 document is invalid.");

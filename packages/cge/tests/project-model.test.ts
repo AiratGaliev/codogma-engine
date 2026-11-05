@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   migrateProjectDocument,
+  ProjectMigrationError,
   parseProjectDocument,
   serializeProjectDocument,
   validateProjectDocument,
@@ -645,4 +646,78 @@ test("reports a missing or malformed Prefab root at root", () => {
 
   assert.equal(result.valid, false);
   assert.equal(result.diagnostics[0]?.path, "root");
+});
+
+
+test("rejects malformed present Project v0 fields instead of silently replacing them", () => {
+  const base = {
+    schemaVersion: 0,
+    id: "legacy-project-malformed",
+    name: "Malformed legacy Project",
+  };
+  const malformedFields: Array<[string, unknown]> = [
+    ["scenes", { unexpected: true }],
+    ["assets", "not-an-array"],
+    ["prefabs", 1],
+    ["componentModules", null],
+    ["runtime", "phaser"],
+  ];
+
+  for (const [field, value] of malformedFields) {
+    assert.throws(
+      () => migrateProjectDocument({ ...base, [field]: value }),
+      (error: unknown) => error instanceof ProjectMigrationError &&
+        error.diagnostics.some((item) =>
+          item.code === "PROJECT_MIGRATION_INVALID_INPUT" && item.path === field),
+    );
+  }
+
+  const missingOptionalFields = migrateProjectDocument(base);
+  assert.deepEqual(missingOptionalFields.document.scenes, []);
+  assert.deepEqual(missingOptionalFields.document.assets, []);
+  assert.deepEqual(missingOptionalFields.document.prefabs, []);
+  assert.deepEqual(missingOptionalFields.document.componentModules, []);
+  assert.deepEqual(missingOptionalFields.document.runtime, { adapterId: "phaser", settings: {} });
+});
+
+test("rejects Scene and Prefab accessors without executing their getters", () => {
+  let getterCalls = 0;
+  const scene = {
+    id: "scene-accessor",
+    name: "Accessor Scene",
+    rootNodes: [],
+    settings: {},
+  };
+  Object.defineProperty(scene, "schemaVersion", {
+    enumerable: true,
+    get: () => {
+      getterCalls += 1;
+      return 1;
+    },
+  });
+
+  const prefabRoot = {
+    id: "prefab-accessor-root",
+    active: true,
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+    components: [],
+    children: [],
+  };
+  Object.defineProperty(prefabRoot, "name", {
+    enumerable: true,
+    get: () => {
+      getterCalls += 1;
+      return "Accessor Root";
+    },
+  });
+  const prefab = {
+    schemaVersion: 1,
+    id: "prefab-accessor",
+    name: "Accessor Prefab",
+    root: prefabRoot,
+  };
+
+  assert.equal(validateSceneDocument(scene).valid, false);
+  assert.equal(validatePrefabDocument(prefab).valid, false);
+  assert.equal(getterCalls, 0);
 });

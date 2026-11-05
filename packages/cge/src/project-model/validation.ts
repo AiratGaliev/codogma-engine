@@ -40,6 +40,42 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function hasSafeDataProperties(
+  value: unknown,
+  visited: WeakSet<object> = new WeakSet(),
+): boolean {
+  if (typeof value === "function") return false;
+  if (value === null || typeof value !== "object") return true;
+  if (visited.has(value)) return true;
+
+  visited.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype ||
+          Object.getOwnPropertySymbols(value).length > 0) {
+        return false;
+      }
+    } else {
+      const prototype = Object.getPrototypeOf(value);
+      if ((prototype !== Object.prototype && prototype !== null) ||
+          Object.getOwnPropertySymbols(value).length > 0) {
+        return false;
+      }
+    }
+
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !("value" in descriptor) ||
+          !hasSafeDataProperties(descriptor.value, visited)) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function warnUnknownFields(
   input: Record<string, unknown>,
   knownFields: ReadonlySet<string>,
@@ -467,10 +503,10 @@ export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
-  if (!isRecord(input)) {
+  if (!isRecord(input) || !hasSafeDataProperties(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must be an object.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must contain plain data properties.")],
     };
   }
   if (input.schemaVersion !== SCENE_SCHEMA_VERSION) {
@@ -523,10 +559,10 @@ export function validatePrefabDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
-  if (!isRecord(input)) {
+  if (!isRecord(input) || !hasSafeDataProperties(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must be an object.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must contain plain data properties.")],
     };
   }
   if (input.schemaVersion !== PREFAB_SCHEMA_VERSION) {
