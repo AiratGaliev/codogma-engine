@@ -74,6 +74,7 @@ Project v0 migration and legacy .scene compatibility converters are explicit in-
 - migrateProjectDocument(input) deep-copies JSON data, defaults only absent v0 optional fields and rejects malformed present fields with structured diagnostics.
 - migrateSceneDocument(input, options) and migratePrefabDocument(input, options) validate v1 documents or opt in to conversion from legacy sceneType: "SCENE" | "PREFAB" envelopes.
 - migrateLegacySceneDocument / migrateLegacyPrefabDocument are legacy-only entry points. They preserve source payloads, require stable existing IDs and apply Component/Prefab mappings only when the caller supplies explicit mappings.
+- Their results expose LegacyMigratedSceneDocument / LegacyMigratedPrefabDocument and recursive LegacyMigratedNodeDocument types, so callers can access legacySource, legacyCollection and legacyComponents without casting. The general migrateSceneDocument / migratePrefabDocument APIs return the versioned document or the typed legacy-migrated document; sourceVersion distinguishes cge-scene-v1 / cge-prefab-v1 from legacy source versions.
 - Legacy renderer, texture/asset keys, plainObjects, nested Prefab metadata and other unrepresented fields are preserved with diagnostics rather than being assigned invented v1 runtime semantics.
 - A present but malformed hierarchy/Component collection (displayList, Node list or components) is a blocking migration error; the converter does not return a partial Scene tree. Missing optional collections remain empty.
 
