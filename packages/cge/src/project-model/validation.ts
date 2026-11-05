@@ -137,21 +137,47 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
   if (!isNonEmptyString(input.name)) {
     return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project name must be a non-empty string.", "name")] };
   }
-  for (const field of ["scenes", "assets", "prefabs", "componentModules"] as const) {
-    if (!Array.isArray(input[field])) {
-      return {
-        valid: false,
-        diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project " + field + " must be an array.", field)],
-      };
-    }
+  const scenesValue = input.scenes;
+  if (!Array.isArray(scenesValue)) {
+    return {
+      valid: false,
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project scenes must be an array.", "scenes")],
+    };
   }
-  if (!isRecord(input.runtime)) {
+  const scenes = scenesValue as unknown[];
+  const assetsValue = input.assets;
+  if (!Array.isArray(assetsValue)) {
+    return {
+      valid: false,
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project assets must be an array.", "assets")],
+    };
+  }
+  const assets = assetsValue as unknown[];
+  const prefabsValue = input.prefabs;
+  if (!Array.isArray(prefabsValue)) {
+    return {
+      valid: false,
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project prefabs must be an array.", "prefabs")],
+    };
+  }
+  const prefabs = prefabsValue as unknown[];
+  const componentModulesValue = input.componentModules;
+  if (!Array.isArray(componentModulesValue)) {
+    return {
+      valid: false,
+      diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project componentModules must be an array.", "componentModules")],
+    };
+  }
+  const componentModules = componentModulesValue as unknown[];
+
+  const runtime = input.runtime;
+  if (!isRecord(runtime)) {
     return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Project runtime configuration must be an object.", "runtime")] };
   }
-  if (!isNonEmptyString(input.runtime.adapterId)) {
+  if (!isNonEmptyString(runtime.adapterId)) {
     return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Runtime adapterId must be a non-empty string.", "runtime.adapterId")] };
   }
-  if (!isRecord(input.runtime.settings)) {
+  if (!isRecord(runtime.settings)) {
     return { valid: false, diagnostics: [issue("PROJECT_INVALID_DOCUMENT", "Runtime settings must be an object.", "runtime.settings")] };
   }
   if (!isValidStableId(input.id)) {
@@ -173,13 +199,13 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
     diagnostics,
     input.id,
   );
-  warnUnknownFields(input.runtime, new Set(["adapterId", "settings"]), "runtime", diagnostics, input.id);
-  validateIdCollection(input.assets, "assets", diagnostics);
-  validateIdCollection(input.scenes, "scenes", diagnostics);
-  validateIdCollection(input.prefabs, "prefabs", diagnostics);
+  warnUnknownFields(runtime, new Set(["adapterId", "settings"]), "runtime", diagnostics, input.id);
+  validateIdCollection(assets, "assets", diagnostics);
+  validateIdCollection(scenes, "scenes", diagnostics);
+  validateIdCollection(prefabs, "prefabs", diagnostics);
   const assetsById = new Map<string, Record<string, unknown>>();
 
-  input.assets.forEach((asset, index) => {
+  assets.forEach((asset, index) => {
     const assetPath = "assets[" + index + "]";
     if (!isRecord(asset)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Asset reference must be an object.", assetPath));
@@ -205,7 +231,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
     assetsById.set(asset.id, asset);
   });
 
-  input.scenes.forEach((scene, index) => {
+  scenes.forEach((scene, index) => {
     if (!isRecord(scene) || !isValidStableId(scene.id) || !isValidStableId(scene.assetId)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Scene reference requires id and assetId.", "scenes[" + index + "]"));
       return;
@@ -217,7 +243,7 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
     }
   });
 
-  input.prefabs.forEach((prefab, index) => {
+  prefabs.forEach((prefab, index) => {
     if (!isRecord(prefab) || !isValidStableId(prefab.id) || !isValidStableId(prefab.assetId)) {
       diagnostics.push(issue("PROJECT_INVALID_DOCUMENT", "Prefab reference requires id and assetId.", "prefabs[" + index + "]"));
       return;
@@ -229,9 +255,9 @@ export function validateProjectDocument(input: unknown): ValidationResult<Projec
     }
   });
 
-  validateIdCollection(input.componentModules, "componentModules", diagnostics);
+  validateIdCollection(componentModules, "componentModules", diagnostics);
   const exportedTypeIds = new Set<string>();
-  input.componentModules.forEach((module, moduleIndex) => {
+  componentModules.forEach((module, moduleIndex) => {
     const modulePath = "componentModules[" + moduleIndex + "]";
     if (!isRecord(module) ||
         !isValidStableId(module.id) ||
