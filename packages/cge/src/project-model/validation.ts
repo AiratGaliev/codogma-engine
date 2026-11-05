@@ -41,6 +41,45 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function hasSafeDataProperties(value: unknown, ancestors = new WeakSet<object>()): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+    return true;
+  }
+  if (typeof value !== "object" || ancestors.has(value)) return false;
+
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0) {
+        return false;
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        if (!Object.prototype.hasOwnProperty.call(value, index)) return false;
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !("value" in descriptor) || !hasSafeDataProperties(descriptor.value, ancestors)) return false;
+      }
+      return Object.keys(value).every((key) => {
+        const index = Number(key);
+        return Number.isInteger(index) && index >= 0 && index < value.length && String(index) === key;
+      });
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    if ((prototype !== Object.prototype && prototype !== null) || Object.getOwnPropertySymbols(value).length > 0) {
+      return false;
+    }
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !("value" in descriptor) || !hasSafeDataProperties(descriptor.value, ancestors)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
 function warnUnknownFields(
   input: Record<string, unknown>,
   knownFields: ReadonlySet<string>,
@@ -50,6 +89,15 @@ function warnUnknownFields(
 ): void {
   for (const key of Object.keys(input)) {
     if (knownFields.has(key)) continue;
+    if (!isJsonValue(input[key])) {
+      diagnostics.push(issue(
+        "PROJECT_INVALID_DOCUMENT",
+        "Unknown field must contain JSON-compatible data.",
+        path + "." + key,
+        entityId,
+      ));
+      continue;
+    }
     diagnostics.push({
       code: "PROJECT_UNKNOWN_FIELD_PRESERVED",
       severity: "warning",
@@ -277,9 +325,17 @@ function validateNode(
     const componentPath = path + ".components[" + index + "]";
     if (!isRecord(component) || !isValidStableId(component.id) ||
         !isValidStableId(component.typeId) || typeof component.schemaVersion !== "number" ||
-        !Number.isInteger(component.schemaVersion) || component.schemaVersion < 1 || typeof component.enabled !== "boolean" ||
-        !isRecord(component.properties) || !isJsonValue(component)) {
-      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, integer schemaVersion, enabled and JSON properties.", componentPath, nodeId));
+        typeof component.enabled !== "boolean" || !isRecord(component.properties) || !isJsonValue(component)) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Component instance requires id, typeId, schemaVersion, enabled and JSON properties.", componentPath, nodeId));
+      return component;
+    }
+    if (!Number.isInteger(component.schemaVersion) || component.schemaVersion < 1) {
+      diagnostics.push(issue(
+        "COMPONENT_INVALID_SCHEMA",
+        "Component instance schemaVersion must be a positive integer.",
+        componentPath + ".schemaVersion",
+        nodeId,
+      ));
       return component;
     }
     warnUnknownFields(
@@ -323,7 +379,7 @@ function validateNode(
   if (node.prefabInstance !== undefined) {
     const prefab = node.prefabInstance;
     if (!isRecord(prefab) || !isValidStableId(prefab.prefabId) ||
-        !Array.isArray(prefab.overrides) || !isJsonValue(prefab)) {
+        !Array.isArray(prefab.overrides)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab instance requires a prefabId and JSON overrides.", path + ".prefabInstance", node.id));
     } else if (prefab.sourceNodeId !== undefined && !isValidStableId(prefab.sourceNodeId)) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab sourceNodeId must be a non-empty stable id.", path + ".prefabInstance.sourceNodeId", node.id));
@@ -354,10 +410,10 @@ export function validateSceneDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<SceneDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input)) {
+  if (!isRecord(input) || !hasSafeDataProperties(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must contain only JSON-compatible plain data.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Scene document must contain only plain data properties without accessors or cycles.")],
     };
   }
   if (input.schemaVersion !== SCENE_SCHEMA_VERSION) {
@@ -372,7 +428,7 @@ export function validateSceneDocument(
     };
   }
   if (!isValidStableId(input.id) || !isNonEmptyString(input.name) ||
-      !Array.isArray(input.rootNodes) || !isRecord(input.settings)) {
+      !Array.isArray(input.rootNodes) || !isRecord(input.settings) || !isJsonValue(input.settings)) {
     return {
       valid: false,
       diagnostics: [issue("SCENE_INVALID_NODE", "Scene v1 requires stable id/name, rootNodes and settings.", "scene")],
@@ -401,10 +457,10 @@ export function validatePrefabDocument(
   input: unknown,
   context: SceneValidationContext = {},
 ): ValidationResult<PrefabDocumentV1> {
-  if (!isRecord(input) || !isJsonValue(input)) {
+  if (!isRecord(input) || !hasSafeDataProperties(input)) {
     return {
       valid: false,
-      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must contain only JSON-compatible plain data.")],
+      diagnostics: [issue("SCENE_INVALID_NODE", "Prefab document must contain only plain data properties without accessors or cycles.")],
     };
   }
   if (input.schemaVersion !== PREFAB_SCHEMA_VERSION) {
