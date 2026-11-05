@@ -87,3 +87,8 @@ Run the standalone Core suite from this directory with:
 ## Initial contracts
 
 Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically.
+
+
+### Unknown fields and validation diagnostics
+
+Project, Scene, Prefab, Node, Transform, Asset and Component envelope extensions that contain JSON-compatible values are preserved by validation and serialization and produce `PROJECT_UNKNOWN_FIELD_PRESERVED` warnings with the exact document path. Unknown Component property values are preserved separately with `COMPONENT_UNKNOWN_PROPERTY` warnings. Invalid non-JSON values, accessors, custom prototypes, symbol properties, sparse arrays and cyclic object graphs are rejected at the JSON boundary without executing getters. Future Project, Scene and Prefab schema versions are blocking errors.
