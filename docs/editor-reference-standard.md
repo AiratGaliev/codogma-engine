@@ -18,7 +18,7 @@
 
 **Другие открытые инженерные reference.** Godot не должен становиться единственным источником implementation ideas. Для конкретной задачи можно выбирать Defold, Fyrox, o2, GDevelop, ezEngine, Stride и специализированные проекты из [каталога Editor Engineering References](editor-engineering-references.md). Каталог разделяет полноценные интегрированные редакторы, 2D-focused и исторические tools, фиксирует revisions/licensing и связывает решения с COD issues. Он не меняет UX-priority Unity → Cocos и не расширяет продуктовый scope.
 
-**Версионное уточнение:** официальный Unity Manual для 6000.6 на дату проверки маркирует Unity 6.6 как **Released**, а не как stable release. Поэтому Unity 6.6 — основной UX/product reference по запросу проекта, но beta-only APIs/features нельзя принимать за стабильный технический baseline или автоматически включать в Codogma. Для утверждений о стабильности и доступности сверять релизные/LTS материалы Unity отдельно. Cocos Creator 4.0 User Manual обозначен как **4.0 LTS**. Не смешивать его с Cocos Creator 3.x docs или с отдельным репозиторием исходников cocos/cocos4.
+**Версионное уточнение:** Unity 6.6 (6000.6) — выпущенная версия; архив Unity содержит 6000.6.8f1 от 03.11.2026. Unity 6.6 остаётся основным UX/product reference. Конкретные API и гарантии проверяются по документации выбранного patch release и фактическим Codogma contracts. Cocos Creator 4.0 User Manual обозначен как **4.0 LTS**. Не смешивать его с Cocos Creator 3.x docs или с отдельным репозиторием исходников cocos/cocos4.
 
 ## 2. Жёсткая граница: 2D, не 2D/3D
 
@@ -102,7 +102,7 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 
 1. Продуктовые границы Codogma и ТЗ: 2D-only, Web-first, TypeScript-native.
 2. Подтверждённые форматы, API, serializer/codegen и runtime contracts Codogma/Phaser 4.2.1.
-3. Unity 6.6 — основной UX reference; учитывать Beta status для релизных/технических выводов.
+3. Unity 6.6 — основной UX reference; технические гарантии сверять с документацией конкретного patch release.
 4. Cocos Creator 4.0 LTS — дополнительный workflow reference и cross-check.
 5. Godot — implementation reference по релевантным редакторским подсистемам, но не продуктовый UX-reference, не runtime dependency и не критерий acceptance.
 6. Colibri — только историческое UI/workflow evidence; не UX/architecture authority и не источник форматов, schemas, serialization или runtime contracts нового Codogma.
@@ -113,7 +113,7 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 
 ### Unity 6.6 / 2D
 
-- [Unity 6.6 — 2D feature set (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) — официальный срез 2D feature set; текущая страница указывает **Unity 6.6 Beta**.
+- [Unity 6.6 — 2D feature set (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) — официальный срез 2D feature set для выпущенной линии Unity 6.6.
 - [Unity 6.6 — 2D overview](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d)
 - [Unity 6.6 — Sprites](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite)
 - [Unity 6.6 — Tilemaps](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/tilemaps)
