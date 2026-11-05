@@ -47,7 +47,29 @@ export interface LegacyMigrationResult<T> {
   readonly sourceVersion: string;
 }
 
-type LegacyCollection = "displayList" | "container";
+export type LegacyNodeCollection = "displayList" | "container";
+
+/** Typed shape returned for Nodes that carry the original legacy payload. */
+export interface LegacyMigratedNodeDocument extends NodeDocument {
+  readonly legacySource: JsonObject;
+  readonly legacyCollection: LegacyNodeCollection;
+  readonly legacyComponents?: string[];
+  readonly children: LegacyMigratedNodeDocument[];
+}
+
+/** Scene v1 with its preserved legacy document and per-Node source payloads. */
+export interface LegacyMigratedSceneDocument extends Omit<SceneDocumentV1, "rootNodes"> {
+  readonly rootNodes: LegacyMigratedNodeDocument[];
+  readonly legacySource: JsonObject;
+}
+
+/** Prefab v1 with its preserved legacy document, root payload and declarations. */
+export interface LegacyMigratedPrefabDocument extends Omit<PrefabDocumentV1, "root"> {
+  readonly root: LegacyMigratedNodeDocument;
+  readonly legacyPrefabProperties: JsonValue;
+  readonly legacySource: JsonObject;
+}
+
 type LegacyRecord = Record<string, unknown>;
 
 const TRANSFORM_FIELDS = [
@@ -437,10 +459,10 @@ function mapPrefabInstance(
 function migrateLegacyNode(
   input: unknown,
   path: string,
-  collection: LegacyCollection,
+  collection: LegacyNodeCollection,
   options: LegacySceneMigrationOptions,
   diagnostics: CoreDiagnostic[],
-): NodeDocument {
+): LegacyMigratedNodeDocument {
   if (!isRecord(input) || !isJsonValue(input)) {
     return fail("Legacy Node must be a JSON-compatible object.", path);
   }
@@ -486,7 +508,7 @@ function migrateLegacyNode(
     ...(components.unresolved.length === 0 ? {} : { legacyComponents: components.unresolved }),
     ...(prefabInstance === undefined ? {} : { prefabInstance }),
   };
-  return node as unknown as NodeDocument;
+  return node as unknown as LegacyMigratedNodeDocument;
 }
 
 function buildValidationContext(options: LegacySceneMigrationOptions): SceneValidationContext {
@@ -507,7 +529,7 @@ function assertValidMigration<T>(
 export function migrateLegacySceneDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
-): LegacyMigrationResult<SceneDocumentV1> {
+): LegacyMigrationResult<LegacyMigratedSceneDocument> {
   const legacy = asLegacyDocument(input, "SCENE");
   const diagnostics: CoreDiagnostic[] = [];
   reportUnknownDocumentFields(legacy, diagnostics);
@@ -560,7 +582,7 @@ export function migrateLegacySceneDocument(
   const validation = validateSceneDocument(document, buildValidationContext(options));
   assertValidMigration(validation, "Legacy Scene could not be converted to Scene v1.");
   return {
-    document: validation.value,
+    document: validation.value as LegacyMigratedSceneDocument,
     diagnostics: [...diagnostics, ...validation.diagnostics],
     sourceVersion: sourceVersion(legacy, "scene"),
   };
@@ -570,7 +592,7 @@ export function migrateLegacySceneDocument(
 export function migrateLegacyPrefabDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
-): LegacyMigrationResult<PrefabDocumentV1> {
+): LegacyMigrationResult<LegacyMigratedPrefabDocument> {
   const legacy = asLegacyDocument(input, "PREFAB");
   const diagnostics: CoreDiagnostic[] = [];
   reportUnknownDocumentFields(legacy, diagnostics);
@@ -609,7 +631,7 @@ export function migrateLegacyPrefabDocument(
   const validation = validatePrefabDocument(document, buildValidationContext(options));
   assertValidMigration(validation, "Legacy Prefab could not be converted to Prefab v1.");
   return {
-    document: validation.value,
+    document: validation.value as LegacyMigratedPrefabDocument,
     diagnostics: [...diagnostics, ...validation.diagnostics],
     sourceVersion: sourceVersion(legacy, "prefab"),
   };
@@ -619,7 +641,7 @@ export function migrateLegacyPrefabDocument(
 export function migrateSceneDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
-): LegacyMigrationResult<SceneDocumentV1> {
+): LegacyMigrationResult<SceneDocumentV1 | LegacyMigratedSceneDocument> {
   if (!isRecord(input) || !isJsonValue(input)) {
     return fail("Scene migration input must be a JSON-compatible object.");
   }
@@ -639,7 +661,7 @@ export function migrateSceneDocument(
 export function migratePrefabDocument(
   input: unknown,
   options: LegacySceneMigrationOptions = {},
-): LegacyMigrationResult<PrefabDocumentV1> {
+): LegacyMigrationResult<PrefabDocumentV1 | LegacyMigratedPrefabDocument> {
   if (!isRecord(input) || !isJsonValue(input)) {
     return fail("Prefab migration input must be a JSON-compatible object.");
   }
