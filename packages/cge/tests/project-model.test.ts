@@ -670,3 +670,62 @@ test("rejects cyclic Scene Node graphs before recursive validation", () => {
   });
   assert.equal(result.valid, false);
 });
+
+
+test("reports Project, Scene, Node and Prefab envelope errors at exact paths", () => {
+  const projectCases: Array<[Record<string, unknown>, string]> = [
+    [{ ...validProject, id: "project/invalid" }, "id"],
+    [{ ...validProject, name: "   " }, "name"],
+    [{ ...validProject, scenes: "invalid" }, "scenes"],
+    [{ ...validProject, runtime: { adapterId: "", settings: {} } }, "runtime.adapterId"],
+    [{ ...validProject, runtime: { adapterId: "phaser", settings: null } }, "runtime.settings"],
+  ];
+  for (const [input, expectedPath] of projectCases) {
+    assert.equal(validateProjectDocument(input).diagnostics[0]?.path, expectedPath);
+  }
+
+  const node = {
+    id: "node-field-paths",
+    name: "Root",
+    active: true,
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+    components: [],
+    children: [],
+  };
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-field-paths",
+    name: "Paths",
+    rootNodes: [node],
+    settings: {},
+  };
+  const sceneCases: Array<[Record<string, unknown>, string]> = [
+    [{ ...scene, id: "scene/invalid" }, "id"],
+    [{ ...scene, name: "" }, "name"],
+    [{ ...scene, rootNodes: null }, "rootNodes"],
+    [{ ...scene, settings: [] }, "settings"],
+    [{ ...scene, rootNodes: [{ ...node, name: "" }] }, "rootNodes[0].name"],
+    [{ ...scene, rootNodes: [{ ...node, active: "yes" }] }, "rootNodes[0].active"],
+    [{ ...scene, rootNodes: [{ ...node, transform: null }] }, "rootNodes[0].transform"],
+    [{ ...scene, rootNodes: [{ ...node, components: "invalid" }] }, "rootNodes[0].components"],
+    [{ ...scene, rootNodes: [{ ...node, children: "invalid" }] }, "rootNodes[0].children"],
+  ];
+  for (const [input, expectedPath] of sceneCases) {
+    assert.equal(validateSceneDocument(input).diagnostics[0]?.path, expectedPath);
+  }
+
+  const prefab = {
+    schemaVersion: 1,
+    id: "prefab-field-paths",
+    name: "Paths",
+    root: node,
+  };
+  const prefabCases: Array<[Record<string, unknown>, string]> = [
+    [{ ...prefab, id: "prefab/invalid" }, "id"],
+    [{ ...prefab, name: "" }, "name"],
+    [{ ...prefab, root: null }, "root"],
+  ];
+  for (const [input, expectedPath] of prefabCases) {
+    assert.equal(validatePrefabDocument(input).diagnostics[0]?.path, expectedPath);
+  }
+});
