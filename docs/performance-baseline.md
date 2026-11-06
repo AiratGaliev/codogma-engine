@@ -13,9 +13,9 @@
 |---|---|---|---|---|
 | PERF-01 | Холодный старт сервера и открытие IDE | `tests/workspace/test-typescript`; Node.js 22; точная ОС/CPU/browser version записать при запуске | Время старта сервера, HTTP ready, navigation/first usable UI | Не измерено |
 | PERF-02 | Открытая IDE без взаимодействия | Одна неизменяемая тестовая сцена; браузер в foreground; фиксированный интервал 60 s | Средний/пиковый CPU процесса/вкладки, память до/после, фоновые задачи | Не измерено |
-| PERF-03 | Открытие и редактирование сцены | `Level.scene` плюс один фиксированный сценарий transform/inspector/undo/redo | p50/p95 frame duration, input-to-paint latency, время save/reopen | Не измерено |
-| PERF-04 | Asset Pack import/preview | Отдельный набор фиксированных изображений, spritesheet, шрифта и видео; размер/количество файлов записать | Import duration, preview first-frame time, peak memory, ошибки и cleanup | Не измерено |
-| PERF-05 | Generated runtime scene | Fixture на Phaser 4.2.1, фиксированные объекты/FX; фиксировать browser/GPU и build | Startup time, frame-time p50/p95, long tasks, output raw/gzip size | Не измерено |
+| PERF-03 | Native Scene authoring | Native Project/Scene v1 fixture plus a fixed transform/Inspector/Undo/Redo scenario | p50/p95 frame duration, input-to-paint latency, save/reopen time | Not measured |
+| PERF-04 | Native Asset import/preview | Fixed set of images, spritesheets, fonts and video; record file counts and sizes | Import duration, preview first-frame time, peak memory, errors and cleanup | Not measured |
+| PERF-05 | Native runtime Scene | Phaser 4.2.1 fixture with fixed Nodes/Components/FX; record browser/GPU and Build revision | Startup time, frame-time p50/p95, long tasks, output raw/gzip size | Not measured |
 | PERF-06 | Core vertical slice | Project → Scene → Node/Transform → component → save/reopen → preview/build fixture | Время сериализации, round-trip, start/stop/restart, build duration | Будет доступно после реализации |
 | PERF-07 | Web host lifecycle and recovery | Release fixture в foreground/background и target iframe/WebView; отдельный прогон с WEBGL_lose_context | Восстановление ресурсов/состояния, дубликаты listeners, CPU после hidden tab | Не измерено |
 | PERF-08 | Low-end mobile and first load | Зафиксированные Android/iOS device/browser/host, стабильные assets и cold cache | compressed/raw initial download, time-to-first-frame, first input, memory high-water mark, long tasks, asset failures | Не измерено |
@@ -39,7 +39,7 @@
 - Текущий `npm run build` компилирует editor TypeScript project references; это не benchmark или headless game build.
 - CI Fast выполняет build/server/security smoke, а не performance suite.
 - В текущей интеграции Phaser 4.2.1 runtime подключается vendored full bundle `scripts/phaser.min.js`; эффект реального feature selection на размере bundle не доказан. Upstream v4.2.1 имеет отдельный UMD `phaser-arcade-physics(.min)` без Matter.js, но package root не объявляет public export subpath для него; ESM entry point не является доказательством tree shaking. Сравнение и output-level evidence принадлежат PERF-10/COD-35.
-- Известные runtime follow-ups FX/Box2D/Asset Pack должны сначала пройти functional acceptance. Нет смысла фиксировать производительность эффекта до подтверждения корректного результата.
+- Известные runtime follow-ups FX/Box2D/Asset Library
 
 ## ECS comparison — правила интерпретации
 
