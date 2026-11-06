@@ -3092,7 +3092,7 @@ function App() {
                     log("success", "Phaser game iframe loaded");
                   }}
                 />
-                <div class="game-view-caption">Game View loads the existing generated game output. Scene edits are saved to .scene and do not regenerate game.js automatically.</div>
+                <div class="game-view-caption">Game View loads the existing generated game output. Scene edits are saved to .cge-scene.json and do not regenerate game.js automatically.</div>
               </div>
             </Show>
 
