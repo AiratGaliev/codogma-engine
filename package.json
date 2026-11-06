@@ -8,7 +8,6 @@
     "dev:proxy": "CODOGMA_ALLOWED_HOSTS='*' CODOGMA_ALLOWED_ORIGINS=\"${CODOGMA_ALLOWED_ORIGINS:-*}\" node server/server.mjs 2>&1 | tee dev.log",
     "start": "node server/server.mjs",
     "mcp": "node server/mcp-launcher.mjs",
-    "mcp:builtin": "node server/mcp-stdio.mjs",
     "build": "cd source/editor && npm run build",
     "build:localization": "cd packages/localization && npm run build",
     "build:mcp": "npm --prefix packages/editor-mcp-server run build",
@@ -35,13 +34,9 @@
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.5.0",
-    "@codogma/localization": "file:packages/localization",
-    "@phaserjs/editor-mcp-server": "^1.0.6"
+    "@codogma/localization": "file:packages/localization"
   },
   "overrides": {
-    "@phaserjs/editor-mcp-server": {
-      "zod": "4.6.7"
-    },
     "minimatch": "11.0.3"
   },
   "devDependencies": {
