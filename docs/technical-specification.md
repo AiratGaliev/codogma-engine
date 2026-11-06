@@ -928,7 +928,7 @@ codogma-engine/
 #### Репозиторные команды и зависимости
 
 - Инструменты статического анализа и форматирования регистрируются в devDependencies того workspace/package, чей код они проверяют, а не в production dependencies игры.
-- Фактически существуют отдельные npm roots/lockfiles для root, legacy source/editor, нового src/editor и отдельных mini-services/packages. Новый Host уже создан как самостоятельное приложение; не переносить туда legacy tree. npm Workspaces и объединение lockfiles не включены и остаются отдельным PoC/migration, который должен проверить все package scripts, TypeScript references, server routes, CI/cache и release archive.
+- Фактически существуют отдельные npm roots/lockfiles для root, временного UI client в `source/editor/`, нового `src/editor/` и отдельных mini-services/packages. Новый Host уже создан как самостоятельное приложение; npm Workspaces и объединение lockfiles остаются отдельным инфраструктурным PoC, который должен проверить package scripts, TypeScript references, server routes, CI/cache и release archive.
 - Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
 - Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
 - Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
@@ -1300,7 +1300,7 @@ UI-independent logging contract используется legacy Editor в пер
 - Ошибки не скрываются пустыми `catch`: ожидаемый fallback документируется; при сбое rollback/recovery обе ошибки логируются, а первичная ошибка остаётся primary cause.
 - Production policy ограничивает debug-вывод, stack traces, retention и потенциально чувствительные данные; повторяющиеся сообщения группируются/ограничиваются.
 
-Логирование не должно зависеть от Colibri или SolidJS и не должно вводить собственный runtime/game loop. Схема должна позволять сохранять diagnostics независимо от закрытия Preview, не смешивая их с проектными asset/scene данными. Файловый путь/каталог, ротация и retention требуют отдельного implementation decision и не должны по умолчанию засорять проект.
+Логирование не должно зависеть от конкретного UI framework и не должно вводить собственный runtime/game loop.
 
 ### Критерии приёмки Editor Logging & Diagnostics
 
