@@ -33,8 +33,7 @@ async function startEditorServer(editorUi: "solidjs" | "legacy"): Promise<{ orig
             CODOGMA_EDITOR_UI: editorUi,
             EDITOR_HOST_DIR: join(repositoryRoot, "src", "editor", "dist"),
             CODOGMA_ALLOWED_ORIGINS: "",
-            CODOGMA_ALLOWED_HOSTS: "",
-            MCP_BRIDGE_PORT: "0"
+            CODOGMA_ALLOWED_HOSTS: ""
         }
     })
 

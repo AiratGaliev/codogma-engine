@@ -2,7 +2,6 @@
  * Negative-scenario security tests for the loopback mini-services:
  *
  *   - mini-services/ai-chat            (LLM completions proxy, default :3031)
- *   - mini-services/phaser-editor-mcp  (editor MCP bridge,          default :1902)
  *
  * Both services are local helpers and must fail closed for anything that is
  * not their documented local caller: foreign Host headers, foreign browser
@@ -12,7 +11,6 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { once } from "node:events"
-import { createRequire } from "node:module"
 import http from "node:http"
 import net from "node:net"
 import path from "node:path"
@@ -230,159 +228,10 @@ async function testAiChat() {
     }
 }
 
-/* ========================= phaser-editor-mcp ========================= */
-
-async function testMcpBridge() {
-    const port = await freePort()
-    const service = spawnService(
-        path.join(ROOT, "mini-services", "phaser-editor-mcp"),
-        "index.mjs",
-        { PORT: String(port), MCP_BRIDGE_HOST: "127.0.0.1" })
-
-    try {
-        await waitForHttp(port, service, async p => {
-            const r = await request(p, "/", { headers: { host: `127.0.0.1:${p}` } })
-            return r.status === 200
-        })
-        const host = `127.0.0.1:${port}`
-
-        const status = await request(port, "/", { headers: { host } })
-        assert.equal(status.status, 200, "loopback status check must pass")
-        assert.equal(JSON.parse(status.body).status, "ok")
-
-        const rebinding = await request(port, "/", { headers: { host: "attacker.example" } })
-        assert.equal(rebinding.status, 403, "the MCP bridge must reject foreign Host headers even without Origin")
-
-        const foreignOrigin = await request(port, "/", {
-            headers: { host, origin: "https://attacker.example" }
-        })
-        assert.equal(foreignOrigin.status, 403, "foreign browser origins must be rejected")
-
-        const editorOrigin = await request(port, "/", {
-            headers: { host, origin: "http://127.0.0.1:3000" }
-        })
-        assert.equal(editorOrigin.status, 200, "the editor page origin (loopback) must be accepted")
-        assert.equal(editorOrigin.headers["access-control-allow-origin"], "http://127.0.0.1:3000",
-            "CORS must echo the specific allowed origin, not a wildcard")
-
-        const ipv6Origin = await request(port, "/", {
-            headers: { host, origin: "http://[::1]:3000" }
-        })
-        assert.equal(ipv6Origin.status, 200, "IPv6 loopback origins must be accepted")
-        assert.equal(ipv6Origin.headers["access-control-allow-origin"], "http://[::1]:3000")
-
-        const preflight = await request(port, "/", {
-            method: "OPTIONS",
-            headers: { host, origin: "http://127.0.0.1:3000" }
-        })
-        assert.equal(preflight.status, 204, "CORS preflight for allowed origins must pass")
-
-        const preflightForeign = await request(port, "/", {
-            method: "OPTIONS",
-            headers: { host, origin: "https://attacker.example" }
-        })
-        assert.ok(!preflightForeign.headers["access-control-allow-origin"],
-            "CORS preflight must not grant foreign origins")
-
-        const badJson = await request(port, "/", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: "{oops"
-        })
-        assert.equal(badJson.status, 400, "malformed JSON must be rejected")
-
-        const noTool = await request(port, "/", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({ args: {} })
-        })
-        assert.equal(noTool.status, 400, "requests without a tool name must be rejected")
-
-        const badArgs = await request(port, "/", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({ tool: "ide-get-project-data", args: [1, 2, 3] })
-        })
-        assert.equal(badArgs.status, 400, "non-object args must be rejected")
-
-        const oversized = await request(port, "/", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({ tool: "x", args: { blob: "y".repeat(11 * 1024 * 1024) } })
-        })
-        assert.equal(oversized.status, 413, "oversized request bodies must be rejected with 413")
-
-        const noClients = await request(port, "/", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({ tool: "ide-get-project-data", args: {} })
-        })
-        assert.equal(noClients.status, 503, "tool requests without a connected editor must answer 503")
-
-        // Full loop with a fake editor client over WebSocket.
-        const require = createRequire(path.join(ROOT, "mini-services", "phaser-editor-mcp", "index.mjs"))
-        const { WebSocket } = require("ws")
-
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/`, { headers: { host } })
-        await once(ws, "open")
-        const forwarded = new Promise(resolve => {
-            ws.on("message", data => resolve(JSON.parse(String(data))))
-        })
-
-        const toolCall = request(port, "/", {
-            method: "POST",
-            headers: { host, "content-type": "application/json" },
-            body: JSON.stringify({ tool: "ide-get-project-data", args: { hello: "world" } })
-        })
-
-        const msg = await forwarded
-        assert.equal(msg.tool, "ide-get-project-data")
-        assert.deepEqual(msg.args, { hello: "world" })
-        ws.send(JSON.stringify({ id: msg.id, result: [{ type: "text", text: "fake-editor-result" }] }))
-
-        const toolResponse = await toolCall
-        assert.equal(toolResponse.status, 200)
-        assert.equal(JSON.parse(toolResponse.body)[0]?.text, "fake-editor-result",
-            "the bridge must relay the editor's answer back to the HTTP caller")
-
-        ws.close()
-
-        const hostileWs = new WebSocket(`ws://127.0.0.1:${port}/`, {
-            headers: { host, origin: "https://attacker.example" }
-        })
-        // Note: events.once(emitter, "error") rejects, so wait explicitly.
-        const wsOutcome = await new Promise(resolve => {
-            const timer = setTimeout(() => resolve("closed"), 2000)
-            hostileWs.once("open", () => { clearTimeout(timer); resolve("opened") })
-            hostileWs.once("unexpected-response", () => { clearTimeout(timer); resolve("rejected") })
-            hostileWs.once("error", () => { clearTimeout(timer); resolve("rejected") })
-        })
-        assert.notEqual(wsOutcome, "opened", "WebSocket upgrades from foreign origins must be rejected")
-        hostileWs.terminate()
-
-        const hostileHostWs = new WebSocket(`ws://127.0.0.1:${port}/`, {
-            headers: { host: "attacker.example" }
-        })
-        const hostOutcome = await new Promise(resolve => {
-            const timer = setTimeout(() => resolve("closed"), 2000)
-            hostileHostWs.once("open", () => { clearTimeout(timer); resolve("opened") })
-            hostileHostWs.once("unexpected-response", () => { clearTimeout(timer); resolve("rejected") })
-            hostileHostWs.once("error", () => { clearTimeout(timer); resolve("rejected") })
-        })
-        assert.notEqual(hostOutcome, "opened", "WebSocket upgrades with a foreign Host must be rejected")
-        hostileHostWs.terminate()
-
-        console.log("phaser-editor-mcp: Host/Origin guards, body caps, validation and WS forwarding passed")
-    } finally {
-        await stopChild(service.child)
-    }
-}
-
 async function main() {
     await testRemoteBindGuards()
     await testAiChat()
-    await testMcpBridge()
-    console.log("Mini-services security checks passed.")
+    console.log("AI Chat mini-service security checks passed.")
 }
 
 main().catch(error => {
