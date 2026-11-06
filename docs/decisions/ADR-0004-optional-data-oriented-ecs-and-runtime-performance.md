@@ -89,9 +89,10 @@ References:
 Для одного и того же сценария измерять:
 - frame duration и long tasks p50/p95/p99;
 - main-thread JavaScript CPU и время отдельных systems/queries;
-- physics и rendering отдельно от gameplay simulation;
+- physics и rendering отдельно от gameplay simulation, включая collision/overlap counts;
 - allocations, GC pauses, heap high-water mark и retained objects;
-- startup / scene activation / teardown;
+- startup / scene activation / entity creation/destruction / deterministic teardown;
+- correctness parity и отсутствие изменения наблюдаемого gameplay/visual behavior между сравниваемыми реализациями;
 - при необходимости CPU utilization процесса по описанной и одинаковой методике.
 
 Фиксировать browser/version, OS/device/CPU, GPU/renderer, viewport/DPR, build profile, fixture/seed, warm-up, sampling window и фоновые условия. Для каждой сравниваемой реализации использовать одинаковые seed, spawn/despawn schedule, entity/component counts, активные состояния, AI decision frequency, collision/physics setup, assets и visual output; тестовые cohorts для PERF-09 — 50/100/220+ entities. Нельзя отключать physics или rendering только у одного кандидата. Node synthetic no-op benchmarks остаются полезны для регрессии package-level алгоритмов, но не заменяют browser acceptance. Headless/SwiftShader не является доказательством GPU или mobile performance.
