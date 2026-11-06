@@ -1,3 +1,21 @@
+test("unpublished and unversioned workspace layouts are not migrated", () => {
+  const legacyLayouts: unknown[] = [
+    { dockedPanels: ["Hierarchy"], consoleDocked: false },
+    ...[0, 1, 2].map(schemaVersion => ({
+      schemaVersion,
+      dockedPanels: ["Hierarchy"],
+      consoleDocked: false,
+    })),
+  ];
+
+  for (const legacyLayout of legacyLayouts) {
+    assert.deepEqual(
+      restoreWorkspaceLayout(legacyLayout),
+      createDefaultWorkspaceLayout(false),
+    );
+  }
+});
+
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
@@ -92,7 +110,7 @@ test("migrates the legacy COD-80 layout and preserves its user choices", () => {
 
 test("migrates schema v1 and places Console in the Bottom group by default", () => {
   const migrated = restoreWorkspaceLayout({
-    schemaVersion: 1,
+    schemaVersion: 3,
     hierarchyVisible: false,
     inspectorVisible: true,
     hierarchyZone: "right",
@@ -130,20 +148,6 @@ test("Bottom workspace panels close independently and restore a visible fallback
   allClosed = setBottomPanelVisibility(allClosed, "Components", false);
   allClosed = setConsolePanelVisibility(allClosed, false);
   assert.deepEqual(getVisibleBottomTabs(allClosed, false), []);
-});
-
-test("schema v2 migrates the legacy Console row into the Bottom tab group", () => {
-  const migrated = restoreWorkspaceLayout({
-    schemaVersion: 2,
-    consoleDocked: false,
-    bottomTab: "Project",
-  });
-
-  assert.equal(migrated.schemaVersion, 3);
-  assert.equal(migrated.consoleDocked, true);
-  assert.equal(migrated.projectVisible, true);
-  assert.equal(migrated.animationVisible, true);
-  assert.equal(migrated.componentsVisible, true);
 });
 
 test("Console visibility is independent from dock placement and survives persistence", () => {
@@ -184,7 +188,7 @@ test("closing standalone Console leaves the selected Bottom tab unchanged", () =
 
 test("restores a versioned layout and clamps invalid dimensions", () => {
   const layout = restoreWorkspaceLayout({
-    schemaVersion: 1,
+    schemaVersion: 3,
     leftWidth: 9999,
     rightWidth: 1,
     bottomHeight: Number.NaN,
@@ -269,7 +273,7 @@ test("narrow close keeps a valid Bottom tab selected instead of a hidden side pa
 
 test("ignores unknown and duplicate panel ids and restores missing panels", () => {
   const layout = restoreWorkspaceLayout({
-    schemaVersion: 1,
+    schemaVersion: 3,
     hierarchyZone: "floating",
     inspectorZone: "bottom",
     bottomTabOrder: ["Unknown", "Inspector", "Inspector", "Console"],

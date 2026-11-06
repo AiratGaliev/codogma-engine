@@ -260,10 +260,15 @@ export function ensureSpriteAssetMetadata(
     throw new TypeError("Codogma sprite metadata must be a JSON object.");
   }
   const rawMetadata = isRecord(raw) ? raw : null;
-  const version = Number(rawMetadata?.schemaVersion ?? 0);
-  if (version > SCHEMA_VERSION) {
+  if (rawMetadata && rawMetadata.schemaVersion !== SCHEMA_VERSION) {
+    const version = rawMetadata.schemaVersion;
+    if (typeof version === "number" && version > SCHEMA_VERSION) {
+      throw new Error(
+        `Sprite metadata schema v${version} is newer than supported v${SCHEMA_VERSION}; data is read-only.`,
+      );
+    }
     throw new Error(
-      `Sprite metadata schema v${version} is newer than supported v${SCHEMA_VERSION}; data is read-only.`,
+      `Sprite metadata must use schema v${SCHEMA_VERSION}; unversioned and older data is not migrated.`,
     );
   }
 

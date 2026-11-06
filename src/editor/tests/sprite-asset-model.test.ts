@@ -107,6 +107,15 @@ test("ensures stable IDs/source fingerprints and preserves vendor fields", () =>
   assert.throws(() => ensureSpriteAssetMetadata({ ...imageEntry, codogma: { schemaVersion: 99 } as never }), /newer than supported/);
 });
 
+test("does not migrate unversioned or older Codogma Sprite metadata", () => {
+  for (const codogma of [{}, { schemaVersion: 0 }, { schemaVersion: "1" }]) {
+    assert.throws(
+      () => ensureSpriteAssetMetadata({ ...imageEntry, codogma } as never),
+      /schema v1|not migrated/,
+    );
+  }
+});
+
 test("edits pivot, trim, crop and collision shapes while preserving unknown frame properties", () => {
   const descriptor = describeSpriteAssetFrames(imageEntry, 64, 32);
   const metadata = ensureSpriteAssetMetadata(imageEntry, { size: 1024, modifiedAt: 100 }, descriptor);
