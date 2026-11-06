@@ -14,7 +14,7 @@
 
 ## Продуктовые reference и 2D-only scope
 
-Новый Host проектируется для 2D-игр. Основной UX-reference — Unity 6.6 Editor (6000.6); дополнительный reference по 2D authoring workflows — Cocos Creator 4.0 LTS. Unity 6.6 является выпущенной версией; технические гарантии сверяются с документацией конкретного patch release. Не добавлять режим 2D/3D или 3D-only panels/gizmos/workflows. Colibri остаётся только временным UI client до cutover и историческим источником пользовательских UI-workflow observations. Его project formats, serializers, Component mappings, Prefab semantics и codegen не являются контрактами нового Host; см. ADR-0007. Детальные правила и acceptance process — в [стандарте reference](../editor-reference-standard.md).
+Новый Host проектируется для 2D-игр. Основной UX-reference — Unity 6.6 Editor (6000.6); дополнительный reference по 2D authoring workflows — Cocos Creator 4.0 LTS. Unity 6.6 является выпущенной версией; технические гарантии сверяются с документацией конкретного patch release. Не добавлять режим 2D/3D или 3D-only panels/gizmos/workflows. Точный process изучения UX и implementation references описан в [стандарте reference](../editor-reference-standard.md).
 
 ## Почему SolidJS
 
@@ -51,7 +51,7 @@
 3. **Project Model отделён от UI state:** сериализация, validation и file operations остаются во владении существующих backend/project contracts. В SolidJS живут transient UI state: открытые панели, вкладки, selection, expanded tree nodes, inspector drafts и layout. Не создавать второй serializer или независимую копию Project Model.
 4. **Phaser остаётся Canvas/runtime renderer:** SolidJS владеет DOM-оболочкой и панелями. Scene viewport интегрирует существующий Phaser runtime через явный lifecycle/resize contract; gizmos/overlays используют согласованные coordinate transforms.
 5. **Нет долгосрочного Colibri bridge:** новый Host не импортирует Colibri, его registry, Parts, Workbench, globals или controls. Старый и новый UI работают как самостоятельные browser applications.
-6. **Использовать нативные Codogma contracts:** Node.js server, HTTP/file APIs, Project Model v1, Asset metadata/importer APIs, MCP schemas и Phaser runtime связываются с новым Host через typed boundaries. Colibri formats/serializers/codegen не сохраняются как compatibility contract. Project Model policy определяется ADR-0007.
+6. **Использовать единые Codogma contracts:** Node.js server, HTTP/file APIs, Project Model v1, Asset metadata/importer APIs, MCP schemas и Phaser runtime связываются с новым Host через typed boundaries. Project Model policy определяется ADR-0007.
 7. **Библиотеки выбирать по реальной потребности:** docking, CodeMirror/Monaco, router и virtualization utilities не становятся обязательными без workflow, который их требует.
 
 **Фактическая граница первого Host (COD-80, CI Fast #453):** SolidJS Host и Phaser Scene workflow прошли typecheck/build, 36 domain tests и 9 Chromium acceptance tests. Workbench поддерживает dock/undock Console, перенос Hierarchy/Inspector в Bottom Dock с возвратом в исходный слот, перестановку вкладок, сохранение layout и focus-aware shortcuts. Это не универсальная docking-система с произвольными floating/free-split зонами; оставшиеся authoring workflows и production migration перечислены в [плане миграции](../editor-ui-migration.md) и остаются открытыми.
