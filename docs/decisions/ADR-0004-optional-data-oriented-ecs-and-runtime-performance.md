@@ -103,7 +103,9 @@ ECS принимается как оптимизация только там, г
 
 ### 7. Package selection и production build
 
-- Feature IDs и providers фиксированы: `runtime.ecs` → `@codogma/ecs`; `runtime.ecs-phaser` → `@codogma/ecs-phaser` и требует `runtime.ecs` плюс совместимый Phaser runtime provider. Установка пакета, доступность provider, project enablement, target inclusion и runtime activation — разные состояния; одно не должно неявно создавать другое.
+- Feature IDs и providers фиксированы: `runtime.ecs` → `@codogma/ecs`; `runtime.ecs-phaser` → `@codogma/ecs-phaser` и требует `runtime.ecs` плюс совместимый Phaser runtime provider. Выбор `runtime.ecs` не должен автоматически устанавливать, включать или добавлять в target `runtime.ecs-phaser`; использование adapter требует явного выбора соответствующей feature.
+- Package-specific ECS features регистрируются и становятся доступными для выбора только после реализации соответствующего package и прохождения его package/API/integration acceptance. `runtime.ecs-phaser` не предлагается как usable target feature до готовности adapter и совместимого Phaser provider. Performance claims и production enablement опираются на принятые browser/device measurements, а не на наличие descriptor в Registry.
+- ECS остаётся opt-in: не выполнять массовую автоматическую миграцию существующих проектов и не добавлять ECS автоматически каждому Scene Node/Component. Проекты и разработчики, которым достаточно object/component Core, не обязаны устанавливать ECS.
 - Если пакет не установлен/не включён, Editor/Build выдаёт ясную диагностику при ссылке на его feature; установка не происходит автоматически.
 - Если ECS выключен, production artifact должен физически не содержать ECS package code и его adapter modules. Одного UI checkbox или feature descriptor недостаточно: нужны import graph/output manifest/size evidence.
 - Editor-only, build-only и QA packages не попадают в game runtime. `@codogma/cge` остаётся базовым package, остальные runtime packages включаются только по выбору проекта и target.
