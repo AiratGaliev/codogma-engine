@@ -397,7 +397,7 @@ async function main() {
         if (symlinkChecksAvailable) {
             // Verify the built-in MCP dispatcher directly so this is testing the
             // repository's safeJoin path, not optional-argument defaults in the
-            // third-party stdio adapter.
+            // stdio adapter.
             const danglingMcpWrite = await request(port, "/editor/mcp", {
                 method: "POST",
                 headers: { host, "content-type": "application/json" },

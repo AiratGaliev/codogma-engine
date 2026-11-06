@@ -32,7 +32,7 @@ This package is deliberately an adapter, not a second implementation of editor t
 - `get-system-instructions` remains an engine-owned tool. The engine's initialization instructions are passed through to the stdio server.
 - The tool list is read when this process starts. Restart the MCP process after updating the engine or its tool registry.
 
-The adapter connects directly to `POST /editor/mcp`. It does not use the legacy WebSocket helper on port `1902` and does not import Phaser-specific MCP tool definitions.
+The adapter connects directly to `POST /editor/mcp`. It does not start or depend on a second WebSocket or port-`1902` transport, and does not import Phaser-specific MCP tool definitions.
 
 ## Requirements
 
