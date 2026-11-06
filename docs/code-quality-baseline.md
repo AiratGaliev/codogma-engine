@@ -23,7 +23,7 @@
 
 ## Toolchain baseline
 
-- Root scripts: `start`, `dev`, `mcp`, `mcp:builtin`, `build`, `watch`, `test:e2e`, `test:security`.
+- Root scripts: `start`, `dev`, `mcp`, `build`, `watch`, `test:e2e`, `test:security`.
 - Existing UI client scripts: `start` / `build` / `clean` через TypeScript project references.
 - SolidJS Host scripts in `src/editor/package.json`: `dev`, `typecheck`, `build`, `test`, `test:browser`; root shortcuts: `dev:editor-host`, `build:editor-host`, `test:editor-host`, `test:editor-host:browser`.
 - Existing UI-client `source/editor` devDependencies: TypeScript `5.3.3`, `colibri-packer ^1.0.1`.
@@ -41,7 +41,7 @@
 |---|---|---|---|
 | P0 | Для нового и целенаправленно изменяемого Codogma-owned кода нет воспроизводимого quality loop | Ограниченный toolchain pilot: strict TS для новых модулей, ESLint/typescript-eslint, Prettier check, адресные unit/regression tests и locked dependencies; применять к editor modernization scope по мере внедрения | Не расширять соответствующий новый/изменяемый scope, пока его clean install/check/tests не проходят; не запускать массовый lint rewrite всего существующего UI source tree |
 | P0 | Filesystem TOCTOU закрыт лишь для отдельных content writes | `openSafeProjectFileForWrite` validates descriptor before truncation/write; path-based folder creation, rename/copy/move/delete still need OS-aware mutation strategy and adversarial concurrent-race tests | До новых server write APIs / Package Manager file operations |
-| P0 перед non-loopback exposure mini-services | Standalone MCP/AI Chat реализуют local-first defensive defaults, но не являются аутентифицированными публичными API; entry points не покрыты main-server security smoke | `phaser-editor-mcp`: loopback bind по умолчанию, Host/Origin allow-list, HTTP/WS limits and caps; `ai-chat`: loopback bind, Host/Origin, body/message caps, timeout/rate limit. Env vars `MCP_BRIDGE_HOST`/`AI_CHAT_HOST` позволяют менять bind; Origin/Host не заменяют authentication | Не публиковать и не bind-ить сервисы на non-loopback до отдельной auth/authorization design и service-specific regression tests. Main server CI не доказывает безопасность standalone entry points |
+| P0 перед non-loopback exposure AI Chat | Optional AI Chat backend реализует local-first defensive defaults, но не является аутентифицированным публичным API; entry point требует отдельного security review | `ai-chat`: loopback bind, Host/Origin validation, body/message caps, timeout/rate limit; `AI_CHAT_HOST` позволяет менять bind. Origin/Host не заменяют authentication | Не публиковать и не bind-ить AI Chat на non-loopback до отдельной auth/authorization design и service-specific regression tests. Main server CI не доказывает безопасность standalone AI Chat entry point |
 | P0 | Несколько изменённых codegen/runtime функций не имеют browser acceptance | FX/Box2D/asset/codegen regression fixtures и журнал ручной проверки | До закрытия соответствующих пунктов backlog и заявления о готовности этих функций |
 | P1 | MCP smoke покрывает только узкий набор | Тесты optional/nested arguments и типовых response/error paths для risk-based набора tools | Перед обновлением MCP/Zod contract |
 | P1 | Нет активного dead-code/dependency-boundary анализа | Knip + dependency-cruiser в report mode, корректно задав existing/generated/dynamic UI entry points | Сначала report, не blocking для existing UI client |

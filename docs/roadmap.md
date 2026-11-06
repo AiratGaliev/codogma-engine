@@ -58,11 +58,11 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ### Что не следует делать параллельно «на всякий случай»
 
-- Не встраивать SolidJS views внутрь Colibri как долгосрочную архитектуру. Не переносить всё в одном giant PR; old/new UI должны быть независимыми applications с отдельными origins, общими backend/data contracts и проверяемыми cutover gates.
+- Не встраивать SolidJS views в другой UI client и не переносить всё в одном giant PR; оба UI остаются независимыми applications с отдельными origins, общими backend/data contracts и проверяемыми cutover gates.
 - Не останавливать исправление существующего редактора, пока проектируют идеальный Core. Для каждой задачи выбирать минимальный контракт, необходимый именно ей.
 - Не сводить модернизацию к замене цветов/иконок: визуальная работа должна включать и функциональные состояния, клавиатурный workflow, layout панелей и связанные пользовательские сценарии.
 - Не оставлять icon migration только в виде карты: после инвентаризации выполнить внедрение в согласованном UI scope, с отдельными light/dark variants и attribution.
-- Не вводить сразу строгий lint/format gate на все legacy-пакеты, не менять все lockfiles/путь editor и не переводить всё на Workspaces одной операцией.
+- Не вводить сразу строгий lint/format gate на все существующие package roots, не менять все lockfiles/путь editor и не переводить всё на Workspaces одной операцией.
 - Не заменять Phaser и не подключать EVA.js как второй runtime/Game/Ticker. Optional Data-Oriented ECS разрешён как самостоятельный package (ADR-0004), но реализация и performance claims требуют representative browser/device benchmark; не переносить ECS в `@codogma/cge` и не создавать второй game loop.
 - Не отмечать runtime-функции завершёнными по одному лишь TypeScript build, наличию кнопки или генерации исходника.
 - Не добавлять зависимости «на будущее». У каждой зависимости должны быть используемая функция, лицензия, scope, критерии приёмки и доказательство, почему текущей реализации недостаточно.
@@ -102,7 +102,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ### С чего начинается реализация
 
-**Первый самостоятельный SolidJS Editor Host и базовый Scene vertical slice уже реализованы в COD-80 / PR #30.** Следующий этап — не повторное создание shell/Workbench, а независимая acceptance уже интегрированного среза и выбор следующих workflow gaps по migration inventory. Не встраивать SolidJS в Colibri и не перемещать legacy source tree.
+**Первый самостоятельный SolidJS Editor Host и базовый Scene vertical slice уже реализованы в COD-80 / PR #30.** Следующий этап — независимая acceptance интегрированного среза и выбор следующих workflow gaps по inventory. Workbench, Scene и следующие authoring surfaces реализуются в `src/editor/` как отдельное приложение.
 
 Ожидаемый рабочий порядок:
 1. Использовать merged code evidence PR #30 (merge commit `7aa0f2c8cd85df795e35b3678de95794de693a5d`) и зафиксировать отдельный integrated candidate SHA после promotion `dev → test` для CODQA-18; не смешивать candidate SHA с code-commit CI evidence.
@@ -110,7 +110,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 3. Завершить migration inventory COD-16 вместе с COD-82: для каждой capability разделить legacy reference, reusable data/domain/runtime contract, SolidJS implementation status, test fixtures, browser/runtime acceptance и owner issue.
 4. Реализовывать следующие вертикальные slices в SolidJS Host: Asset/Sprite (COD-86), Prefab (COD-8), camera/coordinates/sorting (COD-41), 2D UI authoring (COD-43), docking (COD-83), user components/scripts (COD-91), Animation (COD-84), Spine (COD-90), Tilemap/Physics/Audio/Particles и другие gaps по dependencies. FX authoring и generated-game parity реализованы/проверены в PR #32; CODQA-19 закрывает независимый visual/reference sign-off.
 5. Общие engine/data/runtime/security defects исправлять в соответствующих слоях; не переносить UI ради использования legacy panels. Новые зависимости (Monaco/CodeMirror/docking library) добавлять только после конкретного gap и ограниченного evidence.
-6. До общего Preview Host/MCP session ownership не подключать новый Host к legacy broadcast SSE bridge и не допускать concurrent write в один PROJECT_DIR. Session-aware MCP routing ведётся в COD-85.
+6. До общего Preview Host/MCP session ownership не подключать несколько Host sessions к broadcast SSE transport и не допускать concurrent write в один PROJECT_DIR. Session-aware MCP routing ведётся в COD-85.
 7. После принятия migration inventory выполнить COD-87 cutover с rollback window, затем отдельную COD-88 cleanup после consumer/provenance/license audit.
 
 Для каждого workflow фиксируются пользовательская цель, SolidJS status, native Codogma contract, owner issue, native fixtures и browser/runtime acceptance. UI reference выбирается из утверждённых Unity/Cocos/Godot источников. `src/editor/` уже существует как самостоятельное приложение; `source/editor/` не переносится. npm Workspaces и lockfile consolidation остаются отдельным инфраструктурным решением.
@@ -136,7 +136,6 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [x] Интеграция Phaser 4.2.1, типы и адаптации компилятора/редактора.
 - [x] Существующие инструменты Scene Editor, Inspector, Prefabs/Components, Assets/Pack, Animations, Tilemap и связанные с ними editor plugins.
 - [x] Контракт файлового доступа `IFileStorage`, registry расширений и базовая инфраструктура Undo/Redo в существующем клиенте.
-- [x] Engine-owned MCP tool registry и local HTTP endpoint; legacy WebSocket bridge для старых editor-side workflows.
 - [x] Private TypeScript stdio adapter `@codogma/editor-mcp-server` в `packages/editor-mcp-server/`, с собственным manifest/lockfile и проверками; публичная npm publication и npm Workspaces остаются отдельными задачами.
 - [x] CI Fast: проверка маршрута PR, install dependencies, build редактора и server smoke test.
 - [x] MCP integration workflow на PR в `test`/`main`.
@@ -428,9 +427,9 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [x] Выбранный набор общих UI/2D Godot SVG assets импортирован в `src/editor/icons/` и используется SolidJS Host. Сохранены provenance/upstream commit, mapping и MIT notices; последующие additions выполняются под подтверждённые workflows.
 - [x] Для импортированного набора подготовлены assets и theme-aware use в новом Host; exact contrast, focus/hover/disabled/selected/error states и визуальная проверка всех design artboards подтверждаются browser/design acceptance CODQA-18, а не фактом наличия SVG.
 - [x] Создана parent Engineering issue COD-82 для staged SolidJS Host rollout; COD-80 / PR #30 остаётся первым реализованным Host/Scene slice. COD-82 координирует следующие authoring workflows, MCP routing, acceptance и UI cutover COD-87/COD-88.
-- [x] Создан самостоятельный SolidJS Host в `src/editor/`. На период migration он запускается через Vite на отдельном loopback port (по умолчанию 5173), а legacy editor остаётся на текущем backend (по умолчанию 3000). Vite проксирует `/editor/*` backend routes; используется точный `CODOGMA_ALLOWED_ORIGINS`, не wildcard. Два UI не встраиваются друг в друга и не обмениваются UI state через постоянный bridge.
+- [x] Создан самостоятельный SolidJS Host в `src/editor/`. До production cutover он запускается через Vite на отдельном loopback port (по умолчанию 5173), а временный UI client остаётся на текущем backend (по умолчанию 3000). Vite проксирует `/editor/*` backend routes; используется точный `CODOGMA_ALLOWED_ORIGINS`, не wildcard. Два UI не встраиваются друг в друга и не обмениваются UI state через постоянный bridge.
 - [x] **COD-80 / PR #30 — первый Host/Workbench + Scene vertical slice:** Unity-подобная Dark/Light оболочка по `.pen`, Phaser Scene workflow, Hierarchy/Inspector/Project/Animation/Components/Console, persisted layout, Console docking, перенос Hierarchy/Inspector в Bottom Dock и возврат, tab reorder, focus-aware shortcuts и Command Palette focus management. CI Fast #453: typecheck/build, 36 domain tests, 9 Chromium acceptance tests и общие `fast-checks` прошли. Это завершает только первый срез; оставшиеся миграция инструментов, MCP SSE routing и production cutover не закрыты.
-- [ ] На время dual-run запретить concurrent writes в один `PROJECT_DIR`. Для параллельной write acceptance использовать отдельные project copies/backend instances. Legacy MCP SSE bridge пока может принадлежать только одному editor client: current server broadcasts events всем `bridgeClients`; session-aware routing требуется до подключения нового Host к общему SSE bridge.
+- [ ] На время dual-run запретить concurrent writes в один `PROJECT_DIR`. Для параллельной write acceptance использовать отдельные project copies/backend instances. Текущий MCP SSE transport рассылает события всем `bridgeClients` и допускает только одного owner; session-aware routing требуется до подключения нескольких Host sessions к общему transport.
 - [ ] Переносить инструменты вертикальными workflow slices: first Host/Scene slice COD-80 уже реализован; далее docking/workspace (COD-83), assets/Sprite (COD-86), Prefab/Components (COD-8/COD-91), camera/UI authoring (COD-41/COD-43), Animation (COD-84), Tilemap/Physics (COD-40/COD-42), FX/Spine (COD-89/COD-90), Audio/Particles (COD-61), project/MCP/settings. Для каждого slice — regression fixtures и browser/runtime acceptance.
 - [ ] После inventory sign-off по обязательным workflows (migrated / deferred с owner и причиной / retired с причиной), независимой browser/runtime acceptance, проверки MCP/Preview и project write ownership выполнить production cutover `/editor/` на новый bundle (COD-87) с ограниченным rollback window; затем отдельным cleanup PR удалить Colibri и только legacy-only assets/plugins/build/dependencies (COD-88). Полный feature parity со старым редактором не является критерием cutover.
 

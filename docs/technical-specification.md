@@ -60,7 +60,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
 | Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
-| AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует исходные tool schemas/calls без второго реестра. Отдельно остаётся legacy WebSocket bridge для старых editor-side workflows; AI Chat service необязателен |
+| AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует tool schemas/calls без второго реестра или альтернативного transport contract. AI Chat service необязателен |
 | CI | `fast-checks` выполняет быстрые build/typecheck, unit/contract/security и server-smoke проверки для обычных PR; все E2E suites (MCP, Playwright/browser и последующие gameplay E2E) запускаются только в promotion workflow начиная с PR `dev → test`, затем на последующих release-promotion PR |
 | TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
@@ -200,7 +200,7 @@ Tauri и Electron не выбираются только по размеру д�
 - Временный UI client продолжает открываться
 - Vite proxy пересылает относительные запросы /editor/* к backend на 127.0.0.1:3000, чтобы UI использовал те же POST /editor/api, project-file, upload, MCP HTTP и прочие действующие endpoints без прямого browser-to-backend CORS. Для proxy-origin в backend задаётся точный CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173; wildcard Origin запрещён. Реальная proxy конфигурация должна быть проверена вместе с server/request-origin.mjs.
 - По умолчанию оба UI могут использовать один backend/PROJECT_DIR, но редактировать один проект одновременно нельзя: current API не даёт cross-client lock/optimistic concurrency contract, а selection, undo history и caches принадлежат отдельным browser sessions. Для write acceptance использовать один активный writer либо отдельные fixture copies и backend instances.
-- Текущий server/mcp.mjs рассылает editor SSE command всем подключённым bridge clients (bridgeClients is a Set) и разрешает pending command по первому результату. Поэтому в dual-run режиме SSE bridge подключается только к одной UI-сессии — сначала к legacy editor. Новый Host подключается к нему лишь после реализации и acceptance session-aware routing либо получает отдельный изолированный backend/bridge instance.
+- Текущий server/mcp.mjs рассылает editor SSE commands всем подключённым clients (`bridgeClients` is a Set) и разрешает pending command по первому результату. До реализации session-aware routing shared transport имеет одного Editor session owner; параллельные Host sessions используют отдельные backend/transport instances.
 - Два порта — только development topology. Production cutover выполняется через Node server: SolidJS bundle становится основным `/editor/`, а legacy UI удерживается ограниченное время для rollback. Постоянные два production backend или второй editor API не требуются.
 
 ### 4.3. Зависимости должны идти в одном направлении
@@ -914,7 +914,7 @@ codogma-engine/
 #### Инструменты, которые нужно оценить и ввести поэтапно
 
 - **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для нового scope. TSLint dependency уже удалена из editor manifest, но `source/editor/tslint.json` и `source/editor/lint.sh` ещё существуют; считать их неактивными остатками, а не доступным lint toolchain. Не возвращать TSLint ради новых модулей.
-- **Prettier + eslint-config-prettier** — единый форматтер. ESLint отвечает за ошибки и risky patterns, Prettier — за форматирование; не дублировать спорные stylistic правила. Зафиксировать локальные версии и общий конфиг, подключить format:check в CI. Не форматировать всю legacy-кодовую базу автоматически первым PR.
+- **Prettier + eslint-config-prettier** — единый форматтер. ESLint отвечает за ошибки и risky patterns, Prettier — за форматирование; не дублировать спорные stylistic правила. Зафиксировать локальные версии и общий конфиг, подключить format:check в CI. Не форматировать весь существующий source tree автоматически первым PR.
 - **Knip** — анализ неиспользуемых файлов, exports/types, dependencies/devDependencies, binaries и scripts. Настроить корректные entry points для существующего plugin registry, dynamic imports, generated code, command-line tools, test fixtures и editor plugins: динамически загружаемый плагин нельзя удалять только потому, что его import не виден статически. Первый отчёт служит baseline; после исправления конфигурации ошибки вводятся как гейт по новым/изменяемым областям, затем расширяются на репозиторий.
 - **dependency-cruiser** — кандидат для контроля архитектурных границ, циклических импортов и запрещённых зависимостей. Требуемые правила: Core не импортирует editor/desktop UI; runtime game build не импортирует editor/MCP/server/test modules; editor/build-only dependencies не попадают в game runtime; новые запрещённые циклы не появляются. Конкретные правила задаются после фиксации реальной структуры репозитория.
 - **TypeScript compiler / project references** — сохранить tsc -b для существующей сборки там, где это нужно, плюс явная typecheck-команда для нового Core/API. Build success и typecheck должны возвращать ненулевой exit code при ошибке.
@@ -938,7 +938,7 @@ codogma-engine/
 1. Снять baseline: проверить TS configs/scripts, определить новые Codogma-owned code paths, зафиксировать отсутствие TSLint dependency и оценить оставшиеся `tslint.json`/`lint.sh`. Отдельно инвентаризировать legacy type/lint findings.
 2. Добавить конфиги ESLint/Prettier/Knip и TypeScript strict profile для нового Core как отдельную, ограниченную область; не менять поведение runtime.
 3. Сначала запускать Knip/dependency-cruiser в report mode, исправить ошибочные entry points и сохранить baseline; удалять код/зависимости только после ручной проверки.
-4. Добавить typecheck, lint и formatting checks в быстрый CI для новых/изменяемых модулей; затем расширять scope по мере сокращения legacy baseline. Базовый fast-checks обязан оставаться быстрым.
+4. Добавить typecheck, lint и formatting checks в быстрый CI для новых/изменяемых модулей; затем расширять scope на дополнительные существующие modules по результатам отчётов и оценке стоимости. Базовый fast-checks обязан оставаться быстрым.
 5. Не описывать TSLint как активный gate: его npm dependency отсутствует уже в текущем manifest. После пилота решить судьбу остаточных `tslint.json`/`lint.sh`; расширять ESLint gates на legacy scope только после отчёта, проверки dynamic plugin entry points и оценки стоимости исправлений. Любое исключение содержит ссылку/комментарий, владельца и условие пересмотра.
 
 Acceptance: новый engine module не принимается без strict typecheck, линтера, форматирования и unit tests, соответствующих его слою; новые forbidden dependencies/cycles и неиспользуемые dependencies в охваченном scope блокируют PR. Неописанные и ещё не реализованные scripts не должны указываться как уже существующие в README/CI.
@@ -969,7 +969,7 @@ The current implementation includes a standalone private package
 
 The engine-side catalog includes scene, game-object, plain-object, Prefab, editable-tilemap, Arcade Physics, filter, object-list, asset-pack, Spine, Google Fonts and project-file operations. Spine support includes serializing `SpineGameObject` configuration (skeleton/atlas keys, skin, bounds-provider settings, animation mixes, default mix and time scale) and the `assets-get-spine-skin-image` PNG preview. The preview is rendered inside the active browser editor via SSE; a green headless package test does not constitute visual renderer acceptance.
 
-The adapter preserves the engine's JSON Schemas without converting them to a second schema model, compiles each advertised schema with Ajv and validates stdio `tools/call` arguments before forwarding. The engine remains authoritative for tool definitions, system instructions, editor-state operations and project-file security. The old WebSocket mini-service and editor configuration/log dialogs are retained as a separate legacy compatibility path; the new adapter does not depend on that port or service.
+The adapter preserves the engine's JSON Schemas, compiles each advertised schema with Ajv and validates stdio `tools/call` arguments before forwarding to the single engine-owned HTTP endpoint. The engine remains authoritative for tool definitions, system instructions, editor-state operations and project-file security. The stdio adapter exposes no separate WebSocket or alternate tool-registry contract.
 
 #### Game QA MCP — отдельный companion package
 
@@ -1288,7 +1288,7 @@ MCP surface группируется по операциям: browser/session li
 
 **Статус:** архитектурное требование зафиксировано; единая система логирования ещё не реализована. Детальный contract, reference patterns, текущие ограничения и критерии — в [Editor Logging & Diagnostics](editor-logging-and-diagnostics.md).
 
-Текущие Browser Console, Node.js server logger, `dev.log` и legacy MCP Message Log — отдельные механизмы. Логи browser Editor автоматически не попадают в Node terminal; MCP Message Log охватывает только MCP bridge. Они не считаются общей системой диагностики.
+Текущие Browser Console, Node.js server logger, `dev.log` и MCP operation responses — отдельные механизмы. Логи browser Editor автоматически не попадают в Node terminal; MCP responses охватывают только результаты tool calls. Они не считаются общей системой диагностики.
 
 UI-independent logging contract используется legacy Editor в переходный период и текущим SolidJS Host; после cutover целевым consumer остаётся SolidJS:
 

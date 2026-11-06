@@ -67,7 +67,7 @@
 - Vite проксирует относительные `/editor/*` запросы к backend. Browser code не обращается к backend direct cross-origin.
 - Для нового UI задаётся точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`. Wildcard Origin запрещён; Host/Origin и loopback guards сохраняются. Proxy и Origin forwarding проверяются вместе с `server/request-origin.mjs`.
 - Оба UI могут быть открыты одновременно, но пока нет cross-client locking/versioning contract только один клиент записывает в конкретный `PROJECT_DIR`. Для параллельной write-приёмки используются разные fixture copies и backend instances.
-- Текущий `server/mcp.mjs` рассылает editor SSE-команды всем подключённым clients. Пока нет session-aware routing, общий `/editor/mcp-bridge/events` принадлежит только одному UI; сначала это legacy Colibri. Новый Host подключается к общему SSE bridge только после адресной маршрутизации или через изолированный backend.
+- Текущий `server/mcp.mjs` рассылает editor SSE-команды всем подключённым clients. Пока нет session-aware routing, общий `/editor/mcp-bridge/events` может принадлежать только одной Editor session. Новый Host подключается к общему SSE transport после реализации адресной маршрутизации или использует изолированный backend.
 - Это временная dev topology. После cutover существующий Node server отдаёт SolidJS build по `/editor/`; legacy route остаётся на ограниченное rollback window, затем удаляется.
 
 ## Порядок реализации

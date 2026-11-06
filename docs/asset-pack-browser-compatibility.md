@@ -24,7 +24,7 @@
 - CompressedTextureVariants (webp, avif, ktx2, pvr, dds) хранит optional editor/export metadata. Само поле не реализует runtime transcoding, GPU upload или выбор формата по capabilities.
 - Texture URL variants (IMG, ETC, ETC1, ASTC, BPTC, PVRTC, S3TC и другие) сохраняются как данные Asset Pack. Сохранение URL не означает, что текущий Phaser loader/editor preview умеет декодировать соответствующий container/format.
 - FontFace stub tests проверяют наш error/cache contract, но не заменяют реальные font fixtures. Audio/video URL tests не подтверждают codec decode или autoplay.
-- Legacy AudioPreviewSection и VideoPreviewSection освобождают активный media source при скрытии секции (removeAttribute("src") + load()). Отдельный browser memory/decoder acceptance при смене проекта, закрытии editor и завершении browser session ещё нужен.
+- Media preview при закрытии или смене selection должен освобождать активный media source (`removeAttribute("src")` + `load()`). Отдельный browser memory/decoder acceptance при смене проекта, закрытии Editor и завершении browser session ещё нужен.
 
 ## Следующая browser acceptance
 
