@@ -32,7 +32,7 @@
 - `source/editor/tsconfig-base.json` задаёт DOM/ESNext, composite/declarations, отключает автоматические ambient `@types` через `types: []`, но не задаёт `strict: true`, `noUncheckedIndexedAccess` или `exactOptionalPropertyTypes` в общем base config. Индивидуальные project configs надо проверить отдельно перед окончательным existing UI-client baseline.
 - `source/editor/tsconfig.json` использует TypeScript project references. Нельзя менять общий config механически, пока не выявлены межпроектные зависимости и generated declarations.
 - `source/editor/tslint.json` и `source/editor/lint.sh` сохранились, но TSLint отсутствует в текущем `source/editor/package.json` и не вызывается CI. Скрипт использует `npx tslint`, поэтому это не воспроизводимая рабочая lint-команда текущего manifest. Считать TSLint **остатком existing UI-client tooling**, а не активным quality gate.
-- Root manifests include ESLint/typescript-eslint, Prettier, Knip and dependency-cruiser. New Host uses scoped TypeScript/domain tests and Playwright browser acceptance. Knip/dependency-cruiser remain report-oriented where documented; no repository-wide existing UI client Colibri lint rewrite is implied.
+- Root manifests include ESLint/typescript-eslint, Prettier, Knip and dependency-cruiser. New Codogma modules use scoped TypeScript/domain tests and Playwright browser acceptance. Knip/dependency-cruiser remain report-oriented where documented; no repo-wide lint policy is implied.
 - В дереве есть два основных test scripts. Большое количество файлов в `tests/workspace/test-typescript` — fixture проекта и regression fixtures, но само по себе оно не означает, что каждый fixture автоматически тестируется.
 
 ## Найденные gaps и минимальные решения
