@@ -25,16 +25,10 @@
 
 | Package | Status | Intended scope | Dependency / exclusion rule | Linear owner |
 |---|---|---|---|---|
-| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Не является зависимостью `@codogma/cge`; не импортирует Phaser, DOM, Editor, Node-only APIs или platform SDK | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
-| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Отдельная peer dependency/adapter; не делает базовый `@codogma/runtime-phaser` зависимым от ECS | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
+| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Dependency boundary and host-neutral constraints: ADR-0004 | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
+| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Optional adapter boundary and base-runtime independence: ADR-0004 | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
 
-Project feature IDs proposed for Feature Registry:
-- `runtime.ecs` → `@codogma/ecs`
-- `runtime.ecs-phaser` → `@codogma/ecs-phaser`, requiring `runtime.ecs` and the compatible Phaser runtime provider.
-
-Installation, feature availability, project enablement, target inclusion and runtime activation are distinct. Projects without ECS must not receive these dependencies transitively. Release fixtures must prove physical exclusion of both package code and adapter modules when disabled; metadata or a UI checkbox alone is insufficient.
-
-Object/component `ComponentWorld` in `@codogma/cge` and Data-Oriented ECS storage are different runtime models. Project Model Node IDs and ECS runtime entity handles use explicit mapping; persisted Component Schema/Inspector metadata is not automatically the ECS storage schema.
+Таблица выше — инвентаризация package roots, статусов и владельцев. ECS feature IDs/providers, opt-in/dependency relationships, mapping между object/component Core и runtime ECS, а также правила физического исключения optional code из Release определены только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ## Phaser 4.2.1 bundle analysis constraints
 

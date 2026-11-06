@@ -16,6 +16,8 @@
 
 ## 2. Native persisted contract
 
+Optional Data-Oriented ECS is outside the scope of this acceptance slice; its normative contract is defined in [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+
 The fixture and tests cover:
 
 - Project/Scene/Node/Transform/Component/Prefab/Asset/Script schemas and version fields.

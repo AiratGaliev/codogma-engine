@@ -50,11 +50,11 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 ### Что можно выполнять параллельно Editor UI migration
 
 - Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и существующих engine/editor configuration roots. Эти сведения пополняются по мере работы и до публикации/массового обновления инфраструктуры; они не должны задерживать изолированную исправимую задачу.
-- Реализация нового Project Model/Core, runtime adapter и отдельного optional Data-Oriented ECS. ECS не является предусловием для Scene Editor, Inspector или Asset Library и не входит в обязательный @codogma/cge.
+- Реализация Project Model/Core и runtime adapter; optional Data-Oriented ECS остаётся отдельной возможностью, не является предусловием Scene Editor, Inspector или Asset Library и не входит в обязательный `@codogma/cge` ([ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md)).
 - Создание нового SolidJS Editor Host в `src/editor/` и последующее удаление временного UI client из `source/editor/` — отдельный staged UI rollout по `docs/editor-ui-migration.md`; это не механическое перемещение исходного дерева. npm Workspaces остаются отдельной инфраструктурной миграцией.
 - Реализация нового Project Model/Core, runtime adapter, Preview Host и HTML5 build pipeline. Они могут идти отдельными потоками, если сохраняются совместимые contracts; готовность Core не является предварительным условием для первого нового Editor Host slice.
 - Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
-- Tauri, замена Phaser на PixiJS, второй независимый Game/Scene/Ticker loop, дополнительные physics backends и public package registry не входят в основной scope UI migration. Отдельный optional `@codogma/ecs` теперь является утверждённым архитектурным направлением (ADR-0004), но реализуется отдельными задачами COD-111/112.
+- Tauri, замена Phaser на PixiJS, второй независимый Game/Scene/Ticker loop, дополнительные physics backends и public package registry не входят в основной scope UI migration. ECS ведётся как отдельный optional workstream COD-111/112 вне UI migration; нормативные границы заданы [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ### Что не следует делать параллельно «на всякий случай»
 
@@ -63,7 +63,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - Не сводить модернизацию к замене цветов/иконок: визуальная работа должна включать и функциональные состояния, клавиатурный workflow, layout панелей и связанные пользовательские сценарии.
 - Не оставлять icon migration только в виде карты: после инвентаризации выполнить внедрение в согласованном UI scope, с отдельными light/dark variants и attribution.
 - Не вводить сразу строгий lint/format gate на все существующие package roots, не менять все lockfiles/путь editor и не переводить всё на Workspaces одной операцией.
-- Не заменять Phaser и не подключать EVA.js как второй runtime/Game/Ticker. Optional Data-Oriented ECS разрешён как самостоятельный package (ADR-0004), но реализация и performance claims требуют representative browser/device benchmark; не переносить ECS в `@codogma/cge` и не создавать второй game loop.
+- Не заменять Phaser и не подключать EVA.js как второй runtime/Game/Ticker; EVA.js reuse policy и optional ECS integration определяются [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 - Не отмечать runtime-функции завершёнными по одному лишь TypeScript build, наличию кнопки или генерации исходника.
 - Не добавлять зависимости «на будущее». У каждой зависимости должны быть используемая функция, лицензия, scope, критерии приёмки и доказательство, почему текущей реализации недостаточно.
 
@@ -216,7 +216,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 3. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, сериализация, валидация и runtime adapter используют единый контракт.
 4. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
 5. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
-6. **Граница optional ECS:** базовый ComponentWorld в `@codogma/cge` остаётся object/component runtime. Data-Oriented ECS не входит в минимальный Core и реализуется отдельным optional `@codogma/ecs` (COD-111); optional Phaser integration — `@codogma/ecs-phaser` (COD-112). Сравнение должно включать object-component baseline и centralized object systems, а не только synthetic no-op ECS benchmark.
+6. **Граница optional ECS:** базовый `ComponentWorld` в `@codogma/cge` остаётся object/component runtime; Data-Oriented ECS развивается отдельно от минимального Core и не блокирует его acceptance. Нормативные package/integration/performance требования и владельцы COD-111/112 закреплены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ### Задачи
 
@@ -239,7 +239,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Создать Phaser adapter для выбранного среза: сущность ↔ sprite/view, Transform ↔ display transform, physics body и lifecycle.
 - [ ] Обеспечить одну точку истины для каждого значения. При переносе HP/Transform/AI-state старое поле не должно продолжать независимо изменяться.
 - [ ] Изучить EVA.js v2 как reference композиции GameObject/Component/System, lifecycle, metadata и модульных пакетов; не подключать его целиком и не переносить второй Game/Scene/Ticker, Pixi renderer или global Resource singleton.
-- [ ] Зафиксировать отдельный optional Data-Oriented ECS package scope по ADR-0004; его storage strategy и применение выбирать по browser/device performance fixture, не по фиксированному entity-count порогу.
+- [ ] Реализовать optional ECS package и adapter в рамках COD-111/112 по единственному нормативному источнику — [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); этот workstream не блокирует Core object/component slice.
 
 ### Критерии приёмки
 
@@ -255,7 +255,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Повторное открытие проектного файла сохраняет данные; неизвестные/новые поля не теряются молча.
 - [ ] Inspector использует те же metadata/schema, что и сериализация и runtime adapter.
 - [ ] Core можно тестировать без запуска редактора UI; его публичные API не импортируют UI framework, DOM, desktop shell или platform SDK напрямую.
-- [ ] Есть результат performance comparison для representative fixture; ECS не объявляется ускорением без данных.
+- [ ] ECS performance acceptance и любые claims об ускорении подтверждаются отдельно по [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), а не синтетическим ComponentWorld benchmark.
 - [ ] Контракты Input/Time/Scene Manager, если входят в пилот, покрывают focus loss, UI-vs-world routing, pause/resume и безопасное освобождение timers/listeners.
 
 **Gate:** прежде чем массово переписывать текущие игровые сущности, Core проходит отдельный пилот на одной законченной механике. Интеграция с Last Hero может использоваться как дополнительная реальная проверка через отдельную ветку/репозиторий, но Codogma не должен получать жёсткую зависимость на код игры.
@@ -264,21 +264,9 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Отдельный optional workstream — Data-Oriented ECS
 
-Это самостоятельная возможность для проектов с массовыми однотипными сущностями, а не обязательная часть Core и не блокер базового Project Model → Preview → Build acceptance.
+Это независимая optional capability для проектов, которым нужна обработка большого числа однотипных сущностей. Она не является обязательной частью Core и не блокирует базовый Project Model → Preview → Build acceptance.
 
-### Порядок
-
-1. **COD-111 — `@codogma/ecs`:** независимые Entity/World handles, component storage, Queries, Systems/scheduler, safe structural mutation и deterministic disposal. Выбор archetypes/table chunks, sparse sets или комбинации подтверждается сравнением.
-2. **COD-112 — `@codogma/ecs-phaser`:** отдельный optional adapter к Phaser 4; базовый `@codogma/runtime-phaser` не зависит от ECS.
-3. Сохранить `@codogma/cge` ComponentWorld как object/component path. Не переносить Data-Oriented storage в cge и не переписывать базовый Core ради ECS.
-4. Разделить persisted Project Model Node/component IDs и runtime ECS handles; обеспечить явный mapping и одного owner каждого mutable значения. Component Schema/Inspector metadata не отождествлять автоматически с ECS storage.
-5. Использовать Phaser-controlled tick; не создавать второй Game/Scene/Ticker/requestAnimationFrame. Physics bindings являются отдельной optional capability.
-6. Сравнить object-component baseline, centralized systems и Data-Oriented ECS на одинаковом representative browser workload, затем отдельно измерить adapter overhead. Профиль включает p50/p95/p99 frame time, main-thread/system/query time, physics/render breakdown, allocations/GC и heap.
-7. Только после package implementation и измерений подключить `runtime.ecs` / `runtime.ecs-phaser` в Feature Registry и подтвердить физическое исключение disabled ECS в production artifact.
-
-**Не входит:** массовая миграция существующих игровых проектов, обязательная установка ECS всеми разработчиками, автоматическое использование ECS для каждого Scene Node, второй runtime loop, Worker/SharedArrayBuffer/WASM/multithreading без отдельных PoC/ADR.
-
-См. [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage), [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) и [performance baseline](performance-baseline.md).
+Реализация принадлежит [COD-111 — `@codogma/ecs`](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) и [COD-112 — `@codogma/ecs-phaser`](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter). Все требования к package/API, integration, identity/ownership, feature/build selection и performance acceptance находятся только в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Roadmap фиксирует ownership и независимость этого workstream, не копируя его техническую спецификацию.
 
 ## Этап 3 — Game Preview Host, live Inspector и runtime debugging
 
@@ -507,7 +495,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ### Приоритеты
 
-Performance acceptance для optional ECS ведётся отдельно от ComponentWorld benchmark: одинаковые browser/device fixtures сравнивают object-component, centralized systems, Data-Oriented ECS и ECS↔Phaser bridge. Фиксируются frame p50/p95/p99, main-thread/system/query time, physics/render, allocations/GC и heap; универсальный порог entity count или фиксированная квота Core не задаются.
+Performance acceptance для optional ECS проводится отдельно от ComponentWorld benchmark; нормативная методика сравнения и критерии приёмки определены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), результаты серии фиксируются в PERF-09.
 
 
 Проверки сдвигаются влево и вводятся одновременно с каждой подсистемой: не откладывать unit/typecheck/lint до завершения всей архитектуры. Самостоятельный этап QA нужен для объединения telemetry, regression baselines, широкого browser acceptance и release checklist, а не для первого появления тестов.
@@ -676,7 +664,7 @@ Performance acceptance для optional ECS ведётся отдельно от 
 - [ ] Сформировать taxonomy пакетов по ответственности и scope: Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter и tooling. Имя пакета не обязано начинаться с `plugin-`.
 - [ ] Поддерживать исходники самостоятельных пакетов в `packages/<name>/` с собственными manifests, публичными exports, тестами и документацией; не создавать отдельный пакет на каждый класс. Пакет можно разрабатывать в монорепозитории до публичной публикации.
 - [ ] Настроить npm Workspaces для локальной разработки пакетов и проверить, что workspace linkage не приводит к установке всех пакетов как dependencies каждого потребительского проекта. После миграции редактора включить `src/editor` в согласованную workspace-схему.
-- [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP, платформенных SDK или optional ECS packages.
+- [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor UI, Colibri, desktop shell, MCP или платформенных SDK; отдельная ECS package boundary определяется [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 - [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`: kind, scopes/targets, совместимость с Engine/Editor API, explicit entry points и предоставляемые Feature/Capability descriptors (inline или явной ссылкой на декларативное описание). Metadata не дублирует npm dependency tree и не заменяет npm resolver.
 - [ ] Утвердить versioned Feature/Capability Registry contract для встроенных и package-provided capabilities: stable IDs, provider, scopes/targets, requirements/conflicts, required/optional/default policy и build/editor entry points. Неоднозначный выбор нескольких providers должен давать diagnostic, если явная multi-provider policy не утверждена. Точная schema и место хранения подтверждаются ADR/PoC.
 - [ ] Не дробить Phaser-подсистемы на формальные wrapper-пакеты ради видимости модульности: сначала доказать, что выбранный runtime packaging/build path действительно позволяет независимо выбирать эти подсистемы и исключать ненужный код.
@@ -690,7 +678,7 @@ Performance acceptance для optional ECS ведётся отдельно от 
 - [ ] Обеспечить package-level registrations для команд, меню/shortcuts, panels/views, settings, Inspector property editors, schema validators, asset import/reimport handlers, Scene Editor gizmos/brushes, profiler overlays, build hooks и target profiles.
 - [ ] Установку/обновление/удаление сопровождать проверкой metadata/API compatibility и понятной диагностикой. Добавить project-level activation/disable для editor extensions так, чтобы отключение не требовало изменения npm dependency tree и не повреждало проектные данные.
 - [ ] Проверить, что editor-only/build-only/QA зависимости не попадают в production game bundle; optional runtime packages включаются только по явному project dependency и enabled target feature. Build pipeline должен анализировать scopes/targets, imports, dynamic entry points и фактический output artifact.
-- [ ] Проверить, что выбранные в проекте features собираются только для совместимых targets, их обязательные feature dependencies включаются прозрачно, а выключенные features не подключаются скрыто. Для `runtime.ecs` provider — `@codogma/ecs`, для `runtime.ecs-phaser` — `@codogma/ecs-phaser`; установка/provider/enablement/target inclusion остаются разными состояниями.
+- [ ] Проверить, что выбранные в проекте features собираются только для совместимых targets, их обязательные feature dependencies включаются прозрачно, а выключенные features не подключаются скрыто. Установка/provider/enablement/target inclusion остаются разными состояниями; ECS-specific IDs/providers определены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 - [ ] Подготовить machine-readable report с feature IDs, участвующими packages/entry points, причинами включения и диагностикой; корректно обрабатывать dynamic imports и modules с side effects вместо обещаний автоматического удаления.
 - [ ] Поддержать источники по очереди: npm registry/scoped registry и local/file packages сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
 - [ ] Разделить package manifest (npm package.json + namespaced codogma metadata), registry packument/version metadata, project manifest/lockfile и optional curated catalogue record. Не складывать технические и каталожные сведения в один manifest; фиксировать provenance и приоритет источников. См. [package management reference](package-management-reference.md) и OpenUPM.
