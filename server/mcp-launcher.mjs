@@ -6,9 +6,6 @@
  * packages/editor-mcp-server. It forwards the engine's live tool schemas and
  * calls through POST /editor/mcp; it does not maintain a second tool registry.
  *
- * The dependency-free server/mcp-stdio.mjs remains a fallback for checkouts
- * where the standalone package has not been installed and built yet.
- *
  * Start server/server.mjs before connecting an MCP client.
  */
 
@@ -26,6 +23,5 @@ if (existsSync(packageCli) && existsSync(packageRuntime)) {
 } else {
     console.error("[codogma-editor-mcp-server] Package is not built or its dependencies are missing.");
     console.error("[codogma-editor-mcp-server] Run: npm --prefix packages/editor-mcp-server ci");
-    console.error("[codogma-editor-mcp-server] Starting the dependency-free legacy stdio fallback.");
-    await import(pathToFileURL(path.join(__dirname, "mcp-stdio.mjs")).href);
+    process.exitCode = 1;
 }

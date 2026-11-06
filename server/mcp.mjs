@@ -1,14 +1,11 @@
 /**
  * Codogma Engine — MCP Server + Editor Bridge.
  *
- * Mirrors the official Phaser Editor v5 MCP integration
- * (github.com/phaserjs/editor-mcp-server + docs.phaser.io/phaser-editor/ai/mcp-server):
+ * Engine-owned Model Context Protocol server and Editor session bridge.
  *
  *   - POST /editor/mcp          Model Context Protocol (Streamable HTTP, JSON-RPC 2.0)
  *   - GET  /editor/mcp-bridge/events   SSE channel to the running editor client
  *   - POST /editor/mcp-bridge/result   editor client posts command results back
- *   - POST /editor/mcp-bridge   official-style bridge entry: { tool, args } -> result
- *                               (used by server/mcp-stdio.mjs and the AI Chat)
  *
  * Tools that operate purely on project files are executed server-side.
  * Tools that need the running editor UI (open scene, screenshots, active scene)
@@ -3338,10 +3335,6 @@ async function forwardToEditor(tool, args) {
     return text(typeof result === "string" ? result : JSON.stringify(result, null, 2))
 }
 
-export function bridgeClientCount() {
-    return bridgeClients.size
-}
-
 export function getBridgeStatus() {
     return bridgeStatus()
 }
@@ -3421,69 +3414,6 @@ export async function handleBridgeResult(req, res) {
         pending.resolve(body.result)
     }
     return sendJSON(res, { ok: true })
-}
-
-/** Official-style bridge entry point: { tool, args } -> tool result. */
-export async function handleBridgeRequest(req, res) {
-    const body = await readBody(req)
-    if (!body || typeof body.tool !== "string") {
-        return sendJSON(res, { error: "missing tool name" })
-    }
-    try {
-        if (body.tool === "__tools_list__") {
-            return sendJSON(res, {
-                tools: [...TOOLS.values()].map(t => ({
-                    name: t.name,
-                    description: t.description,
-                    inputSchema: t.inputSchema
-                }))
-            })
-        }
-        const result = await dispatchTool(body.tool, body.args || {})
-        return sendJSON(res, result)
-    } catch (e) {
-        return sendJSON(res, { error: String(e.message || e) })
-    }
-}
-
-/**
- * Official `@phaserjs/editor-mcp-server` bridge contract (v5-compatible).
- *
- * The official stdio package (ToolsManager.defineTool) does:
- *     response = await fetch("http://127.0.0.1:1902", { body: JSON.stringify({ tool, args }) })
- *     return { content: response.json() }
- *
- * so this endpoint must respond with the MCP content ARRAY itself,
- * not wrapped in a { content } object.
- */
-export async function handleOfficialBridgeRequest(req, res) {
-    let body
-    try {
-        body = await readBody(req)
-    } catch (e) {
-        return sendJSON(res, [{ type: "text", text: `Invalid bridge request body: ${e.message}` }])
-    }
-    if (!body || typeof body.tool !== "string") {
-        return sendJSON(res, [{ type: "text", text: "Invalid bridge request: missing tool name." }])
-    }
-    log(`mcp-bridge-1902: ${body.tool}`)
-    try {
-        const result = await dispatchTool(body.tool, body.args || {})
-        if (result && Array.isArray(result.content)) {
-            return sendJSON(res, result.content)
-        }
-        return sendJSON(res, [{ type: "text", text: JSON.stringify(result ?? null, null, 2) }])
-    } catch (e) {
-        return sendJSON(res, [{ type: "text", text: `Tool '${body.tool}' error: ${e.message}` }])
-    }
-}
-
-export function getBridgeToolsList() {
-    return [...TOOLS.values()].map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema
-    }))
 }
 
 /* ============================ MCP HTTP handler ============================ */
