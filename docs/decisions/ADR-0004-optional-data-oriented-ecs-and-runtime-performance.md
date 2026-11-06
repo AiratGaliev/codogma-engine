@@ -103,7 +103,6 @@ ECS принимается как оптимизация только там, г
 
 ### 7. Package selection и production build
 
-- Установка `@codogma/ecs`, project feature enablement и включение в конкретный target build — разные состояния.
 - Feature IDs и providers фиксированы: `runtime.ecs` → `@codogma/ecs`; `runtime.ecs-phaser` → `@codogma/ecs-phaser` и требует `runtime.ecs` плюс совместимый Phaser runtime provider. Установка пакета, доступность provider, project enablement, target inclusion и runtime activation — разные состояния; одно не должно неявно создавать другое.
 - Если пакет не установлен/не включён, Editor/Build выдаёт ясную диагностику при ссылке на его feature; установка не происходит автоматически.
 - Если ECS выключен, production artifact должен физически не содержать ECS package code и его adapter modules. Одного UI checkbox или feature descriptor недостаточно: нужны import graph/output manifest/size evidence.
