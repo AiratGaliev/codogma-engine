@@ -121,6 +121,8 @@ Open **http://127.0.0.1:5173/**. The Vite server binds to IPv4 loopback, uses st
 
 The first Host slice provides a Phaser-backed Scene Canvas, object selection, Move/Rotate/Scale gestures, Hierarchy and Inspector/Transform synchronization, and an initial Game View iframe. This describes the implemented UI surface; complete native Project Model persistence, Scene Loader and Preview lifecycle are separate implementation stages. The frozen legacy client remains available only for the existing route and bounded rollback arrangement until COD-87/COD-88.
 
+Root shortcuts:
+
 ```bash
 npm run dev:editor-host
 npm run build:editor-host
