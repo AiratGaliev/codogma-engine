@@ -12,7 +12,6 @@ import {
   parseNativeSceneDocument,
   resolvePrefabAsset,
   resolveSceneAsset,
-  serializeNativeProjectDocument,
   serializeNativeSceneDocument,
 } from "../src/domain/native-project-model.js";
 
