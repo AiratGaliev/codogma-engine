@@ -209,7 +209,7 @@ export function getNativeNodeEffects(node: NodeDocument): FxEntry[] {
   });
 }
 
-export function createFxObject(type: FxType, id = createId(), preFX = false): FxObject {
+export function createFxObject(type: FxType, id = createId(), preFX = true): FxObject {
   if (!isFxType(type)) throw new TypeError(`Unsupported FX type "${String(type)}".`);
   return defaults(type, id, preFX);
 }
