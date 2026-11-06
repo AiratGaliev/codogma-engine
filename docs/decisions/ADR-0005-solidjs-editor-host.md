@@ -2,7 +2,7 @@
 
 **Статус:** принято как целевое UI-направление; COD-80 (PR #30) реализовал и CI-проверил первый SolidJS Host/Workbench + Scene vertical slice. Полная staged migration, session-aware MCP routing, production cutover и Colibri removal ещё не завершены.  
 **Дата:** 30.10.2026  
-**Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [Стандарт reference для 2D Editor Host](../editor-reference-standard.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md), [ADR-0002: общий TypeScript toolchain](ADR-0002-typescript-toolchain.md).
+**Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [Стандарт reference для 2D Editor Host](../editor-reference-standard.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md), [ADR-0002: общий TypeScript toolchain](ADR-0002-typescript-toolchain.md), [ADR-0007: нативный Project Model](ADR-0007-native-codogma-project-model.md).
 
 ## Контекст и решение
 
@@ -14,7 +14,7 @@
 
 ## Продуктовые reference и 2D-only scope
 
-Новый Host проектируется для 2D-игр. Основной UX-reference — Unity 6.6 Editor (6000.6); дополнительный reference по 2D authoring workflows — Cocos Creator 4.0 LTS. Unity 6.6 Manual на дату фиксации решения помечен Beta: его UX-паттерны можно изучать как продуктовый ориентир, но beta-only API/features не становятся стабильным техническим baseline. Не добавлять режим 2D/3D или 3D-only panels/gizmos/workflows. Colibri остаётся только источником legacy workflow/data/runtime evidence; его UI, registry, Parts/controls и lifecycle не являются архитектурным/визуальным шаблоном нового Host. Детальные правила и acceptance process — в [стандарте reference](../editor-reference-standard.md).
+Новый Host проектируется для 2D-игр. Основной UX-reference — Unity 6.6 Editor (6000.6); дополнительный reference по 2D authoring workflows — Cocos Creator 4.0 LTS. Unity 6.6 является выпущенной версией; технические гарантии сверяются с документацией конкретного patch release. Не добавлять режим 2D/3D или 3D-only panels/gizmos/workflows. Точный process изучения UX и implementation references описан в [стандарте reference](../editor-reference-standard.md).
 
 ## Почему SolidJS
 
@@ -41,7 +41,7 @@
 - Unit/integration tests в `src/editor/tests/` — TypeScript (`.test.ts`); Playwright acceptance в `src/editor/browser-tests/` — TypeScript (`.spec.ts`). При использовании JSX тестовый файл может иметь `.tsx`. `playwright.config.ts`, `vite.config.ts` и fixture launchers — TypeScript и включены в Host typecheck. Vitest и Playwright имеют отдельные discovery patterns; browser scenarios не исполняются Vitest в Node runner.
 - `src/editor/tsconfig.json` обязан включать `allowJs: false`, `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `noImplicitOverride: true`, `noImplicitReturns: true`, `noFallthroughCasesInSwitch: true`, `forceConsistentCasingInFileNames: true`, а также `noUnusedLocals`/`noUnusedParameters`. `include` должен охватывать весь TS/TSX source, unit/integration tests, Playwright specs и TS tool configs; `exclude`/границы проекта не должны оставлять новые Host-файлы вне typecheck.
 - Нативные data/config formats (`package.json`, `tsconfig.json`, YAML workflows, HTML, CSS, JSON tokens) сохраняют свои форматы. `.js`/`.mjs` не используются для Host конфигураций, если инструмент поддерживает `.ts`.
-- Граница исключения — уже существующие Node backend `server/*.mjs`, legacy Colibri `source/editor/` и repository-level JS smoke/security scripts. Они не мигрируются автоматически этим ADR. Это не разрешение писать в них новую feature logic: новые Codogma-owned функции должны следовать ADR-0002, а legacy entry point при необходимости остаётся минимальным interop/bootstrap adapter до отдельной миграции.
+- Граница приложения: `src/editor/` — самостоятельный SolidJS Host; `source/editor/` остаётся отдельным временным UI client до production cutover и последующего физического удаления по COD-88. Node backend `server/*.mjs` и repository-level JS smoke/security scripts имеют собственные package/runtime boundaries. Новая feature logic создаётся только в целевых first-party modules и следует ADR-0002; этот ADR не добавляет дополнительные bootstrap или interop paths.
 - Production build не включает тестовые файлы.
 
 ## Архитектурные правила
@@ -51,7 +51,7 @@
 3. **Project Model отделён от UI state:** сериализация, validation и file operations остаются во владении существующих backend/project contracts. В SolidJS живут transient UI state: открытые панели, вкладки, selection, expanded tree nodes, inspector drafts и layout. Не создавать второй serializer или независимую копию Project Model.
 4. **Phaser остаётся Canvas/runtime renderer:** SolidJS владеет DOM-оболочкой и панелями. Scene viewport интегрирует существующий Phaser runtime через явный lifecycle/resize contract; gizmos/overlays используют согласованные coordinate transforms.
 5. **Нет долгосрочного Colibri bridge:** новый Host не импортирует Colibri, его registry, Parts, Workbench, globals или controls. Старый и новый UI работают как самостоятельные browser applications.
-6. **Сохранить backend и data contracts:** Node.js server, HTTP/file APIs, project/scene/prefab formats, serializers, importer metadata, codegen semantics, MCP schemas и Phaser runtime не переписываются только из-за смены UI.
+6. **Использовать единые Codogma contracts:** Node.js server, HTTP/file APIs, Project Model v1, Asset metadata/importer APIs, MCP schemas и Phaser runtime связываются с новым Host через typed boundaries. Project Model policy определяется ADR-0007.
 7. **Библиотеки выбирать по реальной потребности:** docking, CodeMirror/Monaco, router и virtualization utilities не становятся обязательными без workflow, который их требует.
 
 **Фактическая граница первого Host (COD-80, CI Fast #453):** SolidJS Host и Phaser Scene workflow прошли typecheck/build, 36 domain tests и 9 Chromium acceptance tests. Workbench поддерживает dock/undock Console, перенос Hierarchy/Inspector в Bottom Dock с возвратом в исходный слот, перестановку вкладок, сохранение layout и focus-aware shortcuts. Это не универсальная docking-система с произвольными floating/free-split зонами; оставшиеся authoring workflows и production migration перечислены в [плане миграции](../editor-ui-migration.md) и остаются открытыми.
@@ -67,7 +67,7 @@
 - Vite проксирует относительные `/editor/*` запросы к backend. Browser code не обращается к backend direct cross-origin.
 - Для нового UI задаётся точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`. Wildcard Origin запрещён; Host/Origin и loopback guards сохраняются. Proxy и Origin forwarding проверяются вместе с `server/request-origin.mjs`.
 - Оба UI могут быть открыты одновременно, но пока нет cross-client locking/versioning contract только один клиент записывает в конкретный `PROJECT_DIR`. Для параллельной write-приёмки используются разные fixture copies и backend instances.
-- Текущий `server/mcp.mjs` рассылает editor SSE-команды всем подключённым clients. Пока нет session-aware routing, общий `/editor/mcp-bridge/events` принадлежит только одному UI; сначала это legacy Colibri. Новый Host подключается к общему SSE bridge только после адресной маршрутизации или через изолированный backend.
+- Текущий `server/mcp.mjs` рассылает editor SSE-команды всем подключённым clients. Пока нет session-aware routing, общий `/editor/mcp-bridge/events` может принадлежать только одной Editor session. Новый Host подключается к общему SSE transport после реализации адресной маршрутизации или использует изолированный backend.
 - Это временная dev topology. После cutover существующий Node server отдаёт SolidJS build по `/editor/`; legacy route остаётся на ограниченное rollback window, затем удаляется.
 
 ## Порядок реализации
@@ -80,7 +80,7 @@
 | 4. Feature migration | Prefabs/components, assets/importers, Sprite, Animation/Spine, Tilemap, Physics, FX/Particles и code editor integration | Авторские workflows перенесены по вертикальным срезам |
 | 5. Services and MCP | Settings, localization, project actions, runtime preview, diagnostics, MCP HTTP/SSE | Новый Host не зависит от legacy UI для обязательных операций |
 | 6. Cutover | SolidJS build обслуживается по `/editor/`; legacy route остаётся для rollback | SolidJS становится основным editor UI |
-| 7. Colibri removal | Удаление legacy UI, Colibri-only plugins/controls/styles/assets/build config/dependencies и обновление server/scripts/CI/archive/docs | В production/editor bundle нет runtime зависимости от Colibri |
+| 7. Temporary UI client cleanup |
 
 Полная inventory Colibri capabilities ведётся по мере переноса конкретных функций и не блокирует bootstrap SolidJS или создание Workbench. Не выполнять миграцию одним giant PR.
 

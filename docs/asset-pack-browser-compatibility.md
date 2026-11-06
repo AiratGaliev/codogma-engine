@@ -1,4 +1,4 @@
-# Asset Pack и Browser API — compatibility evidence
+# Asset Pack и Browser API — browser support evidence
 
 Документ фиксирует проверяемые контракты Asset Pack и границы доказательств. Он не расширяет перечень поддерживаемых браузеров или игровых форматов.
 
@@ -13,7 +13,7 @@
 | Font loading | Отсутствующий source/API и неудачный FontFace.load() записывают item-level diagnostic и логируются; ошибка не прерывает открытие всего Asset Pack. Успешный face кешируется, очищает предыдущую ошибку и удаляется при resetCache(); следующий preload повторяет неуспешную загрузку | FontFace/FontFaceSet stub проверяет error → retry → success → cleanup | Реальная загрузка каждого TTF/OTF/WOFF/WOFF2/EOT файла и browser-specific font rendering |
 | DirectoryReader | Обход продолжает readEntries() до пустого batch; ошибка отдельного файла не удаляет успешных siblings | Несколько batches и ошибочный дочерний FileEntry в tests/editor-data-preview.test.mjs | Поведение настоящего browser picker/drag-and-drop на разных OS/browser implementations |
 | FileList upload | Ошибка одного файла не прекращает следующие upload; неуспешный файл остаётся в очереди, успешные не загружаются повторно при retry | UploadDialog regression test проверяет partial success, очередь повторной попытки и закрытие после успеха | UX/keyboard/accessibility acceptance в реальном браузере |
-| Audio/video preview | Сохраняется разбор поддерживаемых Phaser URL форм; скрытие preview удаляет src и вызывает load() | URL model regression tests и lifecycle contract текущих preview sections | Codec support, autoplay policy, memory release на каждой целевой платформе и stop/close всей Editor session |
+
 
 ## Browser, codec и GPU matrix
 
@@ -24,7 +24,7 @@
 - CompressedTextureVariants (webp, avif, ktx2, pvr, dds) хранит optional editor/export metadata. Само поле не реализует runtime transcoding, GPU upload или выбор формата по capabilities.
 - Texture URL variants (IMG, ETC, ETC1, ASTC, BPTC, PVRTC, S3TC и другие) сохраняются как данные Asset Pack. Сохранение URL не означает, что текущий Phaser loader/editor preview умеет декодировать соответствующий container/format.
 - FontFace stub tests проверяют наш error/cache contract, но не заменяют реальные font fixtures. Audio/video URL tests не подтверждают codec decode или autoplay.
-- Legacy AudioPreviewSection и VideoPreviewSection освобождают активный media source при скрытии секции (removeAttribute("src") + load()). Отдельный browser memory/decoder acceptance при смене проекта, закрытии editor и завершении browser session ещё нужен.
+- Media preview при закрытии или смене selection должен освобождать активный media source (`removeAttribute("src")` + `load()`). Отдельный browser memory/decoder acceptance при смене проекта, закрытии Editor и завершении browser session ещё нужен.
 
 ## Следующая browser acceptance
 

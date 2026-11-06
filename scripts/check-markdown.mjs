@@ -14,7 +14,8 @@ const run = (args) => execFileSync("git", args, {
   encoding: "utf8",
   maxBuffer: GIT_OUTPUT_MAX_BUFFER,
 });
-const changedFiles = run(["diff", "--name-only", `${baseSha}...${headSha}`])
+// Удалённые Markdown-файлы уже отсутствуют в HEAD и не должны читаться для проверки содержимого.
+const changedFiles = run(["diff", "--name-only", "--diff-filter=d", `${baseSha}...${headSha}`])
   .split(/\r?\n/)
   .filter((file) => /\.(?:md|mdx|rst)$/i.test(file));
 
@@ -94,7 +95,7 @@ function validateAddedLinks(file, sourceLines, fencedLines, addedLines) {
 let currentFile = "";
 let newLine = 0;
 const addedLinesByFile = new Map();
-const diff = run(["diff", "--unified=0", `${baseSha}...${headSha}`, "--", "*.md", "*.mdx", "*.rst"]);
+const diff = run(["diff", "--diff-filter=d", "--unified=0", `${baseSha}...${headSha}`, "--", "*.md", "*.mdx", "*.rst"]);
 for (const line of diff.split(/\r?\n/)) {
   if (line.startsWith("+++ b/")) {
     currentFile = line.slice("+++ b/".length);

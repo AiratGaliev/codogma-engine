@@ -45,3 +45,38 @@ test("Markdown checker handles a changed Markdown diff larger than 1 MiB", () =>
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("Markdown checker ignores deleted Markdown files", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codogma-markdown-delete-check-"));
+
+  try {
+    runGit(directory, ["init", "-q"]);
+    runGit(directory, ["config", "user.name", "Codogma Tests"]);
+    runGit(directory, ["config", "user.email", "codogma-tests@example.invalid"]);
+
+    writeFileSync(path.join(directory, "README.md"), "# Fixture\n", "utf8");
+    writeFileSync(path.join(directory, "removed-guide.md"), "# To be removed\n", "utf8");
+    runGit(directory, ["add", "README.md", "removed-guide.md"]);
+    runGit(directory, ["commit", "-q", "-m", "baseline"]);
+    const baseSha = runGit(directory, ["rev-parse", "HEAD"]).trim();
+
+    rmSync(path.join(directory, "removed-guide.md"));
+    writeFileSync(path.join(directory, "current-guide.md"), "# Current guide\n", "utf8");
+    runGit(directory, ["add", "-A"]);
+    runGit(directory, ["commit", "-q", "-m", "remove obsolete guide"]);
+    const headSha = runGit(directory, ["rev-parse", "HEAD"]).trim();
+
+    const result = spawnSync(process.execPath, [CHECKER, baseSha, headSha], {
+      cwd: directory,
+      encoding: "utf8",
+    });
+
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Validated 1 changed Markdown file/);
+    assert.doesNotMatch(result.stderr, /removed-guide\.md/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

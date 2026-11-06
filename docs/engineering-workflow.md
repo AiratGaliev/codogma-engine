@@ -41,10 +41,10 @@ Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engin
 ## Правила выбора целевого Editor UI (01.11.2026)
 
 - Все новые пользовательские панели, UX и authoring workflows редактора реализуются в самостоятельном SolidJS Host `src/editor/`.
-- В `source/editor/` / Colibri не начинать новые features, controls, panels, UI refactors или постоянные integration bridges. Допускаются только критические bug/security fixes, release blockers и временные compatibility fixes, без которых нельзя безопасно завершить migration; всегда объяснять, почему изменение нельзя выполнить в SolidJS Host или общем domain/backend слое.
-- Старый редактор разрешено использовать как reference пользовательского поведения, supported formats, edge cases и regression fixtures. Переиспользовать можно проверенные data/domain/runtime contracts и алгоритмы после аудита; не копировать Colibri Workbench, Parts, controls, plugin registry, globals, private imports, lifecycle и UI coupling.
-- Наличие legacy UI или Done issue не считается миграцией. Для каждого workflow проверять реализацию в SolidJS, save/reopen/serialization, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [migration plan](editor-ui-migration.md). Координация — COD-82; inventory — COD-16.
-- Не перемещать `source/editor/` в `src/editor/`. COD-22 отменена; новый Host уже существует как отдельное приложение. Cutover выполняется в COD-87, Colibri removal отдельно в COD-88.
+- Временный UI client в `source/editor/` не получает новые features, controls, panels, UI refactors или постоянные integration bridges. Допускаются только критические UI security fixes и release blockers для безопасного production cutover.
+- Все новые пользовательские workflows и feature contracts проектируются и реализуются в SolidJS Host с собственными typed services, state owners, tests и runtime integration.
+- Наличие панели или завершённой Engineering issue не считается готовностью end-to-end workflow. Проверять native Project Model save/reopen, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [migration plan](editor-ui-migration.md). Координация UI rollout — COD-82.
+- `source/editor/` и `src/editor/` остаются самостоятельными приложениями до production cutover. COD-87 переводит маршрут `/editor/` на новый Host; COD-88 удаляет временный UI client после rollback window.
 
 ## 1. Перед началом каждой задачи
 
