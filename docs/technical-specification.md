@@ -97,7 +97,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 #### Исторический baseline PR #10 (снимок на 27.10.2026)
 
-[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет Scene Editor, Asset Pack, code generation, FX и Box2D, а также добавляет локальные security-проверки. PR был слит в `dev` 27.10.2026. `754edaa1f7313409e99c3462a802d5fd430a9a01` — исторический snapshot; актуальная базовая точка `dev` на дату аудита — `3351b069a11c7992fb28324ae22b48a411f307c7` (29.10.2026). Статус CI PR #21 должен проверяться по live checks точного head: постоянные документы не фиксируют изменяемый SHA последнего прогона. Успешный CI Fast не заменяет browser/runtime acceptance Box2D.
+[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет 2D Editor workflows, FX, physics и local security checks. PR был слит в dev 27.10.2026.
 
 На PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` CI Fast завершился успешно ([run #40472189614](https://github.com/AiratGaliev/codogma-engine/actions/runs/40472189614)): обе установки зависимостей и `npm audit --audit-level=low`, сборка/typecheck редактора, server smoke и security smoke прошли; audit на этом lockfile сообщил 0 уязвимостей. После слияния в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01` отдельный повторный запуск CI именно на merge commit в этом аудите не подтверждён. Успешный PR CI подтверждает только перечисленные проверки на PR head, но не visual/runtime correctness или отсутствие неизвестных уязвимостей.
 
@@ -131,7 +131,7 @@ Security smoke проверяет конкретные локальные сце
 - Одновременная поддержка большого числа игровых runtime «на всякий случай».
 - Собственный renderer, физический движок, bundler, тестовый runner или визуальный редактор каждого вида контента, если зрелое решение закрывает потребность.
 - Разработка всех жанровых систем в ядре: диалоги, квесты, поведение NPC, волны Tower Defense и аналогичные инструменты предпочтительно оформлять как расширения.
-- Одномоментное переписывание всего UI в одном PR или удаление временного Colibri UI до прохождения migration acceptance. Поэтапный cutover UI регулируется ADR-0005; это ограничение не распространяется на старые project formats — они не поддерживаются новым продуктом и удаляются из Core/Host по ADR-0007/COD-113.
+- Одномоментное переписывание всего UI в одном PR или cutover временного UI-клиента до прохождения migration acceptance. Поэтапный production cutover и rollback window регулируются ADR-0005.
 - Публикация всех пакетов в публичный npm registry до стабилизации их контрактов.
 
 ## 4. Целевая архитектура и границы ответственности
@@ -228,7 +228,7 @@ Tauri и Electron не выбираются только по размеру д�
 
 ### 5.2. Требования к проектным данным
 
-**Текущая реализационная база:** host-neutral контракт Project/Scene/Prefab и Component Schema v1 находится в `packages/cge/`. PR #48 также добавил конвертер Colibri форматов; это не принятое продуктовое требование и подлежит удалению по [COD-113](https://linear.app/codogma-engine/issue/COD-113/udalit-colibri-format-compatibility-iz-core-i-novogo-editor-host). Целевой контракт — только нативный Codogma Project Model v1, без Colibri `.scene`/`.components` importer. Фактические Core guarantees и незакрытые runtime границы приведены в [Core acceptance slice](core-component-acceptance-slice.md). Scene Loader и HTML5 production build остаются отдельными незавершёнными capabilities.
+**Текущая реализационная база:** host-neutral Project/Scene/Prefab contracts v1, Component Schema/Registry/World и deterministic serialization находятся в packages/cge/. Фактические Core guarantees и незакрытые runtime границы приведены в [Core acceptance slice](core-component-acceptance-slice.md). Data-driven Scene Loader, Phaser runtime integration и HTML5 production build остаются отдельными незавершёнными capabilities.
 
 
 - Переименование или перемещение ассета не должно молча разрушать ссылки на него. Система должна обновлять управляемые ссылки или явно показывать ошибку/задачу исправления.
@@ -241,7 +241,7 @@ Tauri и Electron не выбираются только по размеру д�
 
 ### 5.3. Сцена как сериализуемые данные, а не обязательный генерируемый класс
 
-**Нормативная граница форматов:** см. [ADR-0007 — нативный Project Model Codogma без совместимости с Colibri](decisions/ADR-0007-native-codogma-project-model.md). Миграции относятся только к собственным версиям опубликованной Codogma schema. Импорт Colibri `.scene`, `.components`, старых Prefab/Asset Pack и старых generated-scene workflows не входит в продукт.
+**Versioning policy:** см. [ADR-0007 — Native Codogma Project Model](decisions/ADR-0007-native-codogma-project-model.md). Schema migrations относятся только к реально опубликованным версиям собственного Codogma Project Model.
 
 **Нормативное требование к новому Project Model/Core:** версия сериализованного описания `Scene` является каноническим исходным представлением сцены. Editor UI, живые runtime-объекты, Preview state и сгенерированный исходный код не являются независимыми источниками истины и не должны расходиться между собой.
 
@@ -263,7 +263,7 @@ Tauri и Electron не выбираются только по размеру д�
 
 **Для каждой Scene запрещено создавать обязательный или автоматически сопровождающий её TypeScript-класс/файл (`Scene.ts`, `Level01.ts` и аналоги).** Scene — самостоятельный versioned document. Runtime строит её из сериализованных данных и явно зарегистрированных модулей. Имя Scene не влияет на имена Script assets, классов, exports или Component IDs. Внутренняя генерация build artifacts допустима только как неперсистентный шаг сборки всего проекта; она не создаёт редактируемый per-scene source и не является форматом Scene.
 
-Это требование является обязательным для нового продукта, а не отложенной целью с legacy fallback. Новый Host, Core, Preview и Build не открывают и не конвертируют старые Colibri project files. Старый Colibri UI физически остаётся только в рамках отдельной UI cutover инициативы и не получает права читать или записывать новый Project Model. PR #48 добавил legacy conversion API; удаление этого кода и переход Host на native format отслеживаются COD-113. Не смешивать эту работу с миграциями между версиями собственного Codogma schema.
+Editor Host, Core, Preview и Build используют один Project Model и один Scene Loader contract. Scene остаётся сериализованным документом; Script является отдельным source asset, а runtime modules разрешаются через явный Project manifest. Production route для нового SolidJS Host и ограниченный UI rollback window регулируются отдельной UI cutover инициативой.
 
 ## 6. Публичный TypeScript API и component system
 
@@ -492,9 +492,9 @@ Codogma предоставляет единый публичный Physics API �
 **Product/UX и implementation baseline:** каждая задача, меняющая пользовательский интерфейс или 2D authoring workflow, должна использовать [стандарт reference для 2D Editor Host](editor-reference-standard.md): Unity 6.6 — основной UX-reference, Cocos Creator 4.0 LTS — дополнительный 2D workflow reference, Godot Editor — отдельный открытый implementation reference по релевантным подсистемам. Godot не определяет продуктовый UX или pass/fail acceptance. Codogma остаётся строго 2D-only. Colibri — только исторический UI/workflow evidence; старые project formats, serializers, Component mappings, runtime assumptions и codegen не являются контрактом нового продукта. В issue/PR фиксировать конкретные страницы Unity/Cocos, файлы Godot и решения adopt/adapt/reject.
 
 - Целевой UI — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Первый Workbench + Scene slice COD-80 реализован и PR #30 смержен в `dev`; production `/editor/` cutover остаётся в COD-87.
-- `source/editor/` содержит временный Colibri UI client и остаётся доступен только на ограниченный период до cutover/rollback window. В нём допускаются только критические UI security fixes и release blockers для безопасного cutover; запрещены поддержка старых Project/Scene/Prefab/Asset Pack formats, serializers, Component mappings, per-scene codegen и любые новые compatibility paths.
-- Переносить следует только пользовательские UI workflows и сформулированные потребности. Data/domain/runtime contracts проектируются заново как native Codogma contracts; старые Colibri formats/serializers/registry/Parts/private API не являются входными требованиями.
-- Backend HTTP/file APIs, MCP registry и независимые Phaser algorithms могут переиспользоваться после проверки. **Project/Scene/Prefab formats, serialization, Script/Component identities, per-scene codegen и runtime loading path формируются как нативные Codogma contracts**, не сохраняются ради Colibri compatibility. Изменение таких contracts проверяется только на native fixtures и миграциях выпущенных версий Codogma.
+- source/editor/ содержит текущий UI client и остаётся доступен только на ограниченный период до cutover/rollback window. В нём допускаются только критические UI security fixes и release blockers для безопасного cutover; новые пользовательские функции и крупные UX-изменения реализуются в SolidJS Host.
+- Переносить следует только пользовательские UI workflows и сформулированные потребности. Data/domain/runtime contracts проектируются как собственные Codogma contracts; реализация Editor Host должна использовать typed API boundaries и общую Project Model.
+- Backend HTTP/file APIs, MCP registry и независимые Phaser algorithms могут переиспользоваться после технической проверки. Project Model, serialization, Script/Component identity и runtime loading path принадлежат собственным Codogma contracts и проверяются native fixtures.
 - Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
 - Cutover и rollback window выполняются в COD-87; Colibri removal — отдельная COD-88 после cutover, consumer audit, inventory sign-off и license review. Механический перенос source/editor → src/editor отменён (COD-22).
 
@@ -563,7 +563,7 @@ Codogma предоставляет единый публичный Physics API �
 - Inspector показывает pivot, размеры, texture/sprite source, render layer/order и применённую оптимизацию. Runtime test подтверждает, что sorting, trimming и pivot сохраняются после save/reopen/build.
 
 **Границы ответственности и metadata contract**
-- Asset/frame metadata, slicing, trim/crop/pivot, collision authoring и conflict-aware reimport принадлежат Sprite/Asset Pack workflow (COD-39).
+- Asset/frame metadata, slicing, trim/crop/pivot, collision authoring и reimport принадлежат native Asset Library/Sprite authoring workflow (COD-86).
 - Sorting layers/groups, стабильный depth ordering и Y-based sorting принадлежат общему 2D render-order contract (COD-41). Sprite Editor использует этот контракт, но не создаёт параллельную модель sorting.
 - 9-slicing и tiled draw mode остаются authoring-возможностями Scene Editor для соответствующих Phaser GameObjects; они не дублируются как независимый механизм texture metadata.
 - Versioned schema, coordinate spaces, migration и фактические ограничения runtime adapters описаны в [Sprite asset metadata contract](sprite-asset-metadata.md). Наличие сохранённой polygon/compound geometry не означает её автоматическую поддержку каждым physics backend.
