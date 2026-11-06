@@ -74,7 +74,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 - [`plugin.json`](../source/editor/plugins/phasereditor2d.phaser/plugin.json) подключает production-файл `scripts/phaser.min.js`, а в режиме разработки — `scripts/phaser.js`. Это текущая схема загрузки runtime внутри editor plugin.
 - В [корневом `package.json`](../package.json) и [`source/editor/package.json`](../source/editor/package.json) Phaser не объявлен как npm dependency. Поэтому текущий Phaser runtime не управляется npm dependency graph пользовательского проекта как обычная установленная Codogma-зависимость.
 - Upstream Phaser 4.2.1 имеет модульно организованные исходники и отдельные варианты поставки/сборки, включая [Arcade Physics build](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js) и [конфигурацию distribution build](https://github.com/phaserjs/phaser/blob/v4.2.1/config/webpack.dist.config.js). Это не означает, что нынешняя интеграция Codogma автоматически выбирает или исключает отдельные подсистемы; доступность кастомной сборки надо подтвердить реальным fixture и совместимостью editor-generated code.
-- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts) — большой сгенерированный слой TypeScript declarations/API, а не реализация runtime. [`phaser-box2d.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser-box2d.ts) отдельно отмечает, что ambient declarations Box2D не поставляют runtime. Более того, `phaser-box2d.ts` описывает legacy-объектный API `Phaser.Box2D.World/Body`, а codegen PR #21 использует низкоуровневые named exports из `PhaserBox2D.js`; эти контракты нельзя считать эквивалентными. Текущий generated path требует внешний `PhaserBox2D.js`, а debug draw подключается отдельно из `PhaserDebugDraw.js`. Совместимость доказывается по зафиксированным версиям обоих файлов и generated-game fixture, а не наличием ambient types.
+- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts)
 
 Таким образом, корректная характеристика — **«модульные исходники, но монолитный по текущему способу подключения runtime bundle»**, а не утверждение, что Phaser невозможно разделить. Сам факт наличия папок, деклараций или wrapper-пакетов не доказывает, что соответствующий runtime-код исключается из конечной сборки.
 
@@ -891,7 +891,7 @@ codogma-engine/
 - Наличие исходников пакета в монорепозитории не означает немедленную публичную публикацию. Выпуск в npm требует стабилизированного API, совместимости версий, тестов, документации, проверки лицензий и поддерживаемого release process.
 - Названия пакетов отражают ответственность, а не обязательный префикс `plugin-`. Например, `@codogma/cge`, `@codogma/editor-api`, `@codogma/tilemap-tools` и `@codogma/platform-yandex-games` — иллюстративные имена, а не полный утверждённый каталог.
 - Логические области Core, Project Model, Runtime, Runtime Adapters, Editor, Build/CLI, DevTools и Platform Services не обязаны соответствовать один к одному отдельным npm-пакетам. Физическая граница определяется ответственностью, зависимостями и потребностью в независимом подключении.
-- Существующий Colibri/plugin registry — только legacy implementation и источник inventory существующих возможностей. Новый SolidJS Editor Host не должен зависеть от Colibri registry или private Colibri APIs. Новый Extension API проектируется отдельно; до его готовности внутренние editor features могут регистрироваться внутри одного приложения и не обязаны упаковываться каждая в npm package.
+- Existing editor extension registration — отдельная UI capability; public Extension API проектируется независимо.
 
 ### 12.1. TypeScript-only source policy and engineering toolchain
 
@@ -909,7 +909,7 @@ codogma-engine/
 - Не использовать any как способ обхода архитектурной границы. Для неизвестных JSON/SDK/plugin inputs использовать unknown, runtime validation и type narrowing. Casts и non-null assertions требуют локального обоснования, если они пересекают границу доверия или скрывают невозможное состояние.
 - Запрещать @ts-ignore в новом коде; редкое @ts-expect-error допустимо только с пояснением проверяемой причины и тестом. При смене schema, платформенного SDK или external data проверять runtime values, не полагаясь только на compile-time types.
 - Включить type-only imports, discriminated unions, exhaustive handling через never и явные типы публичных экспортов/контрактов там, где это повышает устойчивость API. Не создавать дублирующие декларации одной модели в Core, editor и serializer.
-- Унаследованный Phaser Editor/Colibri код мигрируется постепенно: строгий режим и линтер сначала применяются к новому Core и изменяемым областям; фиксируется baseline legacy warnings; каждый PR не должен добавлять новые нарушения в свой scope. Не выполнять массовый mechanical rewrite всей унаследованной кодовой базы в одном PR.
+- Для существующего UI client и общего repository tooling применяется отдельный scoped quality baseline:
 
 #### Инструменты, которые нужно оценить и ввести поэтапно
 
@@ -1106,7 +1106,7 @@ CI Fast намеренно не выполняет E2E: обычные PR в `de
 - На период dual-run один проект не редактируется одновременно обеими UI-сессиями. Для параллельного write acceptance используются отдельные project copies/backend instances.
 - Удаление Colibri начинается только после feature inventory sign-off, browser acceptance нового Host, cutover и подтверждённого rollback window.
 - Новая реализация проходит критерии до удаления старой.
-- Для Scene workflow авторским источником истины является native Scene document. Preview и Build загружают его через один loader contract; Scene не требует companion TypeScript source file. Script modules разрешаются через explicit Project manifest.
+- Для Scene workflow авторским источником истины является native Scene document.
 - Не держать два источника истины для HP/Transform/состояния компонентов или иных переносимых данных.
 - Не переносить все игровые сущности на новую архитектуру одновременно.
 - Не менять игровой цикл, физические тайминги или семантику без регрессионных тестов.
