@@ -54,7 +54,7 @@ export interface ShineFx extends FxBase {
 }
 export type FxObject = CircleFx | BloomFx | GradientFx | ShineFx;
 
-const FX_TYPE_BY_ID = new Map(
+const FX_TYPE_BY_ID: ReadonlyMap<string, FxType> = new Map<string, FxType>(
   Object.entries(FX_COMPONENT_TYPES).map(([type, typeId]) => [typeId, type as FxType]),
 );
 const COLOR_FIELDS: Readonly<Record<FxType, ReadonlySet<string>>> = {
