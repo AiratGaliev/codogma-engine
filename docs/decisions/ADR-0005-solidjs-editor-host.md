@@ -80,7 +80,7 @@
 | 4. Native workflow implementation | Prefabs/components, assets/importers, Sprite, Animation/Spine, Tilemap, Physics, FX/Particles и code editor integration | Новые авторские workflows реализуются в SolidJS Host на native Codogma contracts; legacy UI служит только read-only reference |
 | 5. Services and MCP | Settings, localization, project actions, runtime preview, diagnostics, MCP HTTP/SSE | Новый Host не зависит от legacy UI для обязательных операций |
 | 6. Cutover | SolidJS build обслуживается по `/editor/`; legacy route остаётся для rollback | SolidJS становится основным editor UI |
-| 7. Temporary UI client cleanup |
+| 7. Temporary UI client cleanup | Удалить frozen Colibri client, UI-only assets/plugins/build config/dependencies и обновить server/scripts/CI/archive/docs отдельным COD-88 cleanup PR после закрытия rollback window |
 
 Read-only inventory Colibri capabilities фиксирует существующее поведение и нужные пользовательские сценарии, не изменяя legacy code. Новые workflows реализуются независимо в SolidJS Host на native Codogma contracts. Не выполнять cutover одним giant PR.
 
