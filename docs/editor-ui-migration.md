@@ -12,20 +12,20 @@
 
 Реализованные операции первой вертикали:
 
-- переходный Scene workflow текущего Host: загрузка `PROJECT_DIR` через `GetProjectFiles`, рекурсивное обнаружение и открытие Colibri `.scene`. Этот reader — временный migration blocker, не целевой формат и подлежит замене native Project Model по COD-113;
+- начальный Scene authoring workflow текущего Host: project resource discovery, Phaser Scene Canvas, object selection, Transform gestures, Hierarchy и Inspector integration;
 - Phaser-backed Scene Canvas с выбором объектов, Move/Rotate/Scale gestures и синхронизацией состояния с Inspector/Undo-Redo; Hierarchy для display-list/plain-object элементов;
 - Inspector с Transform-полями, label, Text content и отображением уже сериализованных компонентов;
 - добавление Image/Text/Container узлов, удаление, Undo/Redo с восстановлением selection;
-- сохранение исходного JSON scene-format через `SetFileString`, повторное открытие после reload;
+- сохранение и повторное открытие изменений Scene через project/file API;
 - Workbench по основным Dark/Light artboards `.pen`: menu/toolbar, Scene/Game tabs, resizable splitters, Hierarchy/Inspector, Project/Animation/Components/Console, design tokens и Godot SVG icons; responsive layout хранится между запусками;
 - docking lifecycle первого среза COD-80: Console перемещается в Bottom Dock и обратно; Hierarchy и Inspector перетаскиваются в Bottom Dock, возвращаются в исходные слоты через `Undock`; вкладки Bottom Dock переставляются pointer-drag жестом, порядок и выбранная вкладка сохраняются;
 - focus/command model: W/E/R/Q и F2/Delete применяются только в контексте Scene/Hierarchy; shortcuts не перехватывают ввод в Inspector; Command Palette удерживает Tab внутри диалога и возвращает фокус исходному элементу при закрытии;
 - COD-83 расширяет Workbench тремя закреплёнными dock-зонами `Left / Right / Bottom`: Hierarchy и Inspector можно перемещать между зонами и группировать во вкладки; у каждой боковой зоны есть активная панель, поддерживаются close/reopen, возврат в home-zone, drag/drop, keyboard tab navigation и pointer/keyboard splitter resize. Hierarchy, Inspector и Console закрываются независимо от dock placement и повторно открываются с сохранением предпочтительной зоны/режима Console. Пункты View имеют стабильные названия и checkmark, синхронизированный с состоянием видимости; Window отдельно отмечает активную Bottom-вкладку. Project/Animation/Components остаются постоянными Bottom tabs. При ширине до 780px боковые панели временно представлены в Bottom без изменения их сохранённых зон; при возврате к wide layout они восстанавливаются. Layout хранится как `schemaVersion: 2`; v0 и v1 раскладки мигрируют без потери существующих полей, а отсутствующее в старых версиях `consoleVisible` по умолчанию становится `true`. Неизвестные panel IDs фильтруются, повреждённое состояние получает детерминированные defaults. Floating windows, произвольное docking tree и перемещение Scene/Game viewport не входят в scope.
 - Game View загружает существующий проектный `index.html` в iframe; закрытие Game View уничтожает iframe/runtime, повторный запуск создаёт новый экземпляр.
 
-Текущий Scene helper пока работает с Colibri `.scene` payload и не является native Project Model editor. Это временное состояние первого Host slice; оно не закрепляет поддержку старого формата. COD-113 заменяет этот путь на native Project/Scene/Node/Component contracts. Legacy client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`.
+Первый Scene helper обеспечивает базовые authoring interactions, но не является завершённым Project Model-aware editor/loader. Native Scene persistence и runtime hydration используют общие Project Model v1 contracts и Scene Loader. UI client остаётся доступен на порту 3000; Host предназначен для порта 5173. Для Vite proxy backend запускается с точным CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173.
 
-**Границы COD-80:** первый Scene viewport — transitional Phaser-backed authoring slice поверх текущего старого file format; он не является реализацией native Project Model workflow. COD-113/COD-103 должны заменить persisted document path и loader. Scene viewport создаёт отдельный Phaser.Game/Canvas из локального runtime проекта для authoring preview; поддержаны Image/Text, placeholder для неподдержанных типов, selection и pointer-transform Move/Rotate/Scale. Это не полная реконструкция runtime-поведения Prefab instances и компонентов. Game View загружает существующий generated `index.html` в отдельный iframe; изменения `.scene` автоматически не регенерируют `game.js`. Docking в COD-80 ограничен перемещением Hierarchy/Inspector в Bottom Dock с возвратом в домашние слоты и перестановкой вкладок внутри Bottom Dock; произвольные floating windows, свободные split-зоны и произвольная перекомпоновка всех панелей не заявляются. Animation поддерживает базовую работу с Phaser JSON: открыть/создать файл, добавить/изменить/удалить clip и frame references; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом. User Components и Prefab поддерживают существующие базовые модели/операции, но полноценные script lifecycle, code generation и nested Prefab overrides требуют следующих slices; полный feature parity со старым Colibri не является целью migration. Специализированные Sprite/Spine/Tilemap/Physics/FX/importer workflows, session-aware MCP SSE routing, production cutover, rollback window и Colibri removal не входят в COD-80.
+**Границы COD-80:** первый Scene viewport — Phaser-backed authoring slice для Image/Text/Container, selection и pointer-transform Move/Rotate/Scale. Полный runtime lifecycle Prefab instances и Components остаётся отдельной capability. Game View загружает существующий game index.html в отдельный iframe; Scene Preview и independent Build проходят через свои implementation/acceptance stages. Docking ограничен Bottom Dock/home slots/tab reorder; произвольные floating windows, nested split tree и перемещение Scene/Game viewport не заявляются. Animation поддерживает базовые clip/frame операции; полноценные timeline tracks, curves, keyframes, events и state graph остаются отдельным этапом.
 
 Browser acceptance конфигурируется через `src/editor/playwright.config.ts`. Backend получает временную копию canonical TypeScript fixture, поэтому тесты не меняют пользовательский проект. CI устанавливает отдельный Host package командой `npm ci --no-audit --no-fund` по закоммиченному `src/editor/package-lock.json`; `setup-node` cache также зависит от lockfile, а workflow artifact для сгенерированного lockfile удалён. Успешное выполнение подтверждено [CI Fast #478](https://github.com/AiratGaliev/codogma-engine/actions/runs/41338597813).
 
@@ -39,15 +39,15 @@ Browser acceptance конфигурируется через `src/editor/playwri
 | Docking/workspace | Left/Right/Bottom dock zones, Hierarchy/Inspector groups, close/reopen, tab reorder, splitters, keyboard/focus, narrow layout, v1 persistence/migration | **Implemented (Engineering; independent QA pending)**; COD-83 |
 | Prefab | Базовые модели/операции COD-80; full nested Prefab overrides не закрыты | **Partial**; COD-8; QA CODQA-11 |
 | User Components/TypeScript authoring | Базовая Components surface COD-80; Core/schema contracts in COD-26/COD-27 | **Partial surface; full authoring missing**; COD-91, QA CODQA-21 |
-| Asset Browser/Pack/Sprite | COD-39 реализует domain metadata/slicing/reimport contract; UI пока legacy | **Not migrated**; COD-86, QA CODQA-10 |
+| Asset Library/Sprite | Native Asset/Frame metadata, importer, slicing и reimport contracts | **In progress**; COD-86, QA CODQA-10 |
 | Package Manager | Existing ADR-0003 defines package architecture and Node-side service; no Package Manager workflow in new Host yet | **Not designed/implemented**; COD-92 UX/UI design → COD-94 Host implementation; COD-51/52/53/60/93 provide contracts and services |
 | Camera/coordinates/sorting | Контракт описан в ТЗ; Host authoring/gizmos не закрыты | **Not migrated**; COD-41 |
-| 2D UI authoring | Game UI runtime requirements в ТЗ; legacy authoring controls не перенесены | **Not migrated**; COD-43, QA CODQA-12 |
+| 2D UI authoring | Game UI runtime requirements в ТЗ; authoring workflow ещё не реализован | **Not implemented**; COD-43, QA CODQA-12 |
 | Animation | COD-80 basic clip/frame operations | **Partial**; COD-84, QA CODQA-4 |
 | Tilemap | Existing data/Tiled/runtime contracts требуют targeted gap analysis | **Not migrated**; COD-40, QA CODQA-14 |
-| Physics/Box2D | Existing physics/codegen/runtime contracts and CODQA-1 | **Not migrated as Host UI**; COD-42, CODQA-1 runtime acceptance |
-| FX authoring | COD-89 implements Circle/Bloom/Gradient/Shine authoring and Phaser-backed preview in SolidJS Host. Existing `.scene`/generated-code parity is historical implementation evidence only; the target authoring data and Preview path must use native Project Model through COD-113/COD-103. Local browser/runtime acceptance passed on the transitional fixture | **Implemented; automated runtime acceptance verified; independent visual/reference review pending**; CODQA-19 (CODQA-3 remains legacy-only evidence) |
-| Spine authoring/preview | Legacy Spine serialization/MCP tool; no new Host UI or session routing | **Not migrated**; COD-90, COD-85, QA CODQA-20 + CODQA-8 |
+| Physics/Box2D | Native Physics/Component contracts and Phaser runtime integration | **Not implemented as complete Host workflow**; COD-42, CODQA-1 |
+| FX authoring | COD-89 implements Circle/Bloom/Gradient/Shine authoring and Phaser-backed preview in SolidJS Host. Native Scene persistence and Preview runtime parity require integrated implementation and browser acceptance | **Implemented as Host UI; integrated runtime acceptance pending**; CODQA-19 |
+| Spine authoring/preview | Native Host authoring/preview workflow and session-owned MCP integration are not implemented | **Not implemented**; COD-90, COD-85, QA CODQA-20 + CODQA-8 |
 | Audio groups/Particle Preview | Existing runtime contracts; new Host UI absent | **Not migrated**; COD-61, QA CODQA-13 |
 | Preview/diagnostics | COD-80 Game View loads existing generated index.html in iframe; no complete Preview Host/live identity/common EditorLogger | **Partial/missing**; COD-30/31/32/47/58 |
 | Build Profiles / Build Settings | COD-35 defines reproducible Development/Release profiles and target/browser matrix; no dedicated profile authoring workflow is tracked for the new Host | **Not designed/implemented**; COD-95, depends on COD-34 feature selection and COD-35 build contracts; COD-16 tracks capability/evidence matrix |
@@ -56,7 +56,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 | MCP live bridge | HTTP registry + stdio package exist; current SSE bridge broadcasts to connected clients | **Blocked for new Host until session-aware routing**; COD-85, QA CODQA-8 |
 | Production route / Colibri | Server still defaults to legacy /editor/ during transition | **Not cut over**; COD-87 then COD-88 |
 
-Статусы migrated / in progress / not started / deferred / retired выставляются только по фактическому Host workflow и нужному evidence. Наличие старой панели, backend endpoint, завершённой legacy issue или успешной сборки не означает, что функция перенесена. COD-16 — migration inventory; COD-82 — coordination owner.
+Статусы implemented / in progress / not started / deferred выставляются
 
 ## COD-83. Версионированный workspace layout
 
@@ -94,7 +94,7 @@ Persisted bounds: Left `170–360 px`, Right `210–420 px`, Bottom `150–420 p
 
 Довести самостоятельный browser Editor Host на SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4 до полноценной production-ready 2D authoring среды, ориентированной на основные Unity Editor workflows. COD-80 уже создал первую работающую IDE-оболочку и Scene vertical slice; следующие capabilities реализуются отдельными slices, а не новым bootstrap или framework PoC.
 
-Сохраняются Node.js server, project/file HTTP API, MCP tool registry и подтверждённые независимые runtime algorithms, если они не зависят от старых UI/data structures. **Project/Scene/Prefab formats, serializers, Component/Script model и scene codegen не сохраняются ради Colibri compatibility:** новый Host работает с native Codogma Project Model. Colibri Workbench, panels, controls, menus, dialogs, commands, shortcuts, focus, notifications и plugin UI registration заменяются собственными SolidJS implementations.
+Сохраняются Node.js server, project/file HTTP API, MCP tool registry и подтверждённые независимые runtime algorithms после технической проверки. Новый Host строится на SolidJS и собственных typed services/state owners. Workbench, panels, menus, dialogs, commands, shortcuts, focus, notifications и plugin UI registration реализуются самостоятельными SolidJS components.
 
 ## 2. Целевая структура
 
@@ -173,7 +173,7 @@ codogma-engine/
 Framework choice не требует отдельного PoC или framework comparison. При этом реализуемые workflows проходят обычные инженерные проверки:
 - SolidJS build/TypeScript и тесты state/service contracts;
 - browser acceptance docking, resize, tabs, focus, shortcuts, context menus и тем;
-- native regression fixtures для Project/Scene/Node/Prefab/Component/Asset contracts, save/reopen, Undo/Redo, stable IDs, references и Prefab overrides. Colibri fixtures могут оставаться только в историческом archive и не запускаются как acceptance нового Host;
+- native regression fixtures для Project/Scene/Node/Prefab/Component/Asset contracts
 - performance profiling больших Hierarchy/Assets и частых Inspector updates на реальных сценариях;
 - проверка Phaser Canvas lifecycle, single-writer policy, Origin/proxy и MCP SSE routing;
 - cutover/rollback acceptance до удаления legacy UI.
@@ -183,17 +183,17 @@ Framework choice не требует отдельного PoC или framework c
 ## 8. Политика временного Colibri UI
 
 - Не начинать новые пользовательские features, panels, controls и крупный UX-рефакторинг в `source/editor/`.
-- До production cutover допускаются только критические security fixes и release blockers, без которых нельзя безопасно эксплуатировать временный UI или завершить cutover. Это не включает поддержку Colibri project formats в новом Host/Core.
-- Colibri используется только для изучения исторических UI workflows и как временный rollback client. Не переносить его schemas, serializers, file formats, registry, Component identities или runtime/codegen assumptions.
+- До production cutover допускаются только критические security fixes и release blockers, без которых нельзя безопасно эксплуатировать временный UI или завершить cutover.
+- Текущий UI client используется только как временный rollback client. Все новые панели, commands, interactions и workflows разрабатываются в SolidJS Host.
 - Один `PROJECT_DIR` имеет только одного writer. Пока MCP SSE не session-aware, новый Host не подключается к общему legacy bridge.
-- Удаление Colibri UI, старого bridge и Colibri-only dependencies выполняется в COD-88 после COD-87 cutover и закрытого rollback window. Это отдельная UI cleanup, не основание сохранять старые data formats.
+- Удаление временного UI client, его bridge и UI-only dependencies выполняется
 
 ## 9. Не входит в миграцию
 
-- Переписывание Phaser runtime, Node server, MCP registry или независимых media importers без отдельной технической причины. При этом старые Colibri project formats/serializers/codegen не являются сохраняемым контрактом и удаляются отдельной задачей COD-113.
+- Переписывание Phaser runtime, Node server, MCP registry или независимых media importers без отдельной технической причины.
 - Постоянный SolidJS↔Colibri adapter или встраивание SolidJS панелей в legacy Workbench как целевой путь.
 - Одновременная запись двух редакторов в один project до concurrency contract.
-- Удаление временного Colibri UI до cutover/rollback window; этот запрет не распространяется на удаление Colibri project-format compatibility из Core/нового Host по COD-113.
+- Удаление временного UI client до cutover/rollback window;
 - Обязательное внедрение Dockview, CodeMirror, Monaco, SolidStart, npm Workspaces или public Extension API без подтверждённого workflow.
 
 ## 10. Ссылки
