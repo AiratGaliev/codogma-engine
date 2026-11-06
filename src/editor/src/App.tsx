@@ -488,7 +488,6 @@ function App() {
       return {
         path: asset?.path ?? "",
         module,
-        definition: { name: module.typeId, displayName: module.typeId, properties: [] as never[] },
       };
     }).filter((item) => item.path.length > 0);
   });
