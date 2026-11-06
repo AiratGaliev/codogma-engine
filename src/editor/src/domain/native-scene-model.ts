@@ -44,10 +44,6 @@ export interface SceneNodeView {
   color?: string;
   align?: string;
   wordWrapWidth?: number;
-  components: string[];
-  componentInstances: ComponentInstanceDocument[];
-  prefabId?: string;
-  isPrefabInstance: boolean;
 }
 
 export interface SceneNodeEntry {
@@ -134,15 +130,6 @@ function collectNodes(
       active: node.active,
       alpha: typeof properties.alpha === "number" ? properties.alpha : 1,
       depth: typeof properties.depth === "number" ? properties.depth : 0,
-      components: effectiveNode.components
-        .filter((component) => !Object.prototype.hasOwnProperty.call(RENDERER_TYPES, component.typeId))
-        .map((component) => component.typeId),
-      componentInstances: effectiveNode.components.map((component) => ({
-        ...component,
-        properties: { ...component.properties },
-      })),
-      isPrefabInstance: Boolean(node.prefabInstance),
-      ...(node.prefabInstance ? { prefabId: node.prefabInstance.prefabId } : {}),
       ...(rendererType === "Image" && typeof properties.assetId === "string" && properties.assetId
         ? { texture: { key: properties.assetId } }
         : {}),
