@@ -21,7 +21,7 @@ Development priorities:
 - Preserve working functionality while improving maintainability, tests and developer documentation.
 - Clearly distinguish implemented behaviour, known limitations and future work.
 
-**Source-language standard:** all new first-party functionality and tests are authored in TypeScript (`.ts`); UI components that contain JSX use `.tsx`. Tool configurations use TypeScript when supported natively; declarative formats such as `package.json`, `tsconfig.json`, GitHub Actions YAML, HTML, CSS and `.pen` remain in their native formats. New strict scopes use the full compiler profile and do not add JavaScript feature logic. Existing legacy JS/MJS, generated files and vendored sources are not mass-migrated; see [ADR-0002](docs/decisions/ADR-0002-typescript-toolchain.md) for scope and documented exceptions.
+**Source-language standard:** all new first-party functionality and tests are authored in TypeScript (`.ts`); UI components that contain JSX use `.tsx`. Tool configurations use TypeScript when supported natively; declarative formats such as `package.json`, `tsconfig.json`, GitHub Actions YAML, HTML, CSS and `.pen` remain in their native formats. New strict scopes use the full compiler profile and do not add JavaScript feature logic. Existing JavaScript/MJS sources, generated files and vendored sources remain outside a new strict scope unless that scope explicitly includes them; see [ADR-0002](docs/decisions/ADR-0002-typescript-toolchain.md) for the exact boundary.
 
 This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
@@ -158,8 +158,6 @@ The server uses these defaults unless overridden:
 | <code>EDITOR_DIR</code> | <code>source/editor</code> | Editor client directory served by the server. |
 | <code>DEV_MODE</code> | Unset / disabled | Set to <code>1</code> to load plugin development scripts where available. |
 | <code>CODOGMA_MCP_URL</code> | <code>http://127.0.0.1:3000/editor/mcp</code> | Loopback HTTP MCP endpoint used by <code>@codogma/editor-mcp-server</code>; only the exact local endpoint path is accepted. |
-| <code>MCP_BRIDGE_PORT</code> | <code>1902</code> | Port for the legacy WebSocket bridge used by older editor-side MCP configuration. The new stdio package does not use this port. |
-| <code>MCP_BRIDGE_HOST</code> | <code>127.0.0.1</code> | Host for the legacy local bridge. |
 | <code>AI_CHAT_SERVICE</code> | <code>http://127.0.0.1:3031</code> | URL of the optional AI Chat backend. |
 
 Use a project directory you control. Avoid pointing the development server at a directory containing private files that should not be accessible to the editor or its tools.
@@ -168,14 +166,12 @@ Use a project directory you control. Avoid pointing the development server at a 
 
 | Path | Responsibility |
 |---|---|
-| <code>server/server.mjs</code> | Local HTTP server, editor/project APIs, file operations, play-mode serving, AI Chat endpoint and MCP bridge. |
+| <code>server/server.mjs</code> | Local HTTP server, current Editor/project APIs, file operations, play-mode serving, AI Chat endpoint and engine-owned MCP HTTP endpoint. |
 | <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package; startup fails with an actionable error if the package is missing or has not been built. |
-
-| <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses the engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
-| <code>mini-services/phaser-editor-mcp/</code> | Legacy HTTP/WebSocket bridge retained for existing editor-side MCP workflows; not used by the new package. |
-| <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and MCP compatibility. |
-| <code>source/editor/</code> | Temporary browser editor UI client
-| <code>src/editor/</code> | Implemented independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons and domain/browser tests. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
+| <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
+| <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and the MCP HTTP/stdio security boundary. |
+| <code>source/editor/</code> | Temporary browser editor UI client, removed after the SolidJS production cutover and rollback window. |
+| <code>src/editor/</code> | Independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons and domain/browser tests. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
 | <code>tests/workspace/test-typescript/</code> | Default fixture project for development and CI. |
@@ -242,9 +238,9 @@ By default, these checks exercise server-side MCP capabilities. Optional checks 
 
 The current implementation has three main runtime areas:
 
-1. **New Editor Host** — the independent SolidJS application under <code>src/editor/</code>, target for all new UI and authoring workflows.
-2. **Temporary UI client** — the existing TypeScript application
-3. **Local server** — <code>server/server.mjs</code> serves the legacy client until cutover, exposes shared project/file APIs and hosts MCP/bridge services used by both editor applications.
+1. **SolidJS Editor Host** — the independent application under <code>src/editor/</code> and target for new UI/authoring workflows.
+2. **Temporary UI client** — a separate browser application under <code>source/editor/</code>, removed after production cutover and the bounded rollback window.
+3. **Local server** — <code>server/server.mjs</code> exposes current Editor/project/file APIs, play-mode serving and the engine-owned HTTP MCP endpoint.
 4. **Game project/runtime** — the editable project is selected by <code>PROJECT_DIR</code>. The target Codogma workflow loads native Scene data and registered Script/Component modules. Runtime dependencies must match the native project/build contract.
 
 The server also integrates with the optional AI Chat backend. That backend is a separate service and can be run independently.
@@ -262,9 +258,9 @@ The intended development topology is **two UI hosts, one backend API**. The Vite
 
 Both clients may be open for visual comparison, but **do not edit the same project from both clients at the same time**. They maintain independent in-browser state, selection, undo histories and caches; the current project-file API does not provide a cross-client editing lock or conflict-resolution protocol. Use one writer at a time, or separate fixture/project copies and independent backend instances for write acceptance.
 
-The current MCP editor SSE bridge broadcasts commands to every connected editor client and accepts the first matching result. Until session-aware routing is implemented in [COD-85](https://linear.app/codogma-engine/issue/COD-85/realizovat-session-aware-mcp-sse-routing-dlya-neskolkih-editor-host), only one UI may own that SSE connection. Initially the legacy client remains the MCP SSE owner; the new Host must not attach to the same bridge. This restriction is separate from HTTP MCP tools that do not need a live editor session.
+The current Editor SSE transport broadcasts commands to connected clients and accepts the first matching result. Until session-aware routing is implemented in [COD-85](https://linear.app/codogma-engine/issue/COD-85/realizovat-session-aware-mcp-sse-routing-dlya-neskolkih-editor-host), only one Editor session may own the shared SSE connection. Concurrent Host sessions require isolated backend/transport instances. This restriction is separate from HTTP MCP tools that do not need a live editor session.
 
-The two-port arrangement is a development/transition setup, not a permanent production requirement. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the legacy route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
+The two-port arrangement is a development setup, not a permanent production requirement. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the temporary UI route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
 
 ### HTTP endpoints
 
@@ -279,7 +275,6 @@ The local server exposes editor routes including:
 - <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint;
 - <code>/archive/</code> and <code>/archive/&lt;filename&gt;</code> — development-only download of a prepared full-project snapshot (see below).
 
-The legacy editor-side WebSocket MCP bridge listens on port <code>1902</code> by default. The new <code>@codogma/editor-mcp-server</code> does not use that port: it sends JSON-RPC requests to <code>POST /editor/mcp</code> on the main local HTTP server.
 
 ### Full-project development snapshots
 
@@ -363,14 +358,6 @@ The stdio adapter loads the tool list when its process starts. Restart the MCP p
 after changing the engine or its tool registry. Project/file operations are executed by
 the engine server. Tools that need the active scene, screenshots or other live editor
 state also require the editor page to be open and its SSE bridge connected.
-
-### Legacy bridge
-
-<code>mini-services/phaser-editor-mcp/</code> and port <code>1902</code> remain for
-older editor-side WebSocket workflows. The new Codogma MCP package does not use
-that service. The legacy bridge has a separate security and lifecycle surface and
-must not be exposed to an untrusted network; its remaining security work is tracked
-separately in the capability matrix/roadmap.
 
 ### Optional AI Chat service
 
@@ -609,7 +596,6 @@ Run <code>npm run build</code> from the repository root or <code>npm run watch</
 - Start the Codogma Engine HTTP server before starting an MCP client.
 - Confirm that <code>CODOGMA_MCP_URL</code> points to the exact loopback endpoint <code>http://127.0.0.1:3000/editor/mcp</code> (adjust the port when the engine HTTP server uses a non-default port).
 - For active-scene, screenshot, tile-selection and Spine image-preview tools, open the editor page and wait for the SSE MCP bridge connection.
-- The <code>phaser-editor-mcp-port</code> setting and port <code>1902</code> belong only to the retained legacy WebSocket bridge; the new stdio adapter does not use them.
 
 ### MCP E2E fails
 

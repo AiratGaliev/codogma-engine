@@ -185,13 +185,13 @@ Framework choice не требует отдельного PoC или framework c
 - Не начинать новые пользовательские features, panels, controls и крупный UX-рефакторинг в `source/editor/`.
 - До production cutover допускаются только критические security fixes и release blockers, без которых нельзя безопасно эксплуатировать временный UI или завершить cutover.
 - Текущий UI client используется только как временный rollback client. Все новые панели, commands, interactions и workflows разрабатываются в SolidJS Host.
-- Один `PROJECT_DIR` имеет только одного writer. Пока MCP SSE не session-aware, новый Host не подключается к общему legacy bridge.
-- Удаление временного UI client, его bridge и UI-only dependencies выполняется
+- Один `PROJECT_DIR` имеет только одного writer. Пока MCP SSE не поддерживает session-aware routing, параллельные Host sessions используют изолированные backend/transport instances.
+- Удаление временного UI client и его UI-only assets/dependencies выполняется в COD-88 после закрытия rollback window. Временные server routes, asset-serving endpoints и transport adapters, существующие только ради этого UI, входят в единственную cleanup issue COD-113.
 
 ## 9. Не входит в миграцию
 
 - Переписывание Phaser runtime, Node server, MCP registry или независимых media importers без отдельной технической причины.
-- Постоянный SolidJS↔Colibri adapter или встраивание SolidJS панелей в legacy Workbench как целевой путь.
+- Встраивание SolidJS panels в отдельный Workbench или постоянный cross-application UI bridge.
 - Одновременная запись двух редакторов в один project до concurrency contract.
 - Удаление временного UI client до cutover/rollback window;
 - Обязательное внедрение Dockview, CodeMirror, Monaco, SolidStart, npm Workspaces или public Extension API без подтверждённого workflow.
