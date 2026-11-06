@@ -169,8 +169,8 @@ Use a project directory you control. Avoid pointing the development server at a 
 | Path | Responsibility |
 |---|---|
 | <code>server/server.mjs</code> | Local HTTP server, editor/project APIs, file operations, play-mode serving, AI Chat endpoint and MCP bridge. |
-| <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package when installed and built; otherwise falls back to the dependency-free stdio implementation. |
-| <code>server/mcp-stdio.mjs</code> | Dependency-free stdio MCP fallback entry point. |
+| <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package; startup fails with an actionable error if the package is missing or has not been built. |
+
 | <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses the engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
 | <code>mini-services/phaser-editor-mcp/</code> | Legacy HTTP/WebSocket bridge retained for existing editor-side MCP workflows; not used by the new package. |
 | <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and MCP compatibility. |
@@ -203,7 +203,7 @@ Run these commands from the repository root unless noted otherwise.
 | <code>npm run build</code> | Build/type-check the editor client through TypeScript project references. |
 | <code>npm run watch</code> | Run the editor TypeScript compiler in watch mode. Start the server separately if you need to use the editor. |
 | <code>npm run mcp</code> | Start the Codogma stdio MCP package through the launcher (when package dependencies are installed and built); the editor server must be running. |
-| <code>npm run mcp:builtin</code> | Start the dependency-free stdio MCP fallback. |
+
 | <code>npm run build:mcp</code> | Build the standalone MCP package TypeScript sources. |
 | <code>npm run test:mcp-package</code> | Run isolated stdio/HTTP bridge contract tests for the package. |
 | <code>npm run build:editor-host</code> | Typecheck and production-build the independent SolidJS Host in <code>src/editor/</code>. |

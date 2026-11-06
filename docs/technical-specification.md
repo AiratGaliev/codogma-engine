@@ -35,8 +35,8 @@ Codogma Engine должен развиться в самостоятельный
 | Gate | Что должно работать | Как подтверждается |
 |---|---|---|
 | **A — SolidJS Editor Host migration** | Новый самостоятельный SolidJS + TypeScript/TSX UI с Tailwind CSS 4; оболочка Workbench, Scene/Hierarchy/Inspector/Assets; единая native Project Model и общие typed services | Отдельный UI host запускается независимо; browser acceptance на native fixtures; save/reopen, Undo/Redo, themes, keyboard workflows, MCP routing и отсутствие регрессий. Production route переключается после соответствующих UI gates |
-| **B — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая schema/metadata для Inspector/serialization/runtime, версионированное сохранение и загрузка сцены напрямую из данных без обязательного generated TS-класса на каждый уровень. | Изолированный fixture проходит создание/изменение/save/reopen; запускает сериализованную сцену с явно зарегистрированным TypeScript-компонентом без файла класса сцены; lifecycle, миграции и ошибки ссылок покрыты тестами; Core тестируется без UI редактора. |
-| **C — Browser Preview** | Preview Host запускает сцену из Project Model через целевой loader/runtime adapter, связывает runtime entity/component с моделью, выдаёт runtime state и log/error diagnostics. Старый generated-code path не является частью нового Preview contract и не поддерживается новым Core/Host. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart на data-driven fixture без per-scene generated TS class. Preview не требует Tauri и не создаёт второй игровой цикл. |
+| **B — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая schema/metadata для Inspector/serialization/runtime, версионированное сохранение и загрузка сцены напрямую из данных без обязательного generated TS-класса на каждый уровень. | Изолированный fixture проходит создание/изменение/save/reopen; запускает сериализованную сцену с явно зарегистрированным TypeScript-компонентом без файла класса сцены; lifecycle, native schema validation и ошибки ссылок покрыты тестами; Core тестируется без UI редактора. |
+| **C — Browser Preview** | Preview Host запускает сцену из Project Model через целевой loader/runtime adapter, связывает runtime entity/component с моделью, выдаёт runtime state и log/error diagnostics. Preview загружает сцену непосредственно из валидированной native Project Model; generated TS-класс на каждую сцену не является обязательным входом Preview. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart на data-driven fixture без per-scene generated TS class. Preview не требует Tauri и не создаёт второй игровой цикл. |
 | **D — Независимая HTML5-сборка** | Headless build из валидированных сериализованных сцен, зарегистрированных TypeScript-модулей, ресурсов и настроек adapter; per-scene generated TS file не является обязательным входом. | CI/fixture собирает и запускает проект без editor UI/server, проверяет asset/component refs и подтверждает, что editor-only зависимости не попали в game bundle. |
 | **E — Первая платформенная интеграция** | Platform-neutral Services API и mock/local adapter, затем отдельный Yandex Games adapter. | Unit/integration tests и отдельная проверка в официальном тестовом окружении; VK Mini Apps и VK Play принимаются как отдельные targets. |
 
@@ -82,7 +82,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 Следующие направления описывают целевой продукт, а не подтверждённые функции текущей версии:
 
-- завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, migrations/validation/serialization, component schema/registry/world), но не является законченным runtime;
+- завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, validation/serialization, component schema/registry/world), но не является законченным runtime;
 - data-driven загрузчик сцен из сериализуемой Project Model с разрешением зарегистрированных TypeScript modules, rollback и связью с Phaser adapter (не реализован как завершённый workflow);
 - завершённая object/component runtime-модель Core, интегрированная с Editor Inspector, Project Model loader и базовым Phaser adapter; текущие Core lifecycle tests пока изолированы от UI/runtime. Optional Data-Oriented ECS и его Phaser adapter не реализованы и развиваются отдельными package tasks COD-111/112;
 - синхронизация Inspector с реальными экземплярами компонентов работающей игры;
@@ -148,7 +148,7 @@ Editor UI (browser / optional desktop shell)
         ▼
 Codogma Project Model + Public TypeScript API
 ├─ Project / Scene / Node / Component / Prefab / Asset references
-├─ Schema, serialization, migrations, metadata, undoable operations
+├─ Schema, serialization, published-version evolution, metadata, undoable operations
 ├─ Lifecycle and component/system contracts
 └─ Engine services: input, time, resources, physics, animation, audio
         │
@@ -331,7 +331,7 @@ Codogma должен давать разработчику удобную ком
 - Пользовательские TypeScript-компоненты должны объявлять или предоставлять метаданные редактируемых свойств.
 - Тип компонента должен иметь стабильный идентификатор и явную регистрацию в runtime/build module graph; выбор класса не должен зависеть от имени сцены или соглашения о пути к файлу. Один компонентный модуль может многократно использоваться в разных сценах и узлах.
 - Метаданные схемы должны однозначно различать сохраняемые свойства компонента, editor-only настройки и временное runtime-состояние. Сериализация сохраняет только явно объявленные persisted fields; editor-only и transient runtime fields не должны случайно попадать в проектный файл.
-- Значения по умолчанию, миграции старых component data и поведение отсутствующих/новых полей определяются контрактом схемы. Несовместимые значения дают адресную диагностику или документированный fallback, а не незаметное приведение типов/потерю данных.
+- Default values и optional properties определяются текущей native Component Schema; невалидные значения получают property-specific validation diagnostics и не приводят к незаметному приведению типов или частичному сохранению.
 - Inspector должен отображать типизированные поля, ограничения/валидацию, значения по умолчанию, ссылки на ресурсы и поддерживаемые ссылки на другие объекты.
 - Одни и те же метаданные должны использоваться редактором, сохранением, валидацией и runtime inspector.
 - Изменение сериализуемого значения из Inspector должно проходить через единый механизм команд/операций, позволяющий реализовать Undo/Redo и предсказуемое сохранение. Редактирование persisted property, editor-only metadata и изменение transient runtime state должны иметь разные явно определённые пути.
@@ -360,7 +360,7 @@ Runtime Input API различает **физические device inputs** и *
 - **Input Actions Editor** в SolidJS Host управляет Action Maps/Actions/Bindings, properties, validation/conflict diagnostics и test/listen mode. Это отдельный authoring workflow; Project Settings предоставляет ссылку/выбор project-wide asset, но не дублирует Action editor. Editor hotkeys принадлежат Editor Preferences, а не game input.
 - Начальный browser/2D scope — keyboard, mouse/pointer и touch. Gamepad или иные device types доступны только после capability-based adapter и проверенной acceptance. VR, sensor-specific и 3D input workflows не добавлять.
 - Test/listen mode — read-only диагностический поток action state; он не запускает gameplay, не создаёт второй input dispatcher и должен завершать listeners/captures при stop, закрытии окна, смене проекта и потере сессии.
-- Исполняемый runtime contract и lifecycle остаются в COD-29. Versioned schema/IDs/references/migrations — в COD-25. SolidJS authoring — COD-98/COD-99. Project Settings/Input entry point — COD-96/COD-97.
+- Исполняемый runtime contract и lifecycle остаются в COD-29. Versioned native schema/IDs/references — в COD-25. SolidJS authoring — COD-98/COD-99. Project Settings/Input entry point — COD-96/COD-97.
 
 **Задачи:** [COD-98 — Input Actions Editor UX/UI](https://linear.app/codogma-engine/issue/COD-98/sproektirovat-input-actions-editor-uxui-dlya-solidjs-host), [COD-99 — Input Actions authoring implementation](https://linear.app/codogma-engine/issue/COD-99/realizovat-input-actions-authoring-workflow-v-solidjs-host).
 
@@ -433,7 +433,7 @@ Codogma предоставляет единый публичный Physics API �
 - Время симуляции, fixed timestep, накопитель delta, максимальное число substeps и порядок обновления задаются централизованно и тестируются. Если backend сам управляет timestep, интеграция должна исключать двойное продвижение мира и документировать семантику pause/resume.
 - Визуальная форма коллайдера, сериализованная конфигурация и фактическое runtime-тело должны совпадать. Debug overlay показывает формы, центры, collision filters и состояние столкновений в пределах доступных API.
 - **Native Box2D runtime contract:** runtime provider и его exported API закрепляются в package/build manifest; Debug Draw оформляется отдельной capability. Версии runtime и helper modules фиксируются в fixture/build report. Ambient declarations описывают только типы и не доказывают наличие runtime exports в JS bundle.
-- Для TypeScript export тестируется полный generated project с теми же `.js` helpers и matching declarations для импортируемых named exports. `editor typecheck` не доказывает корректность TypeScript-сцены, генерируемой пользователю; legacy `Phaser.Box2D.*` ambient API не заменяет declaration contract `PhaserBox2D.js`.
+- Для TypeScript export тестируется полный generated project с теми же `.js` helpers и matching declarations для импортируемых named exports. `editor typecheck` не доказывает корректность TypeScript-сцены, генерируемой пользователю; `Phaser.Box2D.*` ambient API не заменяет declaration contract `PhaserBox2D.js`.
 - World ID и Body ID — разные идентификаторы; shape creation требует корректный body ID. Не добавлять самостоятельные shape nodes, пока Inspector/schema, parent/body-ID propagation, finite/even coordinate validation, минимум три вершины, convex-hull limits и prefab semantics не приняты end-to-end.
 - `SetWorldScale` и accumulator state могут находиться на уровне модуля внешней библиотеки. Не заявлять поддержку одновременно активных миров с разными scale, пока сценарий не протестирован на зафиксированной версии runtime, включая pause/resume и shutdown/restart.
 - Нужны тесты на группы/маски, body types, столкновения, уничтожение сущностей, переходы scene lifecycle, паузу/возобновление, фиксированный шаг и удаление физических ресурсов.
@@ -504,7 +504,7 @@ Codogma предоставляет единый публичный Physics API �
 
 **Scopes и владельцы:**
 
-- **Project Settings** — версия проектной конфигурации, общая для contributors и хранящаяся в Project Model/project configuration. Изменения проходят schema validation, migration и save/reopen round-trip. Такие настройки должны быть доступны в VCS вместе с проектом.
+- **Project Settings** — версия проектной конфигурации, общая для contributors и хранящаяся в Project Model/project configuration. Изменения валидируются текущей Project Settings schema и проходят save/reopen round-trip. Такие настройки должны быть доступны в VCS вместе с проектом.
 - **Workspace Settings** — локальные настройки конкретного проекта на конкретной машине/рабочем месте. Они не коммитятся по умолчанию, не являются частью project model и не входят в release build. Это подходящее место для локального workspace choice, если он отличается от shared project intent; фактический docking/panel layout state остаётся у COD-83.
 - **Editor Preferences** — локальные настройки пользователя, применимые ко всем открываемым им проектам на данной машине: тема, UI scale/density, editor-wide confirmation behavior, keyboard preference и прочие user-scoped options. Они хранятся отдельно от project files и не влияют на game build/runtime.
 
@@ -517,7 +517,7 @@ Codogma предоставляет единый публичный Physics API �
 
 **Settings Registry и страницы:**
 
-- Editor Host предоставляет typed Settings Registry/descriptor contract: stable setting/page ID, owning domain, scope, type/schema, default, validation, description/help, availability conditions, storage adapter и migration version. Не использовать свободные JSON paths или произвольные UI fields без владельца и schema.
+- Editor Host предоставляет typed Settings Registry/descriptor contract: stable setting/page ID, owning domain, scope, type/schema, default, validation, description/help, availability conditions, storage adapter и schema version. Не использовать свободные JSON paths или произвольные UI fields без владельца и schema.
 - Доменные подсистемы регистрируют свои страницы/sections и validators через публичный contract. Settings UI агрегирует descriptors и вызывает domain service; он не становится новым Project Model и не копирует бизнес-логику Input, Physics, Audio, Asset Import или Build.
 - Стороннее editor extension может добавить свою страницу только через явный, проверенный Extension API/lifecycle и после trust/activation policy. Одной декларативной metadata недостаточно для исполнения кода.
 - Страницы должны показывать только доступные и реализованные settings. Если target/capability не поддерживается, поле скрывается либо отображается как недоступное с причиной; нельзя показывать фиктивный control.
@@ -537,7 +537,7 @@ Codogma предоставляет единый публичный Physics API �
 - Invalid setting value не должна silently replace valid project config. Ошибки показываются по setting ID/category с причиной и safe action; reset должен менять только выбранное значение/категорию.
 - Unknown descriptor/page/schema version от extension даёт diagnostic и не приводит к выполнению произвольного кода.
 - Project switching очищает привязанные editor view models, отменяет или адресует незавершённые операции и загружает settings только для нового project context.
-- Defaults остаются deterministic при открытии старого проекта; schema migration должна быть проверяема и сохранять неизвестные данные, если это предписывает соответствующая migration policy.
+- Defaults должны быть детерминированы для текущей Project Settings schema. Неподдерживаемая версия или невалидное значение дают структурированную диагностику; изменения не должны применяться частично.
 
 **Задачи:** [COD-96 — Project Settings / Editor Preferences design](https://linear.app/codogma-engine/issue/COD-96/sproektirovat-project-settings-i-editor-preferences-dlya-solidjs-host), [COD-97 — implementation](https://linear.app/codogma-engine/issue/COD-97/realizovat-project-settings-i-editor-preferences-v-solidjs-host), [COD-25 — Project Model](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema), [COD-83 — workspace layout](https://linear.app/codogma-engine/issue/COD-83/razvit-docking-i-workspace-layout-novogo-solidjs-editor-host).
 
@@ -566,7 +566,7 @@ Codogma предоставляет единый публичный Physics API �
 - Asset/frame metadata, slicing, trim/crop/pivot, collision authoring и reimport принадлежат native Asset Library/Sprite authoring workflow (COD-86).
 - Sorting layers/groups, стабильный depth ordering и Y-based sorting принадлежат общему 2D render-order contract (COD-41). Sprite Editor использует этот контракт, но не создаёт параллельную модель sorting.
 - 9-slicing и tiled draw mode остаются authoring-возможностями Scene Editor для соответствующих Phaser GameObjects; они не дублируются как независимый механизм texture metadata.
-- Versioned schema, coordinate spaces, migration и фактические ограничения runtime adapters описаны в [Sprite asset metadata contract](sprite-asset-metadata.md). Наличие сохранённой polygon/compound geometry не означает её автоматическую поддержку каждым physics backend.
+- Native schema, coordinate spaces и фактические ограничения runtime adapters описаны в [Sprite asset metadata contract](sprite-asset-metadata.md). Наличие сохранённой polygon/compound geometry не означает её автоматическую поддержку каждым physics backend.
 
 **2D-рендеринг и визуальная диагностика**
 - Обеспечить корректный и измеряемый workflow спрайтов, текстурных атласов, текстовых объектов, масок, Graphics/custom geometry, фильтров и 2D-эффектов, если их поддерживает текущий runtime.
@@ -709,7 +709,7 @@ P0/P1/P2 — приоритеты требований, не обещание д
 - Отчёт о размере production bundle и отдельных ресурсных группах, обнаружение неожиданных крупных ресурсов и ненужных runtime-зависимостей.
 - Воспроизводимая HTML5-сборка с явным выходным каталогом, исходными картами или эквивалентом диагностики для dev build, понятными ошибками и зафиксированными build settings.
 - Сборка должна запускаться без открытого UI редактора. Команда в headless CLI/CI должна уметь валидировать проект, проверять ресурсные зависимости и собирать игру; диагностический результат не должен зависеть от открытой сцены в редакторе.
-- Канонические входы целевого build — валидированная Project Model, сериализованные сцены, граф явно зарегистрированных TypeScript-компонентов, ссылки на ресурсы, настройки проекта и выбранный runtime adapter. Отдельный генерируемый TypeScript-файл на каждую сцену не требуется; если кодогенерация используется как оптимизация или compatibility/export target, это должен быть отдельный шаг build с проверяемым эквивалентным поведением.
+- Канонические входы целевого build — валидированная Project Model, сериализованные сцены, граф явно зарегистрированных TypeScript-компонентов, ссылки на ресурсы, настройки проекта и выбранный runtime adapter. Отдельный генерируемый TypeScript-файл на каждую сцену не требуется; если code generation используется как явная build optimization, это должен быть отдельный шаг build с проверяемым эквивалентным поведением.
 - Итоговая игра работает без editor server, MCP bridge, Tauri и внутренних development fixtures; production bundle содержит только нужные runtime/build outputs.
 - Итоговую сборку можно запускать отдельным browser acceptance smoke test и проверять на целевых платформах.
 - Предусмотреть versioned build profiles как минимум для Development и Release; target-specific settings не должны неявно смешиваться с общими настройками проекта.
@@ -735,7 +735,7 @@ Web — основная среда исполнения, а не сборочн
 - IndexedDB/cache/local save — best-effort storage, если браузер не подтвердил иное. Обрабатывать quota errors, private mode, очистку данных, interrupted writes и несколько вкладок.
 - Production output имеет hosting contract: WASM MIME, content encoding, cache/version strategy, asset base path, CORS/CSP, source maps и diagnostics. Service worker включается после проверки cache invalidation.
 - Сборка TypeScript Script assets разрешает source imports в соответствующие emitted JavaScript modules по явному bundler/TypeScript contract. Нативные Scene и Prefab остаются сериализованными документами: для них не генерируются companion `.ts` файлы или классы. Проверки импорта и emitted output выполняются для Script modules и их зависимостей.
-- Наличие корневого `package.json` — только legacy template heuristic, не доказательство доступности `phaser` или `@phaserjs/editor-scripts-base`. Package-based build должен диагностировать отсутствующие dependency declarations/resolution; автоматически устанавливать зависимости не предполагается.
+- Наличие корневого `package.json` само по себе не подтверждает доступность `phaser` или `@phaserjs/editor-scripts-base`. Package-based build должен диагностировать отсутствующие dependency declarations/resolution; автоматически устанавливать зависимости не предполагается.
 - Initial download, time-to-first-frame, first input, memory high-water mark и long tasks измеряются отдельно на desktop и representative low-end mobile. Budget назначается после baseline; CI сохраняет raw/compressed size и build manifest.
 - Release matrix покрывает заявленные desktop/mobile browsers и официальный embedded host каждой площадки. Непроверенный target нельзя объявлять поддерживаемым.
 

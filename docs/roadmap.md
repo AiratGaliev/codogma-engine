@@ -49,7 +49,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ### Что можно выполнять параллельно Editor UI migration
 
-- Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и всех legacy project configs. Эти сведения пополняются по мере работы и до публикации/массовой архитектурной миграции; они не должны задерживать изолированную исправимую задачу.
+- Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и существующих engine/editor configuration roots. Эти сведения пополняются по мере работы и до публикации/массового обновления инфраструктуры; они не должны задерживать изолированную исправимую задачу.
 - Реализация нового Project Model/Core, runtime adapter и отдельного optional Data-Oriented ECS. ECS не является предусловием для Scene Editor, Inspector или Asset Library и не входит в обязательный @codogma/cge.
 - Создание нового SolidJS Editor Host в `src/editor/` и последующее удаление временного UI client из `source/editor/` — отдельный staged UI rollout по `docs/editor-ui-migration.md`; это не механическое перемещение исходного дерева. npm Workspaces остаются отдельной инфраструктурной миграцией.
 - Реализация нового Project Model/Core, runtime adapter, Preview Host и HTML5 build pipeline. Они могут идти отдельными потоками, если сохраняются совместимые contracts; готовность Core не является предварительным условием для первого нового Editor Host slice.
@@ -419,7 +419,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Спроектировать и реализовать отдельные Project Settings и Editor Preferences в SolidJS Host: project scope — versioned/shared project configuration; workspace scope — local per-project state; user scope — local preferences across projects. Использовать typed Settings Registry и доменные validators, категории/поиск/dirty state/Apply-Revert-Reset; показывать только реальные settings contracts. Не дублировать Package Manager (COD-92/94), Build Profiles (COD-95) и workspace layout serialization (COD-83). Дизайн — COD-96, реализация — COD-97, Project Model contract — COD-25.
 - [ ] Реализовать отдельный Input Actions Editor в SolidJS Host поверх COD-25/COD-29: Action Maps, logical Actions, physical Bindings, 2D keyboard composites, device scopes, conflict diagnostics и test/listen mode. Разделять project default bindings и runtime user overrides; gamepad показывать только после готовности adapter, editor hotkeys остаются в Preferences. UX — COD-98, implementation — COD-99.
 - [ ] Проверить UI Editor на 9-slice, text/rich text/font fallback, keyboard focus, safe areas, resizing and aspect ratios.
-- [ ] Добавить smoke/acceptance fixtures для audio groups, localization keys/fallbacks и save data migration, если соответствующие P1 capabilities реализуются в этой фазе.
+- [ ] Добавить smoke/acceptance fixtures для audio groups, localization keys/fallbacks и эволюции опубликованной save-data schema, если соответствующие P1 capabilities реализуются в этой фазе.
 - [ ] Проверить точечные importer extensions (PSD/Aseprite) через общий asset metadata/reimport contract, а не через отдельные несогласованные форматы.
 - [ ] Рассмотреть UI layout tools: anchors, responsive layout, scale modes, interactive states и mobile safe areas.
 - [x] Перенести FX authoring/preview в SolidJS Host (COD-89; PR #32): Circle/Bloom/Gradient/Shine Inspector controls, typed FX model, Phaser-backed preview, regression tests и lifecycle cleanup. Независимая native runtime parity проверяется в CODQA-19.
@@ -448,7 +448,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 **B — P1: расширение authoring workflow после P0 и общей модели ресурсов.**
 - Расширенный Tilemap: reusable brushes, rule tiles/auto-tiling, object/collision layers, Tiled import/export с сообщениями о потерях, затем измерения chunking/culling и большие карты.
 - Audio groups/buses, preview и browser focus/autoplay lifecycle; базовые particles с безопасным повторным запуском preview.
-- Versioned local storage/save migrations и localization tables/fallbacks, если востребованы первыми реальными проектами.
+- Versioned local storage/save schema evolution между выпущенными версиями и localization tables/fallbacks, если востребованы первыми реальными проектами.
   - [x] **COD-62 — localization tables/fallback:** версионированный контракт таблиц (v1), runtime-сервис с детерминированным fallback и структурированной диагностикой, валидация (дубликаты ID, версии, расхождения ключей и placeholders), фикстура `tests/workspace/test-typescript/locale/` и проверки `npm run test:localization` / `npm run test:localization:acceptance` в CI Fast. Контракт и ограничения — [docs/localization.md](localization.md); RTL/complex shaping не заявляются.
 - PSD/Aseprite importers, atlas variants/advanced analysis и skeletal animation — отдельными PR, по одному импортеру/формату с license review.
 - Дополнительные UI layouts и production authoring tools — по capability matrix, а не для формального feature parity.
