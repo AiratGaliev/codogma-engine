@@ -69,7 +69,7 @@ test("restores compact defaults after reopening a wide workspace and preserves c
   assert.equal(customized.bottomHeight, 340);
 });
 
-test("migrates the legacy COD-80 layout and preserves its user choices", () => {
+test("unversioned workspace layouts fall back instead of migrating legacy choices", () => {
   const layout = restoreWorkspaceLayout({
     leftWidth: 260,
     rightWidth: 310,
@@ -78,37 +78,15 @@ test("migrates the legacy COD-80 layout and preserves its user choices", () => {
     hierarchyVisible: true,
     inspectorVisible: false,
     bottomTab: "Hierarchy",
-    bottomTabOrder: [
-      "Project",
-      "Inspector",
-      "Animation",
-      "Hierarchy",
-      "Components",
-      "Console",
-    ],
+    bottomTabOrder: ["Project", "Inspector", "Animation", "Hierarchy"],
     dockedPanels: ["Hierarchy", "UnknownPanel", "Hierarchy"],
     consoleDocked: true,
   });
 
-  assert.equal(layout.schemaVersion, 3);
-  assert.equal(layout.leftWidth, 260);
-  assert.equal(layout.rightWidth, 310);
-  assert.equal(layout.hierarchyZone, "bottom");
-  assert.equal(layout.inspectorZone, "right");
-  assert.equal(layout.inspectorVisible, false);
-  assert.equal(layout.bottomTab, "Hierarchy");
-  assert.equal(layout.consoleDocked, true);
-  assert.deepEqual(getVisibleSidePanels(layout, "right"), []);
-  assert.deepEqual(getVisibleBottomTabs(layout, false), [
-    "Project",
-    "Animation",
-    "Hierarchy",
-    "Components",
-    "Console",
-  ]);
+  assert.deepEqual(layout, createDefaultWorkspaceLayout(false));
 });
 
-test("migrates schema v1 and places Console in the Bottom group by default", () => {
+test("restores current schema v3 and preserves the Console Bottom placement", () => {
   const migrated = restoreWorkspaceLayout({
     schemaVersion: 3,
     hierarchyVisible: false,

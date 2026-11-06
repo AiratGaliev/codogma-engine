@@ -3222,7 +3222,17 @@ defTool(
         notifyFilesChanged()
         return text(`Font "${key}" (${family}) added to ${rel}.`)
     }
+
 )
+
+/** Read-only tool catalog used by MCP schema/contract tests. */
+export function getBridgeToolsList() {
+    return [...TOOLS.values()].map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema
+    }))
+}
 
 /* =========================== bridge (SSE channel) ========================= */
 
