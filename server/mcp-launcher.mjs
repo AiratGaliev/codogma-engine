@@ -22,6 +22,6 @@ if (existsSync(packageCli) && existsSync(packageRuntime)) {
     await import(pathToFileURL(packageCli).href);
 } else {
     console.error("[codogma-editor-mcp-server] Package is not built or its dependencies are missing.");
-    console.error("[codogma-editor-mcp-server] Run: npm --prefix packages/editor-mcp-server ci");
+    console.error("[codogma-editor-mcp-server] Run: npm --prefix packages/editor-mcp-server ci (then retry).");
     process.exitCode = 1;
 }

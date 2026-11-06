@@ -3,7 +3,7 @@
  *
  *   - mini-services/ai-chat            (LLM completions proxy, default :3031)
  *
- * Both services are local helpers and must fail closed for anything that is
+ * This service is a local helper and must fail closed for anything that is
  * not their documented local caller: foreign Host headers, foreign browser
  * origins, oversized bodies, malformed payloads and request floods.
  */
@@ -106,12 +106,6 @@ async function testRemoteBindGuards() {
         "index.mjs",
         { AI_CHAT_PORT: "0", AI_CHAT_HOST: "0.0.0.0" },
         "ai-chat"
-    )
-    await assertRemoteBindRejected(
-        path.join(ROOT, "mini-services", "phaser-editor-mcp"),
-        "index.mjs",
-        { PORT: "0", MCP_BRIDGE_HOST: "0.0.0.0" },
-        "phaser-editor-mcp"
     )
 }
 

@@ -114,5 +114,5 @@ Requests are limited to 32 MiB and responses to 64 MiB. Diagnostics go to stderr
 - This adapter uses the official `@modelcontextprotocol/server` SDK and the low-level `Server` API because the engine already owns complete JSON Schemas. Returning these schemas unchanged avoids a second schema registry or lossy schema conversion.
 - The engine currently serves a stateless JSON-RPC MCP endpoint. This package performs the engine-side initialize handshake before exposing its own stdio transport.
 - Invalid tool arguments are rejected by the adapter's Ajv validation against the unmodified engine JSON Schemas before they reach the engine. Editor/runtime and project-file errors are still reported by the engine's actual tool handlers.
-- The legacy `server/mcp-stdio.mjs` remains as a dependency-free fallback. The old `mini-services/phaser-editor-mcp` WebSocket bridge is retained for legacy editor-side compatibility and security testing; this new package does not depend on it.
+- This is the only supported stdio adapter. The launcher fails closed when this package is missing or has not been built; no dependency-free fallback, third-party Phaser bridge or port-`1902` transport is started.
 - This package does not install dependencies into game projects and is not a Core/runtime package. It is editor/developer tooling and must stay out of production game bundles.
