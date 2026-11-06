@@ -249,6 +249,16 @@ export function updateSceneNode(
   return replaceDocumentRoots(document, result.nodes);
 }
 
+export function updateNativeNode(
+  document: EditorDocument,
+  id: string,
+  update: (node: NodeDocument) => NodeDocument,
+): EditorDocument {
+  const result = updateNodeRecursively(documentRoots(document), id, update);
+  if (!result.found) throw new Error(`Scene node "${id}" was not found.`);
+  return replaceDocumentRoots(document, result.nodes);
+}
+
 export function createSceneNode(document: EditorDocument, kind: SceneNodeKind): EditorDocument {
   const id = createId();
   const componentId = createId();

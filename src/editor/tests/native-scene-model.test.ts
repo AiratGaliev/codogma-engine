@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import testCase from "node:test";
+import { test as testCase } from "vitest";
 import type { PrefabDocumentV1, SceneDocumentV1 } from "@codogma/cge";
 import {
   BUILTIN_COMPONENT_TYPES,

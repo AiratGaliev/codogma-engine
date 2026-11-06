@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import testCase from "node:test";
+import { test as testCase } from "vitest";
 import {
   addNativePrefabReference,
   findPrefabReferenceByAssetPath,
@@ -15,7 +15,7 @@ import {
   serializeNativeSceneDocument,
 } from "../src/domain/native-project-model.js";
 
-const fixtureRoot = resolve(process.cwd(), "../packages/cge/tests/fixtures/acceptance-project");
+const fixtureRoot = resolve(process.cwd(), "../../packages/cge/tests/fixtures/acceptance-project");
 const project = parseNativeProjectDocument(readFileSync(resolve(fixtureRoot, "project.json"), "utf8"));
 const sceneContent = readFileSync(resolve(fixtureRoot, "scenes/Level.cge-scene.json"), "utf8");
 
