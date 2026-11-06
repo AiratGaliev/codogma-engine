@@ -4,7 +4,7 @@
  *   - mini-services/ai-chat            (LLM completions proxy, default :3031)
  *
  * This service is a local helper and must fail closed for anything that is
- * not their documented local caller: foreign Host headers, foreign browser
+ * not its documented local caller: foreign Host headers, foreign browser
  * origins, oversized bodies, malformed payloads and request floods.
  */
 
