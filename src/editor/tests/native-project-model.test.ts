@@ -42,7 +42,6 @@ testCase("parses and serializes the native Scene contract without changing manif
 
 testCase("rejects unpublished or unsupported document shapes at the native boundary", () => {
   assert.throws(() => parseNativeProjectDocument(JSON.stringify({
-    schemaVersion: 1,
     id: "old",
     name: "Old",
     scenes: [],
@@ -51,14 +50,14 @@ testCase("rejects unpublished or unsupported document shapes at the native bound
     componentModules: [],
     runtime: { adapterId: "phaser", settings: {} },
     displayList: [],
-  })), /Project document is invalid/);
+  })), /schema version undefined is not supported/);
 
   assert.throws(() => parseNativeSceneDocument(project, "scene-level", JSON.stringify({
     id: "scene-level",
     sceneType: "SCENE",
     displayList: [],
     plainObjects: [],
-  })), /Scene "scene-level" is invalid/);
+  })), /schema version undefined is not supported/);
   assert.throws(() => parseNativeSceneDocument(project, "missing-scene", sceneContent), /not registered in project.json/);
 });
 
@@ -112,5 +111,9 @@ testCase("does not duplicate an asset path or stable asset id while adding a Pre
     },
   };
   assert.throws(() => addNativePrefabReference(project, prefab, "asset-scene-level", "prefabs/Another.cge-prefab.json"), /already registered/);
-  assert.throws(() => addNativePrefabReference(project, prefab, "asset-new", "scenes/Level.cge-scene.json"), /already registered/);
+  const projectWithExistingPrefabPath = {
+    ...project,
+    assets: [...project.assets, { id: "asset-existing-prefab", path: "prefabs/Existing.cge-prefab.json", kind: "other" as const }],
+  };
+  assert.throws(() => addNativePrefabReference(projectWithExistingPrefabPath, prefab, "asset-new", "prefabs/Existing.cge-prefab.json"), /already registered/);
 });

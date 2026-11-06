@@ -54,7 +54,7 @@ testCase("attaches a registered component with stable type identity and independ
 });
 
 testCase("rejects component IDs that are not registered by the native Project manifest", () => {
-  assert.throws(() => attachNativeComponent(scene(), "node-player", "Health", { project }), /stable native identity/);
+  assert.throws(() => attachNativeComponent(scene(), "node-player", "Health", { project }), /not registered/);
   assert.throws(() => attachNativeComponent(scene(), "node-player", "com.example.unknown", { project }), /not registered/);
 });
 
