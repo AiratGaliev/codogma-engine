@@ -80,7 +80,7 @@
 | 4. Feature migration | Prefabs/components, assets/importers, Sprite, Animation/Spine, Tilemap, Physics, FX/Particles и code editor integration | Авторские workflows перенесены по вертикальным срезам |
 | 5. Services and MCP | Settings, localization, project actions, runtime preview, diagnostics, MCP HTTP/SSE | Новый Host не зависит от legacy UI для обязательных операций |
 | 6. Cutover | SolidJS build обслуживается по `/editor/`; legacy route остаётся для rollback | SolidJS становится основным editor UI |
-| 7. Colibri removal | Удаление legacy UI, Colibri-only plugins/controls/styles/assets/build config/dependencies и обновление server/scripts/CI/archive/docs | В production/editor bundle нет runtime зависимости от Colibri |
+| 7. Temporary UI client cleanup |
 
 Полная inventory Colibri capabilities ведётся по мере переноса конкретных функций и не блокирует bootstrap SolidJS или создание Workbench. Не выполнять миграцию одним giant PR.
 
