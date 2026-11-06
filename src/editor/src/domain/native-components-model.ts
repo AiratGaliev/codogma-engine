@@ -160,7 +160,7 @@ export function validateNativeComponentProperties(
     return {
       valid: false,
       diagnostics: [{
-        code: "COMPONENT_INVALID_PROPERTY",
+        code: "COMPONENT_INVALID_VALUE",
         severity: "error",
         message: error instanceof Error ? error.message : String(error),
         entityId: nodeId,
