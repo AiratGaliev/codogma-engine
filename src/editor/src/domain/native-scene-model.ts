@@ -6,6 +6,7 @@ import {
   type PrefabDocumentV1,
   type SceneDocumentV1,
 } from "@codogma/cge";
+import { resolveNativePrefabRoot } from "./native-prefab-model.js";
 
 export type EditorDocument = SceneDocumentV1 | PrefabDocumentV1;
 
@@ -114,7 +115,7 @@ function collectNodes(
   const result: SceneNodeEntry[] = [];
   const visit = (node: NodeDocument, parentId: string | null, depth: number): void => {
     const prefab = node.prefabInstance ? prefabs.get(node.prefabInstance.prefabId) : undefined;
-    const effectiveNode = prefab?.root ?? node;
+    const effectiveNode = prefab ? resolveNativePrefabRoot(node, prefab) : node;
     const renderer = effectiveNode.components.find((component) =>
       Object.prototype.hasOwnProperty.call(RENDERER_TYPES, component.typeId),
     );
