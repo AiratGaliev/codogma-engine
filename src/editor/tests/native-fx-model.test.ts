@@ -5,6 +5,7 @@ import {
   addNativeNodeFx,
   FX_COMPONENT_TYPES,
   getNativeNodeEffects,
+  getEnabledNativeNodeEffects,
   removeNativeNodeFx,
   updateNativeNodeFx,
 } from "../src/domain/native-fx-model.js";
@@ -62,4 +63,24 @@ testCase("removes FX by native Component instance identity", () => {
   document = removeNativeNodeFx(document, "node-image", effect.id) as SceneDocumentV1;
   assert.deepEqual(getNativeNodeEffects(findSceneNode(document, "node-image")!), []);
   assert.throws(() => removeNativeNodeFx(document, "node-image", effect.id), /not found/);
+});
+
+
+testCase("keeps disabled FX components editable but excludes them from the runtime preview set", () => {
+  const withFx = addNativeNodeFx(scene(), "node-image", "Circle") as SceneDocumentV1;
+  const node = findSceneNode(withFx, "node-image")!;
+  const fx = getNativeNodeEffects(node)[0]!;
+  const disabled: SceneDocumentV1 = {
+    ...withFx,
+    rootNodes: [{
+      ...withFx.rootNodes[0]!,
+      components: withFx.rootNodes[0]!.components.map((component) =>
+        component.id === fx.id ? { ...component, enabled: false } : component,
+      ),
+    }],
+  };
+  const disabledNode = findSceneNode(disabled, "node-image")!;
+  assert.equal(getNativeNodeEffects(disabledNode).length, 1);
+  assert.equal(getNativeNodeEffects(disabledNode)[0]?.component.enabled, false);
+  assert.deepEqual(getEnabledNativeNodeEffects(disabledNode), []);
 });

@@ -450,7 +450,7 @@ function PhaserSceneViewport(props: Props) {
         : "";
       const previewSupported = isFxPreviewParentSupported(entry.type, textureKey, imageKeys);
       let renderOrderOffset = 0;
-      for (const effect of getNativeNodeEffects(entry.node)) {
+      for (const effect of getEnabledNativeNodeEffects(entry.node)) {
         const key = `${entry.id}:${effect.id}`;
         desired.set(key, {
           parentId: entry.id,

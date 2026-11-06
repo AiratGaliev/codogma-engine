@@ -204,6 +204,10 @@ export function getNativeNodeEffects(node: NodeDocument): FxEntry[] {
   });
 }
 
+export function getEnabledNativeNodeEffects(node: NodeDocument): FxEntry[] {
+  return getNativeNodeEffects(node).filter((effect) => effect.component.enabled);
+}
+
 export function createFxObject(type: FxType, id = createId(), preFX = true): FxObject {
   if (!isFxType(type)) throw new TypeError(`Unsupported FX type "${String(type)}".`);
   return defaults(type, id, preFX);
