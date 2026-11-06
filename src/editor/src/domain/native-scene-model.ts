@@ -406,31 +406,3 @@ export function assertNativeNodeIdentity(value: unknown): asserts value is NodeD
   }
 }
 
-
-/** Native persisted document aliases; SceneNodeView is a transient UI projection, never serialized. */
-export type SceneDocument = EditorDocument;
-export type SceneObject = SceneNodeView;
-export type SceneObjectEntry = SceneNodeEntry;
-
-export function getSceneObjects(
-  document: EditorDocument,
-  prefabs: readonly PrefabDocumentV1[] = [],
-): SceneNodeEntry[] {
-  return getSceneNodeEntries(document, prefabs);
-}
-
-export function createSceneObject(document: EditorDocument, kind: SceneNodeKind, assetId?: string): EditorDocument {
-  return createSceneNode(document, kind, assetId);
-}
-
-export function updateSceneObject(
-  document: EditorDocument,
-  id: string,
-  patch: SceneNodePatch,
-): EditorDocument {
-  return updateSceneNode(document, id, patch);
-}
-
-export function removeSceneObject(document: EditorDocument, id: string): EditorDocument {
-  return removeSceneNode(document, id);
-}

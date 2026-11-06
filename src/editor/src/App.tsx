@@ -9,26 +9,27 @@ import {
 } from "solid-js";
 import designTokens from "../design-system/tokens.json";
 import {
-  createSceneObject,
-  getSceneObjects,
-  removeSceneObject,
-  updateSceneObject,
+  createSceneNode,
+  getSceneNodeEntries,
+  removeSceneNode,
+  updateSceneNode,
   isPrefabDocument,
-  type SceneDocument,
-  type SceneObjectEntry,
+  type EditorDocument,
+  type SceneNodeEntry,
+  type SceneNodePatch,
 } from "./domain/native-scene-model.ts";
 import {
   findPrefabReferenceByAssetPath,
   findSceneReferenceByAssetPath,
   parseNativePrefabDocument,
   parseNativeProjectDocument,
-  parseNativeSceneDocument,
+  parseNativeEditorDocument,
   PROJECT_MANIFEST_PATH,
   resolvePrefabAsset,
   resolveSceneAsset,
   serializeNativePrefabDocument,
   serializeNativeProjectDocument,
-  serializeNativeSceneDocument,
+  serializeNativeEditorDocument,
 } from "./domain/native-project-model.ts";
 import {
   appendAnimationFrame,
@@ -353,7 +354,7 @@ function App() {
   const [projectDocument, setProjectDocument] = createSignal<import("@codogma/cge").ProjectDocumentV1 | null>(null);
   const [savedProjectContent, setSavedProjectContent] = createSignal("");
   const [projectSaving, setProjectSaving] = createSignal(false);
-  const [scene, setScene] = createSignal<SceneDocument | null>(null);
+  const [scene, setScene] = createSignal<EditorDocument | null>(null);
   const [scenePath, setScenePath] = createSignal("");
   const [savedContent, setSavedContent] = createSignal("");
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
@@ -377,7 +378,7 @@ function App() {
   const [componentToAttach, setComponentToAttach] = createSignal("");
   const [prefabCatalog, setPrefabCatalog] = createSignal<Array<{ assetId: string; path: string; document: import("@codogma/cge").PrefabDocumentV1 }>>([]);
   const [selectedPrefabPath, setSelectedPrefabPath] = createSignal("");
-  const [history, setHistory] = createSignal<SceneDocument[]>([]);
+  const [history, setHistory] = createSignal<EditorDocument[]>([]);
   const [historyIndex, setHistoryIndex] = createSignal(-1);
   const [selectionHistory, setSelectionHistory] = createSignal<Array<{ before: string | null; after: string | null }>>([]);
   const [loading, setLoading] = createSignal(true);
@@ -494,10 +495,10 @@ function App() {
 
   const sceneObjects = createMemo(() => {
     const current = scene();
-    return current ? getSceneObjects(current, prefabCatalog().map((item) => item.document)) : [];
+    return current ? getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)) : [];
   });
 
-  const selectedObject = createMemo<SceneObjectEntry | undefined>(() => {
+  const selectedObject = createMemo<SceneNodeEntry | undefined>(() => {
     const id = selectedId();
     return id ? sceneObjects().find((item) => item.id === id) : undefined;
   });
@@ -717,7 +718,7 @@ function App() {
       const content = await readProjectFile(path);
       if (request !== sceneLoadSequence) return false;
       const parsed = sceneReference
-        ? parseNativeSceneDocument(project, sceneReference.id, content)
+        ? parseNativeEditorDocument(project, sceneReference.id, content)
         : parseNativePrefabDocument(project, prefabReference!.id, content);
       stopAnimationPreview(true);
       setScene(parsed);
@@ -726,7 +727,7 @@ function App() {
       setHistory([parsed]);
       setHistoryIndex(0);
       setSelectionHistory([]);
-      const firstObject = getSceneObjects(parsed, prefabCatalog().map((item) => item.document))[0];
+      const firstObject = getSceneNodeEntries(parsed, prefabCatalog().map((item) => item.document))[0];
       setSelectedId(firstObject?.id ?? null);
       setSelectedProjectPath(path);
       setAnimationDocument(null);
@@ -808,7 +809,7 @@ function App() {
     }
   }
 
-  function applySceneChange(next: SceneDocument, selectionAfter = selectedId()) {
+  function applySceneChange(next: EditorDocument, selectionAfter = selectedId()) {
     const currentIndex = historyIndex();
     const currentHistory = history().slice(0, currentIndex + 1);
     const nextHistory = [...selectionHistory().slice(0, currentIndex), {
@@ -834,7 +835,7 @@ function App() {
     const nextScene = history()[nextIndex];
     if (!nextScene) return;
     setScene(nextScene);
-    setSelectedId(selectionHistory()[index - 1]?.before ?? getSceneObjects(nextScene)[0]?.id ?? null);
+    setSelectedId(selectionHistory()[index - 1]?.before ?? getSceneNodeEntries(nextScene)[0]?.id ?? null);
     setHistoryIndex(nextIndex);
     log("info", "Undo");
   }
@@ -846,7 +847,7 @@ function App() {
     const nextScene = history()[nextIndex];
     if (!nextScene) return;
     setScene(nextScene);
-    setSelectedId(selectionHistory()[index]?.after ?? getSceneObjects(nextScene)[0]?.id ?? null);
+    setSelectedId(selectionHistory()[index]?.after ?? getSceneNodeEntries(nextScene)[0]?.id ?? null);
     setHistoryIndex(nextIndex);
     log("info", "Redo");
   }
@@ -1184,13 +1185,13 @@ function App() {
       await writeProjectFile(path, prefabContent);
       const manifestContent = serializeNativeProjectDocument(nextProject);
       await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
-      const withoutSource = removeSceneObject(current, selected.id);
+      const withoutSource = removeSceneNode(current, selected.id);
       const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
         name: selected.name,
         transform: selected.node.transform,
         parentId: selected.parentId,
       });
-      const instance = getSceneObjects(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
+      const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
       setProjectDocument(nextProject);
       setSavedProjectContent(manifestContent);
       setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
@@ -1206,7 +1207,7 @@ function App() {
     if (!current || !prefab || isPrefabDocument(current)) return;
     try {
       const next = addNativePrefabInstance(current as import("@codogma/cge").SceneDocumentV1, prefab.document, { x: 400, y: 300 });
-      const instance = getSceneObjects(next, prefabCatalog().map((item) => item.document)).at(-1);
+      const instance = getSceneNodeEntries(next, prefabCatalog().map((item) => item.document)).at(-1);
       applySceneChange(next, instance?.id ?? null);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
@@ -1239,7 +1240,7 @@ function App() {
     try {
       const content = isPrefabDocument(current)
         ? serializeNativePrefabDocument(project, current)
-        : serializeNativeSceneDocument(project, current);
+        : serializeNativeEditorDocument(project, current);
       await writeProjectFile(path, content);
       setSavedContent(content);
       log("success", `Saved native ${isPrefabDocument(current) ? "Prefab" : "Scene"} ${path}`);
@@ -1258,14 +1259,14 @@ function App() {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
-    try { applySceneChange(updateSceneObject(current, selected.id, { [key]: value } as import("./domain/native-scene-model.ts").SceneNodePatch)); }
+    try { applySceneChange(updateSceneNode(current, selected.id, { [key]: value } as SceneNodePatch)); }
     catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function updateObjectProperties(id: string, patch: Record<string, number>) {
     const current = scene();
     if (!current) return;
-    try { applySceneChange(updateSceneObject(current, id, patch), id); }
+    try { applySceneChange(updateSceneNode(current, id, patch), id); }
     catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -1308,8 +1309,8 @@ function App() {
     if (!current || isPrefabDocument(current)) return;
     const assetId = kind === "Image" ? projectDocument()?.assets.find((asset) => asset.kind === "image")?.id : undefined;
     try {
-      const next = createSceneObject(current, kind, assetId);
-      const created = getSceneObjects(next, prefabCatalog().map((item) => item.document)).at(-1);
+      const next = createSceneNode(current, kind, assetId);
+      const created = getSceneNodeEntries(next, prefabCatalog().map((item) => item.document)).at(-1);
       applySceneChange(next, created?.id ?? selectedId());
       setShowObjectMenu(false);
       log("info", `Created ${kind}`);
@@ -1321,8 +1322,8 @@ function App() {
     const selected = selectedObject();
     if (!current || !selected) return;
     try {
-      const next = removeSceneObject(current, selected.id);
-      const remaining = getSceneObjects(next, prefabCatalog().map((item) => item.document));
+      const next = removeSceneNode(current, selected.id);
+      const remaining = getSceneNodeEntries(next, prefabCatalog().map((item) => item.document));
       applySceneChange(next, remaining[0]?.id ?? null);
       log("info", `Removed ${selected.name}`);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
@@ -2331,7 +2332,7 @@ function App() {
       const current = scene();
       const currentPath = scenePath();
       if (!current || !currentPath) throw new Error("There is no Scene document open in the SolidJS Editor Host.");
-      const settings = (current as SceneDocument & { settings?: Record<string, unknown> }).settings ?? {};
+      const settings = (current as EditorDocument & { settings?: Record<string, unknown> }).settings ?? {};
       return {
         scenePath: currentPath,
         sceneKey: settings.sceneKey,

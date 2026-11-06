@@ -6,8 +6,8 @@ import {
   onMount,
 } from "solid-js";
 import {
-  getSceneObjects,
-  type SceneDocument,
+  getSceneNodeEntries,
+  type EditorDocument,
 } from "../domain/native-scene-model.ts";
 import {
   readProjectFile,
@@ -175,7 +175,7 @@ interface ImageAsset {
 type TransformTool = "select" | "move" | "rotate" | "scale";
 
 interface Props {
-  scene: SceneDocument | null;
+  scene: EditorDocument | null;
   scenePath: string | null;
   selectedId: string | null;
   projectTree: ProjectEntry | null;
@@ -561,7 +561,7 @@ function PhaserSceneViewport(props: Props) {
 
     const current = props.scene;
     const entries = current
-      ? getSceneObjects(current, props.prefabs).map((entry) => ({
+      ? getSceneNodeEntries(current, props.prefabs).map((entry) => ({
           id: entry.id,
           type: entry.source.renderType,
           parentId: entry.parentId,
@@ -589,7 +589,7 @@ function PhaserSceneViewport(props: Props) {
           }
 
           const liveSource = props.scene
-            ? getSceneObjects(props.scene, props.prefabs).find((candidate) => candidate.id === entry.id)?.source as unknown as Record<string, unknown> | undefined
+            ? getSceneNodeEntries(props.scene, props.prefabs).find((candidate) => candidate.id === entry.id)?.source as unknown as Record<string, unknown> | undefined
             : undefined;
           transformDrag = {
             id: entry.id,
