@@ -1046,7 +1046,7 @@ Normative detail: [docs/package-management-reference.md](package-management-refe
 
 Цели «1000 файлов открываются за 3 секунды», «500+ объектов без просадок» и «холодный старт за 2 секунды» не являются подтверждёнными характеристиками. Прежде чем сделать их release gate, надо определить fixture, тестовую машину, методику и baseline текущей версии.
 
-Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять отдельно время до готового UI, frame time p50/p95/p99, main-thread CPU, время gameplay systems, physics, rendering, память/heap high-water, allocations/GC, загрузку ресурсов и startup/teardown editor и preview. Сравнительный workload, методика и acceptance criteria Data-Oriented ECS заданы [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять отдельно время до готового UI, frame time p50/p95/p99, main-thread CPU, время gameplay systems, physics, rendering, память/heap high-water, allocations/GC, загрузку ресурсов и startup/teardown editor и preview. Сравнительный workload, методика и acceptance criteria Data-Oriented ECS заданы [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Не делать вывод о преимуществе desktop shell (Tauri/Electron) только по размеру приложения; такой выбор требует отдельного измерения на целевых сценариях.
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
