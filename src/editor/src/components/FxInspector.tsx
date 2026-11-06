@@ -32,7 +32,6 @@ type FxField = NumericField | TextField | BooleanField;
 
 interface Props {
   effects: FxEntry[];
-  unsupportedTypes: string[];
   onAdd: (type: FxType) => void;
   onUpdate: (id: string, patch: Partial<Omit<FxObject, "id" | "type">>) => void;
   onRemove: (id: string) => void;
@@ -181,11 +180,6 @@ function FxInspector(props: Props) {
         </label>
         <button class="subtle-button" data-testid="add-fx" onClick={() => props.onAdd(newType())}>Add effect</button>
       </div>
-      <Show when={props.unsupportedTypes.length > 0}>
-        <div class="inspector-note" role="status" data-testid="unsupported-fx-note">
-          Legacy effects not editable in this Host: {props.unsupportedTypes.join(", ")}. Their serialized data is preserved.
-        </div>
-      </Show>
       <Show when={props.effects.length > 0} fallback={<div class="component-empty">No supported effects. Add Circle, Bloom, Gradient or Shine to this object.</div>}>
         <Index each={props.effects}>
           {(entry) => (

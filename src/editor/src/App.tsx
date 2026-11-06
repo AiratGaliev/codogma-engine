@@ -507,7 +507,6 @@ function App() {
     return selected ? getNativeNodeEffects(selected.node) : [];
   });
 
-  const selectedUnsupportedFxTypes = createMemo(() => [] as string[]);
 
   const visibleSceneObjects = createMemo(() => {
     const query = hierarchySearch().trim().toLowerCase();
@@ -3285,7 +3284,6 @@ function App() {
                 <Show when={selectedObject() && selectedObject()?.type !== "Prefab"}>
                   <FxInspector
                     effects={selectedFxEffects()}
-                    unsupportedTypes={selectedUnsupportedFxTypes()}
                     onAdd={addFxToSelected}
                     onUpdate={updateSelectedFx}
                     onRemove={removeSelectedFx}
