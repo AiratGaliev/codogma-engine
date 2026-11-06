@@ -25,8 +25,8 @@
 
 | Package | Status | Intended scope | Dependency / exclusion rule | Linear owner |
 |---|---|---|---|---|
-| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Не является зависимостью `@codogma/cge`; не импортирует Phaser, DOM, Editor, Node-only APIs или platform SDK | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
-| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Отдельная peer dependency/adapter; не делает базовый `@codogma/runtime-phaser` зависимым от ECS | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
+| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Dependency boundary and host-neutral constraints: ADR-0004 | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
+| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Optional adapter boundary and base-runtime independence: ADR-0004 | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
 
 Таблица выше — инвентаризация package roots, статусов и владельцев. ECS feature IDs/providers, opt-in/dependency relationships, mapping между object/component Core и runtime ECS, а также правила физического исключения optional code из Release определены только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
