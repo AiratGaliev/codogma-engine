@@ -4,6 +4,8 @@
 **Дата:** 05.11.2026  
 **Связанные документы:** [ТЗ](../technical-specification.md), [roadmap](../roadmap.md), [ADR-0001](ADR-0001-core-architecture.md), [ADR-0003](ADR-0003-package-architecture-and-management.md), [performance baseline](../performance-baseline.md), [capability matrix](../capability-matrix.md).
 
+**Канонический источник:** этот ADR — единственный нормативный источник требований к optional Data-Oriented ECS: package/API boundaries, data ownership and identity mapping, lifecycle/tick, Phaser integration, EVA.js reuse policy, feature selection, production exclusion and performance acceptance. Другие документы могут сохранять собственные сведения о текущем состоянии, владельцах, рисках, очередности работ и фактических измерениях, но должны ссылаться сюда вместо повторения ECS-контрактов.
+
 ## Контекст
 
 Codogma уже имеет базовую host-neutral object/component модель в `@codogma/cge`: Project Model, Component Schema, ComponentRegistry, ComponentWorld, lifecycle и внешний tick contract. Эта модель нужна для удобного авторинга, Inspector, Prefab и обычных игровых объектов. Она не является data-oriented ECS: runtime records сейчас используют объектные структуры и Map/array lookup, а ComponentWorld обновляет компоненты в порядке Node/attachment, затем запускает системы.
@@ -92,7 +94,7 @@ References:
 - startup / scene activation / teardown;
 - при необходимости CPU utilization процесса по описанной и одинаковой методике.
 
-Фиксировать browser/version, OS/device/CPU, GPU/renderer, viewport/DPR, build profile, fixture/seed, warm-up, sampling window и фоновые условия. Node synthetic no-op benchmarks остаются полезны для регрессии package-level алгоритмов, но не заменяют browser acceptance. Headless/SwiftShader не является доказательством GPU или mobile performance.
+Фиксировать browser/version, OS/device/CPU, GPU/renderer, viewport/DPR, build profile, fixture/seed, warm-up, sampling window и фоновые условия. Для каждой сравниваемой реализации использовать одинаковые seed, spawn/despawn schedule, entity/component counts, активные состояния, AI decision frequency, collision/physics setup, assets и visual output; тестовые cohorts для PERF-09 — 50/100/220+ entities. Нельзя отключать physics или rendering только у одного кандидата. Node synthetic no-op benchmarks остаются полезны для регрессии package-level алгоритмов, но не заменяют browser acceptance. Headless/SwiftShader не является доказательством GPU или mobile performance.
 
 60 FPS означает общий frame budget около 16.67 ms, но не предписывает Core/ECS постоянную квоту 1.67 ms. Подбюджеты назначаются только после повторяемых measurements на целевых устройствах и с запасом на physics/render/browser/SDK work.
 
@@ -101,7 +103,7 @@ ECS принимается как оптимизация только там, г
 ### 7. Package selection и production build
 
 - Установка `@codogma/ecs`, project feature enablement и включение в конкретный target build — разные состояния.
-- Feature Registry описывает optional feature `runtime.ecs` и её package provider/dependencies; Phaser integration объявляется отдельно (`runtime.ecs-phaser`).
+- Feature IDs и providers фиксированы: `runtime.ecs` → `@codogma/ecs`; `runtime.ecs-phaser` → `@codogma/ecs-phaser` и требует `runtime.ecs` плюс совместимый Phaser runtime provider. Установка пакета, доступность provider, project enablement, target inclusion и runtime activation — разные состояния; одно не должно неявно создавать другое.
 - Если пакет не установлен/не включён, Editor/Build выдаёт ясную диагностику при ссылке на его feature; установка не происходит автоматически.
 - Если ECS выключен, production artifact должен физически не содержать ECS package code и его adapter modules. Одного UI checkbox или feature descriptor недостаточно: нужны import graph/output manifest/size evidence.
 - Editor-only, build-only и QA packages не попадают в game runtime. `@codogma/cge` остаётся базовым package, остальные runtime packages включаются только по выбору проекта и target.

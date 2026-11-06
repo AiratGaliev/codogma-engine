@@ -94,22 +94,17 @@
 | Capability | Current implementation / evidence | Target architecture | Status / owner |
 |---|---|---|---|
 | Host-neutral object/component Core | `packages/cge`: versioned Project/Scene/Prefab schema, Component Schema/Registry, ComponentWorld, explicit external tick, lifecycle/structural mutations/disposal; COD-26 и PR #43 harden lifecycle | Базовый API для обычных Node/Components, Inspector, validation и authoring; без Phaser dependency и собственного game loop | **Foundation implemented; end-to-end Core partial** — COD-26, COD-27, COD-105 |
-| Data-Oriented ECS storage | Нет `packages/ecs`, нет archetype/sparse-set runtime и browser comparative fixture | Независимый optional `@codogma/ecs` package с World/Entity handles, storage, Queries, Systems/scheduler, lifecycle и deterministic disposal | **Designed / not implemented** — ADR-0004, COD-111 Todo |
-| ECS ↔ Phaser adapter | Нет `packages/ecs-phaser` | Отдельный optional `@codogma/ecs-phaser`; Phaser tick ownership, entity/view mapping, one-owner Transform and cleanup | **Planned / not implemented** — ADR-0004, COD-112 Backlog |
-| ECS authoring / persisted data mapping | Component Schema v1 существует; ECS storage integration не реализована | Явное mapping между Project Model Node/component identity и runtime ECS handles; persisted Component Schema не равна ECS memory layout | **Not implemented** — входит в COD-111/112 scope и последующие Editor integration tasks |
-| Performance comparison | Core synthetic Node no-op benchmark exists; no target browser/gameplay ECS comparison or CPU decomposition | Same browser workload: object components vs centralized systems vs ECS vs ECS+Phaser; p50/p95/p99, main-thread/system/query, physics/render, GC/heap | **Protocol extended; measurements outstanding** — COD-21, COD-48, COD-111 |
-| Feature Registry | Design/task contracts exist; no fully accepted end-to-end registry / package-provided descriptors | `runtime.ecs` provider `@codogma/ecs`; `runtime.ecs-phaser` provider `@codogma/ecs-phaser`; installed/available/project-enabled/target-included/activated are distinct | **Planned** — COD-34, COD-51 |
+| Data-Oriented ECS storage | Нет `packages/ecs`, нет archetype/sparse-set runtime и browser comparative fixture | Optional `@codogma/ecs`; нормативный package contract — ADR-0004 | **Designed / not implemented** — ADR-0004, COD-111 Todo |
+| ECS ↔ Phaser adapter | Нет `packages/ecs-phaser` | Optional `@codogma/ecs-phaser`; integration contract — ADR-0004 | **Planned / not implemented** — ADR-0004, COD-112 Backlog |
+| ECS authoring / persisted data mapping | Component Schema v1 существует; ECS storage integration не реализована | Mapping contract определяется ADR-0004 | **Not implemented** — COD-111/112 и последующие Editor integration tasks |
+| Performance comparison | Core synthetic Node no-op benchmark exists; no target browser/gameplay ECS comparison or CPU decomposition | Protocol and acceptance criteria — ADR-0004; measurement record — PERF-09 | **Protocol extended; measurements outstanding** — COD-21, COD-48, COD-111 |
+| Feature Registry | Design/task contracts exist; no fully accepted end-to-end registry / package-provided descriptors | ECS-specific feature IDs/providers — ADR-0004; generic registry — COD-34/COD-51 | **Planned** — COD-34, COD-51 |
 | HTML5 Build Analyzer | Current Phaser integration uses vendored full Phaser 4.2.1 bundle; no verified Phaser feature pruning output | Analyze project/package/import/asset graph, Phaser variant/API coverage, Editor/build/QA exclusions; output reproducible inclusion/exclusion and size report | **Planned; actual Phaser pruning unverified** — COD-33, COD-35, COD-54 |
 | Phaser 4.2.1 build variants | Vendored `scripts/phaser(.min).js`; upstream tag contains full UMD and Arcade-only UMD (without Matter.js); package does not declare Arcade-only export subpath | Compare official UMD artifact and reproducible custom/ESM route only through a pinned fixture; ESM named exports do not imply internal tree-shaking | **Inventory known; selection not accepted** — COD-35 |
 
-### Инварианты для оценки состояния
+### Интерпретация ECS status
 
-- `@codogma/cge` остаётся полезным без установки ECS; ECS не является обязательной частью первого Project Model → Loader → Phaser → Preview → HTML5 build slice.
-- `@codogma/ecs` и `@codogma/ecs-phaser` — архитектурно утверждённые package names, но не active package roots текущей ветки.
-- Base `@codogma/runtime-phaser` не должен иметь ECS dependency; optional integration package живёт отдельно.
-- ECS runtime Entity handles не заменяют Project Model Node IDs и не становятся persisted identity автоматически.
-- Выключенная capability считается удалённой из Release только при output-level evidence, а не по наличию checkbox/metadata.
-- Нельзя объявлять ECS performance gain без одинакового browser/device fixture и реальных raw samples.
+Эта матрица отражает состояние исходников и evidence на указанном baseline, а не заменяет архитектурную спецификацию. Package/API boundaries, dependency and feature rules, data mapping, integration, production exclusion и performance acceptance Data-Oriented ECS определяются только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ## Ограничения аудита и следующая актуализация
 

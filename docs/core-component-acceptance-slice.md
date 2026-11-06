@@ -16,6 +16,8 @@
 
 ## 2. Native persisted contract
 
+The fixture and tests cover the host-neutral object/component Project Model and native Scene-to-Build workflow. This acceptance slice does not implement or gate optional Data-Oriented ECS; its contract is defined in [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+
 The fixture and tests cover:
 
 - Project/Scene/Node/Transform/Component/Prefab/Asset/Script schemas and version fields.

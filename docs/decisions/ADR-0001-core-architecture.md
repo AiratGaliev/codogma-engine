@@ -31,12 +31,7 @@ Codogma Core должен предоставлять независимые от
 
 ### 3. Object/component Core и optional Data-Oriented ECS — отдельные уровни
 
-- Первый Core acceptance scenario использует object/component модель: Project → Scene → Node/Transform → TypeScript Component.
-- ComponentRegistry и ComponentWorld принадлежат Core и не зависят от UI.
-- Data-Oriented ECS не входит в обязательный `@codogma/cge`. Optional `@codogma/ecs` и его adapters развиваются отдельно, исходя из измеримого workload.
-- Совместное использование object/component модели и ECS требует явного adapter/mapping и одного владельца каждого mutable runtime value.
-
-Подробное решение о package boundaries и производительности закреплено в [ADR-0004](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+`@codogma/cge` предоставляет host-neutral object/component модель для обычных Node и Component instances; `ComponentRegistry` и `ComponentWorld` остаются частью Core. Data-Oriented ECS не является обязательной частью Core или базового Phaser runtime и развивается как отдельная optional capability. Его package boundaries, identity/data mapping, ownership, lifecycle, tick, Phaser adapter, feature/build selection и performance acceptance определяются только [ADR-0004](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); этот ADR фиксирует только место Core в общей архитектуре.
 
 ### 4. Явный lifecycle и host-neutral Preview
 
