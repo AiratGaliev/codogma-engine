@@ -1106,19 +1106,6 @@ function App() {
     }
   }
 
-  async function createTypeScriptFile(path: string, content: string) {
-    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.tsx?$/i.test(path) || path.split("/").includes("..")) {
-      throw new Error("TypeScript source path must be a relative .ts/.tsx path inside the project.");
-    }
-    assertNewProjectFilePath(path);
-    const directory = path.split("/").slice(0, -1).join("/");
-    if (directory) await ensureProjectFolder(directory);
-    await writeProjectFile(path, content);
-    await refreshProjectTree();
-    await openTypeScriptFile(path, content);
-    log("success", `Created TypeScript source ${path}`);
-  }
-
   async function openProjectFile(path: string) {
     const normalized = path.toLowerCase();
     if (normalized.endsWith(".cge-scene.json") || normalized.endsWith(".cge-prefab.json")) {
