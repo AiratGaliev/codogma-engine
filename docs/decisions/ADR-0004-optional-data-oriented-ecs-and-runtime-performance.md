@@ -110,6 +110,14 @@ ECS принимается как оптимизация только там, г
 - Если ECS выключен, production artifact должен физически не содержать ECS package code и его adapter modules. Одного UI checkbox или feature descriptor недостаточно: нужны import graph/output manifest/size evidence.
 - Editor-only, build-only и QA packages не попадают в game runtime. `@codogma/cge` остаётся базовым package, остальные runtime packages включаются только по выбору проекта и target.
 
+### Проверки и критерии приёмки
+
+- **`@codogma/ecs`:** automated correctness tests для entity/component storage, typed Queries, system scheduler/order, lifecycle, error policy и deterministic disposal. Отдельные fixtures покрывают structural mutations во время update, стабильность iteration, создание/удаление сущностей и компонентов, pause/disable и повторный teardown.
+- **Project Model mapping:** tests подтверждают явное сопоставление persisted Node/component identities с runtime ECS handles, отсутствие автоматического отождествления ID и единственного owner для каждого mutable value. Повторные update/resize, pause/resume и destroy/recreate не должны приводить к drift или дублированному состоянию.
+- **`@codogma/ecs-phaser`:** integration tests проверяют Phaser-controlled tick без второго loop, one-owner Transform/physics mapping, pause/resume, scene shutdown, обработку ошибок и освобождение display objects, bodies и listeners при shutdown/dispose. Adapter overhead измеряется отдельно от ECS systems и Phaser renderer/physics.
+- **Browser performance:** PERF-09 фиксирует сравнение всех вариантов из раздела 6 на сопоставимом browser workload; сохраняются raw samples/traces и окружение. Node synthetic benchmarks остаются package regression tests, но не заменяют browser evidence.
+- **Production exclusion:** consumer/build fixture без ECS доказывает отсутствие кода `@codogma/ecs` и `@codogma/ecs-phaser` в release artifact; descriptor или выключенный UI control без output-level evidence не считается достаточным.
+
 ## Последствия
 
 **Положительные:** object/component Core остаётся простым и доступным; Data-Oriented ECS может развиваться независимо; игры без массовых сущностей не платят за ECS dependency; Phaser boundary остаётся заменяемой; оптимизационные claims подтверждаются на браузерных workloads.
