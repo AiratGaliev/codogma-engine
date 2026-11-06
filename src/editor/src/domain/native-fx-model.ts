@@ -4,6 +4,8 @@ import {
   type NodeDocument,
 } from "@codogma/cge";
 import { updateNativeNode, type EditorDocument } from "./native-scene-model.js";
+import { FX_COMPONENT_TYPES } from "./native-component-types.js";
+export { FX_COMPONENT_TYPES } from "./native-component-types.js";
 
 export type FxType = "Circle" | "Bloom" | "Gradient" | "Shine";
 export type FxColor = string | number;
@@ -51,13 +53,6 @@ export interface ShineFx extends FxBase {
   yoyo: boolean;
 }
 export type FxObject = CircleFx | BloomFx | GradientFx | ShineFx;
-
-export const FX_COMPONENT_TYPES: Readonly<Record<FxType, string>> = {
-  Circle: "com.codogma.fx.circle",
-  Bloom: "com.codogma.fx.bloom",
-  Gradient: "com.codogma.fx.gradient",
-  Shine: "com.codogma.fx.shine",
-};
 
 const FX_TYPE_BY_ID = new Map(
   Object.entries(FX_COMPONENT_TYPES).map(([type, typeId]) => [typeId, type as FxType]),

@@ -61,6 +61,39 @@ testCase("rejects unpublished or unsupported document shapes at the native bound
   assert.throws(() => parseNativeSceneDocument(project, "missing-scene", sceneContent), /not registered in project.json/);
 });
 
+testCase("accepts only built-in renderer/FX types and Project-registered script component types", () => {
+  const document = JSON.parse(sceneContent) as Record<string, any>;
+  const player = document.rootNodes[0];
+  assert.ok(player);
+  player.components.push({
+    id: "component-native-image",
+    typeId: "com.codogma.renderer.image",
+    schemaVersion: 1,
+    enabled: true,
+    properties: { assetId: "asset-player-sprite" },
+  });
+  player.components.push({
+    id: "component-native-bloom",
+    typeId: "com.codogma.fx.bloom",
+    schemaVersion: 1,
+    enabled: true,
+    properties: { threshold: 0.5 },
+  });
+  assert.doesNotThrow(() => parseNativeSceneDocument(project, "scene-level", JSON.stringify(document)));
+
+  player.components.push({
+    id: "component-unregistered",
+    typeId: "com.example.unregistered",
+    schemaVersion: 1,
+    enabled: true,
+    properties: {},
+  });
+  assert.throws(
+    () => parseNativeSceneDocument(project, "scene-level", JSON.stringify(document)),
+    /Component type com\.example\.unregistered is not registered/,
+  );
+});
+
 testCase("rejects mismatched manifest identity and non-native file extension", () => {
   assert.throws(() => parseNativeSceneDocument(project, "scene-level", sceneContent.replace('"scene-level"', '"another-scene"')), /does not match document id/);
   const wrongExtensionProject = {

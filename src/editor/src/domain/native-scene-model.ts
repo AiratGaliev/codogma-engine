@@ -7,14 +7,10 @@ import {
   type SceneDocumentV1,
 } from "@codogma/cge";
 import { resolveNativePrefabRoot } from "./native-prefab-model.js";
+import { BUILTIN_COMPONENT_TYPES } from "./native-component-types.js";
+export { BUILTIN_COMPONENT_TYPES } from "./native-component-types.js";
 
 export type EditorDocument = SceneDocumentV1 | PrefabDocumentV1;
-
-export const BUILTIN_COMPONENT_TYPES = {
-  imageRenderer: "com.codogma.renderer.image",
-  textRenderer: "com.codogma.renderer.text",
-  container: "com.codogma.renderer.container",
-} as const;
 
 const RENDERER_TYPES: Readonly<Record<string, "Image" | "Text" | "Container">> = {
   [BUILTIN_COMPONENT_TYPES.imageRenderer]: "Image",

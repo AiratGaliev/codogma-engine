@@ -1,3 +1,4 @@
+import { BUILTIN_COMPONENT_TYPE_IDS } from "./native-component-types.js";
 import {
   parsePrefabDocument,
   parseProjectDocument,
@@ -89,6 +90,10 @@ function createSceneValidationContext(project: ProjectDocumentV1) {
   return {
     assets: new Map(project.assets.map((asset) => [asset.id, asset])),
     prefabIds: new Set(project.prefabs.map((prefab) => prefab.id)),
+    registeredComponentTypes: new Set([
+      ...BUILTIN_COMPONENT_TYPE_IDS,
+      ...project.componentModules.map((module) => module.typeId),
+    ]),
   };
 }
 
