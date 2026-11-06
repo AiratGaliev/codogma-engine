@@ -12,7 +12,7 @@ The current implementation provides a browser-based authoring environment, a loc
 
 ## Project direction
 
-Codogma Engine is a standalone 2D Web-first engine with its own native Project Model, TypeScript Component system, runtime and SolidJS Editor Host. The temporary UI client under source/editor/ remains available only until production /editor/ cutover (COD-87) and its bounded rollback window; the SolidJS Host is the target application. See [ADR-0007](docs/decisions/ADR-0007-native-codogma-project-model.md), [Editor UI migration plan](docs/editor-ui-migration.md) and [ADR-0005](docs/decisions/ADR-0005-solidjs-editor-host.md).
+Codogma Engine is a standalone 2D Web-first engine with its own native Project Model, TypeScript Component system, runtime and SolidJS Editor Host. The temporary UI client under `source/editor/` is frozen and retained only as a read-only inventory/temporary rollback artifact until production `/editor/` cutover (COD-87), the bounded rollback window and physical removal (COD-88). All new UI and authoring workflows belong to `src/editor/`; Core/runtime/build/services use native Codogma contracts. The frozen legacy boundary prohibits feature work, ordinary bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance and modernization of legacy code, manifests, lockfiles, scripts or dependencies. The only exception is a minimal, one-time security mitigation for a confirmed critical vulnerability while the legacy route is still receiving production traffic; it must be strictly necessary to mitigate that vulnerability and must not become ongoing support. Cutover/rollback work is limited to the technical actions required by COD-87. See [ADR-0007](docs/decisions/ADR-0007-native-codogma-project-model.md), [Editor UI migration plan](docs/editor-ui-migration.md), [ADR-0005](docs/decisions/ADR-0005-solidjs-editor-host.md) and [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md) (sole normative source for optional Data-Oriented ECS).
 
 Development priorities:
 
@@ -119,7 +119,7 @@ npm run dev:editor-host
 
 Open **http://127.0.0.1:5173/**. The Vite server binds to IPv4 loopback, uses strict port 5173 and proxies only the existing `/editor/*` backend routes to port 3000. The exact Origin allow-list is required because the proxy rewrites the backend Host header; do not replace it with a wildcard.
 
-The first Host slice provides a Phaser-backed Scene Canvas, object selection, Move/Rotate/Scale gestures, Hierarchy and Inspector/Transform synchronization, and an initial Game View iframe. This describes the implemented UI surface; complete native Project Model persistence, Scene Loader and Preview lifecycle are separate implementation stages. The temporary UI client remains available at
+The first Host slice provides a Phaser-backed Scene Canvas, object selection, Move/Rotate/Scale gestures, Hierarchy and Inspector/Transform synchronization, and an initial Game View iframe. This describes the implemented UI surface; complete native Project Model persistence, Scene Loader and Preview lifecycle are separate implementation stages. The frozen legacy client remains available only for the existing route and bounded rollback arrangement until COD-87/COD-88.
 
 Root shortcuts:
 
@@ -170,7 +170,7 @@ Use a project directory you control. Avoid pointing the development server at a 
 | <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package; startup fails with an actionable error if the package is missing or has not been built. |
 | <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
 | <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and the MCP HTTP/stdio security boundary. |
-| <code>source/editor/</code> | Temporary browser editor UI client, removed after the SolidJS production cutover and rollback window. |
+| <code>source/editor/</code> | Frozen legacy Colibri UI client: read-only inventory and temporary rollback artifact only; removed after the SolidJS production cutover and rollback window (COD-88). No ongoing maintenance or modernization. |
 | <code>src/editor/</code> | Independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons and domain/browser tests. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
@@ -251,8 +251,8 @@ During the UI cutover window, the two independent UIs run as separate browser ap
 
 | UI host | Development address | Role |
 |---|---|---|
-| Temporary UI client |
-| New SolidJS Editor Host | `http://127.0.0.1:5173/` | Independent Vite dev server; configurable port with strict-port behaviour |
+| Temporary UI client | `http://127.0.0.1:3000/editor/` | Frozen legacy client; read-only inventory and rollback only |
+| New SolidJS Editor Host | `http://127.0.0.1:5173/` | Independent Vite dev server; all new UI development and authoring workflows |
 
 The intended development topology is **two UI hosts, one backend API**. The Vite server proxies the existing `/editor/*` project/API routes to the Node.js server on port 3000; browser code should call relative proxied paths rather than making direct cross-origin requests to the backend. The Node server supports an exact Origin allow-list: configure only `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173` for the Vite origin. Do not use `*`, do not bind either development server to a public interface, and keep the backend's loopback and Host protections enabled. The Vite port is not the Node server's `PORT` variable.
 
@@ -260,7 +260,7 @@ Both clients may be open for visual comparison, but **do not edit the same proje
 
 The current Editor SSE transport broadcasts commands to connected clients and accepts the first matching result. Until session-aware routing is implemented in [COD-85](https://linear.app/codogma-engine/issue/COD-85/realizovat-session-aware-mcp-sse-routing-dlya-neskolkih-editor-host), only one Editor session may own the shared SSE connection. Concurrent Host sessions require isolated backend/transport instances. This restriction is separate from HTTP MCP tools that do not need a live editor session.
 
-The two-port arrangement is a development setup, not a permanent production requirement. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the temporary UI route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
+The two-port arrangement is a development setup, not a permanent production requirement. The legacy client is not an active development target: it is frozen for read-only inventory and temporary rollback only. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the temporary UI route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
 
 ### HTTP endpoints
 
