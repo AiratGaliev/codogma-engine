@@ -120,3 +120,12 @@ testCase("edits native Prefab root and protects its single-root invariant", () =
   assert.equal(next.root.children.length, 1);
   assert.throws(() => removeSceneNode(prefab, "node-crate"), /root Node/);
 });
+
+
+testCase("updates native Image Asset references through the renderer component", () => {
+  const imageScene = createSceneNode(scene(), "Image", "asset-player-sprite") as SceneDocumentV1;
+  const node = findSceneNode(imageScene, getSceneNodeEntries(imageScene).at(-1)!.id)!;
+  const updated = updateSceneNode(imageScene, node.id, { assetId: "asset-background" }) as SceneDocumentV1;
+  const renderer = findSceneNode(updated, node.id)!.components.find((component) => component.typeId === BUILTIN_COMPONENT_TYPES.imageRenderer);
+  assert.equal(renderer?.properties.assetId, "asset-background");
+});

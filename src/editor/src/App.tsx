@@ -10,21 +10,26 @@ import {
 import designTokens from "../design-system/tokens.json";
 import {
   createSceneNode,
+  findSceneNode,
   getSceneNodeEntries,
   removeSceneNode,
+  reparentSceneNode,
   updateSceneNode,
   isPrefabDocument,
   type EditorDocument,
   type SceneNodeEntry,
   type SceneNodePatch,
+  type SceneNodeKind,
 } from "./domain/native-scene-model.ts";
 import {
   findPrefabReferenceByAssetPath,
+  createNativeSceneDocument,
   findSceneReferenceByAssetPath,
   parseNativePrefabDocument,
   parseNativeProjectDocument,
   parseNativeSceneDocument,
   PROJECT_MANIFEST_PATH,
+  registerNativeScene,
   resolvePrefabAsset,
   resolveSceneAsset,
   serializeNativePrefabDocument,
@@ -55,6 +60,7 @@ import {
 import {
   attachNativeComponent,
   detachNativeComponent,
+  setNativeComponentEnabled,
 } from "./domain/native-components-model.ts";
 import {
   addNativeNodeFx,
@@ -68,6 +74,7 @@ import {
   getProjectFiles,
   readProjectFile,
   writeProjectFile,
+  deleteProjectFiles,
   createProjectFolder,
   type ProjectEntry,
 } from "./services/editor-api";
@@ -1160,43 +1167,65 @@ function App() {
     catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  async function createPrefabFromSelected() {
+  async function createNativePrefabFromNode(nodeId: string, pathValue: string, nameValue?: string) {
     const current = scene();
-    const selected = selectedObject();
     const project = projectDocument();
-    if (!current || !selected || !project || isPrefabDocument(current)) return;
+    if (!current || !project || isPrefabDocument(current)) throw new Error("Open a native Scene before creating a Prefab.");
+    const selected = getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).find((item) => item.id === nodeId);
+    if (!selected) throw new Error(`Scene Node "${nodeId}" was not found.`);
+    const path = readMcpPath(pathValue, "path");
+    if (!path.toLowerCase().endsWith(".cge-prefab.json")) {
+      throw new Error("Native Prefab path must end with .cge-prefab.json.");
+    }
+    const name = nameValue?.trim() || selected.name;
+    const directory = path.split("/").slice(0, -1).join("/");
+    assertNewProjectFilePath(path);
+    if (directory) await ensureProjectFolder(directory);
+
+    const prefab = createNativePrefabDocument(selected.node, name);
+    const assetId = globalThis.crypto?.randomUUID?.();
+    if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
+    const nextProject = registerNativePrefab(project, prefab, assetId, path);
+    const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
+    const manifestContent = serializeNativeProjectDocument(nextProject);
+    await writeProjectFile(path, prefabContent);
+    try {
+      await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
+    } catch (error) {
+      try { await deleteProjectFiles([path]); }
+      catch (rollbackError) {
+        throw new Error(`Project manifest update failed and the newly written Prefab could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
+      }
+      throw error;
+    }
+
+    const withoutSource = removeSceneNode(current, selected.id);
+    const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
+      name: selected.name,
+      transform: selected.node.transform,
+      parentId: selected.parentId,
+    });
+    const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
+    setProjectDocument(nextProject);
+    setSavedProjectContent(manifestContent);
+    setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
+    applySceneChange(nextScene, instance?.id ?? null);
+    if (!(await saveScene())) {
+      throw new Error("Prefab and Project manifest were saved, but the Scene instance could not be saved. The Scene remains dirty for retry.");
+    }
+    await refreshProjectTree();
+    return { prefabId: prefab.id, assetId, path, instanceId: instance?.id ?? null };
+  }
+
+  async function createPrefabFromSelected() {
+    const selected = selectedObject();
+    if (!selected) return;
     const baseName = selected.name.replace(/[^A-Za-z0-9_-]+/g, "_") || "Prefab";
     const path = window.prompt("Save native Prefab as", `prefabs/${baseName}.cge-prefab.json`)?.trim();
     if (!path) return;
-    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.cge-prefab\.json$/i.test(path) || path.split("/").includes("..")) {
-      log("error", "Prefab path must be a relative .cge-prefab.json path inside the project.");
-      return;
-    }
-    const directory = path.split("/").slice(0, -1).join("/");
     try {
-      assertNewProjectFilePath(path);
-      if (directory) await ensureProjectFolder(directory);
-      const prefab = createNativePrefabDocument(selected.node, baseName);
-      const assetId = globalThis.crypto?.randomUUID?.();
-      if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
-      const nextProject = registerNativePrefab(project, prefab, assetId, path);
-      const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
-      await writeProjectFile(path, prefabContent);
-      const manifestContent = serializeNativeProjectDocument(nextProject);
-      await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
-      const withoutSource = removeSceneNode(current, selected.id);
-      const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
-        name: selected.name,
-        transform: selected.node.transform,
-        parentId: selected.parentId,
-      });
-      const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
-      setProjectDocument(nextProject);
-      setSavedProjectContent(manifestContent);
-      setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
-      applySceneChange(nextScene, instance?.id ?? null);
-      await refreshProjectTree();
-      log("success", `Created native Prefab ${path} and replaced the selected Node with a Prefab instance`);
+      const result = await createNativePrefabFromNode(selected.id, path, baseName);
+      log("success", `Created native Prefab ${result.path} and replaced the selected Node with a Prefab instance`);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -2326,38 +2355,266 @@ function App() {
     }
   }
 
+  function readMcpString(value: unknown, field: string): string {
+    if (typeof value !== "string" || !value.trim()) throw new Error(`MCP command requires a non-empty ${field}.`);
+    return value.trim();
+  }
+
+  function requireActiveMcpDocument(args: Record<string, unknown>, allowPrefab = true): EditorDocument {
+    const requestedPath = args.path === undefined ? scenePath() : readMcpPath(args.path, "path");
+    const current = scene();
+    if (!requestedPath || requestedPath !== scenePath() || !current) {
+      throw new Error("The requested native document is not the active document in the SolidJS Editor Host.");
+    }
+    if (!allowPrefab && isPrefabDocument(current)) {
+      throw new Error("This operation requires an active native Scene, not a Prefab document.");
+    }
+    return current;
+  }
+
+  async function persistMcpSceneChange(next: EditorDocument, selectionAfter = selectedId()) {
+    applySceneChange(next, selectionAfter);
+    if (!(await saveScene())) {
+      undo();
+      throw new Error("The native document change could not be saved; the in-memory change was reverted.");
+    }
+    return next;
+  }
+
   const editorMcpHandlers: Record<string, EditorMcpHandler> = {
-    "ide-get-active-scene": async () => {
-      const current = scene();
-      const currentPath = scenePath();
-      if (!current || !currentPath) throw new Error("There is no Scene document open in the SolidJS Editor Host.");
-      const settings = (current as EditorDocument & { settings?: Record<string, unknown> }).settings ?? {};
-      return {
-        scenePath: currentPath,
-        sceneKey: settings.sceneKey,
-        sceneId: current.id,
-      };
+    "scene-list": async () => {
+      const project = projectDocument();
+      if (!project) throw new Error("The native Project manifest is not loaded.");
+      return project.scenes.map((reference) => {
+        const asset = project.assets.find((item) => item.id === reference.assetId);
+        return { id: reference.id, assetId: reference.assetId, path: asset?.path ?? null };
+      });
     },
-    "ide-open-scene": async (args) => {
-      const requestedPath = readMcpPath(args.scenePath, "scenePath");
+    "scene-get-active": async () => {
+      const current = scene();
+      const path = scenePath();
+      if (!current || !path) throw new Error("There is no native document open in the SolidJS Editor Host.");
+      return { path, id: current.id, name: current.name, documentType: isPrefabDocument(current) ? "prefab" : "scene" };
+    },
+    "scene-open": async (args) => {
+      const requestedPath = readMcpPath(args.path, "path");
       const opened = await loadScene(requestedPath);
       if (!opened || scenePath() !== requestedPath) {
-        throw new Error(`Scene "${requestedPath}" was not opened. The operation may have been cancelled or the file is invalid.`);
+        throw new Error(`Native document "${requestedPath}" was not opened. The operation may have been cancelled or the file is invalid.`);
       }
-      return `Scene opened in the SolidJS Editor Host: ${requestedPath}`;
+      return { path: requestedPath, id: scene()?.id ?? null };
     },
-    "ide-save-scene": async (args) => {
-      const requestedPath = readMcpPath(args.scenePath, "scenePath");
-      if (scenePath() !== requestedPath) {
-        throw new Error(`Scene "${requestedPath}" is not the active scene in the SolidJS Editor Host. Open it first.`);
+    "scene-save": async (args) => {
+      const requestedPath = args.path === undefined ? scenePath() : readMcpPath(args.path, "path");
+      if (!requestedPath || scenePath() !== requestedPath) {
+        throw new Error("The requested native document is not the active document.");
       }
-      if (!(await saveScene())) throw new Error(`Could not save scene "${requestedPath}".`);
-      return `Scene saved: ${requestedPath}`;
+      if (!(await saveScene())) throw new Error(`Could not save native document "${requestedPath}".`);
+      return { path: requestedPath, saved: true };
     },
-    "scene-get-screenshot": async (args) => {
-      const requestedPath = args.scenePath === undefined ? scenePath() : readMcpPath(args.scenePath, "scenePath");
+    "scene-create": async (args) => {
+      const project = projectDocument();
+      if (!project) throw new Error("The native Project manifest is not loaded.");
+      if (dirty() || projectDirty() || animationDirty() || scriptDirty()) throw new Error("Save the active native document, Animation and Script changes before creating another Scene.");
+      const name = readMcpString(args.name, "name");
+      const path = readMcpPath(args.path, "path");
+      const sceneDocument = createNativeSceneDocument(name);
+      const assetId = globalThis.crypto?.randomUUID?.();
+      if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
+      const nextProject = registerNativeScene(project, sceneDocument, assetId, path);
+      const sceneContent = serializeNativeSceneDocument(nextProject, sceneDocument);
+      const manifestContent = serializeNativeProjectDocument(nextProject);
+      assertNewProjectFilePath(path);
+      const directory = path.split("/").slice(0, -1).join("/");
+      if (directory) await ensureProjectFolder(directory);
+      await writeProjectFile(path, sceneContent);
+      try {
+        await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
+      } catch (error) {
+        try { await deleteProjectFiles([path]); }
+        catch (rollbackError) {
+          throw new Error(`Project manifest update failed and the new Scene could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
+        }
+        throw error;
+      }
+      setProjectDocument(nextProject);
+      setSavedProjectContent(manifestContent);
+      await refreshProjectTree();
+      if (!(await loadScene(path, true))) throw new Error(`Native Scene "${path}" was created and registered but could not be opened.`);
+      return { id: sceneDocument.id, assetId, path, name: sceneDocument.name };
+    },
+    "scene-get-document": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      return current;
+    },
+    "scene-get-nodes": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      return getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        type: entry.type,
+        parentId: entry.parentId,
+        depth: entry.depth,
+        node: entry.node,
+      }));
+    },
+    "scene-create-node": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const kind = readMcpString(args.kind, "kind");
+      if (kind !== "Image" && kind !== "Text" && kind !== "Container") {
+        throw new Error('Native Node kind must be "Image", "Text" or "Container".');
+      }
+      const before = new Set(getSceneNodeEntries(current).map((entry) => entry.id));
+      let next = createSceneNode(current, kind as SceneNodeKind, typeof args.assetId === "string" ? args.assetId : undefined);
+      const created = getSceneNodeEntries(next).find((entry) => !before.has(entry.id));
+      if (!created) throw new Error("Native Node creation did not produce a new identity.");
+      if (args.parentId !== undefined && args.parentId !== null) {
+        next = reparentSceneNode(next, created.id, readMcpString(args.parentId, "parentId"));
+      }
+      await persistMcpSceneChange(next, created.id);
+      return { id: created.id, kind, path: scenePath() };
+    },
+    "scene-update-node": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      if (args.patch === null || typeof args.patch !== "object" || Array.isArray(args.patch)) {
+        throw new Error("MCP command requires a patch object.");
+      }
+      const next = updateSceneNode(current, nodeId, args.patch as SceneNodePatch);
+      await persistMcpSceneChange(next, nodeId);
+      return { id: nodeId, updated: true };
+    },
+    "scene-delete-node": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const next = removeSceneNode(current, nodeId);
+      const remaining = getSceneNodeEntries(next, prefabCatalog().map((item) => item.document));
+      await persistMcpSceneChange(next, remaining[0]?.id ?? null);
+      return { id: nodeId, deleted: true };
+    },
+    "scene-reparent-node": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const parentId = args.parentId === null ? null : readMcpString(args.parentId, "parentId");
+      const next = reparentSceneNode(current, nodeId, parentId);
+      await persistMcpSceneChange(next, nodeId);
+      return { id: nodeId, parentId };
+    },
+    "scene-clear": async (args) => {
+      const current = requireActiveMcpDocument(args, false);
+      const removedCount = getSceneNodeEntries(current).length;
+      const next = { ...current, rootNodes: [] } as import("@codogma/cge").SceneDocumentV1;
+      await persistMcpSceneChange(next, null);
+      return { removedCount, cleared: true };
+    },
+    "prefab-list": async () => {
+      const project = projectDocument();
+      if (!project) throw new Error("The native Project manifest is not loaded.");
+      return prefabCatalog().map((item) => ({
+        id: item.document.id,
+        name: item.document.name,
+        path: item.path,
+        assetId: item.assetId,
+      }));
+    },
+    "prefab-get": async (args) => {
+      const prefabId = readMcpString(args.prefabId, "prefabId");
+      const prefab = prefabCatalog().find((item) => item.document.id === prefabId);
+      if (!prefab) throw new Error(`Native Prefab "${prefabId}" was not found in the Project manifest.`);
+      return prefab.document;
+    },
+    "prefab-create": async (args) => {
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const path = readMcpPath(args.path, "path");
+      const name = typeof args.name === "string" ? args.name : undefined;
+      const result = await createNativePrefabFromNode(nodeId, path, name);
+      return result;
+    },
+    "prefab-instantiate": async (args) => {
+      const current = requireActiveMcpDocument(args, false);
+      const prefabId = readMcpString(args.prefabId, "prefabId");
+      const prefab = prefabCatalog().find((item) => item.document.id === prefabId);
+      if (!prefab) throw new Error(`Native Prefab "${prefabId}" was not found in the Project manifest.`);
+      const before = new Set(getSceneNodeEntries(current).map((entry) => entry.id));
+      const next = addNativePrefabInstance(current as import("@codogma/cge").SceneDocumentV1, prefab.document, {
+        ...(typeof args.name === "string" ? { name: args.name } : {}),
+        ...(typeof args.x === "number" ? { x: args.x } : {}),
+        ...(typeof args.y === "number" ? { y: args.y } : {}),
+        ...(typeof args.parentId === "string" ? { parentId: args.parentId } : {}),
+      });
+      const instance = getSceneNodeEntries(next).find((entry) => !before.has(entry.id));
+      if (!instance) throw new Error("Native Prefab instantiation did not produce a new Node identity.");
+      await persistMcpSceneChange(next, instance.id);
+      return { instanceId: instance.id, prefabId, path: scenePath() };
+    },
+    "component-attach": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const project = projectDocument();
+      if (!project) throw new Error("The native Project manifest is not loaded.");
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const typeId = readMcpString(args.typeId, "typeId");
+      const properties = args.properties === undefined ? {} : args.properties;
+      if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
+        throw new Error("Component properties must be an object.");
+      }
+      const before = new Set(findSceneNode(current, nodeId)?.components.map((item) => item.id) ?? []);
+      const next = attachNativeComponent(current, nodeId, typeId, { project }, properties as Record<string, unknown>);
+      const instance = findSceneNode(next, nodeId)?.components.find((item) => !before.has(item.id));
+      if (!instance) throw new Error("Native Component attach did not produce an instance identity.");
+      await persistMcpSceneChange(next, nodeId);
+      return { nodeId, instanceId: instance.id, typeId };
+    },
+    "component-detach": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const instanceId = readMcpString(args.instanceId, "instanceId");
+      const next = detachNativeComponent(current, nodeId, instanceId);
+      await persistMcpSceneChange(next, nodeId);
+      return { nodeId, instanceId, detached: true };
+    },
+    "component-set-enabled": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const instanceId = readMcpString(args.instanceId, "instanceId");
+      if (typeof args.enabled !== "boolean") throw new Error("Component enabled must be boolean.");
+      const next = setNativeComponentEnabled(current, nodeId, instanceId, args.enabled);
+      await persistMcpSceneChange(next, nodeId);
+      return { nodeId, instanceId, enabled: args.enabled };
+    },
+    "fx-add": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const type = readMcpString(args.type, "type") as FxType;
+      const before = new Set(findSceneNode(current, nodeId)?.components.map((item) => item.id) ?? []);
+      const next = addNativeNodeFx(current, nodeId, type);
+      const effect = findSceneNode(next, nodeId)?.components.find((item) => !before.has(item.id));
+      if (!effect) throw new Error("Native FX add did not produce an instance identity.");
+      await persistMcpSceneChange(next, nodeId);
+      return { nodeId, effectId: effect.id, type };
+    },
+    "fx-update": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const effectId = readMcpString(args.effectId, "effectId");
+      if (args.patch === null || typeof args.patch !== "object" || Array.isArray(args.patch)) {
+        throw new Error("FX patch must be an object.");
+      }
+      const next = updateNativeNodeFx(current, nodeId, effectId, args.patch as Partial<Omit<FxObject, "id" | "type">>);
+      await persistMcpSceneChange(next, nodeId);
+      return { nodeId, effectId, updated: true };
+    },
+    "fx-remove": async (args) => {
+      const current = requireActiveMcpDocument(args);
+      const nodeId = readMcpString(args.nodeId, "nodeId");
+      const effectId = readMcpString(args.effectId, "effectId");
+      const next = removeNativeNodeFx(current, nodeId, effectId);
+      await persistMcpSceneChange(next, nodeId);
+      return { nodeId, effectId, removed: true };
+    },
+    "scene-capture-screenshot": async (args) => {
+      const requestedPath = args.path === undefined ? scenePath() : readMcpPath(args.path, "path");
       if (!requestedPath || requestedPath !== scenePath()) {
-        throw new Error("The requested scene is not open in the SolidJS Scene viewport.");
+        throw new Error("The requested native Scene is not open in the SolidJS Scene viewport.");
       }
       return captureSceneScreenshot(args);
     },

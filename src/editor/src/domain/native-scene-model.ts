@@ -69,6 +69,7 @@ export interface SceneNodePatch extends Partial<Record<TransformKey, number>> {
   color?: string;
   align?: string;
   wordWrapWidth?: number;
+  assetId?: string;
 }
 
 export type SceneNodeKind = "Image" | "Text" | "Container";
@@ -223,7 +224,7 @@ export function updateSceneNode(
     };
 
     const componentPatch: Record<string, unknown> = {};
-    for (const key of ["alpha", "depth", "text", "fontFamily", "fontSize", "color", "align", "wordWrapWidth"] as const) {
+    for (const key of ["alpha", "depth", "text", "fontFamily", "fontSize", "color", "align", "wordWrapWidth", "assetId"] as const) {
       const value = patch[key];
       if (value !== undefined) componentPatch[key] = value;
     }

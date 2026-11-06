@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { test as testCase } from "vitest";
 import {
   addNativePrefabReference,
+  createNativeSceneDocument,
+  registerNativeScene,
   findPrefabReferenceByAssetPath,
   findSceneReferenceByAssetPath,
   getNativeScriptModules,
@@ -149,4 +151,23 @@ testCase("does not duplicate an asset path or stable asset id while adding a Pre
     assets: [...project.assets, { id: "asset-existing-prefab", path: "prefabs/Existing.cge-prefab.json", kind: "other" as const }],
   };
   assert.throws(() => addNativePrefabReference(projectWithExistingPrefabPath, prefab, "asset-new", "prefabs/Existing.cge-prefab.json"), /already registered/);
+});
+
+
+testCase("creates and registers a native Scene using one Project v1 asset/reference pair", () => {
+  const scene = createNativeSceneDocument("  MCP-created Scene  ");
+  assert.equal(scene.schemaVersion, 1);
+  assert.equal(scene.name, "MCP-created Scene");
+  assert.deepEqual(scene.rootNodes, []);
+  const next = registerNativeScene(project, scene, "asset-scene-mcp-created", "scenes/McpCreated.cge-scene.json");
+  assert.equal(resolveSceneAsset(next, scene.id).path, "scenes/McpCreated.cge-scene.json");
+  assert.equal(findSceneReferenceByAssetPath(next, "scenes/McpCreated.cge-scene.json")?.id, scene.id);
+});
+
+testCase("rejects invalid or duplicate native Scene asset registration", () => {
+  const scene = createNativeSceneDocument("Duplicate test");
+  assert.throws(() => registerNativeScene(project, scene, "asset-scene-level", "scenes/Another.cge-scene.json"), /already registered/);
+  assert.throws(() => registerNativeScene(project, scene, "asset-scene-new", "scenes/Level.cge-scene.json"), /already registered/);
+  assert.throws(() => registerNativeScene(project, scene, "asset-scene-new", "scenes/Another.scene"), /relative .+ path/);
+  assert.throws(() => createNativeSceneDocument("   "), /must be non-empty/);
 });

@@ -161,6 +161,62 @@ export function serializeNativePrefabDocument(
   return serializePrefabDocument(document, createSceneValidationContext(project));
 }
 
+function createId(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  throw new Error("Secure randomUUID support is required to create native Project asset identities.");
+}
+
+function assertNativeAssetPath(path: string, extension: string): void {
+  if (
+    !path ||
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    path.split("/").includes("..") ||
+    !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(path) ||
+    !path.endsWith(extension)
+  ) {
+    throw new TypeError(`Native asset path must be a relative ${extension} path inside the Project.`);
+  }
+}
+
+export function createNativeSceneDocument(name: string): SceneDocumentV1 {
+  const normalizedName = name.trim();
+  if (!normalizedName) throw new TypeError("Scene name must be non-empty.");
+  return {
+    schemaVersion: 1,
+    id: createId(),
+    name: normalizedName,
+    rootNodes: [],
+    settings: {},
+  };
+}
+
+export function registerNativeScene(
+  project: ProjectDocumentV1,
+  scene: SceneDocumentV1,
+  assetId: string,
+  path: string,
+): ProjectDocumentV1 {
+  assertNativeAssetPath(path, NATIVE_SCENE_EXTENSION);
+  if (project.scenes.some((item) => item.id === scene.id)) {
+    throw new Error(`Scene "${scene.id}" is already registered in project.json.`);
+  }
+  if (project.assets.some((item) => item.id === assetId || item.path === path)) {
+    throw new Error(`Project asset id or path is already registered: "${assetId}" / "${path}".`);
+  }
+
+  const next: ProjectDocumentV1 = {
+    ...project,
+    assets: [...project.assets, { id: assetId, path, kind: "scene" }],
+    scenes: [...project.scenes, { id: scene.id, assetId }],
+  };
+  const validation = validateProjectDocument(next);
+  if (!validation.valid || !validation.value) {
+    throw new NativeProjectDocumentError("Updated Project document", validation.diagnostics);
+  }
+  return validation.value;
+}
+
 export function addNativePrefabReference(
   project: ProjectDocumentV1,
   prefab: PrefabDocumentV1,
