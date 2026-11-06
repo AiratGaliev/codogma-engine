@@ -55,17 +55,17 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Область | Фактическая база |
 |---|---|
 | Клиент редактора | TypeScript-клиент в `source/editor/`, основанный на открытом клиенте Phaser Editor 2D v3 |
-| Рабочая среда | Legacy-клиент продолжает использовать Colibri workbench, registry расширений, controls и editors; новый SolidJS Host в `src/editor/` реализует отдельную Workbench shell и первый Scene/Hierarchy/Inspector/Transform/save/reopen/Undo/Redo slice. Остальные legacy workflows мигрируют отдельно |
+| Рабочая среда | Colibri workbench, registry расширений, controls и editors описывают существующий legacy-клиент и служат только read-only inventory reference; новый SolidJS Host в `src/editor/` реализует отдельную Workbench shell и native workflows. Legacy-клиент заморожен и не развивается; необходимые workflows проектируются и реализуются заново на native Codogma contracts |
 | Работа с файлами | Существует контракт `IFileStorage` и HTTP-реализация файлового доступа; конкретные методы и текущие ограничения нужно сохранять в capability inventory |
 | Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
 | Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
 | Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
 | AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует tool schemas/calls без второго реестра или альтернативного transport contract. AI Chat service необязателен |
 | CI | `fast-checks` выполняет быстрые build/typecheck, unit/contract/security и server-smoke проверки для обычных PR; все E2E suites (MCP, Playwright/browser и последующие gameplay E2E) запускаются только в promotion workflow начиная с PR `dev → test`, затем на последующих release-promotion PR |
-| TypeScript / lint baseline | В `source/editor/package.json` указан TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Новый quality toolchain пока не внедрён; усиливать типы и static analysis постепенно, без массовой ломки legacy editor |
+| TypeScript / lint baseline | В frozen `source/editor/package.json` зафиксирован TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Это inventory-only baseline: не усиливать, не модернизировать и не расширять quality gates в legacy client. Новые Codogma modules и SolidJS Host используют актуальный строгий toolchain по ADR-0002 |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
-Эта база содержит значительное количество Colibri UI и редакторской логики. **Полная замена UI является принятым направлением, но не одномоментной переписью всего движка.** Новый SolidJS Host создаётся как отдельное приложение сразу; полная инвентаризация Colibri coupling выполняется параллельно и по мере переноса конкретных workflows, а не блокирует старт Workbench. Domain/API contracts сохраняются, функции переносятся вертикальными срезами, Colibri удаляется после cutover. Legacy client не превращается в долгосрочный host для SolidJS и не получает новые крупные подсистемы, предназначенные для нового Editor Host.
+Эта база содержит значительное количество Colibri UI и редакторской логики. **Полная замена UI является принятым направлением, но не одномоментной переписью всего движка.** Новый SolidJS Host создаётся как отдельное приложение; `source/editor/` используется исключительно для read-only inventory и временного rollback. Инвентаризация фиксирует существующие пользовательские сценарии и полезные domain/API потребности, но не предполагает изменения, исправления, рефакторинга или переноса legacy-реализации. Все новые workflows создаются в SolidJS Host с native Codogma contracts; Colibri удаляется после cutover и rollback window.
 
 #### Уточнение: фактическая интеграция Phaser 4.2.1
 
@@ -164,7 +164,7 @@ Independent HTML5 Game Build
 └─ Platform Services adapters: Yandex Games / VK Mini Apps / VK Play
 ~~~
 
-Схема выражает логические границы и направления зависимостей, а не прямое соответствие слоям каталогов. В целевой структуре исходники самостоятельных Codogma packages находятся в `packages/<package-name>/`, а приложение редактора — в `src/editor/`. Не каждый логический слой обязан быть отдельным пакетом: внутренние детали остаются внутри пакета, которому принадлежат. До отдельной миграции фактический путь редактора остаётся `source/editor/`.
+Схема выражает логические границы и направления зависимостей, а не прямое соответствие слоям каталогов. В целевой структуре исходники самостоятельных Codogma packages находятся в `packages/<package-name>/`, а приложение редактора — в `src/editor/`. Не каждый логический слой обязан быть отдельным пакетом: внутренние детали остаются внутри пакета, которому принадлежат. `source/editor/` остаётся фактическим путём текущего frozen rollback client до COD-87/COD-88; он не является target path для новых функций или исправлений.
 
 **Целевой Editor Host:** `src/editor/` — одно SolidJS + TypeScript/TSX SPA на Vite с Tailwind CSS 4. Применяются `vite-plugin-solid`, `jsx: preserve` и `jsxImportSource: solid-js`. SolidJS использует fine-grained reactivity без Virtual DOM: JSX компилируется в DOM-операции, а сигналы/сторы обновляют только зависимые узлы. Компонентная функция не трактуется как React-компонент, повторно вызываемый при каждом изменении состояния; реактивность задаётся Solid-примитивами. Tailwind отвечает за utility styling поверх Codogma design tokens/CSS variables. Phaser остаётся владельцем игрового Canvas/runtime renderer. Панели и редакторские функции — feature modules одного приложения; новый Host не импортирует Colibri и не использует постоянный bridge между UI-фреймворками.
 
@@ -297,34 +297,11 @@ Codogma должен давать разработчику удобную ком
 
 ### 6.3. Object/component Core и optional Data-Oriented ECS
 
-Базовый `@codogma/cge` предоставляет host-neutral object/component модель для Project Model, Scene/Node/Transform, Component Schema, Inspector, сериализации, lifecycle и обычных игровых объектов. Она не должна автоматически превращаться в обязательную data-oriented систему для каждой игры.
+Базовый `@codogma/cge` предоставляет host-neutral object/component модель для Project Model, Scene/Node/Transform, Component Schema, Inspector, сериализации и lifecycle. Это основной путь для обычных игровых объектов и не обязательная data-oriented модель для каждой игры.
 
-Для массовых однотипных сущностей предусматривается отдельный optional runtime package `@codogma/ecs`. Он не входит в обязательные dependencies `@codogma/cge`; пользовательская игра устанавливает его только при осознанном выборе. Отдельный Phaser integration package `@codogma/ecs-phaser` связывает ECS с Phaser, не делая базовый `@codogma/runtime-phaser` зависимым от ECS.
+Data-Oriented ECS — отдельная optional runtime capability; Phaser integration также остаётся отдельной optional capability. Они не входят в обязательные dependencies Core или базового Phaser runtime. Пакеты ещё не реализованы и принадлежат отдельным задачам COD-111/112.
 
-Это совместное существование разных runtime моделей, а не требование применять обе модели везде:
-- object/component Core остаётся основной простой моделью для обычных Node, уникальных объектов, authoring и Inspector;
-- Data-Oriented ECS предназначен для workloads, где массовые Queries и обработка однотипных сущностей дают измеримую пользу;
-- маленькие проекты могут не устанавливать ECS вообще;
-- проект может использовать обе модели только через явно заданный mapping/adapter; одно mutable runtime значение имеет одного owner.
-
-**Разделение данных обязательно:**
-- Project Model Node IDs, Component type/instance IDs и runtime ECS Entity handles — разные идентичности, связываемые явным mapping;
-- persisted Component Schema для Inspector/serialization не тождественна Data-Oriented ECS storage layout;
-- ECS storage по умолчанию содержит transient runtime state; сохранение/загрузка ECS data требует отдельного явного serializer/adapter contract;
-- не дублировать HP, Transform, AI state или physics state одновременно в Phaser objects, ComponentWorld и ECS.
-
-**ECS package contract:**
-- host-neutral World, runtime entity handles, component storage, typed Queries, deterministic Systems/scheduler и безопасные structural mutation boundaries;
-- storage strategy (archetypes/table chunks, sparse sets или их сочетание) выбирается по benchmark и не раскрывается как обязательная часть public API;
-- lifecycle, system ordering, pause/disable/destroy, error handling и disposal проверяются на корректность;
-- никакого собственного Game, Scene Manager, renderer, physics world, requestAnimationFrame или ticker: внешний host владеет игровым циклом и передаёт управляемые update/fixed-step phases;
-- worker, SharedArrayBuffer, WASM и multithreading не следуют из самого наличия ECS и требуют отдельных PoC/ADR и browser-host acceptance.
-
-**EVA.js reference policy:** изучать Core/GameObject/Component/System composition, lifecycle, metadata и модульные feature packages по актуальной ветке [EVA.js v2](https://github.com/eva-engine/eva.js/tree/v2). Не переносить второй Game/Ticker/Scene Manager, Pixi renderer или глобальный Resource singleton в Codogma: Phaser/Runtime Host остаётся владельцем loop и renderer. Object-based component/system model EVA.js — полезный reference, но не доказательство выигрыша Data-Oriented ECS. Повторное использование исходников допускается только после проверки конкретного кода, версии, MIT notices, зависимостей, совместимости и тестов; EVA.js не является обязательной runtime dependency.
-
-**Performance evidence:** решение о Data-Oriented storage опирается на одинаковые representative workloads в target browsers/devices, сравнивающие object-component baseline, centralized systems на тех же объектах, ECS storage и ECS+Phaser adapter. Измерять frame p50/p95/p99, CPU/system/query time, physics/render отдельно, allocations/GC, heap, startup и teardown. Не использовать универсальный порог по entity count или фиксированную долю frame budget как условие включения ECS. Синтетические Node benchmarks остаются package regression tests, но не доказывают mobile/browser выигрыша.
-
-Подробное нормативное решение и owners: [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); задачи COD-111 (`@codogma/ecs`) и COD-112 (`@codogma/ecs-phaser`).
+Все нормативные требования к ECS — разделение authoring schema и runtime storage, identity mapping, ownership, package/API/lifecycle contract, Phaser adapter, EVA.js reuse, feature IDs/providers, production build exclusion и performance acceptance — определяются только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Этот раздел сохраняет product scope и границу Core, но не дублирует ECS-спецификацию.
 
 ### 6.4. Inspector и пользовательские компоненты
 
@@ -492,7 +469,7 @@ Codogma предоставляет единый публичный Physics API �
 **Product/UX и implementation baseline:** каждая задача, меняющая пользовательский интерфейс или 2D authoring workflow, должна использовать [стандарт reference для 2D Editor Host](editor-reference-standard.md): Unity 6.6 — основной UX-reference, Cocos Creator 4.0 LTS — дополнительный 2D workflow reference, Godot Editor — task-specific implementation reference. Codogma остаётся строго 2D-only. Все data/runtime contracts задаются собственными ADR, typed schemas и native fixtures.
 
 - Целевой UI — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Первый Workbench + Scene slice COD-80 реализован и PR #30 смержен в `dev`; production `/editor/` cutover остаётся в COD-87.
-- source/editor/ содержит текущий UI client и остаётся доступен только на ограниченный период до cutover/rollback window. В нём допускаются только критические UI security fixes и release blockers для безопасного cutover; новые пользовательские функции и крупные UX-изменения реализуются в SolidJS Host.
+- `source/editor/` — frozen legacy boundary: только read-only inventory, временный rollback и последующее удаление в COD-88. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и любые модернизации code/manifests/lockfiles/scripts/dependencies. Единственное исключение — минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic; она не допускает регулярной поддержки. Технические cutover/rollback действия выполняются только в необходимом для COD-87 объёме. Все новые UI/authoring workflows создаются в `src/editor/`.
 - Переносить следует только пользовательские UI workflows и сформулированные потребности. Data/domain/runtime contracts проектируются как собственные Codogma contracts; реализация Editor Host должна использовать typed API boundaries и общую Project Model.
 - Backend HTTP/file APIs, MCP registry и независимые Phaser algorithms могут переиспользоваться после технической проверки. Project Model, serialization, Script/Component identity и runtime loading path принадлежат собственным Codogma contracts и проверяются native fixtures.
 - Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
@@ -648,7 +625,7 @@ Codogma предоставляет единый публичный Physics API �
 
 ### 9.3. Приоритеты возможностей 2D
 
-Приоритет задаёт порядок работ по подтверждённым gaps в Engine contracts и SolidJS Host. Общие domain/runtime/security fixes выполняются в соответствующем слое независимо от UI. Все новые пользовательские UI/authoring workflows разрабатываются в `src/editor/`; временный UI client получает только критические security fixes/release blockers до cutover. Новый Project Model/Core не является универсальным предусловием для функций, которые могут безопасно использовать собственные contracts.
+Приоритет задаёт порядок работ по подтверждённым gaps в Engine contracts и SolidJS Host. Общие domain/runtime/security fixes выполняются в соответствующем native слое независимо от UI. Все новые пользовательские UI/authoring workflows разрабатываются в `src/editor/`; `source/editor/` frozen и допускает только read-only inventory, необходимые технические cutover/rollback действия и узкую одноразовую security mitigation при подтверждённой критической уязвимости, пока legacy route принимает production traffic. Новый Project Model/Core не является универсальным предусловием для функций, которые могут безопасно использовать собственные contracts.
 
 **P0 — необходимый производственный фундамент**
 - единая физическая абстракция с capability map и как минимум одним полноценно поддерживаемым backend;
@@ -882,7 +859,7 @@ codogma-engine/
 └── package.json                 # корень репозитория / npm Workspaces
 ```
 
-Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Текущий legacy Colibri client физически находится в source/editor/; новый SolidJS Editor Host создаётся в src/editor/ как самостоятельное приложение. Не выполнять механический перенос старого дерева в src/editor/: legacy и новый UI сосуществуют до cutover. После приёмки нового Host source/editor/ и его Colibri-only build/config/assets удаляются отдельным cleanup PR с обновлением server paths, scripts, CI, release archive и документации.
+Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Frozen Colibri rollback client физически находится в `source/editor/`; новый SolidJS Editor Host находится в `src/editor/` как самостоятельное приложение. Не выполнять механический перенос старого дерева в `src/editor/`: legacy используется только для read-only inventory и ограниченного rollback до cutover. После приёмки нового Host `source/editor/` и его Colibri-only build/config/assets удаляются отдельным cleanup PR с обновлением server paths, scripts, CI, release archive и документации.
 
 ### Правила границ пакетов
 
@@ -990,8 +967,7 @@ Tool schemas и протоколы должны быть versioned, иметь �
 
 - Целевое имя публичного ядра — `@codogma/cge`; его исходный корень в монорепозитории — `packages/cge/`.
 - `@codogma/cge` — Core/public API, а не агрегатор всего продукта. Он не должен автоматически подтягивать Editor UI, desktop shell, MCP, build-only tools, платформенные SDK или optional ECS packages.
-- `@codogma/ecs` — самостоятельный optional runtime package для Data-Oriented ECS; это не часть `@codogma/cge` и не обязательная зависимость базового Phaser runtime.
-- `@codogma/ecs-phaser` — отдельный optional adapter между `@codogma/ecs` и Phaser; он не делает `@codogma/runtime-phaser` зависимым от ECS. Оба пакета являются целевым направлением COD-111/112, а не уже существующими каталогами.
+- Optional ECS packages находятся вне Core и базового Phaser runtime; их точные package boundaries, feature providers и статус определены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 - `cge` — внутреннее сокращение Codogma Game Engine и часть имени Core package; это не название каталога, куда требуется помещать все исходники движка.
 - Другие самостоятельные пакеты имеют собственные каталоги в `packages/`. Каталог `src/cge/` не является целевым корнем исходников пакетов.
 - Core не зависит от Editor UI/desktop shell
@@ -1012,7 +988,7 @@ Tool schemas и протоколы должны быть versioned, иметь �
 - В пользовательский игровой проект устанавливаются **только прямо выбранные пакеты и их транзитивные зависимости**, а не весь monorepo Codogma. Его manifest и `package-lock.json` принадлежат пользовательскому проекту; `node_modules` — результат установки, а не место разработки и хранения исходников пакетов.
 - Пакеты по назначению могут быть Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter или tooling. Названия не обязаны содержать `plugin-`; смысл пакета задаётся его ответственностью, public exports и проверяемыми engine-specific metadata.
 - Пакет может содержать несколько внутренних модулей и exports; независимое версионирование и подключение не требуют отдельного пакета на каждый компонент или файл.
-- Editor-only, build-only и QA packages и их зависимости не должны попадать в production game bundle. Optional runtime packages (например `@codogma/ecs`) включаются только при явной project dependency и target feature selection. Build pipeline обязан проверять фактический import graph и конечный bundle по разрешённым scopes/targets, а не полагаться только на наличие пакета в `node_modules`.
+- Editor-only, build-only и QA packages и их зависимости не должны попадать в production game bundle. Optional runtime packages включаются только по явному выбору проекта и target; Build pipeline проверяет фактический import graph и конечный bundle по разрешённым scopes/targets, а не только наличие пакета в `node_modules`. Требования к ECS-specific inclusion/exclusion — в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 #### npm как источник истины
 
@@ -1031,7 +1007,7 @@ Tool schemas и протоколы должны быть versioned, иметь �
 - Состояния не взаимозаменяемы: **пакет установлен** через npm; **функция объявлена и доступна** при корректной metadata и совместимых зависимостях; **функция включена в конфигурации проекта**; **функция выбрана для конкретного target/build**; **функция активирована в текущей runtime/editor-сессии**, когда для неё существует такой lifecycle. Наличие одного состояния не должно автоматически включать остальные.
 - Выбор функций хранится в версионируемой конфигурации проекта и при необходимости в target-specific build profiles. Точное поле/файл определяется PoC; пользовательский выбор должен быть воспроизводимым и пригодным для CI, а не зависеть от последнего состояния открытого UI.
 - Реестр проверяет feature dependency closure, несовместимые функции, targets/scopes и version/API compatibility. Feature dependencies не равны npm dependencies: npm остаётся единственным механизмом установки и разрешения package dependencies. Если для выбранной функции нет требуемого package provider, система выдаёт структурированную ошибку и может предложить действие в Package Manager UI, но реестр самостоятельно не устанавливает пакеты и не реализует второй resolver.
-- Build pipeline получает явный набор включённых функций для target, проверяет все обязательные feature dependencies, формирует dependency closure из объявленных entry points, исключает несовместимые и editor-only пути и выдаёт machine-readable build report с выбранными функциями, package/module contributions, причинами включения/исключения и диагностикой. Для optional ECS feature IDs должны быть разделены: `runtime.ecs` (provider `@codogma/ecs`) и `runtime.ecs-phaser` (provider `@codogma/ecs-phaser`); наличие одного не должно неявно устанавливать или включать другое. Конкретная сборочная реализация должна подтверждать исключение кода на fixture; registry metadata не гарантирует сама по себе безопасное удаление модулей с side effects или динамической регистрацией.
+- Build pipeline получает явный набор включённых функций для target, проверяет все обязательные feature dependencies, формирует dependency closure из объявленных entry points, исключает несовместимые и editor-only пути и выдаёт machine-readable build report с выбранными функциями, package/module contributions, причинами включения/исключения и диагностикой. Конкретные ECS feature IDs/providers и их package relationship задаются [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); metadata сама по себе не гарантирует безопасное удаление модулей с side effects или динамической регистрацией.
 - Editor Host, Inspector, project validation, runtime services и CLI/build должны потреблять согласованные descriptors/diagnostics, а не поддерживать независимые дублирующие каталоги capabilities.
 - Curated feature sets (преднастроенные группы функций/пакетов) могут появиться позже как UX-удобство. Они не заменяют реестр и не должны становиться обязательным механизмом разрешения зависимостей для MVP.
 
@@ -1070,7 +1046,7 @@ Normative detail: [docs/package-management-reference.md](package-management-refe
 
 Цели «1000 файлов открываются за 3 секунды», «500+ объектов без просадок» и «холодный старт за 2 секунды» не являются подтверждёнными характеристиками. Прежде чем сделать их release gate, надо определить fixture, тестовую машину, методику и baseline текущей версии.
 
-Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять отдельно время до готового UI, frame time p50/p95/p99, main-thread CPU, время gameplay systems, physics, rendering, память/heap high-water, allocations/GC, загрузку ресурсов и startup/teardown editor и preview. Сравнение ECS требует одинаковых browser/device workloads для object-component baseline, centralized systems, Data-Oriented ECS и ECS+runtime adapter. Не делать вывод о преимуществе Tauri/Electron или ECS только по размеру приложения, числу entities или синтетическому Node benchmark. Универсального порога 10 000 entities или фиксированной квоты 1.67 ms для Core не устанавливать; budgets определять из повторяемых measurements на целевых устройствах.
+Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять отдельно время до готового UI, frame time p50/p95/p99, main-thread CPU, время gameplay systems, physics, rendering, память/heap high-water, allocations/GC, загрузку ресурсов и startup/teardown editor и preview. Сравнительный workload, методика и acceptance criteria Data-Oriented ECS заданы [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Не делать вывод о преимуществе desktop shell (Tauri/Electron) только по размеру приложения; такой выбор требует отдельного измерения на целевых сценариях.
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
@@ -1079,8 +1055,7 @@ Profiler должен сначала собирать воспроизводим
 - Server/MCP: серверный smoke, быстрые package contract/schema tests и security checks. E2E-сценарии для сквозных MCP workflows поддерживаются вместе с соответствующей подсистемой; полный MCP E2E suite выполняется в обязательном promotion gate.
 - Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures; отдельный fixture должен запустить сцену из данных с зарегистрированным пользовательским TypeScript-компонентом **без генерируемого файла класса сцены** и проверить диагностику отсутствующего компонента/ресурса без частично созданной runtime-сцены. Проверить ссылки между узлами, повторное использование typeId при независимых instance IDs/значениях, отмену загрузки и отделение временного runtime state от сохранённых данных.
 - Engine API / ComponentWorld: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты согласованности базового Phaser adapter.
-- Optional Data-Oriented ECS (COD-111): correctness/query/storage/system tests, structural mutation and teardown fixtures, plus browser-side comparison against object-component and centralized-system baselines. Measure p50/p95/p99 frame time, system/query time, allocations/GC and memory; do not use Node synthetic benchmark as browser-performance evidence.
-- Optional ECS Phaser adapter (COD-112): integration tests for one-owner Transform mapping, tick ownership, pause/resume, scene shutdown and resource cleanup; measure adapter overhead separately from ECS systems and Phaser renderer/physics.
+- Optional ECS runtime и Phaser adapter package tests, browser acceptance и measurement evidence выполняются по каноническим требованиям [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); comparative run фиксируется в PERF-09.
 - Physics: contract tests для body lifecycle, collision filters, fixed timestep, contacts, supported joints, debug geometry и корректного освобождения ресурсов для каждого поддерживаемого backend.
 - 2D rendering/performance: измеримые fixtures для frame time, batching/texture/resource counts в пределах доступной instrumentation; тесты изменения/освобождения Graphics/particle resources и отсутствия ненужных повторных allocation loops. Atlas analysis покрывает rendered/culled sprites, page count и usage; Tilemap metrics отделяют render/update/collision processing.
 - Asset pipeline/CLI: validate/build без GUI, stable asset references, migration/import metadata, dependency graph, deterministic output и корректные exit codes.

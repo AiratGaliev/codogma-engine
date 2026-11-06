@@ -9,14 +9,14 @@
 |---|---|---|---|---|
 | Корень репозитория | `@phaserjs/editor-mcp-server` | `^1.0.6` | Official MCP stdio implementation / tool schemas, подключён к локальному MCP bridge | Проверка в `npm run test:security` подтверждает initialize/tools/list и один вызов; не покрывает все tools/schema combinations |
 | Корень репозитория | `zod` override для `@phaserjs/editor-mcp-server` | `4.6.7` | Зафиксированная совместимость с Zod override | Не обновлять без MCP integration/security regression и проверки nested/optional arguments |
-| `source/editor` | `typescript` | `5.3.3` | Dev dependency, `tsc -b` и TypeScript project references для существующего UI client | Эта версия не определяет toolchain Core или SolidJS Host |
-| `source/editor` | `colibri-packer` | `^1.0.1` | Resource/atlas packing tooling для существующего UI client | UI-only dependency; её удаление относится к физическому удалению UI client после COD-88 |
+| `source/editor` (frozen) | `typescript` | `5.3.3` | Inventory-only baseline существующего UI client; не является target для развития | Не обновлять; не определяет toolchain Core или SolidJS Host |
+| `source/editor` (frozen) | `colibri-packer` | `^1.0.1` | Inventory-only baseline legacy resource/atlas tooling | Не обновлять и не модернизировать; UI-only dependency удаляется вместе с client в COD-88 |
 | `src/editor` | `solid-js` | `1.9.15` | Независимый SolidJS Editor Host | UI/reactivity layer; не зависит от Colibri и не включает его controls/registry |
 | `src/editor` | `vite`, `vite-plugin-solid`, `tailwindcss`, `@tailwindcss/vite`, `typescript`, `@playwright/test` | `8.3.5`, `2.11.14`, `4.3.3`, `4.3.3`, `5.9.3`, `1.64.1` | Host dev/build/typecheck и Chromium browser tests | Собственный package/lockfile; CI job editor-host; не смешивать с root dependencies без отдельного workspace decision |
 | `mini-services/ai-chat` | `z-ai-web-dev-sdk` | `^0.0.18` | Необязательный отдельный LLM backend | Не является обязательной зависимостью старта IDE; нужен отдельный security/privacy/dependency review перед production exposure |
 | Editor/runtime artifacts | Phaser runtime bundle | `4.2.1` (вендорный) | `scripts/phaser.min.js` production и `scripts/phaser.js` development, подключаются через editor plugin | Текущий путь использует full bundle; upstream v4.2.1 содержит отдельный UMD `phaser-arcade-physics(.min)` без Matter.js, но package root не объявляет public `exports` subpath для Arcade-only artifact. ESM entry point не доказывает tree shaking; feature-pruned output не доказан |
 | Native Box2D runtime integration | `@phaserjs/phaser-box2d` / selected runtime helper modules | Runtime dependency | Physics API used by the native Phaser adapter | Runtime provider/version must be explicit in the native Project/Build dependency graph. Ambient declarations do not provide runtime implementation; browser acceptance is required. |
-| Existing UI client | Existing editor UI source | Existing source tree | `source/editor/` and its UI packages | Preserve applicable upstream notices and license compliance until the UI client is removed through COD-87/COD-88 |
+| Frozen legacy UI client | Existing editor UI source | Existing source tree | `source/editor/` and its UI packages; read-only inventory and temporary rollback only | No feature/fix/refactor/dependency/performance/compatibility maintenance; preserve applicable upstream notices until physical removal in COD-88 |
 | Root + SolidJS Host | ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, strict TypeScript and test tooling | Root quality tools in root manifest; Host TypeScript 5.9.3, Node node:test, Playwright 1.64.1 in src/editor | Scoped checks for engine-owned modules and Host | Extend only within reviewed scopes and confirm dynamically loaded entry points before making checks blocking |
 
 ## Planned optional runtime packages — не активные зависимости
@@ -25,16 +25,10 @@
 
 | Package | Status | Intended scope | Dependency / exclusion rule | Linear owner |
 |---|---|---|---|---|
-| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Не является зависимостью `@codogma/cge`; не импортирует Phaser, DOM, Editor, Node-only APIs или platform SDK | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
-| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Отдельная peer dependency/adapter; не делает базовый `@codogma/runtime-phaser` зависимым от ECS | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
+| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Dependency boundary and host-neutral constraints: ADR-0004 | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
+| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Optional adapter boundary and base-runtime independence: ADR-0004 | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
 
-Project feature IDs proposed for Feature Registry:
-- `runtime.ecs` → `@codogma/ecs`
-- `runtime.ecs-phaser` → `@codogma/ecs-phaser`, requiring `runtime.ecs` and the compatible Phaser runtime provider.
-
-Installation, feature availability, project enablement, target inclusion and runtime activation are distinct. Projects without ECS must not receive these dependencies transitively. Release fixtures must prove physical exclusion of both package code and adapter modules when disabled; metadata or a UI checkbox alone is insufficient.
-
-Object/component `ComponentWorld` in `@codogma/cge` and Data-Oriented ECS storage are different runtime models. Project Model Node IDs and ECS runtime entity handles use explicit mapping; persisted Component Schema/Inspector metadata is not automatically the ECS storage schema.
+Таблица выше — инвентаризация package roots, статусов и владельцев. ECS feature IDs/providers, opt-in/dependency relationships, mapping между object/component Core и runtime ECS, а также правила физического исключения optional code из Release определены только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ## Phaser 4.2.1 bundle analysis constraints
 

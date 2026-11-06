@@ -41,7 +41,7 @@ Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engin
 ## Правила выбора целевого Editor UI (01.11.2026)
 
 - Все новые пользовательские панели, UX и authoring workflows редактора реализуются в самостоятельном SolidJS Host `src/editor/`.
-- Временный UI client в `source/editor/` не получает новые features, controls, panels, UI refactors или постоянные integration bridges. Допускаются только критические UI security fixes и release blockers для безопасного production cutover.
+- `source/editor/` — frozen legacy boundary: только read-only inventory, временный rollback artifact и последующее удаление через COD-88. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и модернизация code/manifests/lockfiles/scripts/dependencies. Единственное исключение — минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic; technical cutover/rollback действия допускаются только в необходимом объёме COD-87.
 - Все новые пользовательские workflows и feature contracts проектируются и реализуются в SolidJS Host с собственными typed services, state owners, tests и runtime integration.
 - Наличие панели или завершённой Engineering issue не считается готовностью end-to-end workflow. Проверять native Project Model save/reopen, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [migration plan](editor-ui-migration.md). Координация UI rollout — COD-82.
 - `source/editor/` и `src/editor/` остаются самостоятельными приложениями до production cutover. COD-87 переводит маршрут `/editor/` на новый Host; COD-88 удаляет временный UI client после rollback window.

@@ -2,11 +2,9 @@
 
 Codogma Engine is all based on web technologies. It has a server-side and an HTML5 client-side.
 
-> **This deployment:** in this fork you normally do NOT need the steps below. Just run
-> `npm run dev` in the repository root (it serves the editor from `source/editor` via the
-> local Node server `server/server.mjs`). To rebuild the client after changing its
-> TypeScript sources: `cd source/editor && npm ci && npm run build`.
-> The steps below are the original upstream build instructions.
+> **Current repository state:** the default local server still serves the frozen legacy client from `source/editor/`. The commands below are operational instructions for reproducing/serving that existing rollback artifact only; they do not authorize source changes, feature work, refactoring, dependency upgrades or other maintenance of Colibri. Do not change its manifest, lockfile, scripts or dependencies. All new UI and authoring work belongs in `src/editor/` (see [the migration policy](docs/editor-ui-migration.md)).
+>
+> To run the existing local server: `npm run dev` in the repository root. The original upstream build instructions below are retained as historical context; use them only when necessary to reproduce the existing client, not as a development target.
 
 The server is a small, native program that serves the editor and project files and interacts with the Operating System.
 
