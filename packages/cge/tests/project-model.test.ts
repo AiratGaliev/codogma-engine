@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   isValidStableId,
-  migrateProjectDocument,
   parseProjectDocument,
   serializeProjectDocument,
   validateComponentTypeSchema,
@@ -45,24 +44,33 @@ test("serializes deterministic JSON and round-trips the same semantic document",
   assert.equal(first.endsWith("\n"), true);
 });
 
-test("migrates only the explicit v0 project shape in memory", () => {
-  const result = migrateProjectDocument({
-    schemaVersion: 0,
-    id: "legacy-project",
-    name: "Old project",
-    unknownPluginData: { keep: "yes" },
-  });
-  assert.equal(result.fromVersion, 0);
-  assert.equal(result.toVersion, 1);
-  assert.equal(result.document.runtime.adapterId, "phaser");
-  assert.deepEqual((result.document as unknown as Record<string, unknown>).unknownPluginData, { keep: "yes" });
+test("rejects unpublished and unsupported Project schema versions without changing the input", () => {
+  assert.equal(parseProjectDocument("{").diagnostics[0]?.code, "PROJECT_PARSE_ERROR");
+  for (const schemaVersion of [0, 2, 7]) {
+    const input = {
+      schemaVersion,
+      id: "unsupported-project",
+      name: "Unsupported",
+      extensionData: { keep: true },
+    };
+    const before = JSON.stringify(input);
+    const result = parseProjectDocument(JSON.stringify(input));
+    assert.equal(result.value, undefined);
+    assert.equal(result.diagnostics[0]?.code, "PROJECT_UNSUPPORTED_VERSION");
+    assert.equal(JSON.stringify(input), before);
+  }
 });
 
-test("reports parse and unsupported-version diagnostics without rewriting source", () => {
-  assert.equal(parseProjectDocument("{").diagnostics[0]?.code, "PROJECT_PARSE_ERROR");
-  assert.equal(
-    parseProjectDocument(JSON.stringify({ schemaVersion: 7 })).diagnostics[0]?.code,
-    "PROJECT_UNSUPPORTED_VERSION",
+test("checked-in Project fixture uses only the current native schema", () => {
+  const fixture = JSON.parse(readFileSync(
+    resolve(process.cwd(), "tests/fixtures/project-v1.json"),
+    "utf8",
+  )) as unknown;
+  const parsed = parseProjectDocument(JSON.stringify(fixture));
+  assert.equal(parsed.value?.schemaVersion, 1);
+  assert.deepEqual(
+    (parsed.value as unknown as Record<string, unknown>).unknownPluginData,
+    { keep: true },
   );
 });
 
@@ -111,26 +119,6 @@ test("scene validation catches duplicate node ids and invalid transforms", () =>
   assert.equal(result.valid, false);
   assert.equal(result.diagnostics.some((item) => item.code === "SCENE_DUPLICATE_ID"), true);
   assert.equal(result.diagnostics.some((item) => item.code === "SCENE_INVALID_TRANSFORM"), true);
-});
-
-test("checked-in project v0/v1 compatibility fixtures are exercised by the parser", () => {
-  const legacy = readFileSync(resolve(process.cwd(), "tests/fixtures/project-v0.json"), "utf8");
-  const current = readFileSync(resolve(process.cwd(), "tests/fixtures/project-v1.json"), "utf8");
-
-  const migrated = parseProjectDocument(legacy);
-  const parsed = parseProjectDocument(current);
-
-  assert.equal(migrated.value?.schemaVersion, 1);
-  assert.equal(migrated.migratedFrom, 0);
-  assert.deepEqual(
-    (migrated.value as unknown as Record<string, unknown>).unknownPluginData,
-    { keep: true },
-  );
-  assert.equal(parsed.value?.schemaVersion, 1);
-  assert.deepEqual(
-    (parsed.value as unknown as Record<string, unknown>).unknownPluginData,
-    { keep: true },
-  );
 });
 
 test("rejects non-JSON objects and safely preserves an own __proto__ data key", () => {
@@ -307,102 +295,6 @@ test("enforces one stable ID grammar across project, scene and component contrac
     version: "1.0.0",
     properties: {},
   }).valid, false);
-});
-
-
-test("Project migration deep-copies JSON values and never aliases or mutates the source", () => {
-  const input = {
-    schemaVersion: 0,
-    id: "legacy-project-copy",
-    name: "Copy test",
-    scenes: [],
-    assets: [],
-    nestedPluginData: { values: [1, 2, 3] },
-  };
-  const before = JSON.stringify(input);
-  const result = migrateProjectDocument(input);
-  assert.equal(JSON.stringify(input), before);
-
-  const migratedExtension = (result.document as unknown as Record<string, unknown>).nestedPluginData as { values: number[] };
-  assert.notEqual(migratedExtension, input.nestedPluginData);
-  migratedExtension.values.push(4);
-  assert.deepEqual(input.nestedPluginData.values, [1, 2, 3]);
-});
-
-test("Project v0 migration rejects malformed present fields instead of silently defaulting them", () => {
-  const base = {
-    schemaVersion: 0,
-    id: "legacy-project-malformed",
-    name: "Malformed legacy project",
-  };
-  const malformedFields: Array<[string, unknown]> = [
-    ["scenes", { unexpected: true }],
-    ["assets", "not-an-array"],
-    ["prefabs", 1],
-    ["componentModules", null],
-    ["runtime", "phaser"],
-    ["runtime", { adapterId: "phaser", settings: "not-an-object" }],
-    ["runtime", { adapterId: "", settings: {} }],
-  ];
-
-  for (const [field, value] of malformedFields) {
-    const input = field === "runtime" && typeof value === "object" && value !== null
-      ? { ...base, runtime: value }
-      : { ...base, [field]: value };
-    assert.throws(
-      () => migrateProjectDocument(input),
-      (error: unknown): boolean => {
-        if (!(error instanceof Error) || !("diagnostics" in error)) return false;
-        const diagnostics = (error as Error & {
-          diagnostics: Array<{ code?: string; path?: string }>;
-        }).diagnostics;
-        return diagnostics.some((item) =>
-          item.code === "PROJECT_MIGRATION_INVALID_INPUT" &&
-          (item.path === field || item.path === "runtime.settings" || item.path === "runtime"));
-      },
-    );
-  }
-});
-test("Project v0 migration defaults only absent optional collections and runtime fields", () => {
-  const migrated = migrateProjectDocument({
-    schemaVersion: 0,
-    id: "legacy-project-defaults",
-    name: "Defaults",
-  });
-  assert.deepEqual(migrated.document.scenes, []);
-  assert.deepEqual(migrated.document.assets, []);
-  assert.deepEqual(migrated.document.prefabs, []);
-  assert.deepEqual(migrated.document.componentModules, []);
-  assert.deepEqual(migrated.document.runtime, { adapterId: "phaser", settings: {} });
-
-  const withRuntime = migrateProjectDocument({
-    schemaVersion: 0,
-    id: "legacy-project-runtime",
-    name: "Runtime",
-    runtime: { adapterId: "phaser", pluginRuntimeData: { keep: true } },
-  });
-  assert.deepEqual(withRuntime.document.runtime.settings, {});
-  assert.deepEqual((withRuntime.document.runtime as unknown as Record<string, unknown>).pluginRuntimeData, { keep: true });
-});
-
-
-test("Project migration rejects future schema versions without modifying source data", () => {
-  const future = {
-    ...validProject,
-    schemaVersion: 2,
-    futureExtension: { nested: ["keep", true] },
-  };
-  const before = JSON.stringify(future);
-  assert.throws(
-    () => migrateProjectDocument(future),
-    (error: unknown) => error instanceof Error &&
-      "diagnostics" in error &&
-      (error as Error & { diagnostics: Array<{ code?: string; path?: string }> })
-        .diagnostics.some((item) =>
-          item.code === "PROJECT_UNSUPPORTED_VERSION" &&
-          item.path === "schemaVersion"),
-  );
-  assert.equal(JSON.stringify(future), before);
 });
 
 

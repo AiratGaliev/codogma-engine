@@ -114,11 +114,6 @@ export interface PrefabDocumentV1 {
   root: NodeDocument;
 }
 
-export type ProjectDocumentV0 = Record<string, unknown> & {
-  schemaVersion: 0;
-  id: string;
-  name: string;
-};
 
 export function createDefaultTransform(): TransformData {
   return {

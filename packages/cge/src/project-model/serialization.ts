@@ -1,7 +1,6 @@
 import type { CoreDiagnostic } from "../diagnostics.js";
 import { isJsonValue, stableStringify, type JsonValue } from "../json.js";
 import type { ProjectDocumentV1, SceneDocumentV1, PrefabDocumentV1 } from "./contracts.js";
-import { migrateProjectDocument, ProjectMigrationError } from "./migrations.js";
 import {
   validateProjectDocument,
   validateSceneDocument,
@@ -12,7 +11,6 @@ import {
 export interface ParseResult<T> {
   value?: T;
   diagnostics: CoreDiagnostic[];
-  migratedFrom?: number;
 }
 
 function parseJson(content: string, label: string): { value?: unknown; diagnostics: CoreDiagnostic[] } {
@@ -32,17 +30,10 @@ function parseJson(content: string, label: string): { value?: unknown; diagnosti
 export function parseProjectDocument(content: string): ParseResult<ProjectDocumentV1> {
   const parsed = parseJson(content, "Project");
   if (parsed.value === undefined) return { diagnostics: parsed.diagnostics };
-  try {
-    const result = migrateProjectDocument(parsed.value);
-    return {
-      value: result.document,
-      diagnostics: result.diagnostics,
-      ...(result.fromVersion === result.toVersion ? {} : { migratedFrom: result.fromVersion }),
-    };
-  } catch (error) {
-    if (error instanceof ProjectMigrationError) return { diagnostics: error.diagnostics };
-    throw error;
-  }
+  const result = validateProjectDocument(parsed.value);
+  return result.valid && result.value
+    ? { value: result.value, diagnostics: result.diagnostics }
+    : { diagnostics: result.diagnostics };
 }
 
 export function parseSceneDocument(
