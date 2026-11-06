@@ -55,24 +55,19 @@ Codogma Editor — **2D-only editor**. Не проектировать пере�
 - Ссылки на код сами по себе не разрешают копирование. Перед прямым reuse проверять лицензию конкретного файла и всех зависимостей, copyright headers, MIT attribution и third-party notices. Не добавлять Godot как runtime/build dependency.
 - Обновлять pinned commit только отдельным осознанным обновлением reference после повторной проверки ссылок и актуальности исходников.
 
-## 4. Colibri policy: evidence, not design authority
+## 4. Product requirements and implementation authority
 
-Legacy source/editor / Colibri — **не третий продуктовый UX-reference** и не blueprint реализации.
+Новые пользовательские workflows проектируются на основе принятых продуктовых UX-reference и собственных native Codogma contracts. Наличие похожего контрола, класса, сервиса или внутренней реализации само по себе не создаёт продуктового требования.
 
-### Разрешено изучать в Colibri
+Для каждого workflow фиксировать:
+- пользовательскую цель и ожидаемый результат;
+- 2D interaction pattern и состояния UI;
+- typed service/API boundary и state owner;
+- persistence, undo/redo и runtime lifecycle, если они применимы;
+- unsupported/error/empty/pending states;
+- browser/runtime acceptance и измеримые критерии.
 
-- реальные операции, которые уже выполняют пользователи;
-- исторические UI-сценарии, панели, команды, состояния и пользовательские edge cases; технические детали старого runtime допускаются только как справочная информация, не как целевой Codogma contract;
-- edge cases, ошибки, регрессии, known limitations и test fixtures;
-
-### Запрещено переносить автоматически
-
-- Workbench/Parts/controls, меню, диалоги и визуальные композиции как эталон нового Host;
-- Colibri plugin registry, global state, lifecycle, event bus, service locator, private imports, UI coupling, legacy project serializers и format mappings;
-- неудобные/непоследовательные interaction patterns, устаревшие UX-компромиссы, скрытые состояния и поведение, противоречащее реальным runtime contracts;
-- функции только потому, что «они уже есть в Colibri».
-
-Для каждого исторического UI-workflow принимай решение: **redesign**, **defer** или **retire**. Не сохраняй старый формат/serializer/Component identity под видом retain: новое поведение должно иметь самостоятельный Codogma contract и native fixtures. Фиксируй причину и owner. Наличие в Colibri или Done issue не создаёт требования совместимости.
+Implementation details внешних редакторов изучаются только для конкретного инженерного вопроса. Не переносить их внутренние UI frameworks, registries, service locators, global state или runtime assumptions без отдельного архитектурного решения. Все persisted models, serializers, Script/Component identities, Asset references и Scene runtime graph должны принадлежать собственным Codogma contracts и проверяться native fixtures.
 
 ## 5. Обязательный процесс для каждой UI/authoring задачи
 
@@ -83,7 +78,7 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 3. Изучить релевантные исходники Godot по закреплённому commit и, если это помогает ответить на отдельный инженерный вопрос, выбрать один-два дополнительных проекта из [Editor Engineering References](editor-engineering-references.md). Не смешивать UX benchmark, implementation evidence и исторический пример. Зафиксировать, какие технические паттерны полезны, какие завязаны на конкретный язык/host/runtime/license и почему они адаптируются или отклоняются.
 4. Выписать для задачи: пользовательскую цель, 2D interaction pattern, состояния/ошибки, selection/focus/keyboard поведения, data/runtime contract и browser acceptance.
 5. Явно решить, какие паттерны **adopt / adapt / reject**. В PR/Linear issue обновлении указать ссылки на рассмотренные страницы и причины отклонения важных паттернов.
-6. Использовать Colibri только для наблюдения за историческими пользовательскими действиями и UI edge cases. Не использовать его project files, schemas, serializers, Component identities, Prefab semantics, codegen или runtime behavior как входные требования, migration baseline или доказательство корректности новой архитектуры.
+6. Убедиться, что implementation использует утверждённые native Codogma contracts и не зависит от неявных assumptions UI framework, renderer или external tooling.
 
 Для готовности:
 
@@ -99,13 +94,13 @@ Legacy source/editor / Colibri — **не третий продуктовый UX
 Приоритет решений:
 
 1. Продуктовые границы Codogma и ТЗ: 2D-only, Web-first, TypeScript-native.
-2. Нативные Codogma Project Model/API contracts и подтверждённое поведение выбранного Phaser 4.2.1 runtime; старые Colibri formats/serializers/codegen не относятся к этой категории.
+2. Нативные Codogma Project Model/API contracts и подтверждённое поведение выбранного Phaser 4.2.1 runtime.
 3. Unity 6.6 — основной UX reference; технические гарантии сверять с документацией конкретного patch release.
 4. Cocos Creator 4.0 LTS — дополнительный workflow reference и cross-check.
 5. Godot — implementation reference по релевантным редакторским подсистемам, но не продуктовый UX-reference, не runtime dependency и не критерий acceptance.
-6. Colibri — только историческое UI/workflow evidence; не UX/architecture authority и не источник форматов, schemas, serialization или runtime contracts нового Codogma.
 
-Если reference предполагает API или feature, которых нет в текущем Codogma/Phaser contract, не симулировать поддержку UI-заглушкой. Спроектировать собственный типизированный contract, native fixtures, implementation и acceptance. Не вводить compatibility shim со старой Colibri schema.
+
+Если reference предполагает API или feature, которых нет в текущем Codogma/Phaser contract, не симулировать функциональность UI-заглушкой. Спроектировать собственный типизированный contract, native fixtures, implementation и acceptance.
 
 ## 7. Официальные источники
 
