@@ -66,7 +66,7 @@ Codogma Core должен предоставлять независимые от
 | Смешать UI, runtime, build/devtools и платформенные обязанности в одном package | Отклонено: обязанности разделены явными границами |
 | Использовать Phaser-specific Scene/GameObject как публичную модель данных | Отклонено: Project Model не зависит от текущего adapter |
 | Создавать обязательный TS-класс для каждой Scene | Отклонено: Scene остаётся versioned data document |
-| Подключить второй runtime/ECS/game loop | Отложено до PoC и измеримой потребности |
+| Подключить второй независимый runtime loop | Отложено до PoC и измеримой потребности; это не отменяет отдельное optional ECS-направление, требования к которому определены в [ADR-0004](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md) |
 | Заменить Phaser или добавить несколько physics engines | Отложено до PoC и сравнимого functional/performance baseline |
 
 ## Последствия и открытые решения

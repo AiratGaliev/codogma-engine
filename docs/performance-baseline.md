@@ -5,7 +5,7 @@
 
 ## Цель и границы
 
-Снять воспроизводимые baseline measurements для существующего editor workflow, Core, Phaser runtime, optional ECS и production build. Измерения нужны перед оптимизациями и перед введением performance budgets. Они не должны задерживать независимую реализацию контрактов, но значения нельзя заменять оценочными цифрами. ECS benchmark обязан сравнивать один и тот же workload в одном browser/device окружении; отдельный Node no-op benchmark не доказывает browser/gameplay performance.
+Снять воспроизводимые baseline measurements для существующего editor workflow, Core, Phaser runtime и production build. Измерения нужны перед оптимизациями и введением performance budgets; значения нельзя заменять оценочными цифрами. Сравнительная серия optional ECS учитывается в PERF-09, а её workload, методика и критерии приёмки определяются только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Этот документ хранит процедуру проведения измерений и фактические evidence.
 
 ## Закреплённые тестовые сценарии
 
@@ -43,13 +43,13 @@
 
 ## ECS comparison — правила интерпретации
 
-Нормативные правила сравнения object/component, centralized systems, Data-Oriented ECS и ECS + Phaser adapter, включая workload parity, метрики, интерпретацию и критерии принятия performance improvement, содержатся только в [ADR-0004](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Этот документ хранит протокол проведения измерений и фактические результаты PERF-09, не дублируя архитектурные требования.
+Нормативные правила сравнения object/component, centralized systems, Data-Oriented ECS и ECS + Phaser adapter, включая workload parity, метрики, интерпретацию и критерии принятия performance improvement, содержатся только в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Этот документ хранит протокол проведения измерений и фактические результаты PERF-09, не дублируя архитектурные требования.
 
 ## Bundle composition comparison — Phaser и optional packages
 
 Для одного и того же generated-game fixture сравнивать full vendored Phaser, upstream supported variants и custom builds только если они имеют эквивалентный API coverage. Сохранять output manifest, module/chunk listing, raw/gzip/Brotli size, parse/compile/startup и browser smoke. Feature выключена только тогда, когда её код физически отсутствует в artifact или доказуемо lazy-loaded вне текущего startup path; отметка в project settings не является доказательством.
 
-- Проверку ECS on/off consumers и физического отсутствия optional package modules в Release выполнять по нормативному контракту [ADR-0004](ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); PERF-10 сохраняет output manifest, import graph и измеренный размер artifact.
+- Проверку ECS on/off consumers и физического отсутствия optional package modules в Release выполнять по нормативному контракту [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); PERF-10 сохраняет output manifest, import graph и измеренный размер artifact.
 
 
 ## Запись результатов

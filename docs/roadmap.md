@@ -216,7 +216,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 3. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, сериализация, валидация и runtime adapter используют единый контракт.
 4. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
 5. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
-6. **Граница optional ECS:** базовый ComponentWorld в `@codogma/cge` остаётся object/component runtime. Data-Oriented ECS не входит в минимальный Core и реализуется отдельным optional `@codogma/ecs` (COD-111); optional Phaser integration — `@codogma/ecs-phaser` (COD-112). Сравнение должно включать object-component baseline и centralized object systems, а не только synthetic no-op ECS benchmark.
+6. **Граница optional ECS:** базовый `ComponentWorld` в `@codogma/cge` остаётся object/component runtime; Data-Oriented ECS развивается отдельно от минимального Core и не блокирует его acceptance. Нормативные package/integration/performance требования и владельцы COD-111/112 закреплены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ### Задачи
 
