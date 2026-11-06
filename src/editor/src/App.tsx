@@ -23,13 +23,13 @@ import {
   findSceneReferenceByAssetPath,
   parseNativePrefabDocument,
   parseNativeProjectDocument,
-  parseNativeEditorDocument,
+  parseNativeSceneDocument,
   PROJECT_MANIFEST_PATH,
   resolvePrefabAsset,
   resolveSceneAsset,
   serializeNativePrefabDocument,
   serializeNativeProjectDocument,
-  serializeNativeEditorDocument,
+  serializeNativeSceneDocument,
 } from "./domain/native-project-model.ts";
 import {
   appendAnimationFrame,
@@ -718,7 +718,7 @@ function App() {
       const content = await readProjectFile(path);
       if (request !== sceneLoadSequence) return false;
       const parsed = sceneReference
-        ? parseNativeEditorDocument(project, sceneReference.id, content)
+        ? parseNativeSceneDocument(project, sceneReference.id, content)
         : parseNativePrefabDocument(project, prefabReference!.id, content);
       stopAnimationPreview(true);
       setScene(parsed);
@@ -1240,7 +1240,7 @@ function App() {
     try {
       const content = isPrefabDocument(current)
         ? serializeNativePrefabDocument(project, current)
-        : serializeNativeEditorDocument(project, current);
+        : serializeNativeSceneDocument(project, current);
       await writeProjectFile(path, content);
       setSavedContent(content);
       log("success", `Saved native ${isPrefabDocument(current) ? "Prefab" : "Scene"} ${path}`);
