@@ -70,6 +70,34 @@ testCase("creates a native Prefab instance with a distinct Node id and explicit 
   assert.equal(next.rootNodes[0]?.prefabInstance?.prefabId, prefab.id);
 });
 
+testCase("preserves full Transform and inserts a replacement Prefab instance at the original parent", () => {
+  const prefab = createNativePrefabDocument(root);
+  const sceneWithParent: SceneDocumentV1 = {
+    ...scene,
+    rootNodes: [{
+      id: "node-parent",
+      name: "Parent",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    }],
+  };
+  const transform = { ...root.transform, x: 120, y: 240, rotation: 0.75, scaleX: 2, scaleY: 1.5, originX: 0.25, originY: 0.75 };
+  const nested = addNativePrefabInstance(sceneWithParent, prefab, {
+    name: "Nested Crate",
+    transform,
+    parentId: "node-parent",
+  });
+  const instance = nested.rootNodes[0]?.children[0];
+  assert.ok(instance?.prefabInstance);
+  assert.equal(instance.name, "Nested Crate");
+  assert.deepEqual(instance.transform, transform);
+  assert.equal(nested.rootNodes.length, 1);
+  assert.equal(nested.rootNodes[0]?.children.length, 1);
+  assert.throws(() => addNativePrefabInstance(sceneWithParent, prefab, { parentId: "missing" }), /parent Node/);
+});
+
 testCase("applies native component property overrides without mutating the Prefab source", () => {
   const prefab = createNativePrefabDocument(root);
   const instance = createNativePrefabInstanceNode(prefab);

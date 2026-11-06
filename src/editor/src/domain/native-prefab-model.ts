@@ -1,11 +1,11 @@
 import {
-  createDefaultTransform,
   isJsonValue,
   isValidStableId,
   type NodeDocument,
   type PrefabDocumentV1,
   type PrefabOverrideDocument,
   type ProjectDocumentV1,
+  type TransformData,
   type SceneDocumentV1,
 } from "@codogma/cge";
 import { addNativePrefabReference } from "./native-project-model.js";
@@ -15,6 +15,9 @@ export interface NativePrefabInstanceOptions {
   x?: number;
   y?: number;
   active?: boolean;
+  transform?: TransformData;
+  /** Existing parent Node in the Scene. Omit/null to insert at the Scene root. */
+  parentId?: string | null;
 }
 
 function createId(): string {
@@ -95,14 +98,20 @@ export function createNativePrefabInstanceNode(
   if (!prefab || prefab.schemaVersion !== 1 || !isValidStableId(prefab.id)) {
     throw new TypeError("A validated PrefabDocumentV1 is required.");
   }
-  const x = options.x ?? prefab.root.transform.x;
-  const y = options.y ?? prefab.root.transform.y;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) throw new TypeError("Prefab instance position must be finite.");
+  const sourceTransform = options.transform ?? prefab.root.transform;
+  const x = options.x ?? sourceTransform.x;
+  const y = options.y ?? sourceTransform.y;
+  const transform = { ...sourceTransform, x, y };
+  for (const [field, value] of Object.entries(transform)) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new TypeError(`Prefab instance Transform ${field} must be finite.`);
+    }
+  }
   return {
     id: createId(),
     name: options.name?.trim() || prefab.name,
     active: options.active ?? true,
-    transform: { ...createDefaultTransform(), x, y },
+    transform,
     components: [],
     children: [],
     prefabInstance: {
@@ -122,7 +131,28 @@ export function addNativePrefabInstance(
   if (scene.rootNodes.some((root) => root.id === instance.id)) {
     throw new Error("Generated Prefab instance identity already exists.");
   }
-  return { ...scene, rootNodes: [...scene.rootNodes, instance] };
+  const parentId = options.parentId ?? null;
+  if (parentId === null) {
+    return { ...scene, rootNodes: [...scene.rootNodes, instance] };
+  }
+
+  const insert = (nodes: readonly NodeDocument[]): { nodes: NodeDocument[]; found: boolean } => {
+    let found = false;
+    const next = nodes.map((node) => {
+      if (node.id === parentId) {
+        found = true;
+        return { ...node, children: [...node.children, instance] };
+      }
+      const childResult = insert(node.children);
+      if (!childResult.found) return node;
+      found = true;
+      return { ...node, children: childResult.nodes };
+    });
+    return { nodes: next, found };
+  };
+  const result = insert(scene.rootNodes);
+  if (!result.found) throw new Error(`Prefab parent Node "${parentId}" was not found in the Scene.`);
+  return { ...scene, rootNodes: result.nodes };
 }
 
 export function addNativePrefabOverride(

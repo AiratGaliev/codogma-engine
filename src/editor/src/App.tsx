@@ -1188,8 +1188,8 @@ function App() {
       const withoutSource = removeSceneObject(current, selected.id);
       const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
         name: selected.name,
-        x: selected.node.transform.x,
-        y: selected.node.transform.y,
+        transform: selected.node.transform,
+        parentId: selected.parentId,
       });
       const instance = getSceneObjects(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
       setProjectDocument(nextProject);
