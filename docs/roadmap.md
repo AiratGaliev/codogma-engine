@@ -231,7 +231,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Зафиксировать разрешение ссылок на узлы/компоненты по стабильным ID и поведение отсутствующей цели/неподдерживаемой циклической ссылки.
 - [ ] Реализовать native SceneDocument loader и Build path: runtime создаётся из сериализованных данных и зарегистрированных Script/Component modules; Scene не имеет собственного generated TypeScript companion file.
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
-- [ ] Определить versioning и миграции между реально выпущенными версиями Codogma Project Model; внутренние experiment formats не поддерживать.
+Схема имеет versioned contract; миграции выполняются только между опубликованными версиями Codogma.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
 - [ ] Утвердить границы API для Input (mouse/keyboard/touch и coordinate spaces), Time/Tween/scheduler и Scene Manager (async load, transition, cancellation, disposal); отдельные необязательные capabilities не должны проникать во все компоненты.
 - [ ] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
