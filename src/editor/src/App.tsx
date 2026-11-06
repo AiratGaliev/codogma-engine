@@ -3380,6 +3380,8 @@ function App() {
                 <Show when={selectedObject() && scene() && !isPrefabDocument(scene()!)}>
                   <button class="subtle-button create-prefab-button" onClick={() => void createPrefabFromSelected()}>Create Prefab from selected Node</button>
                 </Show>
+              </div>
+            </Show>
             <div class="inspector-footer">
               <span>{selectedObject() ? "Scene object" : "Inspector"}</span>
               <span>{documentDirty() ? "Modified" : "In sync"}</span>
