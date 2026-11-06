@@ -75,6 +75,9 @@ export function attachNativeComponent(
   const module = userModule(context, typeId);
   const instanceId = createId();
   return updateNativeNode(document, nodeId, (node) => {
+    if (node.components.some((component) => component.typeId === typeId)) {
+      throw new Error(`Component "${typeId}" is already attached to Node "${nodeId}".`);
+    }
     const properties = validateProperties(typeId, initialProperties, context, node.id);
     const instance: ComponentInstanceDocument = {
       id: instanceId,

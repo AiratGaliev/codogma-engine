@@ -53,6 +53,31 @@ testCase("attaches a registered component with stable type identity and independ
   assert.deepEqual(findSceneNode(original, "node-player")?.components, []);
 });
 
+testCase("prevents duplicate attachment of the same Component type to one Node", () => {
+  const first = attachNativeComponent(scene(), "node-player", "com.example.health", { project }) as SceneDocumentV1;
+  assert.throws(
+    () => attachNativeComponent(first, "node-player", "com.example.health", { project }),
+    /already attached/,
+  );
+  const secondNodeScene: SceneDocumentV1 = {
+    ...first,
+    rootNodes: [...first.rootNodes, {
+      id: "node-enemy",
+      name: "Enemy",
+      active: true,
+      transform: { x: 100, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    }],
+  };
+  const next = attachNativeComponent(secondNodeScene, "node-enemy", "com.example.health", { project }) as SceneDocumentV1;
+  assert.equal(findSceneNode(next, "node-enemy")?.components[0]?.typeId, "com.example.health");
+  assert.notEqual(
+    findSceneNode(next, "node-player")?.components[0]?.id,
+    findSceneNode(next, "node-enemy")?.components[0]?.id,
+  );
+});
+
 testCase("rejects component IDs that are not registered by the native Project manifest", () => {
   assert.throws(() => attachNativeComponent(scene(), "node-player", "Health", { project }), /not registered/);
   assert.throws(() => attachNativeComponent(scene(), "node-player", "com.example.unknown", { project }), /not registered/);
