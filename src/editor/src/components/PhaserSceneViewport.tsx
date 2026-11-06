@@ -8,13 +8,13 @@ import {
 import {
   getSceneObjects,
   type SceneDocument,
-} from "../domain/scene-model.ts";
+} from "../domain/native-scene-model.ts";
 import {
   readProjectFile,
   type ProjectEntry,
 } from "../services/editor-api";
-import { getSceneObjectEffects, type FxObject } from "../domain/fx-model.ts";
-import type { SceneObject } from "../domain/scene-model.ts";
+import { getNativeNodeEffects, type FxObject } from "../domain/native-fx-model.ts";
+import type { NodeDocument, PrefabDocumentV1, ProjectDocumentV1 } from "@codogma/cge";
 import {
   createFxPreview,
   isFxPreviewParentSupported,
@@ -179,6 +179,8 @@ interface Props {
   scenePath: string | null;
   selectedId: string | null;
   projectTree: ProjectEntry | null;
+  projectDocument: ProjectDocumentV1 | null;
+  prefabs: PrefabDocumentV1[];
   theme: "dark" | "light";
   active: boolean;
   tool: () => TransformTool;
@@ -195,6 +197,7 @@ interface SceneEntry {
   type: string;
   parentId: string | null;
   source: Record<string, unknown>;
+  node: NodeDocument;
 }
 
 const RUNTIME_WIDTH = 800;
@@ -447,7 +450,7 @@ function PhaserSceneViewport(props: Props) {
         : "";
       const previewSupported = isFxPreviewParentSupported(entry.type, textureKey, imageKeys);
       let renderOrderOffset = 0;
-      for (const effect of getSceneObjectEffects(entry.source as SceneObject)) {
+      for (const effect of getNativeNodeEffects(entry.node)) {
         const key = `${entry.id}:${effect.id}`;
         desired.set(key, {
           parentId: entry.id,
@@ -558,11 +561,12 @@ function PhaserSceneViewport(props: Props) {
 
     const current = props.scene;
     const entries = current
-      ? getSceneObjects(current).map((entry) => ({
+      ? getSceneObjects(current, props.prefabs).map((entry) => ({
           id: entry.id,
-          type: entry.type,
+          type: entry.source.renderType,
           parentId: entry.parentId,
-          source: entry.source as Record<string, unknown>,
+          source: entry.source as unknown as Record<string, unknown>,
+          node: entry.renderNode,
         }))
       : [];
     const activeIds = new Set(entries.map((entry) => entry.id));
@@ -585,7 +589,7 @@ function PhaserSceneViewport(props: Props) {
           }
 
           const liveSource = props.scene
-            ? getSceneObjects(props.scene).find((candidate) => candidate.id === entry.id)?.source as Record<string, unknown> | undefined
+            ? getSceneObjects(props.scene, props.prefabs).find((candidate) => candidate.id === entry.id)?.source as unknown as Record<string, unknown> | undefined
             : undefined;
           transformDrag = {
             id: entry.id,
@@ -721,10 +725,14 @@ function PhaserSceneViewport(props: Props) {
     void (async () => {
       try {
         const runtimePath = await discoverPhaserScript(props.projectTree);
-        const [phaser, imageAssets] = await Promise.all([
+        const [phaser, assetPackImages] = await Promise.all([
           loadPhaserRuntime(runtimePath),
           discoverImageAssets(props.projectTree),
         ]);
+        const nativeImages = (props.projectDocument?.assets ?? [])
+          .filter((asset) => asset.kind === "image")
+          .map((asset) => ({ key: asset.id, path: asset.path }));
+        const imageAssets = [...new Map([...assetPackImages, ...nativeImages].map((asset) => [asset.key, asset])).values()];
         if (disposed || !mount) return;
 
         const ImageScene = class extends phaser.Scene {

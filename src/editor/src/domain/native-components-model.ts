@@ -75,8 +75,6 @@ export function attachNativeComponent(
   const module = userModule(context, typeId);
   const instanceId = createId();
   return updateNativeNode(document, nodeId, (node) => {
-    const duplicate = node.components.find((component) => component.typeId === typeId);
-    if (duplicate) return node;
     const properties = validateProperties(typeId, initialProperties, context, node.id);
     const instance: ComponentInstanceDocument = {
       id: instanceId,

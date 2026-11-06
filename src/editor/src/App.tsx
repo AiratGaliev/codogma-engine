@@ -10,15 +10,26 @@ import {
 import designTokens from "../design-system/tokens.json";
 import {
   createSceneObject,
-  findScenePaths,
-  formatSceneContent,
   getSceneObjects,
-  parseSceneContent,
   removeSceneObject,
   updateSceneObject,
+  isPrefabDocument,
   type SceneDocument,
   type SceneObjectEntry,
-} from "./domain/scene-model.ts";
+} from "./domain/native-scene-model.ts";
+import {
+  findPrefabReferenceByAssetPath,
+  findSceneReferenceByAssetPath,
+  parseNativePrefabDocument,
+  parseNativeProjectDocument,
+  parseNativeSceneDocument,
+  PROJECT_MANIFEST_PATH,
+  resolvePrefabAsset,
+  resolveSceneAsset,
+  serializeNativePrefabDocument,
+  serializeNativeProjectDocument,
+  serializeNativeSceneDocument,
+} from "./domain/native-project-model.ts";
 import {
   appendAnimationFrame,
   createAnimation,
@@ -36,28 +47,22 @@ import {
   type AnimationDocument,
 } from "./domain/animation-model.ts";
 import {
-  createPrefabDocument,
-  createPrefabInstance,
-  addPrefabProperty,
-  updatePrefabProperty,
-  removePrefabProperty,
-  type PrefabDocument,
-  type PrefabProperty,
-} from "./domain/prefab-model.ts";
+  addNativePrefabInstance,
+  createNativePrefabDocument,
+  registerNativePrefab,
+} from "./domain/native-prefab-model.ts";
 import {
-  addUserComponentDefinition,
-  attachUserComponent,
-  createUserComponentDefinition,
-  createUserComponentSchema,
-  detachUserComponent,
-  formatUserComponentsContent,
-  parseUserComponentsContent,
-  validateUserComponentProperties,
-  validateUserComponentPropertyValue,
-  removeUserComponentDefinition,
-  updateUserComponentDefinition,
-  type UserComponentsDocument,
-} from "./domain/components-model.ts";
+  attachNativeComponent,
+  detachNativeComponent,
+} from "./domain/native-components-model.ts";
+import {
+  addNativeNodeFx,
+  getNativeNodeEffects,
+  removeNativeNodeFx,
+  updateNativeNodeFx,
+  type FxObject,
+  type FxType,
+} from "./domain/native-fx-model.ts";
 import {
   getProjectFiles,
   readProjectFile,
@@ -73,15 +78,6 @@ import {
   connectEditorMcpBridge,
   type EditorMcpHandler,
 } from "./services/editor-mcp-bridge";
-import {
-  addSceneObjectFx,
-  getSceneObjectEffects,
-  getUnsupportedSceneObjectEffects,
-  removeSceneObjectFx,
-  updateSceneObjectFx,
-  type FxObject,
-  type FxType,
-} from "./domain/fx-model.ts";
 import {
   createDefaultWorkspaceLayout,
   getMaximumConsoleHeight,
@@ -186,7 +182,7 @@ function ProjectTreeNode(props: {
   const iconName = () => {
     if (isDirectory()) return expanded() ? "folder" : "folder";
     const extension = props.node.name.toLowerCase().split(".").pop();
-    if (extension === "scene" || extension === "prefab") return "packed-scene";
+    if (props.node.name.toLowerCase().endsWith(".cge-scene.json") || props.node.name.toLowerCase().endsWith(".cge-prefab.json")) return "packed-scene";
     if (["png", "jpg", "jpeg", "webp"].includes(extension ?? "")) return "image-texture";
     if (extension === "ts" || extension === "tsx" || extension === "js") return "script";
     if (extension === "json") return "file";
@@ -217,8 +213,8 @@ function ProjectTreeNode(props: {
         </span>
         <Icon theme={props.theme} name={iconName()} size={14} />
         <span class="tree-label">{props.node.name}</span>
-        <Show when={props.node.isFile && props.node.name.toLowerCase().endsWith(".scene")}>
-          <span class="file-kind">SCENE</span>
+        <Show when={props.node.isFile && (props.node.name.toLowerCase().endsWith(".cge-scene.json") || props.node.name.toLowerCase().endsWith(".cge-prefab.json"))}>
+          <span class="file-kind">{props.node.name.toLowerCase().endsWith(".cge-prefab.json") ? "PREFAB" : "SCENE"}</span>
         </Show>
       </button>
       <Show when={isDirectory() && expanded()}>
@@ -354,6 +350,9 @@ function App() {
   })());
   const [projectName, setProjectName] = createSignal("Project");
   const [projectTree, setProjectTree] = createSignal<ProjectEntry | null>(null);
+  const [projectDocument, setProjectDocument] = createSignal<import("@codogma/cge").ProjectDocumentV1 | null>(null);
+  const [savedProjectContent, setSavedProjectContent] = createSignal("");
+  const [projectSaving, setProjectSaving] = createSignal(false);
   const [scene, setScene] = createSignal<SceneDocument | null>(null);
   const [scenePath, setScenePath] = createSignal("");
   const [savedContent, setSavedContent] = createSignal("");
@@ -369,26 +368,15 @@ function App() {
   const [animationPlayheadMs, setAnimationPlayheadMs] = createSignal(0);
   const [animationPreviewFrameIndex, setAnimationPreviewFrameIndex] = createSignal(0);
   const [selectedAnimationFrameIndex, setSelectedAnimationFrameIndex] = createSignal(0);
-  const [componentSources, setComponentSources] = createSignal<Array<{ path: string; document: UserComponentsDocument }>>([]);
-  const [componentDocument, setComponentDocument] = createSignal<UserComponentsDocument | null>(null);
-  const [componentDocumentPath, setComponentDocumentPath] = createSignal("");
-  const [savedComponentContent, setSavedComponentContent] = createSignal("");
-  const [componentSaving, setComponentSaving] = createSignal(false);
   const [scriptSourcePath, setScriptSourcePath] = createSignal("");
   const [scriptSource, setScriptSource] = createSignal("");
   const [savedScriptSource, setSavedScriptSource] = createSignal("");
   const [scriptSaving, setScriptSaving] = createSignal(false);
   const [scriptChecking, setScriptChecking] = createSignal(false);
   const [scriptDiagnostics, setScriptDiagnostics] = createSignal<TypeScriptSourceDiagnostic[]>([]);
-  const [newComponentName, setNewComponentName] = createSignal("");
-  const [newComponentPropertyName, setNewComponentPropertyName] = createSignal("");
-  const [newComponentPropertyType, setNewComponentPropertyType] = createSignal<"number" | "string" | "boolean">("number");
   const [componentToAttach, setComponentToAttach] = createSignal("");
-  const [prefabCatalog, setPrefabCatalog] = createSignal<Array<{ path: string; document: PrefabDocument }>>([]);
+  const [prefabCatalog, setPrefabCatalog] = createSignal<Array<{ assetId: string; path: string; document: import("@codogma/cge").PrefabDocumentV1 }>>([]);
   const [selectedPrefabPath, setSelectedPrefabPath] = createSignal("");
-  const [prefabPropertyName, setPrefabPropertyName] = createSignal("");
-  const [prefabPropertyType, setPrefabPropertyType] = createSignal<"string" | "number" | "boolean" | "option">("boolean");
-  const [prefabPropertyDefault, setPrefabPropertyDefault] = createSignal("");
   const [history, setHistory] = createSignal<SceneDocument[]>([]);
   const [historyIndex, setHistoryIndex] = createSignal(-1);
   const [selectionHistory, setSelectionHistory] = createSignal<Array<{ before: string | null; after: string | null }>>([]);
@@ -478,36 +466,35 @@ function App() {
     catch { return true; }
   });
 
-  const componentDirty = createMemo(() => {
-    const current = componentDocument();
-    const saved = savedComponentContent();
-    if (!current || !saved) return false;
-    try { return formatUserComponentsContent(current) !== saved; }
-    catch { return true; }
-  });
-
   const scriptDirty = createMemo(() =>
     Boolean(scriptSourcePath()) && scriptSource() !== savedScriptSource(),
   );
 
-  const documentDirty = createMemo(() => dirty() || animationDirty() || componentDirty() || scriptDirty());
+  const projectDirty = createMemo(() => {
+    const current = projectDocument();
+    if (!current || !savedProjectContent()) return false;
+    try { return serializeNativeProjectDocument(current) !== savedProjectContent(); }
+    catch { return true; }
+  });
+
+  const documentDirty = createMemo(() => dirty() || projectDirty() || animationDirty() || scriptDirty());
 
   const componentRegistry = createMemo(() => {
-    const sources = componentSources();
-    const active = componentDocument();
-    const activePath = componentDocumentPath();
-    const effective = active && activePath
-      ? [...sources.filter((source) => source.path !== activePath), { path: activePath, document: active }]
-      : sources;
-    return effective.flatMap((source) => source.document.components.map((definition) => ({
-      path: source.path,
-      definition,
-    })));
+    const project = projectDocument();
+    if (!project) return [];
+    return project.componentModules.map((module) => {
+      const asset = project.assets.find((item) => item.id === module.moduleAssetId);
+      return {
+        path: asset?.path ?? "",
+        module,
+        definition: { name: module.typeId, displayName: module.typeId, properties: [] as never[] },
+      };
+    }).filter((item) => item.path.length > 0);
   });
 
   const sceneObjects = createMemo(() => {
     const current = scene();
-    return current ? getSceneObjects(current) : [];
+    return current ? getSceneObjects(current, prefabCatalog().map((item) => item.document)) : [];
   });
 
   const selectedObject = createMemo<SceneObjectEntry | undefined>(() => {
@@ -517,13 +504,10 @@ function App() {
 
   const selectedFxEffects = createMemo(() => {
     const selected = selectedObject();
-    return selected ? getSceneObjectEffects(selected.source) : [];
+    return selected ? getNativeNodeEffects(selected.node) : [];
   });
 
-  const selectedUnsupportedFxTypes = createMemo(() => {
-    const selected = selectedObject();
-    return selected ? getUnsupportedSceneObjectEffects(selected.source) : [];
-  });
+  const selectedUnsupportedFxTypes = createMemo(() => [] as string[]);
 
   const visibleSceneObjects = createMemo(() => {
     const query = hierarchySearch().trim().toLowerCase();
@@ -716,22 +700,26 @@ function App() {
 
   async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
-    if (animationDirty() || componentDirty() || scriptDirty()) {
-      if (!window.confirm("The active animation, User Components or TypeScript source has unsaved changes. Discard them and open the scene?")) return false;
+    if (animationDirty() || scriptDirty()) {
+      if (!window.confirm("The active animation or TypeScript source has unsaved changes. Discard them and open the document?")) return false;
     }
-    if (dirty()) {
-      const discardChanges = window.confirm(
-        "This scene has unsaved changes. Discard them and open the requested scene?",
-      );
-      if (!discardChanges) return false;
+    if (dirty() || projectDirty()) {
+      if (!window.confirm("The active native document or Project manifest has unsaved changes. Discard them and open the requested document?")) return false;
     }
 
     const request = ++sceneLoadSequence;
     setLoadError("");
     try {
+      const project = projectDocument();
+      if (!project) throw new Error("The native Project manifest is not loaded.");
+      const sceneReference = findSceneReferenceByAssetPath(project, path);
+      const prefabReference = findPrefabReferenceByAssetPath(project, path);
+      if (!sceneReference && !prefabReference) throw new Error(`"${path}" is not registered as a Scene or Prefab asset in project.json.`);
       const content = await readProjectFile(path);
       if (request !== sceneLoadSequence) return false;
-      const parsed = parseSceneContent(content) as SceneDocument;
+      const parsed = sceneReference
+        ? parseNativeSceneDocument(project, sceneReference.id, content)
+        : parseNativePrefabDocument(project, prefabReference!.id, content);
       stopAnimationPreview(true);
       setScene(parsed);
       setScenePath(path);
@@ -739,18 +727,15 @@ function App() {
       setHistory([parsed]);
       setHistoryIndex(0);
       setSelectionHistory([]);
-      const firstObject = getSceneObjects(parsed)[0];
+      const firstObject = getSceneObjects(parsed, prefabCatalog().map((item) => item.document))[0];
       setSelectedId(firstObject?.id ?? null);
       setSelectedProjectPath(path);
       setAnimationDocument(null);
       setAnimationPath("");
       setSavedAnimationContent("");
-      setComponentDocument(null);
-      setComponentDocumentPath("");
-      setSavedComponentContent("");
       setActiveViewport("Scene");
       setGameLoaded(false);
-      log("success", `Opened ${path}`);
+      log("success", `Opened native ${isPrefabDocument(parsed) ? "Prefab" : "Scene"} ${path}`);
       return true;
     } catch (error) {
       if (request !== sceneLoadSequence) return false;
@@ -768,10 +753,11 @@ function App() {
       const result = await getProjectFiles();
       setProjectTree(result.rootFile);
       setProjectName(result.rootFile.name);
-      const scenes = findScenePaths(result.rootFile);
-      if (scenes.length === 0) {
-        throw new Error("No .scene files were found in the selected project.");
-      }
+      const manifestContent = await readProjectFile(PROJECT_MANIFEST_PATH);
+      const project = parseNativeProjectDocument(manifestContent);
+      setProjectDocument(project);
+      setSavedProjectContent(serializeNativeProjectDocument(project));
+
       const files = flattenProjectFiles(result.rootFile);
       const availableProjectPaths = new Set(files.filter(({ entry }) => entry.isFile).map(({ path }) => path));
       const animationAssets: Array<{ key: string; url: string; type: string }> = [];
@@ -792,36 +778,28 @@ function App() {
                 ? candidate
                 : [packDirectory, candidate].filter(Boolean).join("/");
               if (!availableProjectPaths.has(resolvedPath)) continue;
-              animationAssets.push({
-                key: entry.key,
-                url: resolvedPath,
-                type: typeof entry.type === "string" ? entry.type : "image",
-              });
+              animationAssets.push({ key: entry.key, url: resolvedPath, type: typeof entry.type === "string" ? entry.type : "image" });
             }
           }
         } catch (error) {
-          log("warning", `Could not read Asset Pack ${packFile.path}: ${error instanceof Error ? error.message : String(error)}`);
+          log("warning", `Could not read external Asset Pack ${packFile.path}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
       setAnimationAssetSources(animationAssets);
-      const [prefabs, components] = await Promise.all([
-        Promise.all(scenes.map(async (path) => {
-          try {
-            const parsed = parseSceneContent(await readProjectFile(path));
-            return parsed.sceneType === "PREFAB" ? { path, document: parsed as PrefabDocument } : null;
-          } catch { return null; }
-        })),
-        Promise.all(files.filter(({ path }) => path.toLowerCase().endsWith(".components")).map(async ({ path }) => {
-          try { return { path, document: parseUserComponentsContent(await readProjectFile(path)) }; }
-          catch (error) { log("warning", `Could not read User Components file ${path}: ${error instanceof Error ? error.message : String(error)}`); return null; }
-        })),
-      ]);
-      setPrefabCatalog(prefabs.filter((item): item is { path: string; document: PrefabDocument } => item !== null));
-      setComponentSources(components.filter((item): item is { path: string; document: UserComponentsDocument } => item !== null));
-      const preferred = scenes.find((path) => path.toLowerCase() === "scenes/level.scene") ?? scenes.find((path) => !prefabs.some((item) => item?.path === path)) ?? scenes[0];
-      if (!preferred) throw new Error("The selected project does not contain an openable scene file.");
-      await loadScene(preferred);
-      log("info", `Project loaded · ${result.projectNumberOfFiles} files and folders`);
+
+      const prefabs = await Promise.all(project.prefabs.map(async (reference) => {
+        const asset = resolvePrefabAsset(project, reference.id);
+        const document = parseNativePrefabDocument(project, reference.id, await readProjectFile(asset.path));
+        return { assetId: reference.assetId, path: asset.path, document };
+      }));
+      setPrefabCatalog(prefabs);
+
+      const firstScene = project.scenes[0];
+      if (!firstScene) throw new Error("The native Project manifest does not register an openable Scene.");
+      const sceneAsset = resolveSceneAsset(project, firstScene.id);
+      const opened = await loadScene(sceneAsset.path);
+      if (!opened) throw new Error(`The registered Scene "${sceneAsset.path}" could not be opened.`);
+      log("info", `Native Project loaded · ${result.projectNumberOfFiles} files and folders`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setLoadError(message);
@@ -904,7 +882,7 @@ function App() {
 
   async function loadAnimationFile(path: string, sourceContent?: string) {
     if (path === animationPath()) return;
-    if ((dirty() || componentDirty() || scriptDirty()) &&
+    if ((dirty() || projectDirty() || scriptDirty()) &&
         !window.confirm("The active scene, User Components or TypeScript source has unsaved changes. Discard them?")) return;
     if (animationDirty() && !window.confirm("The active animation file has unsaved changes. Discard them?")) return;
     const request = ++documentLoadSequence;
@@ -1063,32 +1041,6 @@ function App() {
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  async function openUserComponentsFile(path: string) {
-    if (path === componentDocumentPath()) return;
-    if ((dirty() || animationDirty() || scriptDirty()) &&
-        !window.confirm("The active scene, animation or TypeScript source has unsaved changes. Discard them?")) return;
-    if (componentDirty() && !window.confirm("The active User Components file has unsaved changes. Discard them?")) return;
-    const request = ++documentLoadSequence;
-    try {
-      const content = await readProjectFile(path);
-      if (request !== documentLoadSequence) return;
-      const parsed = parseUserComponentsContent(content);
-      setComponentDocument(parsed);
-      setComponentDocumentPath(path);
-      setSavedComponentContent(formatUserComponentsContent(parsed));
-      setSelectedProjectPath(path);
-      setLayout((current) => ({ ...current, bottomTab: "Components" }));
-      setComponentSources((current) => [
-        ...current.filter((item) => item.path !== path),
-        { path, document: parsed },
-      ]);
-      log("success", `Opened User Components ${path}`);
-    } catch (error) {
-      if (request !== documentLoadSequence) return;
-      log("error", error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async function runTypeScriptSourceCheck(path: string, content: string) {
     const request = ++scriptCheckSequence;
     setScriptChecking(true);
@@ -1167,43 +1119,10 @@ function App() {
     log("success", `Created TypeScript source ${path}`);
   }
 
-  async function openUserComponentSource(definition: UserComponentsDocument["components"][number]) {
-    const directory = componentDocumentPath().split("/").slice(0, -1).join("/");
-    const path = [directory, `${definition.name}.ts`].filter(Boolean).join("/");
-    const tree = projectTree();
-    const exists = tree
-      ? flattenProjectFiles(tree).some((entry) => entry.path === path && entry.entry.isFile)
-      : false;
-    if (exists) {
-      await openTypeScriptFile(path);
-      return;
-    }
-    const source = [
-      "/**",
-      ` * User-authored TypeScript source for ${definition.name}.`,
-      " * Component metadata remains in the adjacent .components file.",
-      " * Runtime execution requires explicit component module registration.",
-      " */",
-      `export class ${definition.name} {`,
-      "  // Add the component's TypeScript implementation here.",
-      "}",
-      "",
-    ].join("\\n");
-    try {
-      await createTypeScriptFile(path, source);
-    } catch (error) {
-      log("error", error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async function openProjectFile(path: string) {
     const normalized = path.toLowerCase();
-    if (normalized.endsWith(".scene")) {
+    if (normalized.endsWith(".cge-scene.json") || normalized.endsWith(".cge-prefab.json")) {
       await loadScene(path);
-      return;
-    }
-    if (normalized.endsWith(".components")) {
-      await openUserComponentsFile(path);
       return;
     }
     if (normalized.endsWith(".ts") || normalized.endsWith(".tsx")) {
@@ -1236,309 +1155,108 @@ function App() {
     if (existing) throw new Error(`A project item already exists at "${path}".`);
   }
 
-  async function saveUserComponentsFile() {
-    const current = componentDocument();
-    const path = componentDocumentPath();
-    if (!current || !path || componentSaving()) return;
-    setComponentSaving(true);
-    try {
-      const content = formatUserComponentsContent(current);
-      await writeProjectFile(path, content);
-      setSavedComponentContent(content);
-      setComponentSources((sources) => sources.map((item) => item.path === path ? { path, document: current } : item));
-      log("success", `Saved User Components ${path}`);
-    } catch (error) {
-      log("error", `Component save failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setComponentSaving(false);
-    }
-  }
-
-  async function createUserComponentsFile() {
-    const path = window.prompt("New User Components file path", "components/Behaviors.components")?.trim();
-    if (!path) return;
-    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.components$/i.test(path) || path.split("/").includes("..")) {
-      log("error", "User Components path must be a relative .components path inside the project.");
-      return;
-    }
-    const directory = path.split("/").slice(0, -1).join("/");
-    try {
-      assertNewProjectFilePath(path);
-      if (directory) await ensureProjectFolder(directory);
-      const document: UserComponentsDocument = {
-        components: [],
-        outputLang: "TYPE_SCRIPT",
-        meta: {
-          app: "Codogma Engine - User Components Editor",
-          url: "https://codogma.com",
-          contentType: "phasereditor2d.core.scene.SceneContentType",
-        },
-      };
-      const content = formatUserComponentsContent(document);
-      await writeProjectFile(path, content);
-      setComponentDocument(document);
-      setComponentDocumentPath(path);
-      setSavedComponentContent(content);
-      setComponentSources((sources) => [...sources, { path, document }]);
-      setLayout((current) => ({ ...current, bottomTab: "Components" }));
-      await refreshProjectTree();
-    } catch (error) {
-      log("error", `Could not create User Components file: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  function addUserComponent() {
-    const current = componentDocument();
-    const name = newComponentName().trim();
-    if (!current || !name) return;
-    try {
-      const next = addUserComponentDefinition(current, createUserComponentDefinition(name));
-      setComponentDocument(next);
-      setNewComponentName("");
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-  function removeUserComponent(name: string) {
-    const current = componentDocument();
-    if (!current) return;
-    try { setComponentDocument(removeUserComponentDefinition(current, name)); }
-    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-  function removeUserComponentProperty(componentName: string, propertyName: string) {
-    const current = componentDocument();
-    const definition = current?.components.find((item) => item.name === componentName);
-    if (!current || !definition) return;
-    try {
-      setComponentDocument(updateUserComponentDefinition(current, componentName, {
-        properties: (definition.properties ?? []).filter((property) => property.name !== propertyName),
-      }));
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-  function updateAttachedComponentProperty(componentName: string, propertyName: string, value: unknown) {
+  async function attachComponentToSelected(typeId: string) {
     const current = scene();
     const selected = selectedObject();
-    const definition = componentRegistry().find((item) => item.definition.name === componentName)?.definition;
-    if (!current || !selected || !definition) return;
-    const validation = validateUserComponentPropertyValue(definition, propertyName, value);
-    if (!validation.valid) {
-      for (const diagnostic of validation.diagnostics) log("error", `${componentName}.${propertyName}: ${diagnostic.message}`);
-      return;
-    }
+    const project = projectDocument();
+    if (!current || !selected || !project) return;
     try {
-      applySceneChange(updateSceneObject(current, selected.id, { [`${componentName}.${propertyName}`]: validation.value }), selected.id);
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-  function addUserComponentProperty(componentName: string) {
-    const current = componentDocument();
-    if (!current) return;
-    const component = current.components.find((item) => item.name === componentName);
-    const propertyName = newComponentPropertyName().trim();
-    if (!component || !propertyName) return;
-    const propertyType = newComponentPropertyType();
-    const defaultValue = propertyType === "number" ? 0 : propertyType === "boolean" ? false : "";
-    try {
-      const next = updateUserComponentDefinition(current, componentName, {
-        properties: [...(component.properties ?? []), {
-          name: propertyName,
-          label: propertyName,
-          defValue: defaultValue,
-          customDefinition: false,
-          type: { id: propertyType },
-        }],
-      });
-      setComponentDocument(next);
-      setNewComponentPropertyName("");
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-  function attachComponentToSelected(name: string) {
-    const current = scene();
-    const selected = selectedObject();
-    const definition = componentRegistry().find((item) => item.definition.name === name)?.definition;
-    if (!current || !selected || !definition) return;
-    try {
-      const nextSource = attachUserComponent(selected.source, definition);
-      applySceneChange(updateSceneObject(current, selected.id, nextSource), selected.id);
+      applySceneChange(attachNativeComponent(current, selected.id, typeId, { project }), selected.id);
       setComponentToAttach("");
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  function detachComponentFromSelected(name: string) {
+  function detachComponentFromSelected(instanceId: string) {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
-    try {
-      const nextSource = detachUserComponent(selected.source, name);
-      applySceneChange(updateSceneObject(current, selected.id, nextSource), selected.id);
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+    try { applySceneChange(detachNativeComponent(current, selected.id, instanceId), selected.id); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   async function createPrefabFromSelected() {
     const current = scene();
     const selected = selectedObject();
-    if (!current || !selected || current.sceneType === "PREFAB") return;
+    const project = projectDocument();
+    if (!current || !selected || !project || isPrefabDocument(current)) return;
     const baseName = selected.name.replace(/[^A-Za-z0-9_-]+/g, "_") || "Prefab";
-    const path = window.prompt("Save Prefab scene as", `prefabs/${baseName}.scene`)?.trim();
+    const path = window.prompt("Save native Prefab as", `prefabs/${baseName}.cge-prefab.json`)?.trim();
     if (!path) return;
-    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.scene$/i.test(path) || path.split("/").includes("..")) {
-      log("error", "Prefab path must be a relative .scene path inside the project.");
+    if (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.cge-prefab\.json$/i.test(path) || path.split("/").includes("..")) {
+      log("error", "Prefab path must be a relative .cge-prefab.json path inside the project.");
       return;
     }
     const directory = path.split("/").slice(0, -1).join("/");
     try {
       assertNewProjectFilePath(path);
       if (directory) await ensureProjectFolder(directory);
-      const prefab = createPrefabDocument(current, selected.source, baseName);
-      await writeProjectFile(path, formatSceneContent(prefab as SceneDocument));
+      const prefab = createNativePrefabDocument(selected.node, baseName);
+      const assetId = globalThis.crypto?.randomUUID?.();
+      if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
+      const nextProject = registerNativePrefab(project, prefab, assetId, path);
+      const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
+      await writeProjectFile(path, prefabContent);
+      const manifestContent = serializeNativeProjectDocument(nextProject);
+      await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
       const withoutSource = removeSceneObject(current, selected.id);
-      const next = createPrefabInstance(withoutSource, prefab, {
-        label: selected.name,
-        x: Number(selected.source.x ?? 400),
-        y: Number(selected.source.y ?? 300),
-        rotation: Number(selected.source.rotation ?? 0),
-        scaleX: Number(selected.source.scaleX ?? 1),
-        scaleY: Number(selected.source.scaleY ?? 1),
+      const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
+        name: selected.name,
+        x: selected.node.transform.x,
+        y: selected.node.transform.y,
       });
-      const instance = getSceneObjects(next).at(-1);
-      applySceneChange(next, instance?.id ?? null);
-      setPrefabCatalog((catalog) => [...catalog.filter((item) => item.path !== path), { path, document: prefab }]);
+      const instance = getSceneObjects(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
+      setProjectDocument(nextProject);
+      setSavedProjectContent(manifestContent);
+      setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
+      applySceneChange(nextScene, instance?.id ?? null);
       await refreshProjectTree();
-      log("success", `Created Prefab ${path} and replaced the selected object with an instance`);
+      log("success", `Created native Prefab ${path} and replaced the selected Node with a Prefab instance`);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function addPrefabInstance() {
     const current = scene();
     const prefab = prefabCatalog().find((item) => item.path === selectedPrefabPath());
-    if (!current || !prefab || current.sceneType === "PREFAB") return;
-    const next = createPrefabInstance(current, prefab.document, { x: 400, y: 300 });
-    const instance = getSceneObjects(next).at(-1);
-    applySceneChange(next, instance?.id ?? null);
-  }
-
-  function updatePrefabOverride(property: PrefabProperty, value: unknown) {
-    const current = scene();
-    const selected = selectedObject();
-    if (!current || !selected || !selected.source.prefabId) return;
-    const unlock = Array.isArray(selected.source.unlock) ? selected.source.unlock as string[] : [];
-    const nextUnlock = unlock.includes(property.name) ? unlock : [...unlock, property.name];
-    const next = updateSceneObject(current, selected.id, { [property.name]: value, unlock: nextUnlock });
-    applySceneChange(next, selected.id);
-  }
-
-  function addPrefabPropertyFromFields() {
-    const current = scene();
-    const name = prefabPropertyName().trim();
-    if (!current || current.sceneType !== "PREFAB" || !name) return;
-    const type = prefabPropertyType();
-    let defaultValue: unknown = prefabPropertyDefault();
-    let options: string[] | undefined;
-    if (type === "number") {
-      defaultValue = Number(prefabPropertyDefault() || "0");
-      if (!Number.isFinite(defaultValue)) {
-        log("error", "Prefab numeric default must be finite.");
-        return;
-      }
-    } else if (type === "boolean") {
-      defaultValue = prefabPropertyDefault().toLowerCase() === "true";
-    } else if (type === "option") {
-      options = prefabPropertyDefault().split(",").map((item) => item.trim()).filter(Boolean);
-      if (options.length === 0) {
-        log("error", "Enter at least one comma-separated option.");
-        return;
-      }
-      defaultValue = options[0];
-    }
+    if (!current || !prefab || isPrefabDocument(current)) return;
     try {
-      const next = addPrefabProperty(current as PrefabDocument, {
-        name,
-        label: name,
-        tooltip: name,
-        defValue: defaultValue,
-        customDefinition: false,
-        type: { id: type, ...(options ? { options } : {}) },
-      });
-      applySceneChange(next as SceneDocument, selectedId());
-      setPrefabPropertyName("");
+      const next = addNativePrefabInstance(current as import("@codogma/cge").SceneDocumentV1, prefab.document, { x: 400, y: 300 });
+      const instance = getSceneObjects(next, prefabCatalog().map((item) => item.document)).at(-1);
+      applySceneChange(next, instance?.id ?? null);
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  function removePrefabPropertyFromDocument(name: string) {
-    const current = scene();
-    if (!current || current.sceneType !== "PREFAB") return;
+  async function saveProjectManifest(): Promise<boolean> {
+    const current = projectDocument();
+    if (!current || projectSaving()) return false;
+    setProjectSaving(true);
     try {
-      applySceneChange(removePrefabProperty(current as PrefabDocument, name) as SceneDocument, selectedId());
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-  function updatePrefabPropertyDefault(name: string, patch: Partial<PrefabProperty>) {
-    const current = scene();
-    if (!current || current.sceneType !== "PREFAB") return;
-    try {
-      applySceneChange(updatePrefabProperty(current as PrefabDocument, name, patch) as SceneDocument, selectedId());
-    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
-  }
-
-
-  async function saveActiveDocument() {
-    if (activeViewport() === "Source" && scriptSourcePath()) return saveTypeScriptFile();
-    if (layout().bottomTab === "Animation" && animationDocument()) return saveAnimationFile();
-    if (layout().bottomTab === "Components" && componentDocument()) return saveUserComponentsFile();
-    return saveScene();
-  }
-
-  function validateSceneUserComponents(document: SceneDocument): boolean {
-    const definitions = new Map(componentRegistry().map((entry) => [entry.definition.name, entry.definition]));
-    const errors: string[] = [];
-    for (const object of getSceneObjects(document)) {
-      const names = Array.isArray(object.source.components)
-        ? object.source.components.filter((name): name is string => typeof name === "string")
-        : [];
-      for (const name of names) {
-        const definition = definitions.get(name);
-        if (!definition) {
-          log("warning", `${object.name} · ${name}: no matching .components definition was found. The serialized component reference is preserved.`);
-          continue;
-        }
-        const result = validateUserComponentProperties(object.source, definition);
-        for (const diagnostic of result.diagnostics) {
-          if (diagnostic.severity === "error") {
-            errors.push(`${object.name} · ${name}.${diagnostic.propertyName ?? ""}: ${diagnostic.message}`);
-          } else if (diagnostic.severity === "warning") {
-            log("warning", `${object.name} · ${name}: ${diagnostic.message}`);
-          }
-        }
-      }
-    }
-    if (errors.length > 0) {
-      for (const message of errors) log("error", message);
+      const content = serializeNativeProjectDocument(current);
+      await writeProjectFile(PROJECT_MANIFEST_PATH, content);
+      setSavedProjectContent(content);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log("error", `Project manifest save failed: ${message}`);
+      setLoadError(message);
       return false;
+    } finally {
+      setProjectSaving(false);
     }
-    return true;
   }
 
   async function saveScene(): Promise<boolean> {
     const current = scene();
     const path = scenePath();
-    if (!current || !path || saving()) return false;
-
-    if (!validateSceneUserComponents(current)) {
-      setLoadError("One or more User Component values are invalid. Fix the Inspector diagnostics before saving.");
-      return false;
-    }
-
+    const project = projectDocument();
+    if (!current || !path || !project || saving()) return false;
     setSaving(true);
     try {
-      const content = formatSceneContent(current);
+      const content = isPrefabDocument(current)
+        ? serializeNativePrefabDocument(project, current)
+        : serializeNativeSceneDocument(project, current);
       await writeProjectFile(path, content);
       setSavedContent(content);
-      if (current.sceneType === "PREFAB") {
-        setPrefabCatalog((catalog) => catalog.map((item) => item.path === path ? { path, document: current as PrefabDocument } : item));
-      }
-      log("success", `Saved ${path}`);
+      log("success", `Saved native ${isPrefabDocument(current) ? "Prefab" : "Scene"} ${path}`);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1554,23 +1272,15 @@ function App() {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
-    try {
-      const patch = { [key]: value };
-      applySceneChange(updateSceneObject(current, selected.id, patch));
-    } catch (error) {
-      log("error", error instanceof Error ? error.message : String(error));
-    }
+    try { applySceneChange(updateSceneObject(current, selected.id, { [key]: value } as import("./domain/native-scene-model.ts").SceneNodePatch)); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function updateObjectProperties(id: string, patch: Record<string, number>) {
     const current = scene();
     if (!current) return;
-    try {
-      const next = updateSceneObject(current, id, patch) as SceneDocument;
-      applySceneChange(next, id);
-    } catch (error) {
-      log("error", error instanceof Error ? error.message : String(error));
-    }
+    try { applySceneChange(updateSceneObject(current, id, patch), id); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function addFxToSelected(type: FxType) {
@@ -1578,22 +1288,17 @@ function App() {
     const selected = selectedObject();
     if (!current || !selected) return;
     try {
-      applySceneChange(addSceneObjectFx(current, selected.id, type), selected.id);
+      applySceneChange(addNativeNodeFx(current, selected.id, type), selected.id);
       log("info", `Added ${type} effect to ${selected.name}`);
-    } catch (error) {
-      log("error", error instanceof Error ? error.message : String(error));
-    }
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  function updateSelectedFx(id: string, patch: Partial<FxObject>) {
+  function updateSelectedFx(id: string, patch: Partial<Omit<FxObject, "id" | "type">>) {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
-    try {
-      applySceneChange(updateSceneObjectFx(current, selected.id, id, patch), selected.id);
-    } catch (error) {
-      log("error", error instanceof Error ? error.message : String(error));
-    }
+    try { applySceneChange(updateNativeNodeFx(current, selected.id, id, patch), selected.id); }
+    catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function removeSelectedFx(id: string) {
@@ -1601,11 +1306,9 @@ function App() {
     const selected = selectedObject();
     if (!current || !selected) return;
     try {
-      applySceneChange(removeSceneObjectFx(current, selected.id, id), selected.id);
+      applySceneChange(removeNativeNodeFx(current, selected.id, id), selected.id);
       log("info", `Removed FX ${id}`);
-    } catch (error) {
-      log("error", error instanceof Error ? error.message : String(error));
-    }
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function updateSelectedNumber(key: string, event: Event & { currentTarget: HTMLInputElement }) {
@@ -1616,22 +1319,34 @@ function App() {
 
   function addObject(kind: "Image" | "Text" | "Container") {
     const current = scene();
-    if (!current) return;
-    const next = createSceneObject(current, kind) as SceneDocument;
-    const created = getSceneObjects(next).at(-1);
-    applySceneChange(next, created?.id ?? selectedId());
-    setShowObjectMenu(false);
-    log("info", `Created ${kind}`);
+    if (!current || isPrefabDocument(current)) return;
+    const assetId = kind === "Image" ? projectDocument()?.assets.find((asset) => asset.kind === "image")?.id : undefined;
+    try {
+      const next = createSceneObject(current, kind, assetId);
+      const created = getSceneObjects(next, prefabCatalog().map((item) => item.document)).at(-1);
+      applySceneChange(next, created?.id ?? selectedId());
+      setShowObjectMenu(false);
+      log("info", `Created ${kind}`);
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
   function deleteSelectedObject() {
     const current = scene();
     const selected = selectedObject();
     if (!current || !selected) return;
-    const next = removeSceneObject(current, selected.id);
-    const remaining = getSceneObjects(next);
-    applySceneChange(next, remaining[0]?.id ?? null);
-    log("info", `Removed ${selected.name}`);
+    try {
+      const next = removeSceneObject(current, selected.id);
+      const remaining = getSceneObjects(next, prefabCatalog().map((item) => item.document));
+      applySceneChange(next, remaining[0]?.id ?? null);
+      log("info", `Removed ${selected.name}`);
+    } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  async function saveActiveDocument() {
+    if (activeViewport() === "Source" && scriptSourcePath()) return saveTypeScriptFile();
+    if (layout().bottomTab === "Animation" && animationDocument()) return saveAnimationFile();
+    if (projectDirty() && !(await saveProjectManifest())) return false;
+    return saveScene();
   }
 
   function getMaximumSidePanelWidth(kind: "left" | "right"): number {
@@ -2828,36 +2543,39 @@ function App() {
     }
   }
 
-  const components = () => {
-    const value = currentObject()?.components;
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  };
+  const selectedComponentDefinitions = createMemo(() => {
+    const selected = selectedObject();
+    const project = projectDocument();
+    if (!selected || !project) return [];
+    const modules = new Map(project.componentModules.map((module) => [module.typeId, module]));
+    return selected.node.components.flatMap((instance) => {
+      const module = modules.get(instance.typeId);
+      if (!module) return [];
+      const asset = project.assets.find((item) => item.id === module.moduleAssetId);
+      return asset ? [{ instance, module, asset }] : [];
+    });
+  });
 
-  const selectedComponentDefinitions = createMemo(() =>
-    componentRegistry().filter((item) => components().includes(item.definition.name)),
-  );
-  const hasUnattachedComponents = createMemo(() =>
-    componentRegistry().filter((item) => !components().includes(item.definition.name)),
-  );
+  const components = () => selectedComponentDefinitions().map((item) => item.instance.typeId);
+
+  const hasUnattachedComponents = createMemo(() => {
+    const attached = new Set(components());
+    return componentRegistry().filter((entry) => !attached.has(entry.module.typeId));
+  });
+
   const selectedPrefab = createMemo(() => {
     const current = scene();
-    if (current?.sceneType === "PREFAB") return { path: scenePath(), document: current as PrefabDocument };
-    const prefabId = selectedObject()?.source.prefabId;
+    if (current && isPrefabDocument(current)) return { path: scenePath(), document: current };
+    const prefabId = selectedObject()?.node.prefabInstance?.prefabId;
     return prefabId ? prefabCatalog().find((item) => item.document.id === prefabId) : undefined;
   });
   const selectedPrefabDefinition = createMemo(() => selectedPrefab()?.document ?? null);
 
-
-
-
-
   const menuItems = createMemo<Record<string, MenuItem[]>>(() => ({
     File: [
-      { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !componentDocument() },
+      { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !scriptSourcePath() },
       { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
-      { label: "Save User Components", action: () => void saveUserComponentsFile(), disabled: !componentDocument() || !componentDirty() },
       { label: "New Animation file", action: () => void createAnimationFile() },
-      { label: "New User Components file", action: () => void createUserComponentsFile() },
       { label: "Reload scene from disk", action: () => scenePath() && void loadScene(scenePath(), true), disabled: !scenePath() },
     ],
     Edit: [
@@ -2865,7 +2583,7 @@ function App() {
       { label: "Redo", shortcut: "Ctrl+Shift+Z", action: redo, disabled: historyIndex() < 0 || historyIndex() >= history().length - 1 },
       { label: "Command palette", shortcut: "Ctrl+P", action: openPalette },
       { label: "Delete selected object", shortcut: "Del", action: deleteSelectedObject, disabled: !selectedObject() },
-      { label: "Create Prefab from selected object", action: () => void createPrefabFromSelected(), disabled: !selectedObject() || scene()?.sceneType === "PREFAB" },
+      { label: "Create Prefab from selected Node", action: () => void createPrefabFromSelected(), disabled: !selectedObject() || !scene() || isPrefabDocument(scene()!) },
     ],
     View: [
       { label: "Hierarchy", checkable: "checkbox", checked: layout().hierarchyVisible, action: () => toggleSidePanel("Hierarchy") },
@@ -2930,7 +2648,7 @@ function App() {
           <span class="document-title">{scenePath().split("/").pop() ?? "No scene"}</span>
           <span class="saved-indicator" classList={{ dirty: dirty() }}>
             <span class="saved-dot" />
-            {saving() || animationSaving() || componentSaving() ? "Saving" : documentDirty() ? "Unsaved changes" : "Saved"}
+            {saving() || animationSaving() || projectSaving() ? "Saving" : documentDirty() ? "Unsaved changes" : "Saved"}
           </span>
           <span class="editor-version">EDITOR HOST</span>
         </div>
@@ -3344,6 +3062,8 @@ function App() {
                 {(currentScene) => (
                   <PhaserSceneViewport
                     scene={currentScene()}
+                    projectDocument={projectDocument()}
+                    prefabs={prefabCatalog().map((item) => item.document)}
                     scenePath={scenePath()}
                     selectedId={selectedId()}
                     projectTree={projectTree()}
@@ -3588,174 +3308,78 @@ function App() {
 
                 <section class="inspector-section" data-testid="attached-components">
                   <div class="inspector-section-heading">
-                    <span>User Components</span>
-                    <span class="component-count">{components().length}</span>
+                    <span>Components</span>
+                    <span class="component-count">{selectedComponentDefinitions().length}</span>
                   </div>
-                  <Show when={selectedComponentDefinitions().length > 0} fallback={<div class="component-empty">No registered components are attached.</div>}>
+                  <Show when={selectedComponentDefinitions().length > 0} fallback={<div class="component-empty">No registered native component modules are attached.</div>}>
                     <For each={selectedComponentDefinitions()}>
                       {(entry) => (
                         <div class="attached-component-card">
                           <div class="component-row">
                             <Icon theme={theme()} name="script" size={13} />
-                            <span>{entry.definition.displayName ?? entry.definition.name}</span>
-                            <span class="component-state">Enabled</span>
-                            <button class="toolbar-icon-button tiny" aria-label={`Detach ${entry.definition.name}`} title="Detach component" onClick={() => detachComponentFromSelected(entry.definition.name)}>
+                            <span>{entry.module.typeId}</span>
+                            <span class="component-state">v{entry.module.version}</span>
+                            <button class="toolbar-icon-button tiny" aria-label={`Detach ${entry.module.typeId}`} title="Detach component" onClick={() => detachComponentFromSelected(entry.instance.id)}>
                               <Icon theme={theme()} name="remove" size={11} />
                             </button>
                           </div>
-                          <For each={entry.definition.properties ?? []}>
-                            {(property) => {
-                              const propertySchema = () => createUserComponentSchema(entry.definition).value?.properties[property.name];
-                              const enumOptions = () => {
-                                const schema = propertySchema();
-                                return schema?.type === "enum" ? schema.options : [];
-                              };
-                              const propertyValue = () => currentObject()?.[`${entry.definition.name}.${property.name}`] ?? propertySchema()?.defaultValue;
-                              return (
-                                <label class="inspector-field component-property-field">
-                                  <span>{property.label ?? property.name}</span>
-                                  <Show when={propertySchema()?.type === "boolean"}>
-                                    <input type="checkbox" aria-label={`${entry.definition.name} ${property.name}`} checked={Boolean(propertyValue())} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.checked)} />
-                                  </Show>
-                                  <Show when={propertySchema()?.type === "enum"}>
-                                    <select aria-label={`${entry.definition.name} ${property.name}`} value={String(propertyValue() ?? "")} onChange={(event) => updateAttachedComponentProperty(entry.definition.name, property.name, event.currentTarget.value)}>
-                                      <For each={enumOptions()}>{(option) => <option value={option}>{option}</option>}</For>
-                                    </select>
-                                  </Show>
-                                  <Show when={propertySchema()?.type === "number" || propertySchema()?.type === "string"}>
-                                    <input aria-label={`${entry.definition.name} ${property.name}`} type={propertySchema()?.type === "number" ? "number" : "text"} value={String(propertyValue() ?? "")} onChange={(event) => {
-                                      if (propertySchema()?.type === "number" && event.currentTarget.value === "") return;
-                                      const value = propertySchema()?.type === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
-                                      if (propertySchema()?.type !== "number" || Number.isFinite(value)) updateAttachedComponentProperty(entry.definition.name, property.name, value);
-                                    }} />
-                                  </Show>
-                                </label>
-                              );
-                            }}
-                          </For>
+                          <div class="inspector-note">Instance {entry.instance.id} · {entry.instance.enabled ? "Enabled" : "Disabled"}</div>
+                          <Show when={Object.keys(entry.instance.properties).length > 0}>
+                            <pre class="component-properties-json">{JSON.stringify(entry.instance.properties, null, 2)}</pre>
+                          </Show>
+                          <button class="subtle-button" onClick={() => void openTypeScriptFile(entry.asset.path)}>Open Script Asset</button>
                         </div>
                       )}
                     </For>
                   </Show>
-                  <Show when={components().some((name) => !componentRegistry().some((item) => item.definition.name === name))}>
-                    <div class="inspector-note">Some attached components have no matching .components definition file. Their serialized references are preserved.</div>
-                  </Show>
                   <Show when={hasUnattachedComponents().length > 0}>
                     <div class="component-attach-row">
-                      <select aria-label="User Component to attach" value={componentToAttach()} onChange={(event) => setComponentToAttach(event.currentTarget.value)}>
+                      <select aria-label="Native component module to attach" value={componentToAttach()} onChange={(event) => setComponentToAttach(event.currentTarget.value)}>
                         <option value="">Attach component…</option>
                         <For each={hasUnattachedComponents()}>
-                          {(entry) => <option value={entry.definition.name}>{entry.definition.displayName ?? entry.definition.name} · {entry.path}</option>}
+                          {(entry) => <option value={entry.module.typeId}>{entry.module.typeId} · {entry.path}</option>}
                         </For>
                       </select>
-                      <button class="subtle-button" disabled={!componentToAttach()} onClick={() => attachComponentToSelected(componentToAttach())}>Attach</button>
+                      <button class="subtle-button" disabled={!componentToAttach()} onClick={() => void attachComponentToSelected(componentToAttach())}>Attach</button>
                     </div>
+                  </Show>
+                  <Show when={!projectDocument()?.componentModules.length}>
+                    <div class="inspector-note">No native Script Component modules are declared in project.json. Module authoring and schema-driven properties are owned by COD-91 and COD-27.</div>
                   </Show>
                 </section>
 
-                <Show when={Boolean(currentObject()?.prefabId)}>
+                <Show when={Boolean(selectedObject()?.node.prefabInstance)}>
                   <section class="inspector-section" data-testid="prefab-overrides">
-                    <div class="inspector-section-heading"><span>Prefab overrides</span></div>
-                    <Show when={selectedPrefabDefinition()} fallback={<div class="inspector-note">Prefab asset not found. The prefabId reference remains serialized.</div>}>
-                      <strong class="prefab-name">{selectedPrefabDefinition()?.name ?? selectedPrefab()?.path}</strong>
-                      <For each={selectedPrefabDefinition()?.prefabProperties ?? []}>
-                        {(property) => {
-                          const value = () => currentObject()?.[property.name] ?? property.defValue;
-                          return (
-                            <label class="inspector-field prefab-property-field">
-                              <span>{property.label ?? property.name}</span>
-                              <Show when={property.type.id === "boolean"}>
-                                <input type="checkbox" aria-label={`Prefab override ${property.name}`} checked={Boolean(value())} onChange={(event) => updatePrefabOverride(property, event.currentTarget.checked)} />
-                              </Show>
-                              <Show when={property.type.id === "option"}>
-                                <select aria-label={`Prefab override ${property.name}`} value={String(value() ?? "")} onChange={(event) => updatePrefabOverride(property, event.currentTarget.value)}>
-                                  <For each={property.type.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
-                                </select>
-                              </Show>
-                              <Show when={property.type.id === "string" || property.type.id === "number"}>
-                                <input aria-label={`Prefab override ${property.name}`} type={property.type.id === "number" ? "number" : "text"} value={String(value() ?? "")} onChange={(event) => {
-                                  const nextValue = property.type.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
-                                  if (property.type.id !== "number" || Number.isFinite(nextValue)) updatePrefabOverride(property, nextValue);
-                                }} />
-                              </Show>
-                            </label>
-                          );
-                        }}
-                      </For>
-                      <button class="subtle-button" onClick={() => selectedPrefab() && void openProjectFile(selectedPrefab()!.path)}>Open Prefab asset</button>
-                    </Show>
+                    <div class="inspector-section-heading"><span>Prefab instance</span></div>
+                    <strong class="prefab-name">{selectedPrefabDefinition()?.name ?? selectedObject()?.node.prefabInstance?.prefabId}</strong>
+                    <span class="inspector-note">Prefab ID: {selectedObject()?.node.prefabInstance?.prefabId}</span>
+                    <span class="inspector-note">{selectedObject()?.node.prefabInstance?.overrides.length ?? 0} native overrides</span>
+                    <button class="subtle-button" disabled={!selectedPrefab()} onClick={() => selectedPrefab() && void openProjectFile(selectedPrefab()!.path)}>Open Prefab asset</button>
                   </section>
                 </Show>
-              </div>
-            </Show>
-            <Show when={scene()?.sceneType === "PREFAB"}>
-              <section class="inspector-section prefab-properties-editor" data-testid="prefab-properties-editor">
-                <div class="inspector-section-heading"><span>Prefab properties</span><span class="component-count">{(scene() as PrefabDocument | null)?.prefabProperties?.length ?? 0}</span></div>
-                <div class="prefab-property-create">
-                  <label class="inspector-field">
-                    <span>Property name</span>
-                    <input aria-label="New Prefab property name" value={prefabPropertyName()} onInput={(event) => setPrefabPropertyName(event.currentTarget.value)} />
-                  </label>
-                  <label class="inspector-field">
-                    <span>Type</span>
-                    <select aria-label="New Prefab property type" value={prefabPropertyType()} onChange={(event) => setPrefabPropertyType(event.currentTarget.value as "string" | "number" | "boolean" | "option")}>
-                      <option value="boolean">Boolean</option>
-                      <option value="number">Number</option>
-                      <option value="string">String</option>
-                      <option value="option">Option</option>
-                    </select>
-                  </label>
-                  <label class="inspector-field">
-                    <span>{prefabPropertyType() === "option" ? "Options (comma separated)" : "Default value"}</span>
-                    <input aria-label="New Prefab property default" value={prefabPropertyDefault()} onInput={(event) => setPrefabPropertyDefault(event.currentTarget.value)} placeholder={prefabPropertyType() === "option" ? "small,medium,large" : "Value"} />
-                  </label>
-                  <button class="subtle-button" disabled={!prefabPropertyName().trim()} onClick={addPrefabPropertyFromFields}>Add property</button>
-                </div>
-                <For each={(scene() as PrefabDocument | null)?.prefabProperties ?? []}>
-                  {(property) => (
-                    <div class="prefab-property-definition-row">
-                      <div class="prefab-property-label">
-                        <span>{property.label ?? property.name}</span>
-                        <code>{property.name}</code>
-                      </div>
-                      <span>{property.type.id}</span>
-                      <Show when={property.type.id === "boolean"}>
-                        <input type="checkbox" aria-label={`Prefab default ${property.name}`} checked={Boolean(property.defValue)} onChange={(event) => updatePrefabPropertyDefault(property.name, { defValue: event.currentTarget.checked })} />
-                      </Show>
-                      <Show when={property.type.id === "option"}>
-                        <select aria-label={`Prefab default ${property.name}`} value={String(property.defValue ?? "")} onChange={(event) => updatePrefabPropertyDefault(property.name, { defValue: event.currentTarget.value })}>
-                          <For each={property.type.options ?? []}>{(option) => <option value={option}>{option}</option>}</For>
-                        </select>
-                      </Show>
-                      <Show when={property.type.id === "string" || property.type.id === "number"}>
-                        <input aria-label={`Prefab default ${property.name}`} type={property.type.id === "number" ? "number" : "text"} value={String(property.defValue ?? "")} onChange={(event) => {
-                          const value = property.type.id === "number" ? Number(event.currentTarget.value) : event.currentTarget.value;
-                          if (property.type.id !== "number" || Number.isFinite(value)) updatePrefabPropertyDefault(property.name, { defValue: value });
-                        }} />
-                      </Show>
-                      <button class="toolbar-icon-button tiny" aria-label={`Remove Prefab property ${property.name}`} onClick={() => removePrefabPropertyFromDocument(property.name)}>
-                        <Icon theme={theme()} name="remove" size={11} />
-                      </button>
-                    </div>
-                  )}
-                </For>
-              </section>
-            </Show>
-            <Show when={scene() && scene()?.sceneType !== "PREFAB" && prefabCatalog().length > 0}>
-              <div class="inspector-panel-action">
-                <label class="inspector-field">
-                  <span>Instantiate Prefab</span>
-                  <select aria-label="Prefab asset to instantiate" value={selectedPrefabPath()} onChange={(event) => setSelectedPrefabPath(event.currentTarget.value)}>
-                    <option value="">Select Prefab…</option>
-                    <For each={prefabCatalog()}>{(item) => <option value={item.path}>{item.path}</option>}</For>
-                  </select>
-                </label>
-                <button class="subtle-button" disabled={!selectedPrefabPath()} onClick={addPrefabInstance}>Add instance</button>
-              </div>
-            </Show>
-            <Show when={selectedObject() && scene()?.sceneType !== "PREFAB"}>
-              <button class="subtle-button create-prefab-button" onClick={() => void createPrefabFromSelected()}>Create Prefab from selected object</button>
-            </Show>
+                <Show when={scene() && isPrefabDocument(scene()!)}>
+                  <section class="inspector-section" data-testid="prefab-document-info">
+                    <div class="inspector-section-heading"><span>Native Prefab document</span></div>
+                    <span>{selectedPrefabDefinition()?.name ?? "Prefab"}</span>
+                    <span class="inspector-note">Schema v1 · single root Node</span>
+                    <span class="inspector-note">Nested Prefabs and override propagation are implemented by the dedicated Prefab workflow task.</span>
+                  </section>
+                </Show>
+                <Show when={scene() && !isPrefabDocument(scene()!) && prefabCatalog().length > 0}>
+                  <div class="inspector-panel-action">
+                    <label class="inspector-field">
+                      <span>Instantiate Prefab</span>
+                      <select aria-label="Prefab asset to instantiate" value={selectedPrefabPath()} onChange={(event) => setSelectedPrefabPath(event.currentTarget.value)}>
+                        <option value="">Select Prefab…</option>
+                        <For each={prefabCatalog()}>{(item) => <option value={item.path}>{item.path}</option>}</For>
+                      </select>
+                    </label>
+                    <button class="subtle-button" disabled={!selectedPrefabPath()} onClick={addPrefabInstance}>Add instance</button>
+                  </div>
+                </Show>
+                <Show when={selectedObject() && scene() && !isPrefabDocument(scene()!)}>
+                  <button class="subtle-button create-prefab-button" onClick={() => void createPrefabFromSelected()}>Create Prefab from selected Node</button>
+                </Show>
             <div class="inspector-footer">
               <span>{selectedObject() ? "Scene object" : "Inspector"}</span>
               <span>{documentDirty() ? "Modified" : "In sync"}</span>
@@ -3915,14 +3539,11 @@ function App() {
                 <div class="project-preview-heading">Project contents</div>
                 <div class="project-preview-content">
                   <Show when={selectedProjectPath()} fallback={<div class="empty-panel-hint">Select a scene or asset to inspect it.</div>}>
-                    <Icon theme={theme()} name={selectedProjectPath().endsWith(".scene") ? "packed-scene" : "file"} size={26} />
+                    <Icon theme={theme()} name={selectedProjectPath().endsWith(".cge-scene.json") || selectedProjectPath().endsWith(".cge-prefab.json") ? "packed-scene" : "file"} size={26} />
                     <strong>{selectedProjectPath().split("/").pop()}</strong>
                     <span>{selectedProjectPath()}</span>
-                    <Show when={selectedProjectPath().toLowerCase().endsWith(".scene")}>
-                      <button class="subtle-button" onClick={() => void loadScene(selectedProjectPath())}>Open Scene / Prefab</button>
-                    </Show>
-                    <Show when={selectedProjectPath().toLowerCase().endsWith(".components")}>
-                      <button class="subtle-button" onClick={() => void openUserComponentsFile(selectedProjectPath())}>Open Components</button>
+                    <Show when={selectedProjectPath().toLowerCase().endsWith(".cge-scene.json") || selectedProjectPath().toLowerCase().endsWith(".cge-prefab.json")}>
+                      <button class="subtle-button" onClick={() => void loadScene(selectedProjectPath())}>Open Native Document</button>
                     </Show>
                   </Show>
                 </div>
@@ -4151,80 +3772,29 @@ function App() {
             <div class="components-workspace" data-testid="components-workspace" data-focus-context="components">
               <div class="components-toolbar">
                 <div class="components-file-heading">
-                  <strong>User Components</strong>
-                  <span>{componentDocumentPath() || "Open a .components file from Project"}</span>
-                </div>
-                <div class="timeline-actions">
-                  <button class="subtle-button" onClick={() => void createUserComponentsFile()}>New file</button>
-                  <button class="primary-button" data-testid="save-components" disabled={!componentDocument() || !componentDirty() || componentSaving()} onClick={() => void saveUserComponentsFile()}>
-                    {componentSaving() ? "Saving…" : "Save"}
-                  </button>
+                  <strong>Native Component Modules</strong>
+                  <span>Registered in project.json · no sidecar .components files</span>
                 </div>
               </div>
-              <Show when={componentDocument()} fallback={<div class="timeline-empty">Select a .components file in Project or create a new one. Definitions keep the legacy Phaser Editor JSON shape.</div>}>
-                <div class="components-create-row">
-                  <label class="inspector-field">
-                    <span>Component class name</span>
-                    <input aria-label="New User Component name" placeholder="e.g. Blink" value={newComponentName()} onInput={(event) => setNewComponentName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") addUserComponent(); }} />
-                  </label>
-                  <button class="subtle-button" disabled={!newComponentName().trim()} onClick={addUserComponent}>Add component</button>
-                </div>
+              <Show when={componentRegistry().length > 0} fallback={<div class="timeline-empty">No native component modules are registered in this Project. Script module authoring belongs to COD-91.</div>}>
                 <div class="components-definition-list">
-                  <Show when={(componentDocument()?.components.length ?? 0) > 0} fallback={<div class="timeline-empty">No definitions yet. Add the first User Component.</div>}>
-                    <For each={componentDocument()?.components ?? []}>
-                      {(definition) => (
-                        <section class="components-definition-card" data-testid={`component-definition-${definition.name}`}>
-                          <div class="components-definition-heading">
-                            <div><strong>{definition.displayName ?? definition.name}</strong><code>{definition.name}</code></div>
-                            <button class="subtle-button" onClick={() => void openUserComponentSource(definition)}>Edit TypeScript source</button>
-                            <button class="toolbar-icon-button tiny" aria-label={`Delete definition ${definition.name}`} title="Remove definition" onClick={() => {
-                              if (window.confirm(`Remove User Component "${definition.name}" from this file? Existing scene references are preserved.`)) removeUserComponent(definition.name);
-                            }}>
-                              <Icon theme={theme()} name="remove" size={12} />
-                            </button>
-                          </div>
-                          <div class="components-definition-meta">
-                            <label class="inspector-field">
-                              <span>Display name</span>
-                              <input aria-label={`${definition.name} display name`} value={definition.displayName ?? definition.name} onChange={(event) => setComponentDocument((current) => current ? updateUserComponentDefinition(current, definition.name, { displayName: event.currentTarget.value }) : current)} />
-                            </label>
-                            <label class="inspector-field">
-                              <span>GameObject type</span>
-                              <input aria-label={`${definition.name} GameObject type`} value={definition.gameObjectType ?? "Phaser.GameObjects.Image"} onChange={(event) => setComponentDocument((current) => current ? updateUserComponentDefinition(current, definition.name, { gameObjectType: event.currentTarget.value }) : current)} />
-                            </label>
-                          </div>
-                          <div class="components-property-list">
-                            <strong>Properties</strong>
-                            <For each={definition.properties ?? []}>
-                              {(property) => (
-                                <div class="components-property-row">
-                                  <span>{property.label ?? property.name}</span>
-                                  <code>{property.name}</code>
-                                  <span class="components-property-type">{property.type?.id ?? "string"}</span>
-                                  <button class="toolbar-icon-button tiny" aria-label={`Remove ${definition.name} property ${property.name}`} onClick={() => removeUserComponentProperty(definition.name, property.name)}>
-                                    <Icon theme={theme()} name="remove" size={11} />
-                                  </button>
-                                </div>
-                              )}
-                            </For>
-                            <div class="components-add-property">
-                              <input aria-label={`${definition.name} new property name`} placeholder="propertyName" value={newComponentPropertyName()} onInput={(event) => setNewComponentPropertyName(event.currentTarget.value)} />
-                              <select aria-label="User Component property type" value={newComponentPropertyType()} onChange={(event) => setNewComponentPropertyType(event.currentTarget.value as "number" | "string" | "boolean")}>
-                                <option value="number">Number</option>
-                                <option value="string">String</option>
-                                <option value="boolean">Boolean</option>
-                              </select>
-                              <button class="toolbar-icon-button tiny" aria-label={`Add property to ${definition.name}`} disabled={!newComponentPropertyName().trim()} onClick={() => addUserComponentProperty(definition.name)}>
-                                <Icon theme={theme()} name="add" size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        </section>
-                      )}
-                    </For>
-                  </Show>
+                  <For each={componentRegistry()}>
+                    {(entry) => (
+                      <section class="components-definition-card">
+                        <div class="components-definition-heading">
+                          <div><strong>{entry.module.typeId}</strong><code>v{entry.module.version}</code></div>
+                          <button class="subtle-button" onClick={() => void openTypeScriptFile(entry.path)}>Open Script Asset</button>
+                        </div>
+                        <div class="components-definition-meta">
+                          <span>Asset ID: {entry.module.moduleAssetId}</span>
+                          <span>Path: {entry.path}</span>
+                        </div>
+                      </section>
+                    )}
+                  </For>
                 </div>
               </Show>
+              <div class="inspector-note">This panel reads only native Project manifest references. Creating/editing module manifests and typed property schemas is handled by COD-91/COD-27.</div>
             </div>
           </Show>
 

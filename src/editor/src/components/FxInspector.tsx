@@ -1,5 +1,5 @@
 import { For, Index, Show, createSignal } from "solid-js";
-import type { FxEntry, FxObject, FxType } from "../domain/fx-model.ts";
+import type { FxEntry, FxObject, FxType } from "../domain/native-fx-model.js";
 import { colorPreview } from "./fx-color.ts";
 
 interface NumericField {
@@ -34,7 +34,7 @@ interface Props {
   effects: FxEntry[];
   unsupportedTypes: string[];
   onAdd: (type: FxType) => void;
-  onUpdate: (id: string, patch: Partial<FxObject>) => void;
+  onUpdate: (id: string, patch: Partial<Omit<FxObject, "id" | "type">>) => void;
   onRemove: (id: string) => void;
   onError: (message: string) => void;
 }
@@ -133,7 +133,7 @@ function EffectFields(props: { effect: () => FxObject; onUpdate: Props["onUpdate
                     const value = isTextField(field) ? event.currentTarget.value : Number(event.currentTarget.value);
                     if (typeof value === "number" && !Number.isFinite(value)) return;
                     try {
-                      props.onUpdate(props.effect().id, { [field.key]: value } as Partial<FxObject>);
+                      props.onUpdate(props.effect().id, { [field.key]: value } as Partial<Omit<FxObject, "id" | "type">>);
                     } catch (error) {
                       props.onError(error instanceof Error ? error.message : String(error));
                     }

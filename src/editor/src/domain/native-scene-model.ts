@@ -62,6 +62,7 @@ export interface SceneNodeEntry {
   depth: number;
   source: SceneNodeView;
   node: NodeDocument;
+  renderNode: NodeDocument;
 }
 
 export interface SceneNodePatch extends Partial<Record<TransformKey, number>> {
@@ -158,7 +159,7 @@ function collectNodes(
         ...(typeof properties.wordWrapWidth === "number" ? { wordWrapWidth: properties.wordWrapWidth } : {}),
       } : {}),
     };
-    result.push({ id: node.id, name: node.name, type: view.type, parentId, depth, source: view, node });
+    result.push({ id: node.id, name: node.name, type: view.type, parentId, depth, source: view, node, renderNode: effectiveNode });
     node.children.forEach((child) => visit(child, node.id, depth + 1));
   };
   roots.forEach((root) => visit(root, null, 0));
@@ -260,7 +261,7 @@ export function updateNativeNode(
   return replaceDocumentRoots(document, result.nodes);
 }
 
-export function createSceneNode(document: EditorDocument, kind: SceneNodeKind): EditorDocument {
+export function createSceneNode(document: EditorDocument, kind: SceneNodeKind, assetId?: string): EditorDocument {
   const id = createId();
   const componentId = createId();
   const rendererTypeId = kind === "Image"
@@ -270,7 +271,9 @@ export function createSceneNode(document: EditorDocument, kind: SceneNodeKind): 
       : BUILTIN_COMPONENT_TYPES.container;
   const properties: Record<string, unknown> = kind === "Text"
     ? { text: "New text", fontFamily: "Arial", fontSize: "16px", color: "#E7EBF2", align: "left" }
-    : {};
+    : kind === "Image" && assetId
+      ? { assetId }
+      : {};
   const node: NodeDocument = {
     id,
     name: `New ${kind}`,
@@ -405,4 +408,33 @@ export function assertNativeNodeIdentity(value: unknown): asserts value is NodeD
   if (!value || typeof value !== "object" || !isValidStableId((value as { id?: unknown }).id)) {
     throw new TypeError("A native Node requires a stable id.");
   }
+}
+
+
+/** Native persisted document aliases; SceneNodeView is a transient UI projection, never serialized. */
+export type SceneDocument = EditorDocument;
+export type SceneObject = SceneNodeView;
+export type SceneObjectEntry = SceneNodeEntry;
+
+export function getSceneObjects(
+  document: EditorDocument,
+  prefabs: readonly PrefabDocumentV1[] = [],
+): SceneNodeEntry[] {
+  return getSceneNodeEntries(document, prefabs);
+}
+
+export function createSceneObject(document: EditorDocument, kind: SceneNodeKind, assetId?: string): EditorDocument {
+  return createSceneNode(document, kind, assetId);
+}
+
+export function updateSceneObject(
+  document: EditorDocument,
+  id: string,
+  patch: SceneNodePatch,
+): EditorDocument {
+  return updateSceneNode(document, id, patch);
+}
+
+export function removeSceneObject(document: EditorDocument, id: string): EditorDocument {
+  return removeSceneNode(document, id);
 }
