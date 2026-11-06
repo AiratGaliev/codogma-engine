@@ -1,6 +1,6 @@
 # Дорожная карта: Codogma Engine
 
-Дорожная карта строится вокруг требований [технического задания](technical-specification.md). **Целевое направление Editor UI — самостоятельный SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4 в `src/editor/`**. Временный UI client в `source/editor/` остаётся отдельным приложением до принятой функциональной приёмки, production cutover и ограниченного rollback window. Новый Host использует native Codogma Project Model; общая UI rollout topology описана в [Editor UI migration plan](editor-ui-migration.md).
+Дорожная карта строится вокруг требований [технического задания](technical-specification.md). **Целевое направление Editor UI — самостоятельный SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4 в `src/editor/`**. `source/editor/` frozen: только read-only inventory, временный rollback artifact и последующее удаление в COD-88 после cutover COD-87 и bounded rollback window. Никакого feature work, обычных bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance или модернизации Colibri code/manifests/lockfiles/scripts/dependencies. Единственное исключение — минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic; технические cutover/rollback действия ограничены необходимым объёмом. Новый Host использует native Codogma Project Model; общая UI rollout topology описана в [Editor UI migration plan](editor-ui-migration.md).
 
 Unity 6.6 (6000.6, выпущенная версия; актуальный patch на дату проверки — 6000.6.8f1 от 03.11.2026) — основной UX-reference, Cocos Creator 4.0 LTS — дополнительный reference для 2D authoring workflows. Godot Editor source на закреплённом commit — отдельный implementation/engineering reference по открытым исходникам соответствующих редакторских подсистем, но не третий UX-reference, не runtime dependency и не цель feature parity. Codogma Editor остаётся строго 2D-only: без 2D/3D переключателей и 3D-only workflows. Unity/Cocos задают ориентир качества и организации 2D UX, Godot помогает изучать внутреннюю реализацию. Применять [стандарт reference для 2D Editor Host](editor-reference-standard.md). Каждая задача должна давать работающий результат в коде; документация и матрицы фиксируют decisions и acceptance evidence.
 
@@ -8,7 +8,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Приоритеты и рекомендуемый порядок реализации
 
-Очередность ниже отражает фактическое состояние на 01.11.2026. Первый SolidJS Host/Scene slice COD-80 уже реализован; дальнейшие работы строятся вокруг завершения пользовательских workflows и подтверждения engine contracts. **Новые пользовательские UI/authoring features разрабатываются в `src/editor/`; временный UI client получает только критические security fixes и release blockers до UI cutover.**
+Очередность ниже отражает фактическое состояние на 06.11.2026. Первый SolidJS Host/Scene slice COD-80 уже реализован; дальнейшие работы строятся вокруг завершения пользовательских workflows и подтверждения engine contracts. **Новые пользовательские UI/authoring features разрабатываются только в `src/editor/`; `source/editor/` frozen и допускает только read-only inventory, необходимые технические cutover/rollback действия и узкую одноразовую security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic.**
 
 | Очередь | Рабочий пакет | Приоритет | Измеримый результат / правило |
 |---|---|---|---|
@@ -33,7 +33,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - **Заполнять migration inventory.** COD-16 и COD-82 фиксируют каждую capability отдельно: legacy reference, reusable domain/data/runtime contract, SolidJS status, owner issue, tests и acceptance evidence.
 - **Выбирать следующий SolidJS vertical slice по пользовательской ценности и зависимостям.** Начинать с подтверждённых gaps: Asset/Sprite, Prefab/Components, Scene camera/sorting и игровые UI tools; далее specialized workflows по capability matrix.
 - **Исправлять общие engine/data/runtime/security defects независимо от UI.** Не менять утверждённые native contracts без конкретного изменения требований, ADR или доказанного defect.
-- Временный UI client в source/editor/ получает только критические security fixes и release blockers до завершения cutover. Все новые пользовательские функции и authoring workflows реализуются в SolidJS Host.
+- `source/editor/` не является поддерживаемой development surface: только read-only inventory и временный rollback. Никаких feature work, обычных bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance или модернизации его code/manifests/lockfiles/scripts/dependencies. Исключение — только минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic. Все новые пользовательские функции и authoring workflows реализуются в SolidJS Host.
 - **Закрывать runtime/security residuals отдельными задачами.** Box2D/FX/codegen acceptance, cross-platform filesystem security и local-only boundaries не смешивать с UI migration и не считать зелёный build фактической runtime приёмкой.
 - **Сохранять отдельные Core/Preview/Build/QA потоки.** Они могут выполняться параллельно при собственных acceptance, не создавая второй источник истины или второй game loop.
 
@@ -71,7 +71,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 1. Один PR — одна логически завершённая задача. Работу крупной фазы не переносить целиком одним большим PR.
 2. Не закрывать чекбокс по наличию кода или успешной компиляции: нужен результат соответствующего acceptance test.
-3. Перед переписыванием существующей функции определить, что уже работает в текущем Colibri/Phaser Editor client, где расположены ограничения и что действительно надо заменить.
+3. Перед реализацией нового workflow изучить существующий Colibri/Phaser Editor client только как read-only reference: зафиксировать наблюдаемое поведение, пользовательскую потребность и необходимые reusable contracts. Не исправлять, не рефакторить и не переносить legacy implementation; новую функциональность реализовывать на native Codogma contracts в SolidJS Host.
 4. Новый модуль проходит критерии и сравнивается с legacy-сценарием до удаления старой реализации.
 5. Не создавать вторую сущность, сцену или игровой цикл там, где можно добавить adapter к существующей реализации.
 6. Исходники самостоятельных, независимо подключаемых возможностей оформлять как пакеты в `packages/` внутри монорепозитория; не создавать пакет на каждый класс. Публичную публикацию выполнять только после стабилизации API, SemVer/compatibility policy, тестов и документации. Локальную совместную разработку связывать через npm Workspaces.
