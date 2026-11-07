@@ -394,3 +394,50 @@ testCase("rejects malformed persisted built-in FX properties at the native docum
     /FX property "threshold".*at most 1/,
   );
 });
+
+testCase("runs Core safe-data validation before native Scene and Prefab traversal", () => {
+  let getterCalls = 0;
+  const unsafeScene = JSON.parse(sceneContent) as import("@codogma/cge").SceneDocumentV1;
+  Object.defineProperty(unsafeScene.rootNodes[0]!, "components", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return [];
+    },
+  });
+
+  assert.throws(
+    () => serializeNativeSceneDocument(project, unsafeScene),
+    (error: unknown) => error instanceof Error && error.name === "ProjectSerializationError",
+  );
+  assert.equal(getterCalls, 0, "Scene components getter must not run before Core rejects the document");
+
+  const unsafePrefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-unsafe-data",
+    name: "Unsafe Prefab",
+    root: JSON.parse(sceneContent).rootNodes[0] as import("@codogma/cge").NodeDocument,
+  };
+  const registeredProject = addNativePrefabReference(
+    project,
+    unsafePrefab,
+    "asset-prefab-unsafe-data",
+    "prefabs/UnsafeData.cge-prefab.json",
+  );
+  Object.defineProperty(unsafePrefab.root, "components", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return [];
+    },
+  });
+
+  assert.throws(
+    () => serializeNativePrefabDocument(registeredProject, unsafePrefab),
+    (error: unknown) => error instanceof Error && error.name === "ProjectSerializationError",
+  );
+  assert.equal(getterCalls, 0, "Prefab components getter must not run before Core rejects the document");
+});
+

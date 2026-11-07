@@ -187,14 +187,19 @@ export function serializeNativeSceneDocument(
   project: ProjectDocumentV1,
   document: SceneDocumentV1,
 ): string {
-  const reference = project.scenes.find((item) => item.id === document.id);
-  if (!reference) throw new Error(`Scene "${document.id}" is not registered in project.json.`);
+  const context = createSceneValidationContext(project);
+  // Core validation must run before native traversal so accessors, cycles and
+  // unsafe prototypes cannot execute while native invariants are inspected.
+  const content = serializeSceneDocument(document, context);
+  const normalized = requireParsed("Native Scene document", parseSceneDocument(content, context));
+  const reference = project.scenes.find((item) => item.id === normalized.id);
+  if (!reference) throw new Error(`Scene "${normalized.id}" is not registered in project.json.`);
   const asset = assetById(project, reference.assetId, "scene");
   if (!asset.path.endsWith(NATIVE_SCENE_EXTENSION)) {
     throw new Error(`Scene asset "${asset.id}" must use the native ${NATIVE_SCENE_EXTENSION} contract.`);
   }
-  assertNativeBuiltinComponentData(project, document.rootNodes, `Scene "${document.id}"`);
-  return serializeSceneDocument(document, createSceneValidationContext(project));
+  assertNativeBuiltinComponentData(project, normalized.rootNodes, `Scene "${normalized.id}"`);
+  return content;
 }
 
 export function parseNativePrefabDocument(
@@ -221,14 +226,18 @@ export function serializeNativePrefabDocument(
   project: ProjectDocumentV1,
   document: PrefabDocumentV1,
 ): string {
-  const reference = project.prefabs.find((item) => item.id === document.id);
-  if (!reference) throw new Error(`Prefab "${document.id}" is not registered in project.json.`);
+  const context = createSceneValidationContext(project);
+  // Keep the same safe-validation-before-native-traversal order as Scenes.
+  const content = serializePrefabDocument(document, context);
+  const normalized = requireParsed("Native Prefab document", parsePrefabDocument(content, context));
+  const reference = project.prefabs.find((item) => item.id === normalized.id);
+  if (!reference) throw new Error(`Prefab "${normalized.id}" is not registered in project.json.`);
   const asset = assetById(project, reference.assetId, "prefab");
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
     throw new Error(`Prefab asset "${asset.id}" must use the native ${NATIVE_PREFAB_EXTENSION} contract.`);
   }
-  assertNativeBuiltinComponentData(project, [document.root], `Prefab "${document.id}"`, "root");
-  return serializePrefabDocument(document, createSceneValidationContext(project));
+  assertNativeBuiltinComponentData(project, [normalized.root], `Prefab "${normalized.id}"`, "root");
+  return content;
 }
 
 function createId(): string {
