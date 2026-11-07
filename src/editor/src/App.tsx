@@ -712,6 +712,7 @@ function App() {
   });
 
   let sceneLoadSequence = 0;
+  let activeSceneLoads = 0;
   let prefabCreationInProgress = false;
   let documentLoadSequence = 0;
   let scriptCheckSequence = 0;
@@ -730,15 +731,28 @@ function App() {
     }
 
     const request = ++sceneLoadSequence;
+    const activeDocumentBeforeLoad = scene();
+    const activeHistoryBeforeLoad = history();
+    const activePathBeforeLoad = scenePath();
+    const projectBeforeLoad = projectDocument();
+    activeSceneLoads += 1;
     setLoadError("");
     try {
-      const project = projectDocument();
+      const project = projectBeforeLoad;
       if (!project) throw new Error("The native Project manifest is not loaded.");
       const sceneReference = findSceneReferenceByAssetPath(project, path);
       const prefabReference = findPrefabReferenceByAssetPath(project, path);
       if (!sceneReference && !prefabReference) throw new Error(`"${path}" is not registered as a Scene or Prefab asset in project.json.`);
       const content = await readProjectFile(path);
-      if (request !== sceneLoadSequence) return false;
+      if (
+        request !== sceneLoadSequence ||
+        saving() ||
+        prefabCreationInProgress ||
+        scene() !== activeDocumentBeforeLoad ||
+        history() !== activeHistoryBeforeLoad ||
+        scenePath() !== activePathBeforeLoad ||
+        projectDocument() !== project
+      ) return false;
       const parsed = sceneReference
         ? parseNativeSceneDocument(project, sceneReference.id, content)
         : parseNativePrefabDocument(project, prefabReference!.id, content);
@@ -763,6 +777,8 @@ function App() {
       setLoadError(message);
       log("error", message);
       return false;
+    } finally {
+      activeSceneLoads = Math.max(0, activeSceneLoads - 1);
     }
   }
 
@@ -1186,6 +1202,7 @@ function App() {
 
   async function createNativePrefabFromNode(nodeId: string, pathValue: string, nameValue?: string) {
     if (prefabCreationInProgress) throw new Error("Another native Prefab creation is already in progress.");
+    if (activeSceneLoads > 0) throw new Error("A native Scene or Prefab document is currently opening. Retry Prefab creation afterwards.");
     if (saving() || projectSaving()) {
       throw new Error("A native document or Project manifest save is in progress. Retry Prefab creation afterwards.");
     }
