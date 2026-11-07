@@ -624,7 +624,7 @@ function PhaserSceneViewport(props: Props) {
       object.setDepth?.(numeric(entry.source.depth, 0));
       const isHidden = props.hiddenIds().has(entry.id);
       const isLocked = props.lockedIds().has(entry.id);
-      object.setVisible?.(!isHidden);
+      object.setVisible?.(entry.source.active !== false && !isHidden);
       // Phaser Container не создаёт hit-area автоматически. Не вызываем
       // setInteractive() без геометрии: такие попытки генерируют warning и
       // оставляют объект фактически неинтерактивным.

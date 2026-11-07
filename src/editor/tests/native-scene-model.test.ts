@@ -82,6 +82,12 @@ testCase("edits native Transform and renderer properties immutably", () => {
   assert.equal(updatedChild?.components[0]?.properties.assetId, "asset-hero");
 });
 
+testCase("projects inactive native Nodes as inactive viewport entries", () => {
+  const inactive = updateSceneNode(scene(), "node-child", { active: false }) as SceneDocumentV1;
+  const entry = getSceneNodeEntries(inactive).find((item) => item.id === "node-child");
+  assert.equal(entry?.source.active, false);
+});
+
 testCase("reparents native Nodes and rejects cycles", () => {
   const original = scene();
   const withSibling = createSceneNode(original, "Image") as SceneDocumentV1;
