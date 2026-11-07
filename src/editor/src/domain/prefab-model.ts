@@ -204,27 +204,36 @@ function validateNativePrefabNodeOverride(override: PrefabOverrideDocument): voi
   throw new TypeError(`Prefab Node override "${override.propertyPath}" is not supported.`);
 }
 
-export function addNativePrefabOverride(
-  scene: SceneDocumentV1,
-  instanceNodeId: string,
+function validateNativePrefabOverride(
   prefab: PrefabDocumentV1,
   override: PrefabOverrideDocument,
-): SceneDocumentV1 {
-  const pathSegments = typeof override.propertyPath === "string" ? override.propertyPath.split(".") : [];
+): void {
+  const pathSegments = typeof override?.propertyPath === "string" ? override.propertyPath.split(".") : [];
   const forbiddenPathSegments = new Set(["__proto__", "prototype", "constructor"]);
-  if (!isJsonValue(override.value) || !isValidStableId(override.targetNodeId) ||
-      pathSegments.length === 0 || pathSegments.some((part) =>
-        !/^[A-Za-z_$][\w$]*$/.test(part) || forbiddenPathSegments.has(part),
+  if (!override || typeof override !== "object" || !isJsonValue(override.value) ||
+      !isValidStableId(override.targetNodeId) || pathSegments.length === 0 ||
+      pathSegments.some((part) =>
+        !/^[A-Za-z_$][\\w$]*$/.test(part) || forbiddenPathSegments.has(part),
       ) ||
       (override.targetComponentId !== undefined && !isValidStableId(override.targetComponentId))) {
     throw new TypeError("Prefab override requires a stable target, safe property path and JSON-compatible value.");
   }
+
   const target = findNode([prefab.root], override.targetNodeId);
   if (!target) throw new Error(`Prefab Node "${override.targetNodeId}" was not found.`);
   if (override.targetComponentId && !target.components.some((item) => item.id === override.targetComponentId)) {
     throw new Error(`Prefab Component "${override.targetComponentId}" was not found on Node "${override.targetNodeId}".`);
   }
   validateNativePrefabNodeOverride(override);
+}
+
+export function addNativePrefabOverride(
+  scene: SceneDocumentV1,
+  instanceNodeId: string,
+  prefab: PrefabDocumentV1,
+  override: PrefabOverrideDocument,
+): SceneDocumentV1 {
+  validateNativePrefabOverride(prefab, override);
   const result = updateNode(scene.rootNodes, instanceNodeId, (node) => {
     if (node.prefabInstance?.prefabId !== prefab.id) {
       throw new Error(`Node "${instanceNodeId}" is not an instance of Prefab "${prefab.id}".`);
@@ -307,6 +316,10 @@ export function resolveNativePrefabRoot(
   if (instance.prefabInstance?.prefabId !== prefab.id) {
     throw new TypeError("The Node does not reference the supplied native Prefab.");
   }
+  if (!Array.isArray(instance.prefabInstance.overrides)) {
+    throw new TypeError("Native Prefab instance overrides must be an array.");
+  }
+  instance.prefabInstance.overrides.forEach((override) => validateNativePrefabOverride(prefab, override));
   return instance.prefabInstance.overrides.reduce(
     (root, override) => applyOverride(root, override),
     cloneNode(prefab.root),

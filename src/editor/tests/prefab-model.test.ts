@@ -183,3 +183,49 @@ testCase("refreshes only the saved Prefab in the in-memory catalog and preserves
   assert.equal(updated[1], secondEntry);
   assert.equal(firstEntry.document.name, "Crate");
 });
+
+testCase("validates all persisted Prefab override targets before resolving the Prefab root", () => {
+  const prefab = createNativePrefabDocument(root);
+  const instance = createNativePrefabInstanceNode(prefab);
+  const makeInstance = (override: Record<string, unknown>) => ({
+    ...instance,
+    prefabInstance: {
+      ...instance.prefabInstance!,
+      overrides: [override as unknown as import("@codogma/cge").PrefabOverrideDocument],
+    },
+  });
+
+  assert.throws(
+    () => resolveNativePrefabRoot(makeInstance({
+      targetNodeId: "missing-node",
+      propertyPath: "transform.x",
+      value: 10,
+    }), prefab),
+    /Prefab Node "missing-node" was not found/,
+  );
+  assert.throws(
+    () => resolveNativePrefabRoot(makeInstance({
+      targetNodeId: root.id,
+      targetComponentId: "missing-component",
+      propertyPath: "tint",
+      value: "#fff",
+    }), prefab),
+    /Prefab Component "missing-component" was not found/,
+  );
+  assert.throws(
+    () => resolveNativePrefabRoot(makeInstance({
+      targetNodeId: root.id,
+      propertyPath: "__proto__.polluted",
+      value: true,
+    }), prefab),
+    /safe property path/,
+  );
+  assert.throws(
+    () => resolveNativePrefabRoot(makeInstance({
+      targetNodeId: root.id,
+      propertyPath: "opacity",
+      value: 0.5,
+    }), prefab),
+    /not supported/,
+  );
+});
