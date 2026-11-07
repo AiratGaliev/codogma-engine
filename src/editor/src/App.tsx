@@ -68,6 +68,7 @@ import {
   type DocumentChangeRollback,
   type DocumentHistoryState,
 } from "./domain/document-history.js";
+import { beginSceneLoadRequest } from "./domain/scene-load-request.js";
 import {
   attachNativeComponent,
   detachNativeComponent,
@@ -722,7 +723,9 @@ function App() {
     reloadCurrent = false,
     allowDuringProjectMutation = false,
   ): Promise<boolean> {
-    if (path === scenePath() && !reloadCurrent) return true;
+    const loadDecision = beginSceneLoadRequest(sceneLoadSequence, path, scenePath(), reloadCurrent);
+    sceneLoadSequence = loadDecision.sequence;
+    if (loadDecision.skip) return true;
     if (saving() || (nativeProjectMutationInProgress && !allowDuringProjectMutation)) {
       log("warning", "A native document operation is in progress; opening another document is temporarily blocked.");
       return false;
@@ -734,7 +737,7 @@ function App() {
       if (!window.confirm("The active native document or Project manifest has unsaved changes. Discard them and open the requested document?")) return false;
     }
 
-    const request = ++sceneLoadSequence;
+    const request = sceneLoadSequence;
     const activeDocumentBeforeLoad = scene();
     const activeHistoryBeforeLoad = history();
     const activePathBeforeLoad = scenePath();
