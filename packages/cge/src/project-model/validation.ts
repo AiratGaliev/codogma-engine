@@ -361,7 +361,6 @@ function validatePrefabOverrides(
           overridePath + ".propertyPath",
           nodeId,
         ));
-        return;
       }
     }
     const identity = targetNodeId + "\u0000" + targetComponentId + "\u0000" + override.propertyPath;
