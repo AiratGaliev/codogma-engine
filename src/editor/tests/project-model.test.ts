@@ -294,3 +294,55 @@ testCase("round-trips native Scene edits across hierarchy, Component, FX and Ass
   assert.equal(reopenedBloomSource.threshold, 0.75);
   assert.equal(reopenedBloomSource.blurSteps, 8);
 });
+
+testCase("validates built-in Image Renderer Asset references for Scene and Prefab reads and writes", () => {
+  const makeImageNode = (assetId: unknown) => ({
+    id: "node-image-reference-check",
+    name: "Image",
+    active: true,
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+    components: [{
+      id: "component-image-reference-check",
+      typeId: "com.codogma.renderer.image",
+      schemaVersion: 1,
+      enabled: true,
+      properties: { assetId },
+    }],
+    children: [],
+  });
+
+  for (const invalidAssetId of ["asset-does-not-exist", "asset-follow-target-module", 42, ""]) {
+    const invalidScene = JSON.parse(sceneContent) as import("@codogma/cge").SceneDocumentV1;
+    invalidScene.rootNodes.push(makeImageNode(invalidAssetId));
+    assert.throws(
+      () => serializeNativeSceneDocument(project, invalidScene),
+      /Image Asset|Image Renderer assetId|expected "image"/,
+    );
+    assert.throws(
+      () => parseNativeSceneDocument(project, "scene-level", JSON.stringify(invalidScene)),
+      /Image Asset|Image Renderer assetId|expected "image"/,
+    );
+
+    const prefab = {
+      schemaVersion: 1 as const,
+      id: "prefab-image-reference-check",
+      name: "Image Prefab",
+      root: makeImageNode(invalidAssetId),
+    };
+    const registeredProject = addNativePrefabReference(
+      project,
+      prefab,
+      "asset-prefab-image-reference-check",
+      "prefabs/ImageReferenceCheck.cge-prefab.json",
+    );
+    assert.throws(
+      () => serializeNativePrefabDocument(registeredProject, prefab),
+      /Image Asset|Image Renderer assetId|expected "image"/,
+    );
+    assert.throws(
+      () => parseNativePrefabDocument(registeredProject, prefab.id, JSON.stringify(prefab)),
+      /Image Asset|Image Renderer assetId|expected "image"/,
+    );
+  }
+});
+

@@ -1,4 +1,4 @@
-import { BUILTIN_COMPONENT_TYPE_IDS } from "./builtin-component-ids.js";
+import { BUILTIN_COMPONENT_TYPE_IDS, BUILTIN_COMPONENT_TYPES } from "./builtin-component-ids.js";
 import {
   parsePrefabDocument,
   parseProjectDocument,
@@ -8,6 +8,7 @@ import {
   serializeSceneDocument,
   validateProjectDocument,
   type AssetReference,
+  type NodeDocument,
   type PrefabDocumentV1,
   type ProjectDocumentV1,
   type SceneDocumentV1,
@@ -97,6 +98,55 @@ function createSceneValidationContext(project: ProjectDocumentV1) {
   };
 }
 
+/**
+ * Built-in Image Renderer stores its Asset reference as a stable assetId
+ * string (rather than a user Component's { assetId } property object). Keep
+ * that native reference valid at the Project boundary for both Scene and
+ * Prefab documents, on read and write.
+ */
+function assertNativeImageAssetReferences(
+  project: ProjectDocumentV1,
+  roots: readonly NodeDocument[],
+  label: string,
+  rootPath: "root" | "rootNodes" = "rootNodes",
+): void {
+  const diagnostics: Array<{ code: string; message: string; path: string }> = [];
+
+  const visit = (node: NodeDocument, path: string): void => {
+    node.components.forEach((component, index) => {
+      if (component.typeId !== BUILTIN_COMPONENT_TYPES.imageRenderer ||
+          !Object.prototype.hasOwnProperty.call(component.properties, "assetId")) {
+        return;
+      }
+
+      const assetId = component.properties.assetId;
+      const asset = typeof assetId === "string"
+        ? project.assets.find((item) => item.id === assetId)
+        : undefined;
+      if (!asset) {
+        diagnostics.push({
+          code: "PROJECT_INVALID_REFERENCE",
+          message: typeof assetId === "string" && assetId.trim()
+            ? `Image Asset "${assetId}" is not registered in project.json.`
+            : "Image Renderer assetId must reference a registered Project image Asset.",
+          path: `${path}.components[${index}].properties.assetId`,
+        });
+      } else if (asset.kind !== "image") {
+        diagnostics.push({
+          code: "PROJECT_INVALID_REFERENCE",
+          message: `Asset "${assetId}" has kind "${asset.kind}", expected "image".`,
+          path: `${path}.components[${index}].properties.assetId`,
+        });
+      }
+    });
+
+    node.children.forEach((child, index) => visit(child, `${path}.children[${index}]`));
+  };
+
+  roots.forEach((root, index) => visit(root, rootPath === "root" ? "root" : `rootNodes[${index}]`));
+  if (diagnostics.length > 0) throw new NativeProjectDocumentError(label, diagnostics);
+}
+
 export function parseNativeSceneDocument(
   project: ProjectDocumentV1,
   sceneId: string,
@@ -113,6 +163,7 @@ export function parseNativeSceneDocument(
   if (document.id !== sceneId) {
     throw new Error(`Scene manifest id "${sceneId}" does not match document id "${document.id}".`);
   }
+  assertNativeImageAssetReferences(project, document.rootNodes, `Scene "${sceneId}"`);
   return document;
 }
 
@@ -126,6 +177,7 @@ export function serializeNativeSceneDocument(
   if (!asset.path.endsWith(NATIVE_SCENE_EXTENSION)) {
     throw new Error(`Scene asset "${asset.id}" must use the native ${NATIVE_SCENE_EXTENSION} contract.`);
   }
+  assertNativeImageAssetReferences(project, document.rootNodes, `Scene "${document.id}"`);
   return serializeSceneDocument(document, createSceneValidationContext(project));
 }
 
@@ -145,6 +197,7 @@ export function parseNativePrefabDocument(
   if (document.id !== prefabId) {
     throw new Error(`Prefab manifest id "${prefabId}" does not match document id "${document.id}".`);
   }
+  assertNativeImageAssetReferences(project, [document.root], `Prefab "${prefabId}"`, "root");
   return document;
 }
 
@@ -158,6 +211,7 @@ export function serializeNativePrefabDocument(
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
     throw new Error(`Prefab asset "${asset.id}" must use the native ${NATIVE_PREFAB_EXTENSION} contract.`);
   }
+  assertNativeImageAssetReferences(project, [document.root], `Prefab "${document.id}"`, "root");
   return serializePrefabDocument(document, createSceneValidationContext(project));
 }
 
