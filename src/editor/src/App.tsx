@@ -712,13 +712,14 @@ function App() {
   });
 
   let sceneLoadSequence = 0;
+  let prefabCreationInProgress = false;
   let documentLoadSequence = 0;
   let scriptCheckSequence = 0;
 
   async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
-    if (saving()) {
-      log("warning", "The active native document is being saved; opening another document is temporarily blocked.");
+    if (saving() || prefabCreationInProgress) {
+      log("warning", "A native document operation is in progress; opening another document is temporarily blocked.");
       return false;
     }
     if (animationDirty() || scriptDirty()) {
@@ -831,8 +832,9 @@ function App() {
   function applySceneChange(
     next: EditorDocument,
     selectionAfter = selectedId(),
+    allowDuringPrefabCreation = false,
   ): DocumentChangeRollback<EditorDocument | null> | null {
-    if (saving()) return null;
+    if (saving() || (prefabCreationInProgress && !allowDuringPrefabCreation)) return null;
 
     const previousDocument = scene();
     const previousState = history();
@@ -854,7 +856,7 @@ function App() {
   }
 
   function undo() {
-    if (saving()) return;
+    if (saving() || prefabCreationInProgress) return;
     const result = undoDocumentChange(history());
     if (!result || !result.document) return;
     setHistory(result.state);
@@ -864,7 +866,7 @@ function App() {
   }
 
   function redo() {
-    if (saving()) return;
+    if (saving() || prefabCreationInProgress) return;
     const result = redoDocumentChange(history());
     if (!result || !result.document) return;
     setHistory(result.state);
@@ -1183,57 +1185,69 @@ function App() {
   }
 
   async function createNativePrefabFromNode(nodeId: string, pathValue: string, nameValue?: string) {
-    const current = scene();
-    const project = projectDocument();
-    if (!current || !project || isPrefabDocument(current)) throw new Error("Open a native Scene before creating a Prefab.");
-    const selected = getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).find((item) => item.id === nodeId);
-    if (!selected) throw new Error(`Scene Node "${nodeId}" was not found.`);
-    const path = readMcpPath(pathValue, "path");
-    if (!path.toLowerCase().endsWith(".cge-prefab.json")) {
-      throw new Error("Native Prefab path must end with .cge-prefab.json.");
+    if (prefabCreationInProgress) throw new Error("Another native Prefab creation is already in progress.");
+    if (saving() || projectSaving()) {
+      throw new Error("A native document or Project manifest save is in progress. Retry Prefab creation afterwards.");
     }
-    const name = nameValue?.trim() || selected.name;
-    const directory = path.split("/").slice(0, -1).join("/");
-    assertNewProjectFilePath(path);
-    if (directory) await ensureProjectFolder(directory);
-
-    const prefab = createNativePrefabDocument(selected.node, name);
-    const assetId = globalThis.crypto?.randomUUID?.();
-    if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
-    const nextProject = registerNativePrefab(project, prefab, assetId, path);
-    const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
-    const manifestContent = serializeNativeProjectDocument(nextProject);
-    await writeProjectFile(path, prefabContent);
+    prefabCreationInProgress = true;
     try {
-      await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
-    } catch (error) {
-      try { await deleteProjectFiles([path]); }
-      catch (rollbackError) {
-        throw new Error(`Project manifest update failed and the newly written Prefab could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
+      const current = scene();
+      const project = projectDocument();
+      if (!current || !project || isPrefabDocument(current)) throw new Error("Open a native Scene before creating a Prefab.");
+      const selected = getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).find((item) => item.id === nodeId);
+      if (!selected) throw new Error(`Scene Node "${nodeId}" was not found.`);
+      const path = readMcpPath(pathValue, "path");
+      if (!path.toLowerCase().endsWith(".cge-prefab.json")) {
+        throw new Error("Native Prefab path must end with .cge-prefab.json.");
       }
-      throw error;
-    }
+      const name = nameValue?.trim() || selected.name;
+      const directory = path.split("/").slice(0, -1).join("/");
+      assertNewProjectFilePath(path);
+      if (directory) await ensureProjectFolder(directory);
 
-    const previousNodeIds = new Set(
-      getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).map((entry) => entry.id),
-    );
-    const withoutSource = removeSceneNode(current, selected.id);
-    const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
-      name: selected.name,
-      transform: selected.node.transform,
-      parentId: selected.parentId,
-    });
-    const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab])
-      .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
-    setProjectDocument(nextProject);
-    setSavedProjectContent(manifestContent);
-    setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
-    applySceneChange(nextScene, instance?.id ?? null);
-    if (!(await saveScene())) {
-      throw new Error("Prefab and Project manifest were saved, but the Scene instance could not be saved. The Scene remains dirty for retry.");
+      const prefab = createNativePrefabDocument(selected.node, name);
+      const assetId = globalThis.crypto?.randomUUID?.();
+      if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
+      const nextProject = registerNativePrefab(project, prefab, assetId, path);
+      const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
+      const manifestContent = serializeNativeProjectDocument(nextProject);
+      await writeProjectFile(path, prefabContent);
+      try {
+        await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
+      } catch (error) {
+        try { await deleteProjectFiles([path]); }
+        catch (rollbackError) {
+          throw new Error(`Project manifest update failed and the newly written Prefab could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
+        }
+        throw error;
+      }
+
+      const previousNodeIds = new Set(
+        getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).map((entry) => entry.id),
+      );
+      const withoutSource = removeSceneNode(current, selected.id);
+      const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
+        name: selected.name,
+        transform: selected.node.transform,
+        parentId: selected.parentId,
+      });
+      const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab])
+        .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
+      setProjectDocument(nextProject);
+      setSavedProjectContent(manifestContent);
+      setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
+      const rollback = applySceneChange(nextScene, instance?.id ?? null, true);
+      if (!rollback) {
+        throw new Error("The new Prefab and Project manifest were saved, but the active Scene changed before Prefab instantiation could be committed.");
+      }
+      if (!(await saveScene(true))) {
+        throw new Error("Prefab and Project manifest were saved, but the Scene instance could not be saved. The Scene remains dirty for retry.");
+      }
+      await refreshProjectTree();
+      return { prefabId: prefab.id, assetId, path, instanceId: instance?.id ?? null };
+    } finally {
+      prefabCreationInProgress = false;
     }
-    await refreshProjectTree();
-    return { prefabId: prefab.id, assetId, path, instanceId: instance?.id ?? null };
   }
 
   async function createPrefabFromSelected() {
@@ -1261,7 +1275,7 @@ function App() {
 
   async function saveProjectManifest(): Promise<boolean> {
     const current = projectDocument();
-    if (!current || projectSaving()) return false;
+    if (!current || projectSaving() || prefabCreationInProgress) return false;
     setProjectSaving(true);
     try {
       const content = serializeNativeProjectDocument(current);
@@ -1278,11 +1292,14 @@ function App() {
     }
   }
 
-  async function saveScene(): Promise<boolean> {
+  async function saveScene(allowDuringPrefabCreation = false): Promise<boolean> {
     const current = scene();
     const path = scenePath();
     const project = projectDocument();
-    if (!current || !path || !project || saving()) return false;
+    if (
+      !current || !path || !project || saving() ||
+      (prefabCreationInProgress && !allowDuringPrefabCreation)
+    ) return false;
     setSaving(true);
     try {
       const content = isPrefabDocument(current)
@@ -2395,8 +2412,8 @@ function App() {
   }
 
   async function persistMcpSceneChange(next: EditorDocument, selectionAfter = selectedId()) {
-    if (saving()) {
-      throw new Error("The active native document is already being saved. Retry the MCP mutation after the save completes.");
+    if (saving() || prefabCreationInProgress) {
+      throw new Error("A native document operation is already in progress. Retry the MCP mutation after it completes.");
     }
 
     const rollback = applySceneChange(next, selectionAfter);
