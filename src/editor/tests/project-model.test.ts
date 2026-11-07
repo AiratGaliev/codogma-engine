@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as testCase } from "vitest";
+import type { SceneDocumentV1 } from "@codogma/cge";
 import { reparentSceneNode, getSceneNodeEntries, findSceneNode, createSceneNode } from "../src/domain/scene-model.js";
 import { setNativeComponentEnabled } from "../src/domain/components-model.js";
 import {
