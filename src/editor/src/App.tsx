@@ -20,7 +20,7 @@ import {
   type SceneNodeEntry,
   type SceneNodePatch,
   type SceneNodeKind,
-} from "./domain/native-scene-model.ts";
+} from "./domain/scene-model.ts";
 import {
   findPrefabReferenceByAssetPath,
   createNativeSceneDocument,
@@ -35,7 +35,7 @@ import {
   serializeNativePrefabDocument,
   serializeNativeProjectDocument,
   serializeNativeSceneDocument,
-} from "./domain/native-project-model.ts";
+} from "./domain/project-model.ts";
 import {
   appendAnimationFrame,
   createAnimation,
@@ -56,12 +56,12 @@ import {
   addNativePrefabInstance,
   createNativePrefabDocument,
   registerNativePrefab,
-} from "./domain/native-prefab-model.ts";
+} from "./domain/prefab-model.ts";
 import {
   attachNativeComponent,
   detachNativeComponent,
   setNativeComponentEnabled,
-} from "./domain/native-components-model.ts";
+} from "./domain/components-model.ts";
 import {
   addNativeNodeFx,
   getNativeNodeEffects,
@@ -69,7 +69,7 @@ import {
   updateNativeNodeFx,
   type FxObject,
   type FxType,
-} from "./domain/native-fx-model.ts";
+} from "./domain/fx-model.ts";
 import {
   getProjectFiles,
   readProjectFile,

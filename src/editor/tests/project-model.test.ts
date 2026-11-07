@@ -15,7 +15,7 @@ import {
   resolvePrefabAsset,
   resolveSceneAsset,
   serializeNativeSceneDocument,
-} from "../src/domain/native-project-model.js";
+} from "../src/domain/project-model.js";
 
 const fixtureRoot = resolve(process.cwd(), "../../packages/cge/tests/fixtures/acceptance-project");
 const project = parseNativeProjectDocument(readFileSync(resolve(fixtureRoot, "project.json"), "utf8"));

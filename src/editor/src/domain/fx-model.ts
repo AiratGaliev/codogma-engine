@@ -3,9 +3,9 @@ import {
   type ComponentInstanceDocument,
   type NodeDocument,
 } from "@codogma/cge";
-import { updateNativeNode, type EditorDocument } from "./native-scene-model.js";
-import { FX_COMPONENT_TYPES } from "./native-component-types.js";
-export { FX_COMPONENT_TYPES } from "./native-component-types.js";
+import { updateNativeNode, type EditorDocument } from "./scene-model.js";
+import { FX_COMPONENT_TYPES } from "./builtin-component-ids.js";
+export { FX_COMPONENT_TYPES } from "./builtin-component-ids.js";
 
 export type FxType = "Circle" | "Bloom" | "Gradient" | "Shine";
 export type FxColor = string | number;

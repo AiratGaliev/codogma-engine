@@ -8,8 +8,8 @@ import {
   getEnabledNativeNodeEffects,
   removeNativeNodeFx,
   updateNativeNodeFx,
-} from "../src/domain/native-fx-model.js";
-import { findSceneNode } from "../src/domain/native-scene-model.js";
+} from "../src/domain/fx-model.js";
+import { findSceneNode } from "../src/domain/scene-model.js";
 
 function scene(): SceneDocumentV1 {
   return {

@@ -8,7 +8,7 @@ import {
   type TransformData,
   type SceneDocumentV1,
 } from "@codogma/cge";
-import { addNativePrefabReference } from "./native-project-model.js";
+import { addNativePrefabReference } from "./project-model.js";
 
 export interface NativePrefabInstanceOptions {
   name?: string;

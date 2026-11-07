@@ -1,5 +1,5 @@
 import { For, Index, Show, createSignal } from "solid-js";
-import type { FxEntry, FxObject, FxType } from "../domain/native-fx-model.js";
+import type { FxEntry, FxObject, FxType } from "../domain/fx-model.js";
 import { colorPreview } from "./fx-color.ts";
 
 interface NumericField {

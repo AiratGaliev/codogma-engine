@@ -7,8 +7,8 @@ import {
   getNativeComponentInstances,
   setNativeComponentEnabled,
   updateNativeComponentProperties,
-} from "../src/domain/native-components-model.js";
-import { findSceneNode } from "../src/domain/native-scene-model.js";
+} from "../src/domain/components-model.js";
+import { findSceneNode } from "../src/domain/scene-model.js";
 
 const project: ProjectDocumentV1 = {
   schemaVersion: 1,

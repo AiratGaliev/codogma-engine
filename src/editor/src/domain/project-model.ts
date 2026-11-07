@@ -1,4 +1,4 @@
-import { BUILTIN_COMPONENT_TYPE_IDS } from "./native-component-types.js";
+import { BUILTIN_COMPONENT_TYPE_IDS } from "./builtin-component-ids.js";
 import {
   parsePrefabDocument,
   parseProjectDocument,

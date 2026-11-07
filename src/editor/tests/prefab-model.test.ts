@@ -8,7 +8,7 @@ import {
   createNativePrefabInstanceNode,
   registerNativePrefab,
   resolveNativePrefabRoot,
-} from "../src/domain/native-prefab-model.js";
+} from "../src/domain/prefab-model.js";
 
 const root: NodeDocument = {
   id: "node-crate",

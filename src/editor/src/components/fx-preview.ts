@@ -1,4 +1,4 @@
-import type { CircleFx, FxObject, GradientFx, BloomFx, ShineFx } from "../domain/native-fx-model.js";
+import type { CircleFx, FxObject, GradientFx, BloomFx, ShineFx } from "../domain/fx-model.js";
 
 type UpdateListener = () => void;
 type DestroyListener = (...args: unknown[]) => void;

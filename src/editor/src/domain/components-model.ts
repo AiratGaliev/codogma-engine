@@ -10,7 +10,7 @@ import {
   type ProjectDocumentV1,
   type ValidationResult,
 } from "@codogma/cge";
-import { updateNativeNode, type EditorDocument } from "./native-scene-model.js";
+import { updateNativeNode, type EditorDocument } from "./scene-model.js";
 
 export interface NativeComponentContext {
   project: ProjectDocumentV1;

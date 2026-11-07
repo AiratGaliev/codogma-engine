@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createFxObject } from "../src/domain/native-fx-model.js";
+import { createFxObject } from "../src/domain/fx-model.js";
 import {
   createFxPreview,
   isFxPreviewParentSupported,

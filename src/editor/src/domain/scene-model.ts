@@ -6,9 +6,9 @@ import {
   type PrefabDocumentV1,
   type SceneDocumentV1,
 } from "@codogma/cge";
-import { resolveNativePrefabRoot } from "./native-prefab-model.js";
-import { BUILTIN_COMPONENT_TYPES } from "./native-component-types.js";
-export { BUILTIN_COMPONENT_TYPES } from "./native-component-types.js";
+import { resolveNativePrefabRoot } from "./prefab-model.js";
+import { BUILTIN_COMPONENT_TYPES } from "./builtin-component-ids.js";
+export { BUILTIN_COMPONENT_TYPES } from "./builtin-component-ids.js";
 
 export type EditorDocument = SceneDocumentV1 | PrefabDocumentV1;
 

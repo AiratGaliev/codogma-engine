@@ -10,7 +10,7 @@ import {
   removeSceneNode,
   reparentSceneNode,
   updateSceneNode,
-} from "../src/domain/native-scene-model.js";
+} from "../src/domain/scene-model.js";
 
 function scene(): SceneDocumentV1 {
   return {

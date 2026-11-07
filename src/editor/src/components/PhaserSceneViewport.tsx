@@ -8,12 +8,12 @@ import {
 import {
   getSceneNodeEntries,
   type EditorDocument,
-} from "../domain/native-scene-model.ts";
+} from "../domain/scene-model.ts";
 import {
   readProjectFile,
   type ProjectEntry,
 } from "../services/editor-api";
-import { getEnabledNativeNodeEffects, type FxObject } from "../domain/native-fx-model.ts";
+import { getEnabledNativeNodeEffects, type FxObject } from "../domain/fx-model.ts";
 import type { NodeDocument, PrefabDocumentV1, ProjectDocumentV1 } from "@codogma/cge";
 import {
   createFxPreview,
