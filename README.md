@@ -232,7 +232,7 @@ Terminal 2:
 npm run test:e2e
 ~~~
 
-By default, these checks exercise server-side MCP and external asset inspection. Optional checks that open a native Scene, read its Node hierarchy and request a viewport screenshot require a running, connected SolidJS Editor Host and can be enabled with <code>MCP_E2E_WITH_EDITOR=1</code>. The default fast-checks CI job does not enable this UI-specific mode; the full E2E gate remains on promotion PRs.
+By default, these checks exercise server-side MCP and external asset inspection. Optional checks that open a native Scene, read its Node hierarchy and request a viewport screenshot require a running, connected SolidJS Editor Host plus <code>PROJECT_DIR</code> pointing to a native Project Model v1 fixture with at least one Scene; enable them with <code>MCP_E2E_WITH_EDITOR=1</code>. The test rejects the frozen Colibri workspace as a native Scene fixture. The default fast-checks CI job does not enable this UI-specific mode; the full E2E gate remains on promotion PRs.
 
 ## Architecture and integration boundaries
 

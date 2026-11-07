@@ -129,6 +129,11 @@ async function main() {
     assert.ok(Array.isArray(textureList.textures), "texture discovery must return a textures array")
 
     if (process.env.MCP_E2E_WITH_EDITOR === "1") {
+        assert.ok(process.env.PROJECT_DIR,
+            "MCP_E2E_WITH_EDITOR=1 requires PROJECT_DIR to point to a native Project Model v1 fixture, not the frozen Colibri test workspace")
+        const projectInfo = JSON.parse(await callTool("project-compile-info", {}))
+        assert.ok(Array.isArray(projectInfo.scenes) && projectInfo.scenes.length > 0,
+            "native MCP browser acceptance requires at least one Scene reference in project.json")
         const scenes = JSON.parse(await callTool("scene-list", {}))
         assert.ok(Array.isArray(scenes), "native scene-list must return a scene array")
         if (scenes.length > 0) {
