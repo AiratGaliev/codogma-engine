@@ -557,8 +557,19 @@ testCase("rejects unsafe property path segments on native Prefab overrides", () 
         }
       : node),
   } as SceneDocumentV1;
+  const hasSafePathDiagnostic = (error: unknown) =>
+    error instanceof Error &&
+    "diagnostics" in error &&
+    Array.isArray(error.diagnostics) &&
+    error.diagnostics.some((item: { message?: string }) =>
+      item.message?.includes("safe identifier segments"),
+    );
   assert.throws(
     () => serializeNativeSceneDocument(registered, invalid, [prefab]),
-    /safe identifier segments/,
+    hasSafePathDiagnostic,
+  );
+  assert.throws(
+    () => parseNativeSceneDocument(registered, "scene-level", JSON.stringify(invalid), [prefab]),
+    hasSafePathDiagnostic,
   );
 });

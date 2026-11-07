@@ -621,3 +621,47 @@ test("reports Project, Scene, Node and Prefab envelope errors at exact paths", (
     assert.equal(validatePrefabDocument(input).diagnostics[0]?.path, expectedPath);
   }
 });
+
+test("rejects unsafe property path segments in Prefab overrides", () => {
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-safe-path",
+    name: "Safe Path",
+    root: {
+      id: "prefab-root",
+      name: "Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  };
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-safe-override",
+    name: "Safe Override",
+    settings: {},
+    rootNodes: [{
+      id: "instance-safe-override",
+      name: "Instance",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+      prefabInstance: {
+        prefabId: prefab.id,
+        overrides: [{
+          targetNodeId: "prefab-root",
+          propertyPath: "__proto__.polluted",
+          value: true,
+        }],
+      },
+    }],
+  };
+  const result = validateSceneDocument(scene, { prefabs: new Map([[prefab.id, prefab]]) });
+  assert.equal(result.valid, false);
+  assert.ok(result.diagnostics.some((item) =>
+    item.path === "rootNodes[0].prefabInstance.overrides[0].propertyPath" &&
+    item.message.includes("safe identifier segments"),
+  ));
+});
