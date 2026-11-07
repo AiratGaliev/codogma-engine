@@ -338,16 +338,18 @@ test("endpoint validation rejects non-loopback hosts and unintended paths", () =
     assert.throws(() => resolveEngineMcpUrl("http://127.0.0.1:3000/editor/mcp?redirect=1"), /credentials/);
 });
 
-test("HTTP MCP adapter refuses redirects away from the loopback endpoint", async () => {
-    const engine = await startMockEngine({ redirectMethod: "initialize" });
-    try {
-        await assert.rejects(
-            createCodogmaMcpServer({ url: engine.url, fetchImpl: fetch }),
-            /redirect/i
-        );
-    } finally {
-        await engine.close();
-    }
+test("HTTP MCP adapter refuses redirect responses", async () => {
+    const fetchImpl = async (_url, init) => {
+        assert.equal(init.redirect, "error", "the adapter must disable automatic redirect following");
+        return new Response(null, {
+            status: 302,
+            headers: { location: "https://example.com/editor/mcp" }
+        });
+    };
+    await assert.rejects(
+        createCodogmaMcpServer({ url: "http://127.0.0.1:3000/editor/mcp", fetchImpl }),
+        /HTTP 302/
+    );
 });
 
 test("native registry and preserved external asset tools expose valid schemas", async () => {

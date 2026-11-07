@@ -8,9 +8,8 @@
  *   - POST /editor/mcp-bridge/result   editor client posts command results back
  *
  * Tools that operate purely on project files are executed server-side.
- * Tools that need the running editor UI (open scene, screenshots, active scene)
- * are forwarded to the editor over the SSE bridge — exactly like the official
- * server forwards to the desktop editor instance.
+ * Native Scene/Node/Prefab/Component/FX operations and viewport screenshots
+ * are forwarded only to a connected SolidJS Editor Host over the SSE bridge.
  */
 
 import fs from "fs"
@@ -159,9 +158,7 @@ function defTool(name, description, inputSchema, exec) {
     TOOLS.set(name, { name, description, inputSchema, exec })
 }
 
-/* ------------------------------ Asset tools ------------------------------ */
-
-/* ------------------------------ Asset tools ------------------------------ */
+/* ------------------------------ External asset tools --------------------- */
 
 defTool(
     "assets-get-available-textures",

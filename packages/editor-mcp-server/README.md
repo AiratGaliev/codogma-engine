@@ -34,11 +34,26 @@ This package is deliberately an adapter, not a second implementation of editor t
 
 The adapter connects directly to `POST /editor/mcp`. It does not start or depend on a second WebSocket or port-`1902` transport, and does not import Phaser-specific MCP tool definitions.
 
+## Native tool surface
+
+The engine registry exposes native Project Model v1 operations:
+
+- **Scene:** list, open, create, save, read the active document and inspect its Node hierarchy.
+- **Nodes:** create, update, delete, reparent and clear native Nodes using stable IDs.
+- **Prefabs:** list, read, create and instantiate native PrefabDocumentV1 assets.
+- **Components:** attach/detach registered Component modules and change instance enabled state.
+- **FX:** add, update and remove Circle, Bloom, Gradient and Shine Component instances.
+- **Viewport:** capture a screenshot of the active native Scene.
+
+The adapter also preserves file/project utilities and read-only or metadata-oriented integrations for external Phaser Asset Pack, animation, Tiled tilemap, Spine, texture, bitmap-font and Google Fonts assets.
+
+The registry does **not** publish Phaser Editor Scene/Prefab mutation tools or internal `.scene` / `.components` readers and writers. Native Project, Scene and Prefab documents cannot be overwritten or deleted through generic file operations; they must pass the Editor Host's native validation and persistence boundary. External Phaser Asset Pack and animation formats remain separate import/runtime contracts.
+
 ## Requirements
 
 - Node.js 22 or newer.
 - Codogma Engine server running locally.
-- For active-scene, screenshot and other UI-dependent tools, the editor page must be open and its SSE bridge connected.
+- For Scene, Node, Prefab, Component, FX and screenshot operations, the project must be open in the **SolidJS Editor Host** and its SSE bridge connected. A frozen legacy Colibri editor session is never a target for native MCP commands.
 
 ## Local development
 
