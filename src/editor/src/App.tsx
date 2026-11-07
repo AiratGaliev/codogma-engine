@@ -1228,17 +1228,8 @@ function App() {
       const nextProject = registerNativePrefab(project, prefab, assetId, path);
       const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
       const manifestContent = serializeNativeProjectDocument(nextProject);
-      await writeProjectFile(path, prefabContent);
-      try {
-        await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
-      } catch (error) {
-        try { await deleteProjectFiles([path]); }
-        catch (rollbackError) {
-          throw new Error(`Project manifest update failed and the newly written Prefab could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
-        }
-        throw error;
-      }
 
+      // Build and validate the replacement Scene before any file is written.
       const previousNodeIds = new Set(
         getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).map((entry) => entry.id),
       );
@@ -1250,6 +1241,19 @@ function App() {
       });
       const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab])
         .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
+      const sceneContent = serializeNativeSceneDocument(nextProject, nextScene);
+
+      await writeProjectFile(path, prefabContent);
+      try {
+        await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
+      } catch (error) {
+        try { await deleteProjectFiles([path]); }
+        catch (rollbackError) {
+          throw new Error(`Project manifest update failed and the newly written Prefab could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
+        }
+        throw error;
+      }
+
       setProjectDocument(nextProject);
       setSavedProjectContent(manifestContent);
       setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);
@@ -1257,7 +1261,7 @@ function App() {
       if (!rollback) {
         throw new Error("The new Prefab and Project manifest were saved, but the active Scene changed before Prefab instantiation could be committed.");
       }
-      if (!(await saveScene(true))) {
+      if (!(await saveScene(true, sceneContent))) {
         throw new Error("Prefab and Project manifest were saved, but the Scene instance could not be saved. The Scene remains dirty for retry.");
       }
       await refreshProjectTree();
@@ -1309,7 +1313,10 @@ function App() {
     }
   }
 
-  async function saveScene(allowDuringPrefabCreation = false): Promise<boolean> {
+  async function saveScene(
+    allowDuringPrefabCreation = false,
+    contentOverride?: string,
+  ): Promise<boolean> {
     const current = scene();
     const path = scenePath();
     const project = projectDocument();
@@ -1319,9 +1326,9 @@ function App() {
     ) return false;
     setSaving(true);
     try {
-      const content = isPrefabDocument(current)
+      const content = contentOverride ?? (isPrefabDocument(current)
         ? serializeNativePrefabDocument(project, current)
-        : serializeNativeSceneDocument(project, current);
+        : serializeNativeSceneDocument(project, current));
       await writeProjectFile(path, content);
       setSavedContent(content);
       if (isPrefabDocument(current)) {
