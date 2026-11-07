@@ -772,10 +772,7 @@ function selectActiveBridgeClient() {
 
 function selectNativeBridgeClient() {
     const active = activeBridgeClientId ? bridgeClients.get(activeBridgeClientId) : null
-    if (active?.clientType === "solidjs") return active
-    return [...bridgeClients.values()]
-        .filter(client => client.clientType === "solidjs")
-        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0] ?? null
+    return active?.clientType === "solidjs" ? active : null
 }
 
 function rejectPendingForClient(clientId, reason) {
@@ -828,7 +825,7 @@ function bridgeCommand(command) {
         const client = selectNativeBridgeClient()
         if (!client) {
             const hint = bridgeClients.size > 0
-                ? "Only a frozen legacy editor session is connected; open the SolidJS Editor Host and retry."
+                ? "No active SolidJS Host session is selected. Activate the intended SolidJS Host and retry; native commands never fall back to another session."
                 : "Open the project in the SolidJS Editor Host and wait for its MCP bridge connection."
             return reject(new Error(`Native Codogma MCP commands require a connected SolidJS Editor Host session. ${hint}`))
         }

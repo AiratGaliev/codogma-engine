@@ -140,21 +140,30 @@ test("editor focus changes command ownership and disconnect selects the remainin
         )
         assert.equal(JSON.parse(activationResponse.body).activeClientType, "legacy")
 
+        await assert.rejects(
+            dispatchTool("scene-get-active", {}),
+            /require a connected SolidJS Editor Host session/
+        )
+        assert.doesNotMatch(legacy.response.output, /event: command/,
+            "native Project Model tools must never be routed to the frozen legacy editor")
+        assert.doesNotMatch(solid.response.output, /event: command/,
+            "an inactive SolidJS session must not receive another session's native command")
+
+        legacy.response.emit("close")
+        assert.equal(getBridgeStatus().activeClientType, "solidjs")
+        assert.equal(getBridgeStatus().clients, 1)
+
         const commandPromise = dispatchTool("scene-get-active", {})
         await new Promise((resolve) => setImmediate(resolve))
         const command = parseLastCommand(solid.response)
         assert.equal(command.clientId, solid.session.clientId)
         assert.equal(command.tool, "scene-get-active")
-        assert.doesNotMatch(legacy.response.output, /event: command/,
-            "native Project Model tools must never be routed to the frozen legacy editor")
         await sendResult({
             id: command.id,
             clientId: solid.session.clientId,
             result: { path: "scenes/Level.cge-scene.json", id: "scene-level", name: "Level", documentType: "scene" }
         })
         await commandPromise
-
-        legacy.response.emit("close")
         assert.equal(getBridgeStatus().activeClientType, "solidjs")
         assert.equal(getBridgeStatus().clients, 1)
     } finally {
