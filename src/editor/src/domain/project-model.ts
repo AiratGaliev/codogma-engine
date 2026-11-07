@@ -96,7 +96,7 @@ function createSceneValidationContext(
   return {
     assets: new Map(project.assets.map((asset) => [asset.id, asset])),
     prefabIds: new Set(project.prefabs.map((prefab) => prefab.id)),
-    prefabs,
+    ...(prefabDocuments.length > 0 ? { prefabs } : {}),
     registeredComponentTypes: new Set([
       ...BUILTIN_COMPONENT_TYPE_IDS,
       ...project.componentModules.map((module) => module.typeId),
