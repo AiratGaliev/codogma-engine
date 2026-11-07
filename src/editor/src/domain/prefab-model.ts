@@ -87,10 +87,14 @@ function findNode(roots: readonly NodeDocument[], id: string): NodeDocument | un
   return undefined;
 }
 
+function containsNativePrefabInstance(node: NodeDocument): boolean {
+  return Boolean(node.prefabInstance) || node.children.some(containsNativePrefabInstance);
+}
+
 export function createNativePrefabDocument(node: NodeDocument, name = node.name): PrefabDocumentV1 {
   if (!node || !isValidStableId(node.id)) throw new TypeError("A native Node with a stable id is required.");
   if (!name.trim()) throw new TypeError("Prefab name must be non-empty.");
-  if (node.prefabInstance) {
+  if (containsNativePrefabInstance(node)) {
     throw new TypeError("A Prefab instance cannot be nested into a new Prefab until nested Prefab authoring is implemented.");
   }
   return {

@@ -247,3 +247,26 @@ testCase("validates all persisted Prefab override targets before resolving the P
     "#ff0000",
   );
 });
+
+testCase("rejects creating a Prefab from a subtree containing a nested Prefab instance", () => {
+  const nestedInstance = {
+    ...root,
+    id: "node-nested-prefab-instance",
+    name: "Nested Prefab",
+    children: [],
+    prefabInstance: {
+      prefabId: "prefab-source",
+      overrides: [],
+    },
+  };
+  const container = {
+    ...root,
+    id: "node-prefab-container",
+    name: "Container",
+    children: [...root.children, nestedInstance],
+  };
+  assert.throws(
+    () => createNativePrefabDocument(container),
+    /cannot be nested into a new Prefab/,
+  );
+});
