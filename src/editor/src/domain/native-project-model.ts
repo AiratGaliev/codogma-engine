@@ -171,7 +171,7 @@ function assertNativeAssetPath(path: string, extension: string): void {
     !path ||
     path.startsWith("/") ||
     path.includes("\\") ||
-    path.split("/").includes("..") ||
+    path.split("/").some((segment) => segment === ".." || segment === ".") ||
     !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(path) ||
     !path.endsWith(extension)
   ) {
@@ -223,9 +223,7 @@ export function addNativePrefabReference(
   assetId: string,
   path: string,
 ): ProjectDocumentV1 {
-  if (!path.endsWith(NATIVE_PREFAB_EXTENSION)) {
-    throw new Error(`Native Prefab assets must use the ${NATIVE_PREFAB_EXTENSION} extension.`);
-  }
+  assertNativeAssetPath(path, NATIVE_PREFAB_EXTENSION);
   if (project.prefabs.some((item) => item.id === prefab.id)) {
     throw new Error(`Prefab "${prefab.id}" is already registered in project.json.`);
   }

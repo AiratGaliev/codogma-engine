@@ -128,7 +128,16 @@ testCase("registers a native Prefab asset only through a validated Project manif
     ...prefab,
     schemaVersion: 2,
   })), /not supported/);
-  assert.throws(() => addNativePrefabReference(project, prefab, "asset-prefab-crate", "prefabs/Crate.scene"), /must use/);
+  assert.throws(() => addNativePrefabReference(project, prefab, "asset-prefab-crate", "prefabs/Crate.scene"), /relative/);
+  for (const path of [
+    "/prefabs/Crate.cge-prefab.json",
+    "../prefabs/Crate.cge-prefab.json",
+    "prefabs/../Crate.cge-prefab.json",
+    "prefabs/./Crate.cge-prefab.json",
+    "prefabs\\Crate.cge-prefab.json",
+  ]) {
+    assert.throws(() => addNativePrefabReference(project, prefab, "asset-prefab-safe", path), /relative/);
+  }
 });
 
 testCase("does not duplicate an asset path or stable asset id while adding a Prefab", () => {
