@@ -5,6 +5,7 @@ import {
   recordDocumentChange,
   undoDocumentChange,
   redoDocumentChange,
+  resolveDocumentChangeRollback,
 } from "../src/domain/document-history.js";
 
 testCase("undo and redo restore document snapshots and exact selection including null", () => {
