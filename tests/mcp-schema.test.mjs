@@ -83,3 +83,20 @@ test("all built-in MCP input schemas have valid nested JSON Schema and optional 
 test("native editor operations fail closed when no SolidJS Host session is connected", async () => {
     await assert.rejects(dispatchTool("scene-list", {}), /require a connected SolidJS Editor Host session/)
 })
+
+test("scene-update-node exposes only validated native Node patch properties", () => {
+    const tool = getBridgeToolsList().find(item => item.name === "scene-update-node")
+    assert.ok(tool, "native Scene Node update MCP tool must be registered")
+    const patch = tool.inputSchema.properties.patch
+    assert.equal(patch.type, "object")
+    assert.equal(patch.additionalProperties, false)
+    assert.deepEqual(Object.keys(patch.properties).sort(), [
+        "active", "align", "alpha", "assetId", "color", "depth", "fontFamily",
+        "fontSize", "label", "name", "originX", "originY", "rotation", "scaleX",
+        "scaleY", "text", "wordWrapWidth", "x", "y"
+    ])
+    assert.deepEqual(patch.properties.align.enum, ["left", "center", "right"])
+    assert.equal(patch.properties.alpha.minimum, 0)
+    assert.equal(patch.properties.alpha.maximum, 1)
+})
+

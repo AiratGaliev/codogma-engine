@@ -326,7 +326,7 @@ function validatePrefabOverrides(
     }
     const propertySegments = override.propertyPath.split(".");
     if (propertySegments.some((part) =>
-      !/^[A-Za-z_$][\\w$]*$/.test(part) ||
+      !/^[A-Za-z_$][\w$]*$/.test(part) ||
       ["__proto__", "prototype", "constructor"].includes(part),
     )) {
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab override propertyPath must contain only safe identifier segments.", overridePath + ".propertyPath", nodeId));
