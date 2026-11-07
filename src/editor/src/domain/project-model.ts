@@ -179,7 +179,7 @@ export function parseNativeSceneDocument(
   if (document.id !== sceneId) {
     throw new Error(`Scene manifest id "${sceneId}" does not match document id "${document.id}".`);
   }
-  assertNativeImageAssetReferences(project, document.rootNodes, `Scene "${sceneId}"`);
+  assertNativeBuiltinComponentData(project, document.rootNodes, `Scene "${sceneId}"`);
   return document;
 }
 
@@ -193,7 +193,7 @@ export function serializeNativeSceneDocument(
   if (!asset.path.endsWith(NATIVE_SCENE_EXTENSION)) {
     throw new Error(`Scene asset "${asset.id}" must use the native ${NATIVE_SCENE_EXTENSION} contract.`);
   }
-  assertNativeImageAssetReferences(project, document.rootNodes, `Scene "${document.id}"`);
+  assertNativeBuiltinComponentData(project, document.rootNodes, `Scene "${document.id}"`);
   return serializeSceneDocument(document, createSceneValidationContext(project));
 }
 
@@ -213,7 +213,7 @@ export function parseNativePrefabDocument(
   if (document.id !== prefabId) {
     throw new Error(`Prefab manifest id "${prefabId}" does not match document id "${document.id}".`);
   }
-  assertNativeImageAssetReferences(project, [document.root], `Prefab "${prefabId}"`, "root");
+  assertNativeBuiltinComponentData(project, [document.root], `Prefab "${prefabId}"`, "root");
   return document;
 }
 
@@ -227,7 +227,7 @@ export function serializeNativePrefabDocument(
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
     throw new Error(`Prefab asset "${asset.id}" must use the native ${NATIVE_PREFAB_EXTENSION} contract.`);
   }
-  assertNativeImageAssetReferences(project, [document.root], `Prefab "${document.id}"`, "root");
+  assertNativeBuiltinComponentData(project, [document.root], `Prefab "${document.id}"`, "root");
   return serializePrefabDocument(document, createSceneValidationContext(project));
 }
 

@@ -90,7 +90,7 @@ export function getFxTypeFromComponentTypeId(typeId: string): FxType | undefined
 }
 
 export function isFxComponent(component: ComponentInstanceDocument): boolean {
-  return FX_TYPE_BY_ID.has(component.typeId);
+  return getNativeFxType(component.typeId) !== undefined;
 }
 
 function defaults(type: FxType, id: string, preFX: boolean): FxObject {
