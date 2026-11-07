@@ -74,7 +74,7 @@ testCase("creates native Nodes with explicit, stable built-in component TypeIds 
 
 testCase("edits native Transform and renderer properties immutably", () => {
   const original = scene();
-  const next = updateSceneNode(original, "node-child", { x: 48, rotation: 30, text: "not applied to image" }) as SceneDocumentV1;
+  const next = updateSceneNode(original, "node-child", { x: 48, rotation: 30 }) as SceneDocumentV1;
   const originalChild = findSceneNode(original, "node-child");
   const updatedChild = findSceneNode(next, "node-child");
   assert.equal(originalChild?.transform.x, 10);
@@ -134,4 +134,39 @@ testCase("updates native Image Asset references through the renderer component",
   const updated = updateSceneNode(imageScene, node.id, { assetId: "asset-background" }) as SceneDocumentV1;
   const renderer = findSceneNode(updated, node.id)!.components.find((component) => component.typeId === BUILTIN_COMPONENT_TYPES.imageRenderer);
   assert.equal(renderer?.properties.assetId, "asset-background");
+});
+
+testCase("validates Scene Node patch fields and renderer-specific values before mutating the document", () => {
+  const original = scene();
+  const imageId = "node-child";
+  const textScene = createSceneNode(original, "Text") as SceneDocumentV1;
+  const textId = textScene.rootNodes[1]!.id;
+
+  assert.throws(() => updateSceneNode(original, imageId, { unknownField: true } as never), /Unsupported Scene Node patch field/);
+  assert.throws(() => updateSceneNode(original, imageId, { active: "false" } as never), /active must be a boolean/);
+  assert.throws(() => updateSceneNode(original, imageId, { alpha: 1.1 }), /alpha must be a finite number between 0 and 1/);
+  assert.throws(() => updateSceneNode(original, imageId, { alpha: Number.NaN }), /alpha must be a finite number between 0 and 1/);
+  assert.throws(() => updateSceneNode(original, imageId, { depth: Number.POSITIVE_INFINITY }), /depth must be a finite number/);
+  assert.throws(() => updateSceneNode(original, imageId, { text: "wrong renderer" }), /does not have a Text Renderer/);
+  assert.throws(() => updateSceneNode(textScene, textId, { assetId: "asset-hero" }), /does not have an Image Renderer/);
+  assert.throws(() => updateSceneNode(textScene, textId, { align: "justify" }), /align must be "left", "center" or "right"/);
+  assert.throws(() => updateSceneNode(textScene, textId, { wordWrapWidth: -1 }), /wordWrapWidth must be a finite non-negative number/);
+  assert.throws(() => updateSceneNode(original, imageId, { assetId: "invalid asset id" }), /stable Asset ID/);
+
+  const updatedText = updateSceneNode(textScene, textId, {
+    text: "Native text",
+    fontFamily: "Arial",
+    fontSize: "18px",
+    color: "#ffffff",
+    align: "center",
+    wordWrapWidth: 320,
+  }) as SceneDocumentV1;
+  const updatedNode = findSceneNode(updatedText, textId)!;
+  assert.equal(updatedNode.components[0]?.properties.text, "Native text");
+  assert.equal(updatedNode.components[0]?.properties.align, "center");
+
+  // The Inspector edits names one keystroke at a time, so an intermediate
+  // empty string must remain possible; Core validation rejects it on save.
+  const editingName = updateSceneNode(original, imageId, { label: "" }) as SceneDocumentV1;
+  assert.equal(findSceneNode(editingName, imageId)?.name, "");
 });

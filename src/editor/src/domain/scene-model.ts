@@ -74,6 +74,85 @@ export interface SceneNodePatch extends Partial<Record<TransformKey, number>> {
 
 export type SceneNodeKind = "Image" | "Text" | "Container";
 
+const NODE_PATCH_KEYS = new Set([
+  ...TRANSFORM_KEYS,
+  "name", "label", "active", "alpha", "depth",
+  "text", "fontFamily", "fontSize", "color", "align", "wordWrapWidth", "assetId",
+]);
+const TEXT_RENDERER_PATCH_KEYS = ["text", "fontFamily", "fontSize", "color", "align", "wordWrapWidth"] as const;
+
+function validateSceneNodePatch(patch: SceneNodePatch): void {
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+    throw new TypeError("Scene Node patch must be a plain object.");
+  }
+  const prototype = Object.getPrototypeOf(patch);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("Scene Node patch must be a plain object.");
+  }
+
+  for (const key of Reflect.ownKeys(patch)) {
+    if (typeof key !== "string" || !NODE_PATCH_KEYS.has(key)) {
+      throw new TypeError(`Unsupported Scene Node patch field "${String(key)}".`);
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(patch, key);
+    if (!descriptor || !("value" in descriptor)) {
+      throw new TypeError(`Scene Node patch field "${key}" must be a data property.`);
+    }
+  }
+
+  for (const key of TRANSFORM_KEYS) {
+    const value = patch[key];
+    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) {
+      throw new TypeError(`Transform ${key} must be a finite number.`);
+    }
+  }
+  for (const key of ["name", "label"] as const) {
+    const value = patch[key];
+    // Empty names are temporarily permitted while the Inspector text input is
+    // being edited; Core serialization remains the final non-empty check.
+    if (value !== undefined && typeof value !== "string") {
+      throw new TypeError(`Scene Node ${key} must be a string.`);
+    }
+  }
+  if (patch.name !== undefined && patch.label !== undefined && patch.name !== patch.label) {
+    throw new TypeError("Scene Node patch cannot contain conflicting name and label values.");
+  }
+  if (patch.active !== undefined && typeof patch.active !== "boolean") {
+    throw new TypeError("Scene Node active must be a boolean.");
+  }
+  if (patch.alpha !== undefined &&
+      (typeof patch.alpha !== "number" || !Number.isFinite(patch.alpha) || patch.alpha < 0 || patch.alpha > 1)) {
+    throw new RangeError("Renderer alpha must be a finite number between 0 and 1.");
+  }
+  if (patch.depth !== undefined && (typeof patch.depth !== "number" || !Number.isFinite(patch.depth))) {
+    throw new TypeError("Renderer depth must be a finite number.");
+  }
+  for (const key of ["text", "fontFamily", "fontSize", "color"] as const) {
+    if (patch[key] !== undefined && typeof patch[key] !== "string") {
+      throw new TypeError(`Text Renderer ${key} must be a string.`);
+    }
+  }
+  if (patch.fontFamily !== undefined && !patch.fontFamily.trim()) {
+    throw new TypeError("Text Renderer fontFamily must be non-empty.");
+  }
+  if (patch.fontSize !== undefined && !patch.fontSize.trim()) {
+    throw new TypeError("Text Renderer fontSize must be non-empty.");
+  }
+  if (patch.color !== undefined && !patch.color.trim()) {
+    throw new TypeError("Text Renderer color must be non-empty.");
+  }
+  if (patch.align !== undefined && !["left", "center", "right"].includes(patch.align)) {
+    throw new TypeError('Text Renderer align must be "left", "center" or "right".');
+  }
+  if (patch.wordWrapWidth !== undefined &&
+      (typeof patch.wordWrapWidth !== "number" || !Number.isFinite(patch.wordWrapWidth) || patch.wordWrapWidth < 0)) {
+    throw new RangeError("Text Renderer wordWrapWidth must be a finite non-negative number.");
+  }
+  if (patch.assetId !== undefined && (typeof patch.assetId !== "string" || !isValidStableId(patch.assetId))) {
+    throw new TypeError("Image Renderer assetId must be a stable Asset ID.");
+  }
+}
+
 function createId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   throw new Error("Secure randomUUID support is required to create native document identities.");
@@ -206,12 +285,24 @@ export function updateSceneNode(
   id: string,
   patch: SceneNodePatch,
 ): EditorDocument {
+  validateSceneNodePatch(patch);
   const result = updateNodeRecursively(documentRoots(document), id, (node) => {
+    const renderer = getRendererComponent(node);
+    const rendererType = renderer ? RENDERER_TYPES[renderer.typeId] : undefined;
+    const hasTextRendererPatch = TEXT_RENDERER_PATCH_KEYS.some((key) => patch[key] !== undefined);
+    if (hasTextRendererPatch && rendererType !== "Text") {
+      throw new TypeError(`Scene Node "${id}" does not have a Text Renderer.`);
+    }
+    if (patch.assetId !== undefined && rendererType !== "Image") {
+      throw new TypeError(`Scene Node "${id}" does not have an Image Renderer.`);
+    }
+    if ((patch.alpha !== undefined || patch.depth !== undefined) && !renderer) {
+      throw new TypeError(`Scene Node "${id}" has no built-in Renderer for alpha or depth properties.`);
+    }
     const transformPatch: Partial<Record<TransformKey, number>> = {};
     for (const key of TRANSFORM_KEYS) {
       const value = patch[key];
       if (value === undefined) continue;
-      if (!Number.isFinite(value)) throw new TypeError(`Transform ${key} must be a finite number.`);
       transformPatch[key] = value;
     }
 

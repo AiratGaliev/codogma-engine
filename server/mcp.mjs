@@ -1142,10 +1142,35 @@ nativeTool("scene-create-node", "Create a native Image, Text or Container Node i
     assetId: { type: "string", description: "Optional stable Project Asset ID for an Image Node." },
     parentId: { type: ["string", "null"], description: "Optional parent Node ID." }
 }, ["kind"])
-nativeTool("scene-update-node", "Update native Node fields using a partial native Node patch.", {
+nativeTool("scene-update-node", "Update native Node fields using a validated partial native Node patch. Only the documented fields are accepted.", {
     ...nativeSceneSelector,
     ...nativeNodeSelector,
-    patch: { type: "object", description: "Partial native Node fields to update.", additionalProperties: true }
+    patch: {
+        type: "object",
+        description: "Partial Node fields: Transform (x, y, rotation, scaleX, scaleY, originX, originY), name/label, active, alpha, depth; Text Renderer (text, fontFamily, fontSize, color, align, wordWrapWidth); Image Renderer (assetId). Renderer fields must match the Node's built-in Renderer.",
+        properties: {
+            x: { type: "number" },
+            y: { type: "number" },
+            rotation: { type: "number" },
+            scaleX: { type: "number" },
+            scaleY: { type: "number" },
+            originX: { type: "number" },
+            originY: { type: "number" },
+            name: { type: "string" },
+            label: { type: "string" },
+            active: { type: "boolean" },
+            alpha: { type: "number", minimum: 0, maximum: 1 },
+            depth: { type: "number" },
+            text: { type: "string" },
+            fontFamily: { type: "string", minLength: 1 },
+            fontSize: { type: "string", minLength: 1 },
+            color: { type: "string", minLength: 1 },
+            align: { type: "string", enum: ["left", "center", "right"] },
+            wordWrapWidth: { type: "number", minimum: 0 },
+            assetId: { type: "string", minLength: 1 }
+        },
+        additionalProperties: false
+    }
 }, ["nodeId", "patch"])
 nativeTool("scene-delete-node", "Delete a native Node from the active Scene.", { ...nativeSceneSelector, ...nativeNodeSelector }, ["nodeId"])
 nativeTool("scene-reparent-node", "Reparent a native Node. Pass parentId null to move it to the Scene root.", {
