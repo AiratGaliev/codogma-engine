@@ -7,8 +7,8 @@
 
 | Package root | Прямые зависимости / инструмент | Версия в manifest | Назначение / scope | Следствие для разработки |
 |---|---|---|---|---|
-| Корень репозитория | `@phaserjs/editor-mcp-server` | `^1.0.6` | Official MCP stdio implementation / tool schemas, подключён к локальному MCP bridge | Проверка в `npm run test:security` подтверждает initialize/tools/list и один вызов; не покрывает все tools/schema combinations |
-| Корень репозитория | `zod` override для `@phaserjs/editor-mcp-server` | `4.6.7` | Зафиксированная совместимость с Zod override | Не обновлять без MCP integration/security regression и проверки nested/optional arguments |
+| Корень репозитория | Собственный engine MCP HTTP registry в `server/mcp.mjs` | Без стороннего MCP SDK в root manifest | Native Project Model v1 tool schemas/execution, project/file security boundary и dispatch в SolidJS Host | Engine-owned registry; не зависит от Phaser Editor MCP server, Colibri или root Zod override |
+| `packages/editor-mcp-server` | `@modelcontextprotocol/server`, `ajv` | `2.4.0`, `8.20.0` | First-party stdio adapter и Ajv validation against engine-owned native JSON Schemas | Собственный package/lockfile; tool registry и execution остаются в engine server; не устанавливает Phaser Editor MCP dependencies в root/game projects |
 | `source/editor` (frozen) | `typescript` | `5.3.3` | Inventory-only baseline существующего UI client; не является target для развития | Не обновлять; не определяет toolchain Core или SolidJS Host |
 | `source/editor` (frozen) | `colibri-packer` | `^1.0.1` | Inventory-only baseline legacy resource/atlas tooling | Не обновлять и не модернизировать; UI-only dependency удаляется вместе с client в COD-88 |
 | `src/editor` | `solid-js` | `1.9.15` | Независимый SolidJS Editor Host | UI/reactivity layer; не зависит от Colibri и не включает его controls/registry |

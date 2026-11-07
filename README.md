@@ -47,7 +47,7 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Audio groups and particle preview | Native SolidJS authoring/preview controls are not yet implemented. See COD-61 and CODQA-13. |
 | Editable tilemaps | Native Tilemap authoring is not yet implemented in SolidJS Host. See COD-40 and CODQA-14. |
 | Physics authoring | Native Arcade/Box2D authoring and runtime integration are being developed in COD-42; live Box2D runtime acceptance remains in CODQA-1. Standalone B2Body/B2Shape nodes are not currently supported. |
-| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes the engine-owned registry over stdio and forwards requests to <code>POST /editor/mcp</code>. The live Editor SSE bridge requires session-aware routing (COD-85) before all Host sessions can use it concurrently. |
+| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes the native Project Model v1 registry over stdio. Scene/Node/Prefab/Component/FX commands target the active SolidJS Host and refuse legacy-only fallback; full multi-Host routing/acceptance remains COD-85/CODQA-8. |
 | AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
 This table is a practical overview, not a guarantee that every feature has identical behaviour in every runtime. Tools that open a scene in the live editor or capture a screenshot require the editor UI to be running and connected. Some generated game code can also require runtime modules that are not included in the core Phaser bundle. Verify the relevant feature and runtime dependencies before shipping a game.
@@ -130,7 +130,7 @@ npm run test:editor-host
 npm run test:editor-host:browser
 ```
 
-Browser acceptance uses a temporary copy of `tests/workspace/test-typescript`; it never points the test backend at a developer's project. Until the new Host gains session-aware MCP routing and a cross-client write/version contract, use only one UI to write to a given project directory at a time.
+Browser acceptance uses a temporary copy of `tests/workspace/test-typescript`; it never points the test backend at a developer's project. Native MCP commands target one active SolidJS Host session, but multi-Host routing and a cross-client project write/version contract are not accepted. Use only one UI writer per project directory at a time.
 
 ### Select a game project
 
@@ -218,7 +218,7 @@ For a typical local code change:
 
 ### MCP integration tests
 
-The standard test command checks MCP initialization and tool registration (including the upstream Spine skin-image tool), queries scenes, creates a temporary scene, adds objects, exercises prefab/asset tools and verifies that a texture size can be read. The package contract suite also compares the full upstream tool-name set, compiles every real engine JSON Schema and checks nested/alternative argument validation plus image-content forwarding. The generated test scene is removed during cleanup. The Spine image renderer itself remains a browser/SSE acceptance path, not part of the default headless E2E.
+The standard MCP integration test checks initialization, the native tool registry, JSON Schema validity, rejection of legacy tool names, project-file boundary rules, project listing and external texture discovery. The stdio package contract suite verifies schema forwarding, argument validation, image content blocks, native Host handler coverage and external Spine metadata inspection. It does not create or mutate internal legacy Scene files; live Scene/Node/Prefab/Component/FX operations are exercised only when a SolidJS Host is explicitly connected.
 
 Terminal 1:
 
@@ -232,7 +232,7 @@ Terminal 2:
 npm run test:e2e
 ~~~
 
-By default, these checks exercise server-side MCP capabilities. Optional checks that open a scene and request a screenshot require a running and connected editor UI and can be enabled with <code>MCP_E2E_WITH_EDITOR=1</code>. The default CI job does not enable this UI-specific mode.
+By default, these checks exercise server-side MCP and external asset inspection. Optional checks that open a native Scene, read its Node hierarchy and request a viewport screenshot require a running, connected SolidJS Editor Host and can be enabled with <code>MCP_E2E_WITH_EDITOR=1</code>. The default fast-checks CI job does not enable this UI-specific mode; the full E2E gate remains on promotion PRs.
 
 ## Architecture and integration boundaries
 
@@ -258,7 +258,7 @@ The intended development topology is **two UI hosts, one backend API**. The Vite
 
 Both clients may be open for visual comparison, but **do not edit the same project from both clients at the same time**. They maintain independent in-browser state, selection, undo histories and caches; the current project-file API does not provide a cross-client editing lock or conflict-resolution protocol. Use one writer at a time, or separate fixture/project copies and independent backend instances for write acceptance.
 
-The current Editor SSE transport broadcasts commands to connected clients and accepts the first matching result. Until session-aware routing is implemented in [COD-85](https://linear.app/codogma-engine/issue/COD-85/realizovat-session-aware-mcp-sse-routing-dlya-neskolkih-editor-host), only one Editor session may own the shared SSE connection. Concurrent Host sessions require isolated backend/transport instances. This restriction is separate from HTTP MCP tools that do not need a live editor session.
+The Editor SSE bridge maintains per-client session IDs, routes native MCP commands to one active SolidJS Host and accepts results only from the session that received the command. Native commands never fall back to a frozen legacy Colibri session. Full routing tests for multiple concurrent Host sessions, reconnect, cancellation and timeout remain in COD-85. The bridge does not provide a cross-client project write lock or version/conflict-resolution contract; until those requirements are accepted, only one Host should write to a given project directory at a time. File-only HTTP MCP tools do not require a live editor session.
 
 The two-port arrangement is a development setup, not a permanent production requirement. The legacy client is not an active development target: it is frozen for read-only inventory and temporary rollback only. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the temporary UI route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
 
@@ -353,9 +353,10 @@ After a future npm publication, the intended direct configuration will be:
 ~~~
 
 The stdio adapter loads the tool list when its process starts. Restart the MCP process
-after changing the engine or its tool registry. Project/file operations are executed by
-the engine server. Tools that need the active scene, screenshots or other live editor
-state also require the editor page to be open and its SSE bridge connected.
+after changing the engine or its tool registry. External asset/file inspection runs on the
+engine server. Native Scene/Node/Prefab/Component/FX and screenshot tools require the
+project to be open in the SolidJS Editor Host and its SSE bridge connected; they never
+fall back to a frozen legacy Colibri session.
 
 ### Optional AI Chat service
 
@@ -593,7 +594,7 @@ Run <code>npm run build</code> from the repository root or <code>npm run watch</
 
 - Start the Codogma Engine HTTP server before starting an MCP client.
 - Confirm that <code>CODOGMA_MCP_URL</code> points to the exact loopback endpoint <code>http://127.0.0.1:3000/editor/mcp</code> (adjust the port when the engine HTTP server uses a non-default port).
-- For active-scene, screenshot, tile-selection and Spine image-preview tools, open the editor page and wait for the SSE MCP bridge connection.
+- For native Scene/Node/Prefab/Component/FX operations and screenshots, open the project in the SolidJS Editor Host and wait for its SSE MCP bridge connection. Legacy editor sessions are not eligible targets for native MCP commands.
 
 ### MCP E2E fails
 
@@ -627,11 +628,6 @@ The current editor client includes code derived from the open-source Phaser Edit
 Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integration. Phaser and other third-party components remain subject to their own licenses and terms; review those terms when distributing the engine or a game built with it.
 
 
-MCP scene-object serialization tests cover typed properties
+## MCP native contract boundary
 
-MCP object serialization coverage also checks Shape stroke fields
-
-Arcade MCP tools validate supported physics properties
-
-
-The engine-owned get-system-instructions response documents the current scene and tool workflows: object hierarchy, plain objects and Tiled maps, editable tilemaps, prefabs and nested instances, object lists, Phaser 4 filters, Arcade physics, assets and Google Fonts, project-file operations, and UI/SSE requirements for visual tools. Package tests assert that these workflow sections remain present.
+The engine-owned get-system-instructions response and MCP package tests describe the native Project Model v1 Scene/Node/Prefab/Component/FX workflows. The published registry contains no legacy Phaser Editor Scene/Prefab mutation tools and no internal .scene / .components readers or writers. External Phaser Asset Pack, animation, Tiled tilemap and Spine metadata inspection remain separate asset workflows; a Spine skin screenshot is not exposed until the SolidJS Host has a native renderer/handler.

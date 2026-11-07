@@ -53,7 +53,7 @@ Browser acceptance конфигурируется через `src/editor/playwri
 | Build Profiles / Build Settings | COD-35 defines reproducible Development/Release profiles and target/browser matrix; no dedicated profile authoring workflow is tracked for the new Host | **Not designed/implemented**; COD-95, depends on COD-34 feature selection and COD-35 build contracts; COD-16 tracks capability/evidence matrix |
 | Project Settings / Editor Preferences | COD-80 mentions generic settings in the future scope; no separate Host workflow or persistence ownership is defined in the migration inventory | **Not designed/implemented**; COD-96 design → COD-97 implementation; Project Model/schema: COD-25; domain pages: COD-29/42/61/86; workspace layout ownership remains COD-83 |
 | Input Actions Editor | Technical specification §6.5 requires logical actions, configurable physical bindings, remapping and conflict checks; COD-29 currently covers only the minimal runtime Input contract | **Not designed/implemented**; COD-98 UX/UI design → COD-99 authoring implementation; contracts: COD-25/COD-29; editor keymap remains COD-97 |
-| MCP live bridge | HTTP registry + stdio package exist; current SSE bridge broadcasts to connected clients | **Blocked for new Host until session-aware routing**; COD-85, QA CODQA-8 |
+| MCP live bridge | Native Project Model v1 registry + stdio package exist; native commands target the active SolidJS Host and reject legacy-only fallback | **Single active Host route implemented; multi-Host routing/reconnect/cancel acceptance pending**; COD-85, QA CODQA-8 |
 | Production route / Colibri | Server still defaults to legacy /editor/ during transition | **Not cut over**; COD-87 then COD-88 |
 
 Статусы implemented / in progress / not started / deferred выставляются
@@ -142,7 +142,7 @@ codogma-engine/
 - SolidJS app отправляет относительные `/editor/*` запросы; Vite проксирует их в backend. Используется точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`, wildcard Origin/Host запрещён, существующие guards не обходятся.
 - Реальную proxy-конфигурацию и forwarding Origin необходимо согласовать с `server/request-origin.mjs`.
 - Оба UI можно держать открытыми одновременно, но из-за отсутствия cross-client lock/versioning contract только один редактор записывает в конкретный `PROJECT_DIR`. Для параллельной write-приёмки используются разные fixtures и backend instances.
-- Текущий `server/mcp.mjs` рассылает SSE-команды всем `bridgeClients`. До session-aware routing общий `/editor/mcp-bridge/events` может принадлежать только одной Editor session; параллельные Host sessions используют изолированные backend/transport instances.
+- Native MCP commands from `server/mcp.mjs` target one active SolidJS Host session; responses are correlated with the originating client, and native commands never fall back to the frozen legacy Colibri session. Full routing across two or more simultaneous Host sessions, reconnect, timeout/cancel and stale-session behavior remain COD-85 acceptance. Until then, use isolated backend/project instances for concurrent write acceptance.
 - Это только dev topology. После cutover один Node backend обслуживает SolidJS build по `/editor/`; legacy route временно сохраняется для rollback.
 
 ## 5. Порядок реализации
@@ -185,7 +185,7 @@ Framework choice не требует отдельного PoC или framework c
 - Не начинать новые пользовательские features, panels, controls и крупный UX-рефакторинг в `source/editor/`.
 - `source/editor/` — frozen boundary: только read-only inventory, временный rollback artifact и последующее удаление через COD-88. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и модернизация code/manifests/lockfiles/scripts/dependencies. Исключение — минимальная одноразовая security mitigation для подтверждённой критической уязвимости, только пока legacy route принимает production traffic и только в объёме, необходимом для её устранения. Это не разрешение на ongoing support. Cutover/rollback — только необходимые технические действия COD-87.
 - Текущий UI client используется только как временный rollback client. Все новые панели, commands, interactions и workflows разрабатываются в SolidJS Host.
-- Один `PROJECT_DIR` имеет только одного writer. Пока MCP SSE не поддерживает session-aware routing, параллельные Host sessions используют изолированные backend/transport instances.
+- Один `PROJECT_DIR` имеет только одного writer: текущий MCP bridge выбирает один активный SolidJS Host, но не предоставляет межсессионный write lock или optimistic concurrency/version conflict resolution. Параллельные Host write acceptance выполняются на изолированных project/backend instances до завершения COD-85 и write-ownership acceptance.
 - Удаление временного UI client и его UI-only assets/dependencies выполняется в COD-88 после закрытия rollback window. Временные server routes, asset-serving endpoints и transport adapters, существующие только ради этого UI, входят в единственную cleanup issue COD-113.
 
 ## 9. Не входит в миграцию

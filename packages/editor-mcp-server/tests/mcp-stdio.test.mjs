@@ -358,6 +358,9 @@ test("native registry and preserved external asset tools expose valid schemas", 
     assert.equal(names.size, engineTools.length, "the engine registry must not expose duplicate tool names");
     for (const name of NATIVE_TOOL_NAMES) assert.ok(names.has(name), `missing native tool: ${name}`);
     for (const name of EXTERNAL_ASSET_TOOL_NAMES) assert.ok(names.has(name), `missing preserved external asset tool: ${name}`);
+    const expectedNames = new Set(["get-system-instructions", ...NATIVE_TOOL_NAMES, ...EXTERNAL_ASSET_TOOL_NAMES]);
+    assert.deepEqual([...names].sort(), [...expectedNames].sort(),
+        "the engine registry must expose exactly the native editor and supported external-asset tools");
 
     for (const name of [
         "ide-get-all-scenes-in-project", "ide-create-new-scene", "ide-open-scene",
