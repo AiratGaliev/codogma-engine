@@ -713,13 +713,17 @@ function App() {
 
   let sceneLoadSequence = 0;
   let activeSceneLoads = 0;
-  let prefabCreationInProgress = false;
+  let nativeProjectMutationInProgress = false;
   let documentLoadSequence = 0;
   let scriptCheckSequence = 0;
 
-  async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
+  async function loadScene(
+    path: string,
+    reloadCurrent = false,
+    allowDuringProjectMutation = false,
+  ): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
-    if (saving() || prefabCreationInProgress) {
+    if (saving() || (nativeProjectMutationInProgress && !allowDuringProjectMutation)) {
       log("warning", "A native document operation is in progress; opening another document is temporarily blocked.");
       return false;
     }
@@ -747,7 +751,7 @@ function App() {
       if (
         request !== sceneLoadSequence ||
         saving() ||
-        prefabCreationInProgress ||
+        (nativeProjectMutationInProgress && !allowDuringProjectMutation) ||
         scene() !== activeDocumentBeforeLoad ||
         history() !== activeHistoryBeforeLoad ||
         scenePath() !== activePathBeforeLoad ||
@@ -848,9 +852,9 @@ function App() {
   function applySceneChange(
     next: EditorDocument,
     selectionAfter = selectedId(),
-    allowDuringPrefabCreation = false,
+    allowDuringProjectMutation = false,
   ): DocumentChangeRollback<EditorDocument | null> | null {
-    if (saving() || (prefabCreationInProgress && !allowDuringPrefabCreation)) return null;
+    if (saving() || (nativeProjectMutationInProgress && !allowDuringProjectMutation)) return null;
 
     const previousDocument = scene();
     const previousState = history();
@@ -872,7 +876,7 @@ function App() {
   }
 
   function undo() {
-    if (saving() || prefabCreationInProgress) return;
+    if (saving() || nativeProjectMutationInProgress) return;
     const result = undoDocumentChange(history());
     if (!result || !result.document) return;
     setHistory(result.state);
@@ -882,7 +886,7 @@ function App() {
   }
 
   function redo() {
-    if (saving() || prefabCreationInProgress) return;
+    if (saving() || nativeProjectMutationInProgress) return;
     const result = redoDocumentChange(history());
     if (!result || !result.document) return;
     setHistory(result.state);
@@ -1201,12 +1205,12 @@ function App() {
   }
 
   async function createNativePrefabFromNode(nodeId: string, pathValue: string, nameValue?: string) {
-    if (prefabCreationInProgress) throw new Error("Another native Prefab creation is already in progress.");
+    if (nativeProjectMutationInProgress) throw new Error("Another native Prefab creation is already in progress.");
     if (activeSceneLoads > 0) throw new Error("A native Scene or Prefab document is currently opening. Retry Prefab creation afterwards.");
     if (saving() || projectSaving()) {
       throw new Error("A native document or Project manifest save is in progress. Retry Prefab creation afterwards.");
     }
-    prefabCreationInProgress = true;
+    nativeProjectMutationInProgress = true;
     try {
       const current = scene();
       const project = projectDocument();
@@ -1220,7 +1224,6 @@ function App() {
       const name = nameValue?.trim() || selected.name;
       const directory = path.split("/").slice(0, -1).join("/");
       assertNewProjectFilePath(path);
-      if (directory) await ensureProjectFolder(directory);
 
       const prefab = createNativePrefabDocument(selected.node, name);
       const assetId = globalThis.crypto?.randomUUID?.();
@@ -1243,6 +1246,7 @@ function App() {
         .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
       const sceneContent = serializeNativeSceneDocument(nextProject, nextScene);
 
+      if (directory) await ensureProjectFolder(directory);
       await writeProjectFile(path, prefabContent);
       try {
         await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
@@ -1267,7 +1271,7 @@ function App() {
       await refreshProjectTree();
       return { prefabId: prefab.id, assetId, path, instanceId: instance?.id ?? null };
     } finally {
-      prefabCreationInProgress = false;
+      nativeProjectMutationInProgress = false;
     }
   }
 
@@ -1296,7 +1300,7 @@ function App() {
 
   async function saveProjectManifest(): Promise<boolean> {
     const current = projectDocument();
-    if (!current || projectSaving() || prefabCreationInProgress) return false;
+    if (!current || projectSaving() || nativeProjectMutationInProgress) return false;
     setProjectSaving(true);
     try {
       const content = serializeNativeProjectDocument(current);
@@ -1314,7 +1318,7 @@ function App() {
   }
 
   async function saveScene(
-    allowDuringPrefabCreation = false,
+    allowDuringProjectMutation = false,
     contentOverride?: string,
   ): Promise<boolean> {
     const current = scene();
@@ -1322,7 +1326,7 @@ function App() {
     const project = projectDocument();
     if (
       !current || !path || !project || saving() ||
-      (prefabCreationInProgress && !allowDuringPrefabCreation)
+      (nativeProjectMutationInProgress && !allowDuringProjectMutation)
     ) return false;
     setSaving(true);
     try {
@@ -2436,7 +2440,7 @@ function App() {
   }
 
   async function persistMcpSceneChange(next: EditorDocument, selectionAfter = selectedId()) {
-    if (saving() || prefabCreationInProgress) {
+    if (saving() || nativeProjectMutationInProgress) {
       throw new Error("A native document operation is already in progress. Retry the MCP mutation after it completes.");
     }
 
@@ -2495,6 +2499,11 @@ function App() {
       return { path: requestedPath, saved: true };
     },
     "scene-create": async (args) => {
+      if (nativeProjectMutationInProgress) throw new Error("Another native Project document transaction is already in progress.");
+      if (activeSceneLoads > 0) throw new Error("A native Scene or Prefab document is currently opening.");
+      if (saving() || projectSaving()) throw new Error("A native document or Project manifest save is in progress.");
+      nativeProjectMutationInProgress = true;
+      try {
       const project = projectDocument();
       if (!project) throw new Error("The native Project manifest is not loaded.");
       if (dirty() || projectDirty() || animationDirty() || scriptDirty()) throw new Error("Save the active native document, Animation and Script changes before creating another Scene.");
@@ -2522,8 +2531,11 @@ function App() {
       setProjectDocument(nextProject);
       setSavedProjectContent(manifestContent);
       await refreshProjectTree();
-      if (!(await loadScene(path, true))) throw new Error(`Native Scene "${path}" was created and registered but could not be opened.`);
+      if (!(await loadScene(path, true, true))) throw new Error(`Native Scene "${path}" was created and registered but could not be opened.`);
       return { id: sceneDocument.id, assetId, path, name: sceneDocument.name };
+      } finally {
+        nativeProjectMutationInProgress = false;
+      }
     },
     "scene-get-document": async (args) => {
       const current = requireActiveMcpDocument(args);
