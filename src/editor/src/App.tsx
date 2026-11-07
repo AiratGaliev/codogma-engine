@@ -1268,7 +1268,11 @@ function App() {
       if (!(await saveScene(true, sceneContent))) {
         throw new Error("Prefab and Project manifest were saved, but the Scene instance could not be saved. The Scene remains dirty for retry.");
       }
-      await refreshProjectTree();
+      try {
+        await refreshProjectTree();
+      } catch (error) {
+        log("warning", `Native Prefab was saved, but the Project tree could not be refreshed: ${error instanceof Error ? error.message : String(error)}`);
+      }
       return { prefabId: prefab.id, assetId, path, instanceId: instance?.id ?? null };
     } finally {
       nativeProjectMutationInProgress = false;
@@ -2530,9 +2534,16 @@ function App() {
       }
       setProjectDocument(nextProject);
       setSavedProjectContent(manifestContent);
-      await refreshProjectTree();
-      if (!(await loadScene(path, true, true))) throw new Error(`Native Scene "${path}" was created and registered but could not be opened.`);
-      return { id: sceneDocument.id, assetId, path, name: sceneDocument.name };
+      const opened = await loadScene(path, true, true);
+      if (!opened) {
+        log("warning", `Native Scene "${path}" was created and registered, but could not be opened automatically.`);
+      }
+      try {
+        await refreshProjectTree();
+      } catch (error) {
+        log("warning", `Native Scene was created, but the Project tree could not be refreshed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return { id: sceneDocument.id, assetId, path, name: sceneDocument.name, opened };
       } finally {
         nativeProjectMutationInProgress = false;
       }
