@@ -14,11 +14,10 @@
  */
 
 import fs from "fs"
-import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
-import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, writeNewFileSafely, statProjectFileSafely } from "./path-security.mjs"
+import { ensureProjectDirectorySafely, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, statProjectFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -153,12 +152,6 @@ function parseAssetPacks() {
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"])
 
 /* ================================ tools ================================== */
-
-const TOOLS = new Map()
-
-function defTool(name, description, inputSchema, exec) {
-    TOOLS.set(name, { name, description, inputSchema, exec })
-}
 
 const TOOLS = new Map()
 
