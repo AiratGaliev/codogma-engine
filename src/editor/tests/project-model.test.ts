@@ -4,6 +4,11 @@ import { resolve } from "node:path";
 import { test as testCase } from "vitest";
 import { reparentSceneNode, getSceneNodeEntries, findSceneNode, createSceneNode } from "../src/domain/scene-model.js";
 import { setNativeComponentEnabled } from "../src/domain/components-model.js";
+import {
+  addNativePrefabInstance,
+  addNativePrefabOverride,
+  resolveNativePrefabRoot,
+} from "../src/domain/prefab-model.js";
 import { addNativeNodeFx, getNativeNodeEffects, updateNativeNodeFx } from "../src/domain/fx-model.js";
 import {
   addNativePrefabReference,
@@ -224,6 +229,29 @@ testCase("round-trips a native Prefab with child Nodes through its registered Pr
   assert.deepEqual(reopened, prefab);
   assert.equal(reopened.root.children[0]?.id, "node-prefab-child");
   assert.equal(reopened.root.children[0]?.components[0]?.properties.assetId, "asset-player-sprite");
+
+  let sceneWithPrefab = parseNativeSceneDocument(registeredProject, "scene-level", sceneContent);
+  sceneWithPrefab = addNativePrefabInstance(sceneWithPrefab, prefab);
+  const instance = sceneWithPrefab.rootNodes.at(-1);
+  assert.ok(instance);
+  sceneWithPrefab = addNativePrefabOverride(sceneWithPrefab, instance.id, prefab, {
+    targetNodeId: "node-prefab-child",
+    propertyPath: "transform.x",
+    value: 17,
+  });
+
+  const savedScene = serializeNativeSceneDocument(registeredProject, sceneWithPrefab);
+  const reopenedScene = parseNativeSceneDocument(registeredProject, "scene-level", savedScene);
+  const reopenedInstance = reopenedScene.rootNodes.at(-1);
+  assert.ok(reopenedInstance?.prefabInstance);
+  assert.equal(reopenedInstance.prefabInstance.prefabId, prefab.id);
+  assert.equal(reopenedInstance.prefabInstance.sourceNodeId, prefab.root.id);
+  assert.deepEqual(reopenedInstance.prefabInstance.overrides, [{
+    targetNodeId: "node-prefab-child",
+    propertyPath: "transform.x",
+    value: 17,
+  }]);
+  assert.equal(resolveNativePrefabRoot(reopenedInstance, reopened).children[0]?.transform.x, 17);
 });
 
 testCase("round-trips native Scene edits across hierarchy, Component, FX and Asset references", () => {
