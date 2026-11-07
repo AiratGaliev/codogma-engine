@@ -346,3 +346,51 @@ testCase("validates built-in Image Renderer Asset references for Scene and Prefa
   }
 });
 
+testCase("rejects malformed persisted built-in FX properties at the native document boundary", () => {
+  const imageNode = {
+    id: "node-invalid-fx",
+    name: "Image",
+    active: true,
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+    components: [{
+      id: "component-invalid-fx",
+      typeId: "com.codogma.fx.bloom",
+      schemaVersion: 1,
+      enabled: true,
+      properties: { threshold: 1.1 },
+    }],
+    children: [],
+  };
+
+  const invalidScene = JSON.parse(sceneContent) as import("@codogma/cge").SceneDocumentV1;
+  invalidScene.rootNodes.push(imageNode);
+  assert.throws(
+    () => serializeNativeSceneDocument(project, invalidScene),
+    /FX property "threshold".*at most 1/,
+  );
+  assert.throws(
+    () => parseNativeSceneDocument(project, "scene-level", JSON.stringify(invalidScene)),
+    /FX property "threshold".*at most 1/,
+  );
+
+  const prefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-invalid-fx",
+    name: "Invalid FX Prefab",
+    root: imageNode,
+  };
+  const registeredProject = addNativePrefabReference(
+    project,
+    prefab,
+    "asset-prefab-invalid-fx",
+    "prefabs/InvalidFx.cge-prefab.json",
+  );
+  assert.throws(
+    () => serializeNativePrefabDocument(registeredProject, prefab),
+    /FX property "threshold".*at most 1/,
+  );
+  assert.throws(
+    () => parseNativePrefabDocument(registeredProject, prefab.id, JSON.stringify(prefab)),
+    /FX property "threshold".*at most 1/,
+  );
+});

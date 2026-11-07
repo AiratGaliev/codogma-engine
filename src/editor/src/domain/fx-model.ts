@@ -5,9 +5,15 @@ import {
 } from "@codogma/cge";
 import { updateNativeNode, type EditorDocument } from "./scene-model.js";
 import { FX_COMPONENT_TYPES } from "./builtin-component-ids.js";
+import {
+  getNativeFxType,
+  validateNativeFxComponentProperties,
+  validateNativeFxPropertyValues,
+  type NativeFxType,
+} from "./fx-validation.js";
 export { FX_COMPONENT_TYPES } from "./builtin-component-ids.js";
 
-export type FxType = "Circle" | "Bloom" | "Gradient" | "Shine";
+export type FxType = NativeFxType;
 export type FxColor = string | number;
 
 export interface FxBase extends Record<string, unknown> {
@@ -54,15 +60,6 @@ export interface ShineFx extends FxBase {
 }
 export type FxObject = CircleFx | BloomFx | GradientFx | ShineFx;
 
-const FX_TYPE_BY_ID: ReadonlyMap<string, FxType> = new Map<string, FxType>(
-  Object.entries(FX_COMPONENT_TYPES).map(([type, typeId]) => [typeId, type as FxType]),
-);
-const COLOR_FIELDS: Readonly<Record<FxType, ReadonlySet<string>>> = {
-  Circle: new Set(["color", "backgroundColor"]),
-  Bloom: new Set(),
-  Gradient: new Set(["color1", "color2"]),
-  Shine: new Set(),
-};
 const INTERNAL_FILTER_RENDERERS = new Set([
   "com.codogma.renderer.image",
   "com.codogma.renderer.text",
@@ -89,7 +86,7 @@ export function isFxType(value: unknown): value is FxType {
 }
 
 export function getFxTypeFromComponentTypeId(typeId: string): FxType | undefined {
-  return FX_TYPE_BY_ID.get(typeId);
+  return getNativeFxType(typeId);
 }
 
 export function isFxComponent(component: ComponentInstanceDocument): boolean {
@@ -110,62 +107,12 @@ function defaults(type: FxType, id: string, preFX: boolean): FxObject {
   }
 }
 
-function assertFinite(field: string, value: unknown, min?: number, max?: number, integer = false): void {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new TypeError(`FX property "${field}" must be a finite number.`);
-  }
-  if (min !== undefined && value < min) throw new RangeError(`FX property "${field}" must be at least ${min}.`);
-  if (max !== undefined && value > max) throw new RangeError(`FX property "${field}" must be at most ${max}.`);
-  if (integer && !Number.isInteger(value)) throw new TypeError(`FX property "${field}" must be an integer.`);
-}
-
 function validatePatch(source: FxObject, patch: Partial<Omit<FxObject, "id" | "type">>): void {
-  for (const [field, value] of Object.entries(patch)) {
-    if (field === "id" || field === "type") throw new TypeError(`FX identity property "${field}" cannot be changed.`);
-    if (COLOR_FIELDS[source.type].has(field)) {
-      const normalized = typeof value === "string" ? value.trim() : "";
-      const validHex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalized) ||
-        /^0x[0-9a-f]{1,8}$/i.test(normalized);
-      const validInteger = typeof value === "number" &&
-        Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
-      if (!validHex && !validInteger) {
-        throw new TypeError(`FX property "${field}" must be a Phaser-compatible HEX color or 32-bit unsigned integer.`);
-      }
-      continue;
-    }
-    if (field === "label") {
-      if (typeof value !== "string" || !value.trim()) throw new TypeError('FX property "label" must be a non-empty string.');
-      continue;
-    }
-    if (field === "preFX" || (source.type === "Shine" && (field === "reveal" || field === "yoyo"))) {
-      if (typeof value !== "boolean") throw new TypeError(`FX property "${field}" must be boolean.`);
-      continue;
-    }
-    if (source.type === "Circle") {
-      if (field === "thickness" || field === "feather") assertFinite(field, value, 0);
-      else if (field === "scale") assertFinite(field, value, 0.01);
-      else throw new TypeError(`Unsupported Circle property "${field}".`);
-    } else if (source.type === "Bloom") {
-      if (field === "threshold") assertFinite(field, value, 0, 1);
-      else if (field === "blurRadius" || field === "blendAmount") assertFinite(field, value, 0);
-      else if (field === "blurSteps") assertFinite(field, value, 1, undefined, true);
-      else if (field === "blurQuality") assertFinite(field, value, 0, 2, true);
-      else throw new TypeError(`Unsupported Bloom property "${field}".`);
-    } else if (source.type === "Gradient") {
-      if (["alpha", "fromX", "fromY", "toX", "toY"].includes(field)) assertFinite(field, value, 0, 1);
-      else if (field === "size") assertFinite(field, value, 0);
-      else throw new TypeError(`Unsupported Gradient property "${field}".`);
-    } else {
-      if (field === "radius") assertFinite(field, value, 0.01);
-      else if (field === "direction") assertFinite(field, value);
-      else if (field === "scale") assertFinite(field, value, 0.1);
-      else if (field === "duration") assertFinite(field, value, 1);
-      else throw new TypeError(`Unsupported Shine property "${field}".`);
-    }
-  }
+  validateNativeFxPropertyValues(source.type, patch as Record<string, unknown>, true);
 }
 
 function componentToFx(component: ComponentInstanceDocument, type: FxType): FxObject {
+  validateNativeFxComponentProperties(component);
   const base = defaults(type, component.id, component.properties.preFX === true);
   const properties = { ...component.properties };
   delete properties.id;

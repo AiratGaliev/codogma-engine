@@ -84,3 +84,51 @@ testCase("keeps disabled FX components editable but excludes them from the runti
   assert.equal(getNativeNodeEffects(disabledNode)[0]?.component.enabled, false);
   assert.deepEqual(getEnabledNativeNodeEffects(disabledNode), []);
 });
+
+testCase("rejects invalid persisted FX fields while preserving unknown JSON extension fields", () => {
+  const cases = [
+    { type: "Bloom" as const, properties: { threshold: 1.1 }, message: /threshold.*at most 1/ },
+    { type: "Bloom" as const, properties: { blurSteps: 2.5 }, message: /blurSteps.*integer/ },
+    { type: "Gradient" as const, properties: { alpha: -0.1 }, message: /alpha.*at least 0/ },
+    { type: "Circle" as const, properties: { color: "red" }, message: /Phaser-compatible HEX color/ },
+    { type: "Shine" as const, properties: { duration: 0 }, message: /duration.*at least 1/ },
+  ];
+
+  for (const item of cases) {
+    const document = addNativeNodeFx(scene(), "node-image", item.type) as SceneDocumentV1;
+    const effect = getNativeNodeEffects(findSceneNode(document, "node-image")!)[0]!;
+    const invalid: SceneDocumentV1 = {
+      ...document,
+      rootNodes: [{
+        ...document.rootNodes[0]!,
+        components: document.rootNodes[0]!.components.map((component) =>
+          component.id === effect.id
+            ? { ...component, properties: { ...component.properties, ...item.properties } }
+            : component,
+        ),
+      }],
+    };
+    assert.throws(
+      () => getNativeNodeEffects(findSceneNode(invalid, "node-image")!),
+      item.message,
+    );
+  }
+
+  const extensionDocument = addNativeNodeFx(scene(), "node-image", "Bloom") as SceneDocumentV1;
+  const extensionEffect = getNativeNodeEffects(findSceneNode(extensionDocument, "node-image")!)[0]!;
+  const extended: SceneDocumentV1 = {
+    ...extensionDocument,
+    rootNodes: [{
+      ...extensionDocument.rootNodes[0]!,
+      components: extensionDocument.rootNodes[0]!.components.map((component) =>
+        component.id === extensionEffect.id
+          ? { ...component, properties: { ...component.properties, pluginMetadata: { keep: true } } }
+          : component,
+      ),
+    }],
+  };
+  assert.deepEqual(
+    getNativeNodeEffects(findSceneNode(extended, "node-image")!)[0]?.source.pluginMetadata,
+    { keep: true },
+  );
+});

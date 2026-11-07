@@ -1,4 +1,5 @@
 import { BUILTIN_COMPONENT_TYPE_IDS, BUILTIN_COMPONENT_TYPES } from "./builtin-component-ids.js";
+import { validateNativeFxComponentProperties } from "./fx-validation.js";
 import {
   parsePrefabDocument,
   parseProjectDocument,
@@ -104,7 +105,7 @@ function createSceneValidationContext(project: ProjectDocumentV1) {
  * that native reference valid at the Project boundary for both Scene and
  * Prefab documents, on read and write.
  */
-function assertNativeImageAssetReferences(
+function assertNativeBuiltinComponentData(
   project: ProjectDocumentV1,
   roots: readonly NodeDocument[],
   label: string,
@@ -114,6 +115,21 @@ function assertNativeImageAssetReferences(
 
   const visit = (node: NodeDocument, path: string): void => {
     node.components.forEach((component, index) => {
+      const componentPath = `${path}.components[${index}]`;
+      try {
+        validateNativeFxComponentProperties(component);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const propertyName = /FX property "([^"]+)"/.exec(message)?.[1];
+        diagnostics.push({
+          code: "COMPONENT_INVALID_VALUE",
+          message,
+          path: propertyName
+            ? `${componentPath}.properties.${propertyName}`
+            : `${componentPath}.properties`,
+        });
+      }
+
       if (component.typeId !== BUILTIN_COMPONENT_TYPES.imageRenderer ||
           !Object.prototype.hasOwnProperty.call(component.properties, "assetId")) {
         return;
