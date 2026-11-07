@@ -573,3 +573,38 @@ testCase("rejects unsafe property path segments on native Prefab overrides", () 
     hasSafePathDiagnostic,
   );
 });
+
+testCase("distinguishes an omitted Prefab catalog from an explicitly empty Host catalog", () => {
+  const prefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-catalog-state",
+    name: "Catalog State",
+    root: {
+      id: "node-catalog-state",
+      name: "Node",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  };
+  const registered = addNativePrefabReference(
+    project,
+    prefab,
+    "asset-prefab-catalog-state",
+    "prefabs/CatalogState.cge-prefab.json",
+  );
+  const baseScene = parseNativeSceneDocument(registered, "scene-level", sceneContent);
+  const withInstance = addNativePrefabInstance(baseScene, prefab);
+  const content = JSON.stringify(withInstance);
+
+  // Omitted context retains the legacy public API fallback: manifest identity
+  // is checked but target resolution is deferred until a catalog is supplied.
+  assert.doesNotThrow(() => parseNativeSceneDocument(registered, "scene-level", content));
+  // The Host passes even an empty loaded catalog explicitly; that is an
+  // authoritative statement that no referenced Prefab is available.
+  assert.throws(
+    () => parseNativeSceneDocument(registered, "scene-level", content, []),
+    /Prefab .* is not available in the validation context/,
+  );
+});

@@ -90,13 +90,13 @@ export function findPrefabReferenceByAssetPath(
 
 function createSceneValidationContext(
   project: ProjectDocumentV1,
-  prefabDocuments: readonly PrefabDocumentV1[] = [],
+  prefabDocuments?: readonly PrefabDocumentV1[],
 ) {
-  const prefabs = new Map(prefabDocuments.map((prefab) => [prefab.id, prefab]));
+  const prefabs = prefabDocuments ? new Map(prefabDocuments.map((prefab) => [prefab.id, prefab])) : undefined;
   return {
     assets: new Map(project.assets.map((asset) => [asset.id, asset])),
     prefabIds: new Set(project.prefabs.map((prefab) => prefab.id)),
-    ...(prefabDocuments.length > 0 ? { prefabs } : {}),
+    ...(prefabs ? { prefabs } : {}),
     registeredComponentTypes: new Set([
       ...BUILTIN_COMPONENT_TYPE_IDS,
       ...project.componentModules.map((module) => module.typeId),
@@ -150,10 +150,10 @@ function assertNativeBuiltinComponentData(
   roots: readonly NodeDocument[],
   label: string,
   rootPath: "root" | "rootNodes" = "rootNodes",
-  prefabDocuments: readonly PrefabDocumentV1[] = [],
+  prefabDocuments?: readonly PrefabDocumentV1[],
 ): void {
   const diagnostics: Array<{ code: string; message: string; path: string }> = [];
-  const prefabs = new Map(prefabDocuments.map((prefab) => [prefab.id, prefab]));
+  const prefabs = new Map((prefabDocuments ?? []).map((prefab) => [prefab.id, prefab]));
 
   const visit = (node: NodeDocument, path: string): void => {
     node.components.forEach((component, index) => {
@@ -251,7 +251,7 @@ export function parseNativeSceneDocument(
   project: ProjectDocumentV1,
   sceneId: string,
   content: string,
-  prefabDocuments: readonly PrefabDocumentV1[] = [],
+  prefabDocuments?: readonly PrefabDocumentV1[],
 ): SceneDocumentV1 {
   const asset = resolveSceneAsset(project, sceneId);
   if (!asset.path.endsWith(NATIVE_SCENE_EXTENSION)) {
@@ -271,7 +271,7 @@ export function parseNativeSceneDocument(
 export function serializeNativeSceneDocument(
   project: ProjectDocumentV1,
   document: SceneDocumentV1,
-  prefabDocuments: readonly PrefabDocumentV1[] = [],
+  prefabDocuments?: readonly PrefabDocumentV1[],
 ): string {
   const context = createSceneValidationContext(project, prefabDocuments);
   // Core validation must run before native traversal so accessors, cycles and
@@ -292,7 +292,7 @@ export function parseNativePrefabDocument(
   project: ProjectDocumentV1,
   prefabId: string,
   content: string,
-  prefabDocuments: readonly PrefabDocumentV1[] = [],
+  prefabDocuments?: readonly PrefabDocumentV1[],
 ): PrefabDocumentV1 {
   const asset = resolvePrefabAsset(project, prefabId);
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
@@ -312,7 +312,7 @@ export function parseNativePrefabDocument(
 export function serializeNativePrefabDocument(
   project: ProjectDocumentV1,
   document: PrefabDocumentV1,
-  prefabDocuments: readonly PrefabDocumentV1[] = [],
+  prefabDocuments?: readonly PrefabDocumentV1[],
 ): string {
   const context = createSceneValidationContext(project, prefabDocuments);
   // Keep the same safe-validation-before-native-traversal order as Scenes.
