@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as testCase } from "vitest";
+import { reparentSceneNode, getSceneNodeEntries, findSceneNode, createSceneNode } from "../src/domain/scene-model.js";
+import { setNativeComponentEnabled } from "../src/domain/components-model.js";
+import { addNativeNodeFx, getNativeNodeEffects, updateNativeNodeFx } from "../src/domain/fx-model.js";
 import {
   addNativePrefabReference,
   createNativeSceneDocument,
@@ -221,4 +224,42 @@ testCase("round-trips a native Prefab with child Nodes through its registered Pr
   assert.deepEqual(reopened, prefab);
   assert.equal(reopened.root.children[0]?.id, "node-prefab-child");
   assert.equal(reopened.root.children[0]?.components[0]?.properties.assetId, "asset-player-sprite");
+});
+
+testCase("round-trips native Scene edits across hierarchy, Component, FX and Asset references", () => {
+  let edited = parseNativeSceneDocument(project, "scene-level", sceneContent);
+  const playerComponent = edited.rootNodes[0]?.components[0];
+  assert.ok(playerComponent);
+
+  edited = setNativeComponentEnabled(edited, "node-player", playerComponent.id, false) as import("@codogma/cge").SceneDocumentV1;
+  edited = createSceneNode(edited, "Image", "asset-player-sprite") as import("@codogma/cge").SceneDocumentV1;
+  const imageNode = edited.rootNodes.at(-1);
+  assert.ok(imageNode);
+
+  edited = reparentSceneNode(edited, imageNode.id, "node-player") as import("@codogma/cge").SceneDocumentV1;
+  edited = addNativeNodeFx(edited, imageNode.id, "Bloom") as import("@codogma/cge").SceneDocumentV1;
+  const bloom = getNativeNodeEffects(findSceneNode(edited, imageNode.id)!)[0];
+  assert.ok(bloom);
+  edited = updateNativeNodeFx(edited, imageNode.id, bloom.id, {
+    threshold: 0.75,
+    blurSteps: 8,
+  }) as import("@codogma/cge").SceneDocumentV1;
+
+  const serialized = serializeNativeSceneDocument(project, edited);
+  const reopened = parseNativeSceneDocument(project, "scene-level", serialized);
+  const reopenedPlayer = findSceneNode(reopened, "node-player");
+  const reopenedImage = findSceneNode(reopened, imageNode.id);
+  const reopenedModule = reopenedPlayer?.components.find((component) => component.id === playerComponent.id);
+  const reopenedRenderer = reopenedImage?.components.find((component) => component.typeId === "com.codogma.renderer.image");
+  const reopenedBloom = getNativeNodeEffects(reopenedImage!)[0];
+
+  assert.equal(reopenedModule?.enabled, false);
+  assert.equal(reopenedModule?.properties.speed, 4);
+  assert.deepEqual(reopenedModule?.properties.pluginExtension, { retained: true });
+  assert.equal(reopenedImage?.id, imageNode.id);
+  assert.equal(reopenedRenderer?.properties.assetId, "asset-player-sprite");
+  assert.equal(getSceneNodeEntries(reopened).find((entry) => entry.id === imageNode.id)?.parentId, "node-player");
+  assert.equal(reopenedBloom?.id, bloom.id);
+  assert.equal(reopenedBloom?.source.threshold, 0.75);
+  assert.equal(reopenedBloom?.source.blurSteps, 8);
 });
