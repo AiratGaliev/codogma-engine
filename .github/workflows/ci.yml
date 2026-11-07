@@ -37,7 +37,7 @@ jobs:
 
           if [[ "$EVENT_NAME" != "pull_request" ]]; then
             echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
-            for scope in root editor ai_chat mcp_bridge localization mcp_package cge; do
+            for scope in root editor ai_chat localization mcp_package cge; do
               echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
             done
             echo "Manual run: full code checks and all dependency audits are enabled."
@@ -47,7 +47,7 @@ jobs:
           if ! changed_file_list="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::Не удалось определить diff PR; безопасный режим — полный набор проверок и все dependency audits."
             echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
-            for scope in root editor ai_chat mcp_bridge localization mcp_package cge; do
+            for scope in root editor ai_chat localization mcp_package cge; do
               echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
             done
             exit 0
@@ -111,7 +111,6 @@ jobs:
           emit_audit_scope root package-lock.json
           emit_audit_scope editor source/editor/package.json source/editor/package-lock.json
           emit_audit_scope ai_chat mini-services/ai-chat/package.json mini-services/ai-chat/package-lock.json
-          emit_audit_scope mcp_bridge mini-services/phaser-editor-mcp/package.json mini-services/phaser-editor-mcp/package-lock.json
           emit_audit_scope localization packages/localization/package.json packages/localization/package-lock.json
           emit_audit_scope mcp_package packages/editor-mcp-server/package.json packages/editor-mcp-server/package-lock.json
           emit_audit_scope cge packages/cge/package.json packages/cge/package-lock.json
@@ -128,7 +127,6 @@ jobs:
             packages/editor-mcp-server/package-lock.json
             packages/cge/package-lock.json
             mini-services/ai-chat/package-lock.json
-            mini-services/phaser-editor-mcp/package-lock.json
 
       - name: Validate changed Markdown files
         if: github.event_name == 'pull_request'
@@ -233,17 +231,7 @@ jobs:
         run: npm audit --audit-level=low
         working-directory: mini-services/ai-chat
 
-      - name: Install locked MCP bridge service dependencies
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm ci
-        working-directory: mini-services/phaser-editor-mcp
-
-      - name: Audit MCP bridge service dependencies
-        if: steps.scope.outputs.audit_mcp_bridge == 'true'
-        run: npm audit --audit-level=low
-        working-directory: mini-services/phaser-editor-mcp
-
-      - name: Mini-services security tests (loopback, Host/Origin, limits and WebSocket)
+      - name: Mini-services security tests (AI Chat loopback, Host/Origin and limits)
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:mini-services
 

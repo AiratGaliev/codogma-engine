@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,71 +10,32 @@ import test from "node:test";
 import { Ajv } from "ajv";
 
 import { createCodogmaMcpServer, resolveEngineMcpUrl } from "../dist/index.js";
-import { dispatchTool, getBridgeToolsList, initMcp } from "../../../server/mcp.mjs";
+import { dispatchTool, getBridgeToolsList, getChatSystemPrompt, getSystemInstructions, initMcp } from "../../../server/mcp.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = path.join(ROOT, "dist", "cli.js");
 
-const UPSTREAM_TOOL_NAMES = [
-    "scene-enable-arcade-physics-body",
-    "scene-disable-arcade-physics-body",
-    "scene-add-editable-tilemap",
-    "scene-add-tileset-to-editable-tilemap",
-    "scene-delete-tileset-from-editable-tilemap",
-    "scene-add-editable-tilemap-layer",
-    "scene-resize-editable-tilemap-layer",
-    "scene-write-editable-tilemap-layer-data",
-    "scene-fill-editable-tilemap-layer-data",
-    "scene-get-editable-tilemap-layer-selection-data",
-    "scene-add-game-object-filters",
-    "scene-update-game-object-filters",
-    "scene-delete-game-object-filters",
-    "scene-update-game-object-filter-list",
-    "scene-move-game-object-in-render-list",
-    "scene-delete-game-objects",
-    "scene-move-game-objects-to-parent",
-    "scene-pack-objects-in-container",
-    "scene-add-game-objects",
-    "scene-update-game-objects",
-    "scene-delete-plain-objects",
-    "scene-add-object-list",
-    "scene-update-object-list",
-    "scene-remove-object-list",
-    "ide-create-new-prefab-scene",
-    "ide-get-all-prefabs-in-project",
-    "ide-get-prefab-inheritance",
-    "scene-declare-prefab-property",
-    "scene-delete-prefab-property",
-    "scene-get-nested-prefabs-instances",
-    "ide-get-all-scenes-in-project",
-    "ide-get-active-scene",
-    "ide-open-scene",
-    "ide-create-new-scene",
-    "ide-save-scene",
-    "scene-clear-scene",
-    "scene-get-scene-dimension",
-    "scene-get-screenshot",
-    "scene-get-scene-data",
-    "scene-get-objects-data",
-    "assets-get-available-asset-packs",
-    "assets-get-available-textures",
-    "assets-get-texture-binary",
-    "assets-get-texture-size",
-    "assets-get-available-bitmapfonts",
-    "assets-get-bitmapfont-image",
-    "assets-get-spritesheet-image",
-    "assets-get-texture-content-bounding-box",
-    "assets-get-available-animations",
-    "assets-get-available-spine-skeletons",
-    "assets-get-available-spine-atlases",
-    "assets-get-spine-skeleton-info",
-    "assets-get-spine-skin-image",
-    "assets-get-available-tilemaps",
-    "assets-get-tilemap-data",
-    "assets-get-google-font-families",
-    "assets-get-google-font-info",
+const NATIVE_TOOL_NAMES = [
+    "scene-list", "scene-get-active", "scene-open", "scene-save", "scene-create",
+    "scene-get-document", "scene-get-nodes", "scene-create-node", "scene-update-node",
+    "scene-delete-node", "scene-reparent-node", "scene-clear",
+    "prefab-list", "prefab-get", "prefab-create", "prefab-instantiate",
+    "component-attach", "component-detach", "component-set-enabled",
+    "fx-add", "fx-update", "fx-remove", "scene-capture-screenshot"
+];
+
+const EXTERNAL_ASSET_TOOL_NAMES = [
+    "assets-get-available-textures", "assets-get-texture-binary",
+    "assets-get-available-animations", "assets-get-available-tilemaps",
+    "assets-get-available-bitmapfonts", "assets-get-texture-content-bounding-box",
+    "assets-get-available-asset-packs", "assets-get-texture-size",
+    "assets-get-bitmapfont-image", "assets-get-spritesheet-image",
+    "assets-get-available-spine-skeletons", "assets-get-available-spine-atlases",
+    "assets-get-spine-skeleton-info", "assets-get-tilemap-data",
+    "assets-get-google-font-families", "assets-get-google-font-info",
     "assets-add-google-font-to-asset-pack",
-    "get-system-instructions"
+    "project-list-files", "project-read-file", "project-write-file",
+    "project-delete-file", "project-compile-info"
 ];
 
 function readRequest(req) {
@@ -96,77 +57,53 @@ async function startMockEngine({ redirectMethod } = {}) {
     const calls = [];
     const tools = [
         {
-            name: "ide-get-all-scenes-in-project",
-            description: "List project scenes.",
+            name: "scene-list",
+            description: "List native Scene documents.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "scene-open",
+            description: "Open a native Scene or Prefab document.",
             inputSchema: {
                 type: "object",
-                properties: {}
+                properties: { path: { type: "string" } },
+                required: ["path"]
             }
         },
         {
-            name: "scene-add-object-list",
-            description: "Add an object list to a scene.",
+            name: "scene-create-node",
+            description: "Create a native Node.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    sceneId: { type: "string" },
-                    lists: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            properties: {
-                                label: { type: "string" },
-                                scope: { type: "string" },
-                                objectIds: {
-                                    type: "array",
-                                    items: { type: "string" }
-                                }
-                            },
-                            required: ["label"]
-                        }
+                    kind: { type: "string", enum: ["Image", "Text", "Container"] },
+                    assetId: { type: "string" },
+                    parentId: { type: ["string", "null"] }
+                },
+                required: ["kind"],
+                additionalProperties: false
+            }
+        },
+        {
+            name: "assets-get-texture-binary",
+            description: "Read an external Phaser texture asset.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    key: { type: "string" },
+                    texture: {
+                        type: "object",
+                        properties: { key: { type: "string" } },
+                        required: ["key"]
                     }
                 },
-                required: ["sceneId", "lists"]
-            }
-        },
-        {
-            name: "ide-open-scene",
-            description: "Open a scene in the editor.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    sceneId: { type: "string" },
-                    scenePath: { type: "string" },
-                    sceneKey: { type: "string" }
-                },
-                anyOf: [
-                    { required: ["sceneId"] },
-                    { required: ["scenePath"] },
-                    { required: ["sceneKey"] }
-                ]
-            }
-        },
-        {
-            name: "assets-get-spine-skin-image",
-            description: "Render a preview of the selected Spine skin.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    dataKey: { type: "string" },
-                    atlasKey: { type: "string" },
-                    skinName: { type: "string" },
-                    animationName: { type: "string" }
-                },
-                required: ["dataKey", "atlasKey", "skinName", "animationName"]
+                anyOf: [{ required: ["key"] }, { required: ["texture"] }]
             }
         },
         {
             name: "get-system-instructions",
-            description: "Read Codogma Engine tool guidance.",
-            inputSchema: {
-                type: "object",
-                properties: {}
-            }
+            description: "Read native Codogma MCP guidance.",
+            inputSchema: { type: "object", properties: {} }
         }
     ];
 
@@ -181,14 +118,13 @@ async function startMockEngine({ redirectMethod } = {}) {
                 return;
             }
             let result;
-
             switch (message.method) {
                 case "initialize":
                     result = {
                         protocolVersion: "2025-03-26",
                         capabilities: { tools: { listChanged: false } },
                         serverInfo: { name: "codogma-engine", version: "1.0.0" },
-                        instructions: "Call get-system-instructions before authoring scenes."
+                        instructions: "Use native Project Model v1 tools and get-system-instructions."
                     };
                     break;
                 case "tools/list":
@@ -196,20 +132,12 @@ async function startMockEngine({ redirectMethod } = {}) {
                     break;
                 case "tools/call":
                     calls.push(message.params);
-                    result = message.params.name === "assets-get-spine-skin-image"
-                        ? {
-                            content: [{
-                                type: "image",
-                                data: "c3BpbmUtc25hcHNob3Q=",
-                                mimeType: "image/png"
-                            }]
-                        }
-                        : {
-                            content: [{
-                                type: "text",
-                                text: JSON.stringify({ forwarded: message.params.name, arguments: message.params.arguments })
-                            }]
-                        };
+                    result = message.params.name === "assets-get-texture-binary"
+                        ? { content: [{ type: "image", data: "bmF0aXZlLWFzc2V0", mimeType: "image/png" }] }
+                        : { content: [{ type: "text", text: JSON.stringify({
+                            forwarded: message.params.name,
+                            arguments: message.params.arguments
+                        }) }] };
                     break;
                 default:
                     res.writeHead(200, { "content-type": "application/json" });
@@ -220,7 +148,6 @@ async function startMockEngine({ redirectMethod } = {}) {
                     }));
                     return;
             }
-
             res.writeHead(200, { "content-type": "application/json" });
             res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
         } catch (error) {
@@ -233,15 +160,13 @@ async function startMockEngine({ redirectMethod } = {}) {
         server.once("error", reject);
         server.listen(0, "127.0.0.1", resolve);
     });
-
     const address = server.address();
     assert.ok(address && typeof address === "object");
-    const url = `http://127.0.0.1:${address.port}/editor/mcp`;
-
     return {
         calls,
-        url,
-        close: () => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+        url: `http://127.0.0.1:${address.port}/editor/mcp`,
+        close: () => new Promise((resolve, reject) =>
+            server.close(error => error ? reject(error) : resolve()))
     };
 }
 
@@ -260,7 +185,6 @@ function createStdioClient(child) {
             const line = buffer.slice(0, newline).trim();
             buffer = buffer.slice(newline + 1);
             if (!line) continue;
-
             let message;
             try {
                 message = JSON.parse(line);
@@ -269,7 +193,6 @@ function createStdioClient(child) {
                 pending.clear();
                 continue;
             }
-
             if (typeof message.id === "number" && pending.has(message.id)) {
                 const waiter = pending.get(message.id);
                 pending.delete(message.id);
@@ -287,18 +210,10 @@ function createStdioClient(child) {
                 pending.delete(id);
                 reject(new Error(`Timed out waiting for MCP ${method}; stderr: ${stderr.join("")}`));
             }, 5000);
-
             pending.set(id, {
-                resolve: message => {
-                    clearTimeout(timer);
-                    resolve(message);
-                },
-                reject: error => {
-                    clearTimeout(timer);
-                    reject(error);
-                }
+                resolve: message => { clearTimeout(timer); resolve(message); },
+                reject: error => { clearTimeout(timer); reject(error); }
             });
-
             child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n", error => {
                 if (!error) return;
                 clearTimeout(timer);
@@ -311,11 +226,10 @@ function createStdioClient(child) {
     function notify(method, params = {}) {
         child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
     }
-
     return { request, notify, stderr };
 }
 
-test("stdio server preserves Codogma schemas and forwards tool calls to /editor/mcp", async () => {
+test("stdio adapter forwards native schemas and preserves external asset image content", async () => {
     const engine = await startMockEngine();
     const child = spawn(process.execPath, [CLI], {
         cwd: ROOT,
@@ -334,99 +248,64 @@ test("stdio server preserves Codogma schemas and forwards tool calls to /editor/
             capabilities: {},
             clientInfo: { name: "codogma-mcp-test", version: "1.0.0" }
         });
-
         assert.equal(initialized.result?.serverInfo?.name, "codogma-editor-mcp-server");
         assert.match(initialized.result?.instructions ?? "", /get-system-instructions/);
-
         client.notify("notifications/initialized");
 
         const listed = await client.request("tools/list");
         const returnedTools = listed.result?.tools;
         assert.ok(Array.isArray(returnedTools));
-        assert.deepEqual(
-            returnedTools.map(tool => tool.name),
-            ["ide-get-all-scenes-in-project", "scene-add-object-list", "ide-open-scene", "assets-get-spine-skin-image", "get-system-instructions"]
-        );
+        assert.deepEqual(returnedTools.map(tool => tool.name), [
+            "scene-list", "scene-open", "scene-create-node",
+            "assets-get-texture-binary", "get-system-instructions"
+        ]);
 
-        const objectListTool = returnedTools.find(tool => tool.name === "scene-add-object-list");
-        assert.equal(objectListTool.inputSchema.properties.lists.items.properties.scope.type, "string");
-        assert.equal(
-            objectListTool.inputSchema.properties.lists.items.required.includes("scope"),
-            false,
-            "the optional nested scope field must remain optional"
-        );
-        assert.equal(
-            objectListTool.inputSchema.properties.lists.items.required.includes("objectIds"),
-            false,
-            "the optional nested objectIds field must remain optional"
-        );
+        const createNodeTool = returnedTools.find(tool => tool.name === "scene-create-node");
+        assert.equal(createNodeTool.inputSchema.properties.kind.type, "string");
+        assert.equal(createNodeTool.inputSchema.properties.assetId.type, "string");
+        assert.equal(createNodeTool.inputSchema.required.includes("assetId"), false);
+        assert.equal(createNodeTool.inputSchema.required.includes("parentId"), false);
 
-        const args = {
-            sceneId: "scene-1",
-            lists: [{ label: "Decorations" }]
-        };
         const invalidType = await client.request("tools/call", {
-            name: "scene-add-object-list",
-            arguments: {
-                sceneId: 123,
-                lists: [{ label: "Decorations", scope: 42 }]
-            }
+            name: "scene-create-node",
+            arguments: { kind: 123 }
         });
         assert.equal(invalidType.result?.isError, true);
         assert.match(invalidType.result?.content?.[0]?.text ?? "", /validation error/);
         assert.equal(engine.calls.length, 0, "invalid arguments must be rejected before reaching the engine");
 
         const missingRequired = await client.request("tools/call", {
-            name: "scene-add-object-list",
-            arguments: { sceneId: "scene-1" }
+            name: "scene-open",
+            arguments: {}
         });
         assert.equal(missingRequired.result?.isError, true);
         assert.match(missingRequired.result?.content?.[0]?.text ?? "", /required/);
         assert.equal(engine.calls.length, 0, "missing required values must not be forwarded");
 
-        const invalidAnyOf = await client.request("tools/call", {
-            name: "ide-open-scene",
-            arguments: {}
-        });
-        assert.equal(invalidAnyOf.result?.isError, true);
-        assert.match(invalidAnyOf.result?.content?.[0]?.text ?? "", /validation error/);
-
+        const callArgs = { kind: "Image", assetId: "asset-player" };
         const call = await client.request("tools/call", {
-            name: "scene-add-object-list",
-            arguments: args
+            name: "scene-create-node",
+            arguments: callArgs
         });
-
         assert.equal(call.result?.isError, undefined);
-        assert.equal(call.result?.content?.[0]?.type, "text");
-        assert.equal(
-            JSON.parse(call.result.content[0].text).forwarded,
-            "scene-add-object-list"
-        );
-        assert.deepEqual(engine.calls[0], {
-            name: "scene-add-object-list",
-            arguments: args
-        });
+        assert.equal(JSON.parse(call.result.content[0].text).forwarded, "scene-create-node");
+        assert.deepEqual(engine.calls[0], { name: "scene-create-node", arguments: callArgs });
 
         const imageCall = await client.request("tools/call", {
-            name: "assets-get-spine-skin-image",
-            arguments: {
-                dataKey: "characters",
-                atlasKey: "characters-atlas",
-                skinName: "knight",
-                animationName: "idle"
-            }
+            name: "assets-get-texture-binary",
+            arguments: { texture: { key: "player" } }
         });
         assert.deepEqual(imageCall.result?.content, [{
             type: "image",
-            data: "c3BpbmUtc25hcHNob3Q=",
+            data: "bmF0aXZlLWFzc2V0",
             mimeType: "image/png"
         }], "image content blocks must survive the HTTP adapter unchanged");
 
         const stillAlive = await client.request("tools/call", {
-            name: "ide-get-all-scenes-in-project",
+            name: "scene-list",
             arguments: {}
         });
-        assert.equal(stillAlive.result?.isError, undefined, "the stdio process must stay healthy after validation errors");
+        assert.equal(stillAlive.result?.isError, undefined);
 
         const unknown = await client.request("tools/call", {
             name: "not-a-codogma-tool",
@@ -445,21 +324,13 @@ test("stdio server preserves Codogma schemas and forwards tool calls to /editor/
         if (child.exitCode === null) child.kill();
         await engine.close();
     }
-
     assert.match(client.stderr.join(""), /Connected to .* \(5 tools\)/);
 });
 
 test("endpoint validation rejects non-loopback hosts and unintended paths", () => {
     assert.equal(resolveEngineMcpUrl().toString(), "http://127.0.0.1:3000/editor/mcp");
-    assert.equal(
-        resolveEngineMcpUrl("http://localhost:3010/editor/mcp").toString(),
-        "http://localhost:3010/editor/mcp"
-    );
-    assert.equal(
-        resolveEngineMcpUrl("http://[::1]:3000/editor/mcp").hostname,
-        "[::1]"
-    );
-
+    assert.equal(resolveEngineMcpUrl("http://localhost:3010/editor/mcp").toString(), "http://localhost:3010/editor/mcp");
+    assert.equal(resolveEngineMcpUrl("http://[::1]:3000/editor/mcp").hostname, "[::1]");
     assert.throws(() => resolveEngineMcpUrl("http://example.com/editor/mcp"), /loopback host/);
     assert.throws(() => resolveEngineMcpUrl("https://127.0.0.1/editor/mcp"), /HTTP/);
     assert.throws(() => resolveEngineMcpUrl("http://127.0.0.1:3000/editor/mcp-bridge"), /\/editor\/mcp/);
@@ -467,56 +338,56 @@ test("endpoint validation rejects non-loopback hosts and unintended paths", () =
     assert.throws(() => resolveEngineMcpUrl("http://127.0.0.1:3000/editor/mcp?redirect=1"), /credentials/);
 });
 
-
-test("HTTP MCP adapter refuses redirects away from the loopback endpoint", async () => {
-    const engine = await startMockEngine({ redirectMethod: "initialize" });
-
-    try {
-        await assert.rejects(
-            createCodogmaMcpServer({ url: engine.url, timeoutMs: 5000 }),
-            /Cannot reach Codogma Engine MCP endpoint/
-        );
-    } finally {
-        await engine.close();
-    }
-});
-
-
-test("real Codogma registry preserves all upstream tools and every JSON Schema compiles", async () => {
-    const engineTools = getBridgeToolsList();
-    const names = new Set(engineTools.map(tool => tool.name));
-
-    assert.equal(names.size, engineTools.length, "the engine registry must not expose duplicate tool names");
-    assert.ok(engineTools.length >= UPSTREAM_TOOL_NAMES.length, "the Codogma registry must expose the complete upstream tool set");
-    const missingUpstreamTools = UPSTREAM_TOOL_NAMES.filter(name => !names.has(name));
-    assert.deepEqual(missingUpstreamTools, [], "all upstream Phaser MCP tools must remain available");
-
+test("HTTP MCP adapter refuses redirect responses", async () => {
     const fetchImpl = async (_url, init) => {
-        const request = JSON.parse(init.body);
-        const result = request.method === "initialize"
-            ? {
-                protocolVersion: "2025-03-26",
-                capabilities: { tools: { listChanged: false } },
-                serverInfo: { name: "codogma-engine", version: "1.0.0" },
-                instructions: "Call get-system-instructions."
-            }
-            : { tools: engineTools };
-
-        return new Response(JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
-            result
-        }), {
-            status: 200,
-            headers: { "content-type": "application/json" }
+        assert.equal(init.redirect, "error", "the adapter must disable automatic redirect following");
+        return new Response(null, {
+            status: 302,
+            headers: { location: "https://example.com/editor/mcp" }
         });
     };
+    await assert.rejects(
+        createCodogmaMcpServer({ url: "http://127.0.0.1:3000/editor/mcp", fetchImpl }),
+        /HTTP 302/
+    );
+});
+
+test("native registry and preserved external asset tools expose valid schemas", async () => {
+    const engineTools = getBridgeToolsList();
+    const names = new Set(engineTools.map(tool => tool.name));
+    assert.equal(names.size, engineTools.length, "the engine registry must not expose duplicate tool names");
+    for (const name of NATIVE_TOOL_NAMES) assert.ok(names.has(name), `missing native tool: ${name}`);
+    for (const name of EXTERNAL_ASSET_TOOL_NAMES) assert.ok(names.has(name), `missing preserved external asset tool: ${name}`);
+    const expectedNames = new Set(["get-system-instructions", ...NATIVE_TOOL_NAMES, ...EXTERNAL_ASSET_TOOL_NAMES]);
+    assert.deepEqual([...names].sort(), [...expectedNames].sort(),
+        "the engine registry must expose exactly the native editor and supported external-asset tools");
+
+    for (const name of [
+        "ide-get-all-scenes-in-project", "ide-create-new-scene", "ide-open-scene",
+        "scene-get-scene-data", "scene-add-game-objects", "scene-add-plain-objects",
+        "ide-create-new-prefab-scene", "scene-declare-prefab-property",
+        "scene-add-editable-tilemap", "scene-enable-arcade-physics-body",
+        "scene-add-game-object-filters", "scene-add-object-list", "assets-get-spine-skin-image"
+    ]) assert.ok(!names.has(name), `legacy or unsupported tool must not be exposed: ${name}`);
 
     const adapter = await createCodogmaMcpServer({
         url: "http://127.0.0.1:3000/editor/mcp",
-        fetchImpl
+        fetchImpl: async (_url, init) => {
+            const request = JSON.parse(init.body);
+            const result = request.method === "initialize"
+                ? {
+                    protocolVersion: "2025-03-26",
+                    capabilities: { tools: { listChanged: false } },
+                    serverInfo: { name: "codogma-engine", version: "1.0.0" },
+                    instructions: "Use native tools."
+                }
+                : { tools: engineTools };
+            return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), {
+                status: 200,
+                headers: { "content-type": "application/json" }
+            });
+        }
     });
-
     assert.equal(adapter.tools.length, engineTools.length);
 
     const ajv = new Ajv({
@@ -527,428 +398,100 @@ test("real Codogma registry preserves all upstream tools and every JSON Schema c
         removeAdditional: false,
         validateFormats: false
     });
+    for (const tool of engineTools) {
+        assert.doesNotThrow(() => ajv.compile(tool.inputSchema), `invalid JSON Schema: ${tool.name}`);
+    }
 
     for (const name of ["assets-get-texture-size", "assets-get-texture-binary"]) {
         const tool = adapter.tools.find(candidate => candidate.name === name);
-        assert.ok(tool, `missing Codogma texture tool ${name}`);
-
+        assert.ok(tool, `missing texture tool ${name}`);
         const validate = ajv.compile(tool.inputSchema);
         assert.equal(validate({}), false, `${name} must require a texture key`);
-        assert.equal(validate({ texture: { key: 123 } }), false, `${name} must reject a non-string nested texture key`);
-        assert.equal(validate({ texture: { key: "dino" } }), true, `${name} must accept the official nested texture shape`);
+        assert.equal(validate({ texture: { key: 123 } }), false, `${name} must reject non-string texture keys`);
+        assert.equal(validate({ texture: { key: "dino" } }), true, `${name} must accept the nested texture shape`);
         assert.equal(validate({ key: "dino" }), true, `${name} must retain the flat key shape`);
     }
 
-    assert.ok(names.has("project-read-file"), "Codogma-specific project tools must remain available");
-    assert.ok(names.has("get-system-instructions"), "Codogma system guidance must remain available as a tool");
-
-    const guidance = await dispatchTool("get-system-instructions", {});
-    assert.match(guidance.content[0].text, /SpineGameObject/, "system instructions must describe the Spine object type");
-    assert.match(guidance.content[0].text, /assets-get-spine-skin-image/, "system instructions must document the Spine preview workflow");
-    assert.match(guidance.content[0].text, /ParticleEmitter configuration/, "system instructions must describe editor-compatible particle config");
-    assert.match(guidance.content[0].text, /Video/, "system instructions must describe the Video scene object");
-    assert.match(guidance.content[0].text, /Hit areas can be configured/, "system instructions must document editor hit areas");
-    assert.match(guidance.content[0].text, /Arcade physics is available only/, "system instructions must describe supported Arcade component types");
-    for (const section of [
-        "Scene editing and object hierarchy",
-        "Plain objects and Tiled maps",
-        "Prefabs and nested prefab instances",
-        "Object lists",
-        "Phaser 4 filters",
-        "Arcade physics",
-        "Assets, fonts and project files",
-        "UI-dependent commands and verification",
-        "Spine assets and game objects",
-        "Editable tilemaps (v5)"
-    ]) {
-        assert.ok(guidance.content[0].text.includes(section), `system instructions must document the ${section} workflow`);
-    }
-    assert.match(guidance.content[0].text, /Hit areas can be configured/, "system instructions must describe hit-area data");
+    const guidance = getSystemInstructions().content[0].text;
+    assert.match(guidance, /SceneDocumentV1/);
+    assert.match(guidance, /PrefabDocumentV1/);
+    assert.match(guidance, /stable IDs/i);
+    assert.match(guidance, /External Phaser Asset Pack JSON/);
+    assert.doesNotMatch(guidance, /Create it with ide-create-new-prefab-scene|displayList of game objects/);
+    assert.match(getChatSystemPrompt(), /scene-create-node/);
 });
 
-
-test("Spine game-object configuration survives scene JSON creation", async () => {
-    const projectDir = await mkdtemp(path.join(os.tmpdir(), "codogma-mcp-spine-"));
-
+test("generic MCP file operations cannot read or overwrite legacy/native documents", async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), "codogma-mcp-native-boundary-"));
     try {
         initMcp({ projectDir, log: () => {} });
+        await writeFile(path.join(projectDir, "project.json"), JSON.stringify({
+            id: "project-native",
+            assets: [{ id: "scene-asset-level", kind: "scene", path: "scenes/Level.cge-scene.json" }],
+            scenes: [{ id: "scene-level", assetId: "scene-asset-level" }]
+        }));
 
-        await dispatchTool("ide-create-new-scene", {
-            name: "SpineContract",
-            folder: "scenes"
-        });
+        await assert.rejects(dispatchTool("project-read-file", { path: "old.scene" }), /legacy Scene\/Component documents/);
+        await assert.rejects(dispatchTool("project-read-file", { path: "old.components" }), /legacy Scene\/Component documents/);
+        await assert.rejects(dispatchTool("project-write-file", { path: "old.scene", content: "{}" }), /legacy Scene\/Component documents/);
+        await assert.rejects(dispatchTool("project-write-file", { path: "old.components", content: "{}" }), /legacy Scene\/Component documents/);
+        await assert.rejects(dispatchTool("project-write-file", { path: "project.json", content: "{}" }), /Native Project, Scene and Prefab/);
+        await assert.rejects(dispatchTool("project-write-file", { path: "scenes/Level.cge-scene.json", content: "{}" }), /Native Project, Scene and Prefab/);
+        await assert.rejects(dispatchTool("project-delete-file", { path: "scenes/Level.cge-scene.json" }), /Native Project, Scene and Prefab/);
 
-        const sceneFile = path.join(projectDir, "scenes", "SpineContract.scene");
-        const originalScene = JSON.parse(await readFile(sceneFile, "utf8"));
+        const compileInfo = JSON.parse((await dispatchTool("project-compile-info", {})).content[0].text);
+        assert.deepEqual(compileInfo.scenes, [{
+            id: "scene-level",
+            assetId: "scene-asset-level",
+            path: "scenes/Level.cge-scene.json"
+        }]);
+    } finally {
+        await rm(projectDir, { recursive: true, force: true });
+    }
+});
 
-        const spineProperties = {
-            label: "heroSpine",
+test("external Spine metadata remains readable from Phaser Asset Pack files", async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), "codogma-mcp-spine-assets-"));
+    try {
+        await writeFile(path.join(projectDir, "hero.json"), JSON.stringify({
+            skeleton: { name: "hero" },
+            spine: "4.2",
+            skins: [{ name: "armored" }, { name: "casual" }],
+            animations: { idle: {}, run: {} }
+        }));
+        await writeFile(path.join(projectDir, "game-asset-pack.json"), JSON.stringify({
+            section1: { files: [
+                { type: "spineJson", key: "hero-skeleton", url: "hero.json" },
+                { type: "spineAtlas", key: "hero-atlas", url: "hero.atlas" }
+            ] }
+        }));
+        initMcp({ projectDir, log: () => {} });
+        const info = JSON.parse((await dispatchTool("assets-get-spine-skeleton-info", {
             dataKey: "hero-skeleton",
-            atlasKey: "hero-atlas",
-            skinName: "armored",
-            bpType: 1,
-            bpSkin: 1,
-            bpAnimation: "walk",
-            bpTimeStep: 0.04,
-            animationMixes: [["walk", "run", 0.2]],
-            defaultMix: 0.15,
-            timeScale: 1.25
-        };
-
-        await dispatchTool("scene-add-game-objects", {
-            sceneId: originalScene.id,
-            objects: [{
-                type: "SpineGameObject",
-                properties: spineProperties
-            }]
-        });
-
-        const updatedScene = JSON.parse(await readFile(sceneFile, "utf8"));
-        const spineObject = updatedScene.displayList.find(object => object.type === "SpineGameObject");
-
-        assert.ok(spineObject, "the Spine game object must be added to the scene");
-        for (const [key, value] of Object.entries(spineProperties)) {
-            assert.deepEqual(spineObject[key], value, `Spine property '${key}' must be serialized without loss`);
-        }
+            atlasKey: "hero-atlas"
+        })).content[0].text);
+        assert.deepEqual(info.skins, ["armored", "casual"]);
+        assert.deepEqual(info.animations, ["idle", "run"]);
+        assert.equal(info.skeletonName, "hero");
     } finally {
         await rm(projectDir, { recursive: true, force: true });
     }
 });
 
-
-test("Codogma scene-object creation preserves upstream type-specific properties", async () => {
-    const projectDir = await mkdtemp(path.join(os.tmpdir(), "codogma-mcp-object-fields-"));
-
-    try {
-        initMcp({ projectDir, log: () => {} });
-        await dispatchTool("ide-create-new-scene", { name: "ObjectFields", folder: "scenes" });
-
-        const sceneFile = path.join(projectDir, "scenes", "ObjectFields.scene");
-        const initialScene = JSON.parse(await readFile(sceneFile, "utf8"));
-        const objects = [
-            {
-                type: "Sprite",
-                properties: {
-                    label: "animatedSprite",
-                    texture: { key: "hero", frame: "idle" },
-                    animationPlayMethod: 1,
-                    animationKey: "walk",
-                    animationCustomConfig: true,
-                    animationFrameRate: 18,
-                    animationRepeat: -1,
-                    animationYoyo: true,
-                    animationTimeScale: 0.75
-                }
-            },
-            {
-                type: "TileSprite",
-                properties: {
-                    label: "scrollingTile",
-                    texture: { key: "tiles" },
-                    width: 320,
-                    height: 128,
-                    tilePositionX: 12,
-                    tilePositionY: 18,
-                    tileScaleX: 0.5,
-                    tileScaleY: 0.75
-                }
-            },
-            {
-                type: "NineSlice",
-                properties: {
-                    label: "nineSlice",
-                    texture: { key: "panel" },
-                    width: 240,
-                    height: 120,
-                    leftWidth: 12,
-                    rightWidth: 14,
-                    topHeight: 16,
-                    bottomHeight: 18
-                }
-            },
-            {
-                type: "ThreeSlice",
-                properties: {
-                    label: "threeSlice",
-                    texture: { key: "button" },
-                    width: 180,
-                    height: 48,
-                    leftWidth: 10,
-                    rightWidth: 10
-                }
-            },
-            {
-                type: "Text",
-                properties: {
-                    label: "styledText",
-                    text: "Hello MCP",
-                    fixedWidth: 240,
-                    paddingLeft: 4,
-                    paddingTop: 5,
-                    paddingRight: 6,
-                    paddingBottom: 7,
-                    wordWrapUseAdvanced: true,
-                    style: {
-                        shadow: {
-                            offsetX: 3,
-                            offsetY: 4,
-                            color: "#112233",
-                            stroke: true,
-                            fill: false,
-                            blur: 5
-                        },
-                        padding: { left: 8, top: 9, right: 10, bottom: 11 }
-                    }
-                }
-            },
-            {
-                type: "BitmapText",
-                properties: {
-                    label: "bitmapLabel",
-                    font: "ui-font",
-                    text: "Bitmap",
-                    fontSize: 32,
-                    letterSpacing: 2,
-                    maxWidth: 256,
-                    dropShadowX: 2,
-                    dropShadowY: 3,
-                    dropShadowAlpha: 0.7,
-                    dropShadowColor: "#445566"
-                }
-            },
-            {
-                type: "Ellipse",
-                properties: { label: "softEllipse", smoothness: 96 }
-            },
-            {
-                type: "Triangle",
-                properties: { label: "customTriangle", x1: 1, y1: 2, x2: 3, y2: 4, x3: 5, y3: 6 }
-            },
-            {
-                type: "Polygon",
-                properties: { label: "customPolygon", points: "0 0 80 0 40 60" }
-            },
-            {
-                type: "Rectangle",
-                properties: {
-                    label: "outlinedRect",
-                    width: 100,
-                    height: 50,
-                    isFilled: true,
-                    isStroked: true,
-                    fillColor: "#112233",
-                    fillAlpha: 0.8,
-                    strokeColor: "#445566",
-                    strokeAlpha: 0.9,
-                    lineWidth: 3
-                }
-            },
-            {
-                type: "Image",
-                properties: {
-                    label: "hitTarget",
-                    texture: { key: "icon" },
-                    hitArea: { shape: "RECTANGLE", x: 1, y: 2, width: 30, height: 40 },
-                    arcade: {
-                        physicsType: 1,
-                        geometry: 0,
-                        radius: 14,
-                        velocityX: 5,
-                        gravityY: 9,
-                        allowGravity: false,
-                        overlapX: 2,
-                        checkCollisionDown: false
-                    }
-                }
-            },
-            {
-                type: "Image",
-                properties: {
-                    label: "enablePhysicsLater",
-                    texture: { key: "icon" }
-                }
-            },
-            {
-                type: "Image",
-                properties: {
-                    label: "legacyArcadeDirect",
-                    texture: { key: "icon" },
-                    "Arcade.active": true,
-                    "body.physicsType": 1,
-                    "body.geometry": 0,
-                    "body.radius": 18,
-                    "body.gravity.y": 400,
-                    "body.allowGravity": false
-                }
-            },
-            {
-                type: "Video",
-                properties: { label: "introVideo", url: "video/intro", loop: true, mute: true, autoplay: false }
-            },
-            {
-                type: "ParticleEmitter",
-                properties: {
-                    label: "sparks",
-                    config: {
-                        configTexture: "effects",
-                        configFrame: ["spark"],
-                        speed: { type: "Static", value: 180 },
-                        lifespan: { type: "MinMax", min: 450, max: 900, int: false },
-                        quantity: { type: "Static", value: 3 },
-                        _duration: 5000,
-                        gravityY: 320,
-                        radial: false
-                    }
-                }
-            },
-            {
-                type: "ParticleEmitter",
-                properties: {
-                    label: "sparkShortcut",
-                    texture: { key: "spark-atlas", frame: "yellow" },
-                    config: { speed: 120 }
-                }
-            }
-        ];
-
-        await dispatchTool("scene-add-game-objects", {
-            sceneId: initialScene.id,
-            objects
-        });
-
-        const scene = JSON.parse(await readFile(sceneFile, "utf8"));
-        const byLabel = Object.fromEntries(scene.displayList.map(object => [object.label, object]));
-
-        assert.equal(byLabel.animatedSprite.animationKey, "walk");
-        assert.equal(byLabel.animatedSprite.animationPlayMethod, 1);
-        assert.equal(byLabel.animatedSprite.animationTimeScale, 0.75);
-        assert.equal(byLabel.scrollingTile.tilePositionX, 12);
-        assert.equal(byLabel.scrollingTile.tileScaleY, 0.75);
-        assert.equal(byLabel.nineSlice.leftWidth, 12);
-        assert.equal(byLabel.nineSlice.bottomHeight, 18);
-        assert.equal(byLabel.threeSlice.rightWidth, 10);
-        assert.equal(byLabel.styledText.fixedWidth, 240);
-        assert.equal(byLabel.styledText.paddingBottom, 11);
-        assert.equal(byLabel.styledText.paddingLeft, 8);
-        assert.equal(byLabel.styledText["shadow.offsetX"], 3);
-        assert.equal(byLabel.styledText["shadow.color"], "#112233");
-        assert.equal(byLabel.bitmapLabel.font, "ui-font");
-        assert.equal(byLabel.bitmapLabel.dropShadowColor, "#445566");
-        assert.equal(byLabel.softEllipse.smoothness, 96);
-        assert.equal(byLabel.customTriangle.x3, 5);
-        assert.equal(byLabel.customPolygon.points, "0 0 80 0 40 60");
-        assert.equal(byLabel.outlinedRect.isStroked, true);
-        assert.equal(byLabel.outlinedRect.lineWidth, 3);
-        assert.equal(byLabel.outlinedRect.strokeColor, "#445566");
-        assert.equal(byLabel.hitTarget["hitArea.shape"], "RECTANGLE");
-        assert.equal(byLabel.hitTarget["hitArea.x"], 1);
-        assert.equal(byLabel.hitTarget["hitArea.width"], 30);
-        assert.equal(byLabel.hitTarget["ArcadeComponent.active"], true);
-        assert.equal(byLabel.hitTarget.physicsType, 1);
-        assert.equal(byLabel.hitTarget.bodyGeometry, 0);
-        assert.equal(byLabel.hitTarget.radius, 14);
-        assert.equal(byLabel.hitTarget["body.velocity.x"], 5);
-        assert.equal(byLabel.hitTarget["body.gravity.y"], 9);
-        assert.equal(byLabel.hitTarget.allowGravity, false);
-        assert.equal(byLabel.hitTarget.overlapX, 2);
-        assert.equal(byLabel.hitTarget["body.checkCollision.down"], false);
-        assert.equal(byLabel.legacyArcadeDirect["ArcadeComponent.active"], true);
-        assert.equal(byLabel.legacyArcadeDirect.physicsType, 1);
-        assert.equal(byLabel.legacyArcadeDirect.bodyGeometry, 0);
-        assert.equal(byLabel.legacyArcadeDirect.radius, 18);
-        assert.equal(byLabel.legacyArcadeDirect["body.gravity.y"], 400);
-        assert.equal(byLabel.legacyArcadeDirect.allowGravity, false);
-
-        await dispatchTool("scene-enable-arcade-physics-body", {
-            sceneId: initialScene.id,
-            updates: [{ id: byLabel.enablePhysicsLater.id }]
-        });
-        let afterEnable = JSON.parse(await readFile(sceneFile, "utf8"));
-        let enabledObject = afterEnable.displayList.find(object => object.label === "enablePhysicsLater");
-        assert.equal(enabledObject["ArcadeComponent.active"], true);
-        assert.equal(enabledObject.physicsType, 0);
-        assert.equal(enabledObject.bodyGeometry, 1);
-
-        await dispatchTool("scene-disable-arcade-physics-body", {
-            sceneId: initialScene.id,
-            ids: [enabledObject.id]
-        });
-        const afterDisable = JSON.parse(await readFile(sceneFile, "utf8"));
-        const disabledObject = afterDisable.displayList.find(object => object.label === "enablePhysicsLater");
-        assert.equal(Object.hasOwn(disabledObject, "ArcadeComponent.active"), false);
-        assert.equal(Object.hasOwn(disabledObject, "bodyGeometry"), false);
-        assert.equal(Object.hasOwn(disabledObject, "body.velocity.x"), false);
-
-        await assert.rejects(
-            dispatchTool("scene-enable-arcade-physics-body", {
-                sceneId: initialScene.id,
-                updates: [{ id: byLabel.introVideo.id }]
-            }),
-            /does not expose an Arcade physics component/
-        );
-        assert.equal(byLabel.introVideo.url, "video/intro");
-        assert.equal(byLabel.introVideo.loop, true);
-        assert.equal(byLabel.sparks.configTexture, "effects");
-        assert.deepEqual(byLabel.sparks.configFrame, ["spark"]);
-        assert.equal(byLabel.sparks.speed_type, "Static");
-        assert.equal(byLabel.sparks.speed_value, 180);
-        assert.equal(byLabel.sparks.lifespan_type, "MinMax");
-        assert.equal(byLabel.sparks.lifespan_min, 450);
-        assert.equal(byLabel.sparks.duration, 5000);
-        assert.equal(byLabel.sparks.gravityY, 320);
-        assert.equal(byLabel.sparkShortcut.configTexture, "spark-atlas");
-        assert.deepEqual(byLabel.sparkShortcut.configFrame, ["yellow"]);
-        assert.equal(byLabel.sparkShortcut.speed_value, 120);
-    } finally {
-        await rm(projectDir, { recursive: true, force: true });
-    }
-});
-
-test("all server-forwarded editor commands have browser SSE handlers", async () => {
+test("all native server-forwarded commands have SolidJS Host handlers", async () => {
     const serverFile = path.resolve(ROOT, "..", "..", "server", "mcp.mjs");
-    const bridgeFile = path.resolve(
-        ROOT,
-        "..",
-        "..",
-        "source",
-        "editor",
-        "plugins",
-        "phasereditor2d.mcp",
-        "scripts",
-        "mcp-bridge-client.js"
-    );
-
+    const appFile = path.resolve(ROOT, "..", "..", "src", "editor", "src", "App.tsx");
     const serverSource = await readFile(serverFile, "utf8");
-    const bridgeSource = await readFile(bridgeFile, "utf8");
+    const appSource = await readFile(appFile, "utf8");
     const forwardedCommands = new Set([
-        ...[...serverSource.matchAll(/forwardToEditor\(\s*["']([^"']+)["']/g)].map(match => match[1]),
-        ...[...serverSource.matchAll(/bridgeCommand\(\s*\{\s*tool:\s*["']([^"']+)["']/gs)].map(match => match[1])
+        ...[...serverSource.matchAll(/nativeTool\(["']([^"']+)["']/g)].map(match => match[1]),
+        ...[...serverSource.matchAll(/forwardToEditor\(\s*["']([^"']+)["']/g)].map(match => match[1])
     ]);
-    const handlersMatch = bridgeSource.match(/const commandHandlers = \{([\s\S]*?)\n    \};/);
-
-    assert.ok(handlersMatch, "the editor SSE bridge must expose its commandHandlers registry");
-
+    const handlersMatch = appSource.match(/const editorMcpHandlers: Record<string, EditorMcpHandler> = \{([\s\S]*?)\n  \};/);
+    assert.ok(handlersMatch, "SolidJS Host must expose its native editorMcpHandlers registry");
     const registeredHandlers = new Set(
         [...handlersMatch[1].matchAll(/["']([^"']+)["']\s*:/g)].map(match => match[1])
     );
     const missingHandlers = [...forwardedCommands].filter(name => !registeredHandlers.has(name));
-
-    assert.deepEqual(missingHandlers, [], "every server-forwarded tool must have an editor SSE command handler");
-});
-
-test("the editor SSE bridge script is valid JavaScript", () => {
-    const script = path.resolve(
-        ROOT,
-        "..",
-        "..",
-        "source",
-        "editor",
-        "plugins",
-        "phasereditor2d.mcp",
-        "scripts",
-        "mcp-bridge-client.js"
-    );
-    const result = spawnSync(process.execPath, ["--check", script], { encoding: "utf8" });
-
-    assert.equal(result.status, 0, result.stderr || "mcp-bridge-client.js failed node --check");
+    assert.deepEqual(missingHandlers, [], "every MCP-forwarded native command must have a SolidJS Host handler");
 });

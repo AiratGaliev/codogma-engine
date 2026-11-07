@@ -168,8 +168,8 @@ export function createDefaultWorkspaceLayout(
 }
 
 /**
- * Restore and validate both the current layout contract and the legacy
- * pre-versioned LayoutState written by COD-80.
+ * Restore and validate the current persisted workspace layout contract.
+ * Unpublished and future schema versions are not reinterpreted.
  *
  * Unknown panel identifiers are ignored. Missing known panels return to
  * their deterministic home zones; malformed dimensions are clamped.
@@ -181,39 +181,16 @@ export function restoreWorkspaceLayout(
 ): WorkspaceLayout {
   const defaults = createDefaultWorkspaceLayout(compact);
   const wideDefaults = createDefaultWorkspaceLayout(false);
-  if (!isRecord(value)) return defaults;
-
-  const rawVersion = value.schemaVersion;
-  const version =
-    rawVersion === undefined ? 0 : rawVersion;
-
-  // Version zero is the pre-COD-83 layout persisted by COD-80.
-  // Unknown future schemas must not be interpreted as a current contract.
-  if (version !== 0 && version !== 1 && version !== 2 && version !== WORKSPACE_LAYOUT_SCHEMA_VERSION) {
+  if (!isRecord(value) || value.schemaVersion !== WORKSPACE_LAYOUT_SCHEMA_VERSION) {
     return defaults;
   }
 
-  const legacyDocked = Array.isArray(value.dockedPanels)
-    ? value.dockedPanels.filter(isSidePanelId)
-    : [];
-
-  const hierarchyZone =
-    version === 0
-      ? legacyDocked.includes("Hierarchy")
-        ? "bottom"
-        : "left"
-      : isDockZone(value.hierarchyZone)
-        ? value.hierarchyZone
-        : defaults.hierarchyZone;
-
-  const inspectorZone =
-    version === 0
-      ? legacyDocked.includes("Inspector")
-        ? "bottom"
-        : "right"
-      : isDockZone(value.inspectorZone)
-        ? value.inspectorZone
-        : defaults.inspectorZone;
+  const hierarchyZone = isDockZone(value.hierarchyZone)
+    ? value.hierarchyZone
+    : defaults.hierarchyZone;
+  const inspectorZone = isDockZone(value.inspectorZone)
+    ? value.inspectorZone
+    : defaults.inspectorZone;
 
   const rawOrder = normalizeBottomTabOrder(value.bottomTabOrder);
   const bottomTabOrder = normalizeBottomTabOrder([
@@ -222,11 +199,8 @@ export function restoreWorkspaceLayout(
     ...(inspectorZone === "bottom" ? ["Inspector"] : []),
   ]);
 
-  // v0-v2 used a separate Console row as the default. Schema v3 moves it into
-  // the Bottom tab group; an explicit schema-v3 Undock preference remains intact.
-  const consoleDocked = version < 3
-    ? true
-    : typeof value.consoleDocked === "boolean"
+  const consoleDocked =
+    typeof value.consoleDocked === "boolean"
       ? value.consoleDocked
       : defaults.consoleDocked;
   // Preserve COD-80 behavior when a workspace is reopened at a compact width:
@@ -304,14 +278,12 @@ export function restoreWorkspaceLayout(
   restored.leftActivePanel = getActiveSidePanel(
     restored,
     "left",
-    value.leftActivePanel ??
-      (version === 0 && hierarchyZone === "left" ? "Hierarchy" : null),
+    value.leftActivePanel ?? null,
   );
   restored.rightActivePanel = getActiveSidePanel(
     restored,
     "right",
-    value.rightActivePanel ??
-      (version === 0 && inspectorZone === "right" ? "Inspector" : null),
+    value.rightActivePanel ?? null,
   );
 
   const requestedBottomTab = value.bottomTab;

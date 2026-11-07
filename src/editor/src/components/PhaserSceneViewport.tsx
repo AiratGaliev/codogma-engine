@@ -6,15 +6,15 @@ import {
   onMount,
 } from "solid-js";
 import {
-  getSceneObjects,
-  type SceneDocument,
-} from "../domain/scene-model.ts";
+  getSceneNodeEntries,
+  type EditorDocument,
+} from "../domain/native-scene-model.ts";
 import {
   readProjectFile,
   type ProjectEntry,
 } from "../services/editor-api";
-import { getSceneObjectEffects, type FxObject } from "../domain/fx-model.ts";
-import type { SceneObject } from "../domain/scene-model.ts";
+import { getEnabledNativeNodeEffects, type FxObject } from "../domain/native-fx-model.ts";
+import type { NodeDocument, PrefabDocumentV1, ProjectDocumentV1 } from "@codogma/cge";
 import {
   createFxPreview,
   isFxPreviewParentSupported,
@@ -175,10 +175,12 @@ interface ImageAsset {
 type TransformTool = "select" | "move" | "rotate" | "scale";
 
 interface Props {
-  scene: SceneDocument | null;
+  scene: EditorDocument | null;
   scenePath: string | null;
   selectedId: string | null;
   projectTree: ProjectEntry | null;
+  projectDocument: ProjectDocumentV1 | null;
+  prefabs: PrefabDocumentV1[];
   theme: "dark" | "light";
   active: boolean;
   tool: () => TransformTool;
@@ -195,6 +197,7 @@ interface SceneEntry {
   type: string;
   parentId: string | null;
   source: Record<string, unknown>;
+  node: NodeDocument;
 }
 
 const RUNTIME_WIDTH = 800;
@@ -447,7 +450,7 @@ function PhaserSceneViewport(props: Props) {
         : "";
       const previewSupported = isFxPreviewParentSupported(entry.type, textureKey, imageKeys);
       let renderOrderOffset = 0;
-      for (const effect of getSceneObjectEffects(entry.source as SceneObject)) {
+      for (const effect of getEnabledNativeNodeEffects(entry.node)) {
         const key = `${entry.id}:${effect.id}`;
         desired.set(key, {
           parentId: entry.id,
@@ -558,11 +561,12 @@ function PhaserSceneViewport(props: Props) {
 
     const current = props.scene;
     const entries = current
-      ? getSceneObjects(current).map((entry) => ({
+      ? getSceneNodeEntries(current, props.prefabs).map((entry) => ({
           id: entry.id,
-          type: entry.type,
+          type: entry.source.renderType,
           parentId: entry.parentId,
-          source: entry.source as Record<string, unknown>,
+          source: entry.source as unknown as Record<string, unknown>,
+          node: entry.renderNode,
         }))
       : [];
     const activeIds = new Set(entries.map((entry) => entry.id));
@@ -585,7 +589,7 @@ function PhaserSceneViewport(props: Props) {
           }
 
           const liveSource = props.scene
-            ? getSceneObjects(props.scene).find((candidate) => candidate.id === entry.id)?.source as Record<string, unknown> | undefined
+            ? getSceneNodeEntries(props.scene, props.prefabs).find((candidate) => candidate.id === entry.id)?.source as unknown as Record<string, unknown> | undefined
             : undefined;
           transformDrag = {
             id: entry.id,
@@ -620,7 +624,7 @@ function PhaserSceneViewport(props: Props) {
       object.setDepth?.(numeric(entry.source.depth, 0));
       const isHidden = props.hiddenIds().has(entry.id);
       const isLocked = props.lockedIds().has(entry.id);
-      object.setVisible?.(!isHidden);
+      object.setVisible?.(entry.source.active !== false && !isHidden);
       // Phaser Container не создаёт hit-area автоматически. Не вызываем
       // setInteractive() без геометрии: такие попытки генерируют warning и
       // оставляют объект фактически неинтерактивным.
@@ -721,10 +725,14 @@ function PhaserSceneViewport(props: Props) {
     void (async () => {
       try {
         const runtimePath = await discoverPhaserScript(props.projectTree);
-        const [phaser, imageAssets] = await Promise.all([
+        const [phaser, assetPackImages] = await Promise.all([
           loadPhaserRuntime(runtimePath),
           discoverImageAssets(props.projectTree),
         ]);
+        const nativeImages = (props.projectDocument?.assets ?? [])
+          .filter((asset) => asset.kind === "image")
+          .map((asset) => ({ key: asset.id, path: asset.path }));
+        const imageAssets = [...new Map([...assetPackImages, ...nativeImages].map((asset) => [asset.key, asset])).values()];
         if (disposed || !mount) return;
 
         const ImageScene = class extends phaser.Scene {

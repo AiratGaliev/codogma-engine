@@ -33,12 +33,9 @@ import { fileURLToPath } from "url"
 import {
     initMcp,
     handleMcpHttpRequest,
-    handleBridgeRequest,
-    handleOfficialBridgeRequest,
     handleBridgeEvents,
     handleBridgeActivate,
     handleBridgeResult,
-    bridgeClientCount,
     getBridgeStatus,
     dispatchTool,
     getChatSystemPrompt
@@ -900,11 +897,6 @@ const server = http.createServer(async (req, res) => {
             return await handleMcpHttpRequest(req, res)
         }
 
-        // MCP editor bridge (official-style { tool, args } endpoint)
-        if (urlPath === "/editor/mcp-bridge" && req.method === "POST") {
-            return await handleBridgeRequest(req, res)
-        }
-
         // MCP editor bridge (SSE channel to the running editor client)
         if (urlPath === "/editor/mcp-bridge/events" && req.method === "GET") {
             return await handleBridgeEvents(req, res)
@@ -1335,18 +1327,6 @@ async function handleAiChat(req, res) {
     }
 }
 
-/* ==========================================================================
- * MCP Bridge port (1902) — v5-compatible endpoint for the OFFICIAL
- * `@phaserjs/editor-mcp-server` npm package. That package forwards every
- * tool call as `POST http://127.0.0.1:<port>` with `{ tool, args }` and
- * expects the MCP content array as the response body. Run the official
- * server against this port with:
- *
- *   phaser-editor-mcp-port=1902 npx @phaserjs/editor-mcp-server
- * ========================================================================== */
-
-const MCP_BRIDGE_PORT = Number(process.env.MCP_BRIDGE_PORT || 1902)
-
 server.listen(PORT, "127.0.0.1", () => {
     log(`Codogma Engine server running at http://localhost:${PORT}/editor/`)
     log(`  project:  ${PROJECT_DIR}`)
@@ -1358,37 +1338,4 @@ server.listen(PORT, "127.0.0.1", () => {
     log(`            set CODOGMA_MCP_URL=http://127.0.0.1:${PORT}/editor/mcp when using a non-default HTTP port`)
 })
 
-const bridgeServer = http.createServer(async (req, res) => {
 
-    if (rejectNonLocalRequest(req, res)) return
-
-    if (req.method === "OPTIONS") {
-        res.writeHead(204, {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type"
-        })
-        return res.end()
-    }
-
-    if (req.method !== "POST") {
-        res.writeHead(404, { "Content-Type": "application/json" })
-        return res.end(JSON.stringify([{ type: "text", text: "POST { tool, args } only" }]))
-    }
-
-    try {
-        return await handleOfficialBridgeRequest(req, res)
-    } catch (e) {
-        log("mcp-bridge-1902 error:", e.message)
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify([{ type: "text", text: `Bridge error: ${e.message}` }]))
-    }
-})
-
-bridgeServer.listen(MCP_BRIDGE_PORT, "127.0.0.1", () => {
-    log(`  legacy MCP bridge: http://127.0.0.1:${MCP_BRIDGE_PORT} (older editor-side WebSocket clients)`)
-})
-
-bridgeServer.on("error", (e) => {
-    log(`mcp bridge port ${MCP_BRIDGE_PORT} unavailable: ${e.message}`)
-})

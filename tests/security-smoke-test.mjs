@@ -109,91 +109,6 @@ async function stopChild(child) {
     await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2000))])
 }
 
-function createMcpClient(bridgePort, projectDir) {
-    // Keep this smoke test focused on the legacy official package + port-1902
-    // bridge contract. The primary launcher is now covered by the Codogma
-    // package's own stdio/HTTP contract tests and the promotion MCP E2E.
-    const officialServer = path.join(ROOT, "node_modules", "@phaserjs", "editor-mcp-server", "build", "index.js")
-    const child = spawn(process.execPath, [officialServer], {
-        cwd: ROOT,
-        env: {
-            ...process.env,
-            PROJECT_DIR: projectDir,
-            "phaser-editor-mcp-port": String(bridgePort),
-            "phaser-editor-mcp-hostname": "127.0.0.1"
-        },
-        stdio: ["pipe", "pipe", "pipe"]
-    })
-
-    let buffer = ""
-    let nextId = 1
-    let stderr = ""
-    const pending = new Map()
-
-    child.stdout.on("data", chunk => {
-        buffer += chunk.toString("utf8")
-        let newline
-        while ((newline = buffer.indexOf("\n")) >= 0) {
-            const line = buffer.slice(0, newline).trim()
-            buffer = buffer.slice(newline + 1)
-            if (!line) continue
-            try {
-                const message = JSON.parse(line)
-                const waiter = pending.get(message.id)
-                if (waiter) {
-                    pending.delete(message.id)
-                    clearTimeout(waiter.timer)
-                    waiter.resolve(message)
-                }
-            } catch {
-                // Ignore non-protocol diagnostics; stdio output may include them.
-            }
-        }
-    })
-    child.stderr.on("data", chunk => { stderr += chunk.toString("utf8") })
-    child.on("error", error => {
-        for (const waiter of pending.values()) {
-            clearTimeout(waiter.timer)
-            waiter.reject(error)
-        }
-        pending.clear()
-    })
-    child.on("exit", code => {
-        for (const waiter of pending.values()) {
-            clearTimeout(waiter.timer)
-            waiter.reject(new Error(`MCP process exited (${code}):\n${stderr}`))
-        }
-        pending.clear()
-    })
-
-    return {
-        child,
-        request(method, params = {}) {
-            const id = nextId++
-            const message = { jsonrpc: "2.0", id, method, params }
-            return new Promise((resolve, reject) => {
-                const timer = setTimeout(() => {
-                    pending.delete(id)
-                    reject(new Error(`MCP request timed out: ${method}\n${stderr}`))
-                }, 10000)
-                pending.set(id, { resolve, reject, timer })
-                child.stdin.write(JSON.stringify(message) + "\n", error => {
-                    if (!error) return
-                    const waiter = pending.get(id)
-                    if (waiter) {
-                        pending.delete(id)
-                        clearTimeout(waiter.timer)
-                        reject(error)
-                    }
-                })
-            })
-        },
-        notify(method, params = {}) {
-            child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n")
-        }
-    }
-}
-
 async function main() {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codogma-security-smoke-"))
     const projectDir = path.join(tempRoot, "project")
@@ -226,8 +141,6 @@ async function main() {
     }
 
     const port = await freePort()
-    let bridgePort = await freePort()
-    if (bridgePort === port) bridgePort = await freePort()
 
     let logs = ""
     let server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
@@ -235,7 +148,6 @@ async function main() {
         env: {
             ...process.env,
             PORT: String(port),
-            MCP_BRIDGE_PORT: String(bridgePort),
             PROJECT_DIR: projectDir,
             EDITOR_DIR
         },
@@ -244,7 +156,6 @@ async function main() {
     server.stdout.on("data", chunk => { logs += chunk.toString("utf8") })
     server.stderr.on("data", chunk => { logs += chunk.toString("utf8") })
 
-    let mcp
     try {
         await waitForHttpServer(port, server, () => logs)
         const host = `127.0.0.1:${port}`
@@ -483,33 +394,10 @@ async function main() {
                 "DeleteFiles must not delete the link's target directory")
         }
 
-        // Exercise the officially distributed MCP stdio package after the Zod override.
-        mcp = createMcpClient(bridgePort, projectDir)
-        const initialized = await mcp.request("initialize", {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: { name: "codogma-security-smoke", version: "1.0.0" }
-        })
-        assert.ok(initialized.result?.serverInfo, "official MCP package should initialize")
-        mcp.notify("notifications/initialized", {})
-
-        const toolList = await mcp.request("tools/list")
-        const tools = toolList.result?.tools
-        assert.ok(Array.isArray(tools), "official MCP package should list tools")
-        assert.ok(tools.some(tool => tool.name === "ide-get-all-scenes-in-project"), "expected scene-list tool must exist")
-
-        const toolCall = await mcp.request("tools/call", {
-            name: "ide-get-all-scenes-in-project",
-            arguments: {}
-        })
-        assert.ok(toolCall.result && !toolCall.result.isError, "MCP tool call should succeed with patched Zod")
-        const toolText = (toolCall.result.content || []).filter(item => item.type === "text").map(item => item.text).join("\n")
-        assert.ok(Array.isArray(JSON.parse(toolText).scenes), "scene-list tool should return valid scene data")
-
         if (symlinkChecksAvailable) {
             // Verify the built-in MCP dispatcher directly so this is testing the
             // repository's safeJoin path, not optional-argument defaults in the
-            // third-party stdio adapter.
+            // stdio adapter.
             const danglingMcpWrite = await request(port, "/editor/mcp", {
                 method: "POST",
                 headers: { host, "content-type": "application/json" },
@@ -605,7 +493,6 @@ async function main() {
             env: {
                 ...process.env,
                 PORT: String(port),
-                MCP_BRIDGE_PORT: String(bridgePort),
                 PROJECT_DIR: projectDir,
                 EDITOR_DIR,
                 CODOGMA_ALLOWED_HOSTS: "preview.example,alt.example"
@@ -647,7 +534,6 @@ async function main() {
             env: {
                 ...process.env,
                 PORT: String(port),
-                MCP_BRIDGE_PORT: String(bridgePort),
                 PROJECT_DIR: projectDir,
                 EDITOR_DIR,
                 CODOGMA_ALLOWED_HOSTS: "gateway.internal.example",
@@ -684,9 +570,8 @@ async function main() {
         })
         assert.equal(originUnlistedHost.status, 403, "the origin allow-list must not open unlisted Host headers")
 
-        console.log(`Security smoke checks passed: loopback/origin guard, /archive/ route, reverse-proxy allow-list, origin allow-list, ${symlinkSummary}, and official MCP/Zod compatibility.`)
+        console.log(`Security smoke checks passed: loopback/origin guard, /archive/ route, reverse-proxy allow-list, origin allow-list, ${symlinkSummary}, and built-in MCP filesystem boundary.`)
     } finally {
-        await stopChild(mcp?.child)
         await stopChild(server)
         await fs.rm(tempRoot, { recursive: true, force: true })
     }
