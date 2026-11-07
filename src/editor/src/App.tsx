@@ -844,6 +844,7 @@ function App() {
       previousSelection,
       committedDocument: next,
       committedState,
+      committedSelection: selectionAfter,
     };
 
     setHistory(committedState);
@@ -2404,11 +2405,15 @@ function App() {
     }
 
     if (!(await saveScene())) {
-      const restored = resolveDocumentChangeRollback(scene(), history(), rollback);
+      const restored = resolveDocumentChangeRollback(scene(), history(), selectedId(), rollback);
       if (restored) {
+        const validSelection = restored.selectedId !== null &&
+          restored.document !== null &&
+          getSceneNodeEntries(restored.document, prefabCatalog().map((item) => item.document))
+            .some((entry) => entry.id === restored.selectedId);
         setScene(restored.document);
         setHistory(restored.state);
-        setSelectedId(restored.selectedId);
+        setSelectedId(validSelection ? restored.selectedId : rollback.previousSelection);
       } else {
         log("warning", "Native document save failed after a subsequent state change; newer editor state was preserved instead of applying an unsafe rollback.");
       }

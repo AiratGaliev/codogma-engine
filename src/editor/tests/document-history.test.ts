@@ -70,16 +70,20 @@ testCase("failed asynchronous saves only roll back their own unchanged document 
     previousSelection: null,
     committedDocument: committed,
     committedState,
+    committedSelection: "node-1",
   };
 
-  const exactRollback = resolveDocumentChangeRollback(committed, committedState, rollback);
+  const exactRollback = resolveDocumentChangeRollback(committed, committedState, "node-1", rollback);
   assert.ok(exactRollback);
   assert.equal(exactRollback.document, first);
   assert.equal(exactRollback.state, previousState);
   assert.equal(exactRollback.selectedId, null);
 
+  const userSelection = resolveDocumentChangeRollback(committed, committedState, "node-other", rollback);
+  assert.equal(userSelection?.selectedId, "node-other", "rollback must preserve a selection changed while saving");
+
   const laterState = recordDocumentChange(committedState, laterEdit, "node-1", "node-2");
-  assert.equal(resolveDocumentChangeRollback(laterEdit, laterState, rollback), null);
-  assert.equal(resolveDocumentChangeRollback(first, committedState, rollback), null);
+  assert.equal(resolveDocumentChangeRollback(laterEdit, laterState, "node-2", rollback), null);
+  assert.equal(resolveDocumentChangeRollback(first, committedState, null, rollback), null);
 });
 

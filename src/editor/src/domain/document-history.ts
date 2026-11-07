@@ -23,6 +23,7 @@ export interface DocumentChangeRollback<T> {
   previousSelection: string | null;
   committedDocument: T;
   committedState: DocumentHistoryState<T>;
+  committedSelection: string | null;
 }
 
 /**
@@ -33,6 +34,7 @@ export interface DocumentChangeRollback<T> {
 export function resolveDocumentChangeRollback<T>(
   currentDocument: T,
   currentState: DocumentHistoryState<T>,
+  currentSelection: string | null,
   rollback: DocumentChangeRollback<T>,
 ): { document: T; state: DocumentHistoryState<T>; selectedId: string | null } | null {
   if (
@@ -44,7 +46,9 @@ export function resolveDocumentChangeRollback<T>(
   return {
     document: rollback.previousDocument,
     state: rollback.previousState,
-    selectedId: rollback.previousSelection,
+    selectedId: currentSelection === rollback.committedSelection
+      ? rollback.previousSelection
+      : currentSelection,
   };
 }
 
