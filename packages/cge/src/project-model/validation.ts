@@ -297,6 +297,10 @@ function collectPrefabNodes(root: PrefabDocumentV1["root"]): Map<string, PrefabD
   return nodes;
 }
 
+const NODE_TRANSFORM_OVERRIDE_FIELDS = new Set([
+  "x", "y", "rotation", "scaleX", "scaleY", "originX", "originY",
+]);
+
 function validatePrefabOverrides(
   prefabInstance: Record<string, unknown>,
   path: string,
@@ -342,6 +346,24 @@ function validatePrefabOverrides(
 
     const targetNodeId = override.targetNodeId;
     const targetComponentId = typeof override.targetComponentId === "string" ? override.targetComponentId : "";
+    if (!targetComponentId) {
+      const propertyPath = override.propertyPath;
+      const isValidName = propertyPath === "name" &&
+        typeof override.value === "string" && override.value.trim().length > 0;
+      const isValidActive = propertyPath === "active" && typeof override.value === "boolean";
+      const transformKey = propertyPath.startsWith("transform.") ? propertyPath.slice("transform.".length) : "";
+      const isValidTransform = NODE_TRANSFORM_OVERRIDE_FIELDS.has(transformKey) &&
+        typeof override.value === "number" && Number.isFinite(override.value);
+      if (!isValidName && !isValidActive && !isValidTransform) {
+        diagnostics.push(issue(
+          "SCENE_INVALID_NODE",
+          "Node-level Prefab overrides must target name, active or a supported finite Transform field.",
+          overridePath + ".propertyPath",
+          nodeId,
+        ));
+        return;
+      }
+    }
     const identity = targetNodeId + "\u0000" + targetComponentId + "\u0000" + override.propertyPath;
     if (seenOverrides.has(identity)) {
       diagnostics.push(issue("PROJECT_DUPLICATE_ID", "Prefab override is duplicated for the same target and property.", overridePath, nodeId));

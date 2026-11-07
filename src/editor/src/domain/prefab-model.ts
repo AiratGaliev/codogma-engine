@@ -174,6 +174,36 @@ export function addNativePrefabInstance(
   return { ...scene, rootNodes: result.nodes };
 }
 
+const NODE_TRANSFORM_OVERRIDE_KEYS = new Set([
+  "x", "y", "rotation", "scaleX", "scaleY", "originX", "originY",
+]);
+
+function validateNativePrefabNodeOverride(override: PrefabOverrideDocument): void {
+  if (override.targetComponentId) return;
+
+  if (override.propertyPath === "name") {
+    if (typeof override.value !== "string" || !override.value.trim()) {
+      throw new TypeError('Prefab Node "name" override must be a non-empty string.');
+    }
+    return;
+  }
+  if (override.propertyPath === "active") {
+    if (typeof override.value !== "boolean") {
+      throw new TypeError('Prefab Node "active" override must be a boolean.');
+    }
+    return;
+  }
+  if (override.propertyPath.startsWith("transform.")) {
+    const key = override.propertyPath.slice("transform.".length);
+    if (!NODE_TRANSFORM_OVERRIDE_KEYS.has(key) ||
+        typeof override.value !== "number" || !Number.isFinite(override.value)) {
+      throw new TypeError(`Prefab Node override "${override.propertyPath}" must target a supported finite Transform field.`);
+    }
+    return;
+  }
+  throw new TypeError(`Prefab Node override "${override.propertyPath}" is not supported.`);
+}
+
 export function addNativePrefabOverride(
   scene: SceneDocumentV1,
   instanceNodeId: string,
@@ -194,6 +224,7 @@ export function addNativePrefabOverride(
   if (override.targetComponentId && !target.components.some((item) => item.id === override.targetComponentId)) {
     throw new Error(`Prefab Component "${override.targetComponentId}" was not found on Node "${override.targetNodeId}".`);
   }
+  validateNativePrefabNodeOverride(override);
   const result = updateNode(scene.rootNodes, instanceNodeId, (node) => {
     if (node.prefabInstance?.prefabId !== prefab.id) {
       throw new Error(`Node "${instanceNodeId}" is not an instance of Prefab "${prefab.id}".`);

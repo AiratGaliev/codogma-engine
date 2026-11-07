@@ -130,12 +130,32 @@ testCase("rejects unknown target nodes, unknown component ids and malformed prop
     propertyPath: "tint",
     value: "#fff",
   }), /not found/);
-  const overridden = addNativePrefabOverride(withInstance, instance.id, prefab, {
+  assert.throws(() => addNativePrefabOverride(withInstance, instance.id, prefab, {
     targetNodeId: root.id,
     propertyPath: "transform.x",
     value: "invalid",
+  }), /supported finite Transform field/);
+  assert.throws(() => addNativePrefabOverride(withInstance, instance.id, prefab, {
+    targetNodeId: root.id,
+    propertyPath: "alpha",
+    value: 0.5,
+  }), /not supported/);
+  assert.throws(() => addNativePrefabOverride(withInstance, instance.id, prefab, {
+    targetNodeId: root.id,
+    propertyPath: "name",
+    value: "",
+  }), /non-empty string/);
+  assert.throws(() => addNativePrefabOverride(withInstance, instance.id, prefab, {
+    targetNodeId: root.id,
+    propertyPath: "active",
+    value: "false",
+  }), /must be a boolean/);
+  const renamed = addNativePrefabOverride(withInstance, instance.id, prefab, {
+    targetNodeId: root.id,
+    propertyPath: "name",
+    value: "Renamed Crate",
   });
-  assert.throws(() => resolveNativePrefabRoot(overridden.rootNodes[0]!, prefab), /Transform field/);
+  assert.equal(resolveNativePrefabRoot(renamed.rootNodes[0]!, prefab).name, "Renamed Crate");
   for (const propertyPath of ["__proto__.polluted", "constructor.prototype.polluted", "prototype.polluted"]) {
     assert.throws(() => addNativePrefabOverride(withInstance, instance.id, prefab, {
       targetNodeId: root.id,

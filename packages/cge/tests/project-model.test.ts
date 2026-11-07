@@ -665,3 +665,65 @@ test("rejects unsafe property path segments in Prefab overrides", () => {
     item.message.includes("safe identifier segments"),
   ));
 });
+
+test("rejects unsupported and malformed Node-level Prefab overrides", () => {
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-node-overrides",
+    name: "Node Overrides",
+    root: {
+      id: "prefab-node",
+      name: "Node",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  };
+  const makeScene = (propertyPath: string, value: unknown) => ({
+    schemaVersion: 1,
+    id: "scene-node-overrides",
+    name: "Scene",
+    settings: {},
+    rootNodes: [{
+      id: "instance-node",
+      name: "Instance",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+      prefabInstance: {
+        prefabId: prefab.id,
+        overrides: [{ targetNodeId: prefab.root.id, propertyPath, value }],
+      },
+    }],
+  });
+  for (const [propertyPath, value] of [
+    ["alpha", 0.5],
+    ["name", ""],
+    ["name", 12],
+    ["active", "false"],
+    ["transform.x", "10"],
+    ["transform.scaleZ", 1],
+  ] as const) {
+    const result = validateSceneDocument(makeScene(propertyPath, value), {
+      prefabs: new Map([[prefab.id, prefab]]),
+    });
+    assert.equal(result.valid, false, `expected "${propertyPath}" override to be rejected`);
+    assert.ok(result.diagnostics.some((item) =>
+      item.path === "rootNodes[0].prefabInstance.overrides[0].propertyPath" &&
+      item.message.includes("Node-level Prefab overrides"),
+    ));
+  }
+  for (const [propertyPath, value] of [
+    ["name", "Renamed"],
+    ["active", false],
+    ["transform.x", 20],
+    ["transform.rotation", Math.PI],
+  ] as const) {
+    const result = validateSceneDocument(makeScene(propertyPath, value), {
+      prefabs: new Map([[prefab.id, prefab]]),
+    });
+    assert.equal(result.valid, true, `expected "${propertyPath}" override to remain valid`);
+  }
+});
