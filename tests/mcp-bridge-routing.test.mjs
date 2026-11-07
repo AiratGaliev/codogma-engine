@@ -142,12 +142,15 @@ test("editor focus changes command ownership and disconnect selects the remainin
 
         const commandPromise = dispatchTool("scene-get-active", {})
         await new Promise((resolve) => setImmediate(resolve))
-        const command = parseLastCommand(legacy.response)
-        assert.equal(command.clientId, legacy.session.clientId)
+        const command = parseLastCommand(solid.response)
+        assert.equal(command.clientId, solid.session.clientId)
+        assert.equal(command.tool, "scene-get-active")
+        assert.doesNotMatch(legacy.response.output, /event: command/,
+            "native Project Model tools must never be routed to the frozen legacy editor")
         await sendResult({
             id: command.id,
-            clientId: legacy.session.clientId,
-            result: { path: "scenes/Legacy.cge-scene.json", id: "legacy-id", name: "Legacy", documentType: "scene" }
+            clientId: solid.session.clientId,
+            result: { path: "scenes/Level.cge-scene.json", id: "scene-level", name: "Level", documentType: "scene" }
         })
         await commandPromise
 
@@ -174,4 +177,17 @@ test("MCP bridge rejects activation and command results for unknown sessions", a
         result: {}
     })
     assert.equal(result.payload.error, "unknown command id")
+})
+
+test("native MCP tools never fall back to a legacy-only editor session", async () => {
+    const legacy = await connectEditor("legacy")
+    try {
+        await assert.rejects(
+            dispatchTool("scene-get-active", {}),
+            /require a connected SolidJS Editor Host session/
+        )
+        assert.doesNotMatch(legacy.response.output, /event: command/)
+    } finally {
+        legacy.response.emit("close")
+    }
 })

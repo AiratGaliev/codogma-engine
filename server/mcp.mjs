@@ -773,6 +773,14 @@ function selectActiveBridgeClient() {
     return candidate ?? null
 }
 
+function selectNativeBridgeClient() {
+    const active = activeBridgeClientId ? bridgeClients.get(activeBridgeClientId) : null
+    if (active?.clientType === "solidjs") return active
+    return [...bridgeClients.values()]
+        .filter(client => client.clientType === "solidjs")
+        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0] ?? null
+}
+
 function rejectPendingForClient(clientId, reason) {
     for (const [id, pending] of pendingCommands) {
         if (pending.clientId !== clientId) continue
@@ -820,12 +828,12 @@ function bridgeStatus() {
 
 function bridgeCommand(command) {
     return new Promise((resolve, reject) => {
-        const client = selectActiveBridgeClient()
+        const client = selectNativeBridgeClient()
         if (!client) {
-            const hint = bridgeClients.size > 1
-                ? "Several editor sessions are connected but none is active. Focus the editor tab and retry."
-                : "Open the SolidJS Editor Host or legacy editor in a browser tab."
-            return reject(new Error(`Codogma Engine is not connected to an active MCP bridge session. ${hint}`))
+            const hint = bridgeClients.size > 0
+                ? "Only a frozen legacy editor session is connected; open the SolidJS Editor Host and retry."
+                : "Open the project in the SolidJS Editor Host and wait for its MCP bridge connection."
+            return reject(new Error(`Native Codogma MCP commands require a connected SolidJS Editor Host session. ${hint}`))
         }
 
         const id = crypto.randomUUID()
@@ -1014,8 +1022,8 @@ export async function handleMcpHttpRequest(req, res) {
                     protocolVersion: msg.params?.protocolVersion || "2025-03-26",
                     capabilities: { tools: { listChanged: false } },
                     serverInfo: {
-                        name: "phaser-editor-mcp",
-                        title: "Codogma Engine MCP Server (local open-source implementation)",
+                        name: "codogma-engine",
+                        title: "Codogma Engine MCP Server",
                         version: "1.0.0"
                     },
                     instructions: "Codogma Engine MCP server. Call the `get-system-instructions` tool first to learn how to build the arguments of the scene/asset tools."
@@ -1083,7 +1091,7 @@ export function getSystemInstructions() {
     return text(SYSTEM_INSTRUCTIONS)
 }
 
-/** System prompt + tool-call protocol for the AI Chat loop (v5 "AI Chat"). */
+/** System prompt + tool-call protocol for the AI Chat loop. */
 export function getChatSystemPrompt() {
     const toolLines = [...TOOLS.values()]
         .map(tool => `- ${tool.name}: ${tool.description.split(".")[0]}.`)
