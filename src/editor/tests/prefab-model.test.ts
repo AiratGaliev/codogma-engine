@@ -228,4 +228,36 @@ testCase("validates all persisted Prefab override targets before resolving the P
     }), prefab),
     /not supported/,
   );
+
+
+  const validNestedComponentOverride = {
+    ...instance,
+    prefabInstance: {
+      ...instance.prefabInstance!,
+      overrides: [{
+        targetNodeId: root.id,
+        targetComponentId: "component-renderer",
+        propertyPath: "render.tint",
+        value: "#ff0000",
+      }],
+    },
+  };
+  // The resolver accepts safe nested component paths; the target object path
+  // must exist in the Prefab source, so test the root-level tint path as well.
+  const validComponentOverride = {
+    ...instance,
+    prefabInstance: {
+      ...instance.prefabInstance!,
+      overrides: [{
+        targetNodeId: root.id,
+        targetComponentId: "component-renderer",
+        propertyPath: "tint",
+        value: "#ff0000",
+      }],
+    },
+  };
+  assert.equal(
+    resolveNativePrefabRoot(validComponentOverride, prefab).components[0]?.properties.tint,
+    "#ff0000",
+  );
 });

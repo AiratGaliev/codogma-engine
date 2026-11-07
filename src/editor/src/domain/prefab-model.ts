@@ -213,7 +213,7 @@ function validateNativePrefabOverride(
   if (!override || typeof override !== "object" || !isJsonValue(override.value) ||
       !isValidStableId(override.targetNodeId) || pathSegments.length === 0 ||
       pathSegments.some((part) =>
-        !/^[A-Za-z_$][\\w$]*$/.test(part) || forbiddenPathSegments.has(part),
+        !/^[A-Za-z_$][\w$]*$/.test(part) || forbiddenPathSegments.has(part),
       ) ||
       (override.targetComponentId !== undefined && !isValidStableId(override.targetComponentId))) {
     throw new TypeError("Prefab override requires a stable target, safe property path and JSON-compatible value.");
