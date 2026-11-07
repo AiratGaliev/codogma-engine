@@ -288,6 +288,25 @@ export function serializeNativeSceneDocument(
   return content;
 }
 
+function assertNoNestedPrefabInstances(
+  roots: readonly NodeDocument[],
+  label: string,
+): void {
+  const diagnostics: Array<{ code: string; message: string; path: string }> = [];
+  const visit = (node: NodeDocument, path: string): void => {
+    if (node.prefabInstance) {
+      diagnostics.push({
+        code: "PROJECT_INVALID_REFERENCE",
+        message: "Nested Prefab instances are not supported in native Prefab documents.",
+        path: `${path}.prefabInstance`,
+      });
+    }
+    node.children.forEach((child, index) => visit(child, `${path}.children[${index}]`));
+  };
+  roots.forEach((root, index) => visit(root, `root[${index}]`));
+  if (diagnostics.length > 0) throw new NativeProjectDocumentError(label, diagnostics);
+}
+
 export function parseNativePrefabDocument(
   project: ProjectDocumentV1,
   prefabId: string,
@@ -305,6 +324,7 @@ export function parseNativePrefabDocument(
   if (document.id !== prefabId) {
     throw new Error(`Prefab manifest id "${prefabId}" does not match document id "${document.id}".`);
   }
+  assertNoNestedPrefabInstances([document.root], `Prefab "${prefabId}"`);
   assertNativeBuiltinComponentData(project, [document.root], `Prefab "${prefabId}"`, "root", prefabDocuments);
   return document;
 }
@@ -324,6 +344,7 @@ export function serializeNativePrefabDocument(
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
     throw new Error(`Prefab asset "${asset.id}" must use the native ${NATIVE_PREFAB_EXTENSION} contract.`);
   }
+  assertNoNestedPrefabInstances([normalized.root], `Prefab "${normalized.id}"`);
   assertNativeBuiltinComponentData(project, [normalized.root], `Prefab "${normalized.id}"`, "root", prefabDocuments);
   return content;
 }

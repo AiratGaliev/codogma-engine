@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as testCase } from "vitest";
-import type { SceneDocumentV1 } from "@codogma/cge";
+import type { PrefabDocumentV1, SceneDocumentV1 } from "@codogma/cge";
 import { reparentSceneNode, getSceneNodeEntries, findSceneNode, createSceneNode } from "../src/domain/scene-model.js";
 import { setNativeComponentEnabled } from "../src/domain/components-model.js";
 import {
@@ -606,5 +606,64 @@ testCase("distinguishes an omitted Prefab catalog from an explicitly empty Host 
   assert.throws(
     () => parseNativeSceneDocument(registered, "scene-level", content, []),
     /Prefab .* is not available in the validation context/,
+  );
+});
+
+testCase("rejects nested Prefab instances when parsing or serializing a native Prefab document", () => {
+  const innerPrefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-inner",
+    name: "Inner",
+    root: {
+      id: "node-inner-root",
+      name: "Inner Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  };
+  const outerPrefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-outer",
+    name: "Outer",
+    root: {
+      id: "node-outer-root",
+      name: "Outer Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [{
+        id: "node-nested-prefab",
+        name: "Nested",
+        active: true,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [],
+        children: [],
+        prefabInstance: { prefabId: innerPrefab.id, overrides: [] },
+      }],
+    },
+  };
+  const registeredProject = addNativePrefabReference(
+    addNativePrefabReference(project, innerPrefab, "asset-prefab-inner", "prefabs/Inner.cge-prefab.json"),
+    outerPrefab,
+    "asset-prefab-outer",
+    "prefabs/Outer.cge-prefab.json",
+  );
+  const hasNestedPrefabDiagnostic = (error: unknown) =>
+    error instanceof Error &&
+    "diagnostics" in error &&
+    Array.isArray(error.diagnostics) &&
+    error.diagnostics.some((item: { message?: string }) =>
+      item.message?.includes("Nested Prefab instances are not supported"),
+    );
+
+  assert.throws(
+    () => serializeNativePrefabDocument(registeredProject, outerPrefab),
+    hasNestedPrefabDiagnostic,
+  );
+  assert.throws(
+    () => parseNativePrefabDocument(registeredProject, outerPrefab.id, JSON.stringify(outerPrefab)),
+    hasNestedPrefabDiagnostic,
   );
 });
