@@ -135,4 +135,11 @@ testCase("rejects unknown target nodes, unknown component ids and malformed prop
     value: "invalid",
   });
   assert.throws(() => resolveNativePrefabRoot(overridden.rootNodes[0]!, prefab), /Transform field/);
+  for (const propertyPath of ["__proto__.polluted", "constructor.prototype.polluted", "prototype.polluted"]) {
+    assert.throws(() => addNativePrefabOverride(withInstance, instance.id, prefab, {
+      targetNodeId: root.id,
+      propertyPath,
+      value: true,
+    }), /safe property path/);
+  }
 });

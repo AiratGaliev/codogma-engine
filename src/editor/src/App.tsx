@@ -1199,13 +1199,17 @@ function App() {
       throw error;
     }
 
+    const previousNodeIds = new Set(
+      getSceneNodeEntries(current, prefabCatalog().map((item) => item.document)).map((entry) => entry.id),
+    );
     const withoutSource = removeSceneNode(current, selected.id);
     const nextScene = addNativePrefabInstance(withoutSource as import("@codogma/cge").SceneDocumentV1, prefab, {
       name: selected.name,
       transform: selected.node.transform,
       parentId: selected.parentId,
     });
-    const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab]).at(-1);
+    const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab])
+      .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
     setProjectDocument(nextProject);
     setSavedProjectContent(manifestContent);
     setPrefabCatalog((catalog) => [...catalog, { assetId, path, document: prefab }]);

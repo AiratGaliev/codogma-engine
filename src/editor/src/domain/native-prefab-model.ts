@@ -161,10 +161,14 @@ export function addNativePrefabOverride(
   prefab: PrefabDocumentV1,
   override: PrefabOverrideDocument,
 ): SceneDocumentV1 {
+  const pathSegments = typeof override.propertyPath === "string" ? override.propertyPath.split(".") : [];
+  const forbiddenPathSegments = new Set(["__proto__", "prototype", "constructor"]);
   if (!isJsonValue(override.value) || !isValidStableId(override.targetNodeId) ||
-      typeof override.propertyPath !== "string" || !override.propertyPath.trim() ||
+      pathSegments.length === 0 || pathSegments.some((part) =>
+        !/^[A-Za-z_$][\w$]*$/.test(part) || forbiddenPathSegments.has(part),
+      ) ||
       (override.targetComponentId !== undefined && !isValidStableId(override.targetComponentId))) {
-    throw new TypeError("Prefab override requires a stable target, property path and JSON-compatible value.");
+    throw new TypeError("Prefab override requires a stable target, safe property path and JSON-compatible value.");
   }
   const target = findNode([prefab.root], override.targetNodeId);
   if (!target) throw new Error(`Prefab Node "${override.targetNodeId}" was not found.`);
@@ -198,7 +202,10 @@ function setPathValue(
   value: unknown,
 ): Record<string, unknown> {
   const parts = path.split(".");
-  if (parts.length === 0 || parts.some((part) => !/^[A-Za-z_$][\w$]*$/.test(part))) {
+  const forbiddenPathSegments = new Set(["__proto__", "prototype", "constructor"]);
+  if (parts.length === 0 || parts.some((part) =>
+    !/^[A-Za-z_$][\w$]*$/.test(part) || forbiddenPathSegments.has(part),
+  )) {
     throw new TypeError(`Prefab override property path "${path}" is invalid.`);
   }
   const next = { ...target };
