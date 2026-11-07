@@ -56,7 +56,16 @@ import {
   addNativePrefabInstance,
   createNativePrefabDocument,
   registerNativePrefab,
+  replaceNativePrefabCatalogDocument,
+  type NativePrefabCatalogEntry,
 } from "./domain/prefab-model.ts";
+import {
+  createDocumentHistoryState,
+  recordDocumentChange,
+  undoDocumentChange,
+  redoDocumentChange,
+  type DocumentHistoryState,
+} from "./domain/document-history.js";
 import {
   attachNativeComponent,
   detachNativeComponent,
@@ -383,11 +392,11 @@ function App() {
   const [scriptChecking, setScriptChecking] = createSignal(false);
   const [scriptDiagnostics, setScriptDiagnostics] = createSignal<TypeScriptSourceDiagnostic[]>([]);
   const [componentToAttach, setComponentToAttach] = createSignal("");
-  const [prefabCatalog, setPrefabCatalog] = createSignal<Array<{ assetId: string; path: string; document: import("@codogma/cge").PrefabDocumentV1 }>>([]);
+  const [prefabCatalog, setPrefabCatalog] = createSignal<NativePrefabCatalogEntry[]>([]);
   const [selectedPrefabPath, setSelectedPrefabPath] = createSignal("");
-  const [history, setHistory] = createSignal<EditorDocument[]>([]);
-  const [historyIndex, setHistoryIndex] = createSignal(-1);
-  const [selectionHistory, setSelectionHistory] = createSignal<Array<{ before: string | null; after: string | null }>>([]);
+  const [history, setHistory] = createSignal<DocumentHistoryState<EditorDocument | null>>(
+    createDocumentHistoryState<EditorDocument | null>(null),
+  );
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   const [loadError, setLoadError] = createSignal("");
@@ -730,9 +739,7 @@ function App() {
       setScene(parsed);
       setScenePath(path);
       setSavedContent(content);
-      setHistory([parsed]);
-      setHistoryIndex(0);
-      setSelectionHistory([]);
+      setHistory(createDocumentHistoryState<EditorDocument | null>(parsed));
       const firstObject = getSceneNodeEntries(parsed, prefabCatalog().map((item) => item.document))[0];
       setSelectedId(firstObject?.id ?? null);
       setSelectedProjectPath(path);
@@ -816,45 +823,26 @@ function App() {
   }
 
   function applySceneChange(next: EditorDocument, selectionAfter = selectedId()) {
-    const currentIndex = historyIndex();
-    const currentHistory = history().slice(0, currentIndex + 1);
-    const nextHistory = [...selectionHistory().slice(0, currentIndex), {
-      before: selectedId(),
-      after: selectionAfter,
-    }];
-    currentHistory.push(next);
-    if (currentHistory.length > 100) {
-      currentHistory.shift();
-      nextHistory.shift();
-    }
-    setHistory(currentHistory);
-    setSelectionHistory(nextHistory);
-    setHistoryIndex(currentHistory.length - 1);
+    setHistory((current) => recordDocumentChange(current, next, selectedId(), selectionAfter));
     setScene(next);
     setSelectedId(selectionAfter);
   }
 
   function undo() {
-    const index = historyIndex();
-    if (index <= 0) return;
-    const nextIndex = index - 1;
-    const nextScene = history()[nextIndex];
-    if (!nextScene) return;
-    setScene(nextScene);
-    setSelectedId(selectionHistory()[index - 1]?.before ?? getSceneNodeEntries(nextScene)[0]?.id ?? null);
-    setHistoryIndex(nextIndex);
+    const result = undoDocumentChange(history());
+    if (!result || !result.document) return;
+    setHistory(result.state);
+    setScene(result.document);
+    setSelectedId(result.selectedId);
     log("info", "Undo");
   }
 
   function redo() {
-    const index = historyIndex();
-    if (index < 0 || index >= history().length - 1) return;
-    const nextIndex = index + 1;
-    const nextScene = history()[nextIndex];
-    if (!nextScene) return;
-    setScene(nextScene);
-    setSelectedId(selectionHistory()[index]?.after ?? getSceneNodeEntries(nextScene)[0]?.id ?? null);
-    setHistoryIndex(nextIndex);
+    const result = redoDocumentChange(history());
+    if (!result || !result.document) return;
+    setHistory(result.state);
+    setScene(result.document);
+    setSelectedId(result.selectedId);
     log("info", "Redo");
   }
 
@@ -1275,6 +1263,9 @@ function App() {
         : serializeNativeSceneDocument(project, current);
       await writeProjectFile(path, content);
       setSavedContent(content);
+      if (isPrefabDocument(current)) {
+        setPrefabCatalog((catalog) => replaceNativePrefabCatalogDocument(catalog, current));
+      }
       log("success", `Saved native ${isPrefabDocument(current) ? "Prefab" : "Scene"} ${path}`);
       return true;
     } catch (error) {
@@ -2826,8 +2817,8 @@ function App() {
       { label: "Reload scene from disk", action: () => scenePath() && void loadScene(scenePath(), true), disabled: !scenePath() },
     ],
     Edit: [
-      { label: "Undo", shortcut: "Ctrl+Z", action: undo, disabled: historyIndex() <= 0 },
-      { label: "Redo", shortcut: "Ctrl+Shift+Z", action: redo, disabled: historyIndex() < 0 || historyIndex() >= history().length - 1 },
+      { label: "Undo", shortcut: "Ctrl+Z", action: undo, disabled: history().index <= 0 },
+      { label: "Redo", shortcut: "Ctrl+Shift+Z", action: redo, disabled: history().index >= history().documents.length - 1 },
       { label: "Command palette", shortcut: "Ctrl+P", action: openPalette },
       { label: "Delete selected object", shortcut: "Del", action: deleteSelectedObject, disabled: !selectedObject() },
       { label: "Create Prefab from selected Node", action: () => void createPrefabFromSelected(), disabled: !selectedObject() || !scene() || isPrefabDocument(scene()!) },
@@ -2962,10 +2953,10 @@ function App() {
               <span>Save</span>
             </button>
             <span class="toolbar-divider" />
-            <button class="toolbar-icon-button" data-testid="undo" disabled={historyIndex() <= 0} onClick={undo} title="Undo · Ctrl+Z">
+            <button class="toolbar-icon-button" data-testid="undo" disabled={history().index <= 0} onClick={undo} title="Undo · Ctrl+Z">
               <Icon theme={theme()} name="undo-redo" />
             </button>
-            <button class="toolbar-icon-button" data-testid="redo" disabled={historyIndex() < 0 || historyIndex() >= history().length - 1} onClick={redo} title="Redo · Ctrl+Shift+Z">
+            <button class="toolbar-icon-button" data-testid="redo" disabled={history().index >= history().documents.length - 1} onClick={redo} title="Redo · Ctrl+Shift+Z">
               <Icon theme={theme()} name="undo-redo" />
             </button>
           </div>

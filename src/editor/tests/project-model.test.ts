@@ -12,6 +12,7 @@ import {
   parseNativePrefabDocument,
   parseNativeProjectDocument,
   parseNativeSceneDocument,
+  serializeNativePrefabDocument,
   resolvePrefabAsset,
   resolveSceneAsset,
   serializeNativeSceneDocument,
@@ -179,4 +180,45 @@ testCase("rejects invalid or duplicate native Scene asset registration", () => {
   assert.throws(() => registerNativeScene(project, scene, "asset-scene-new", "scenes/Level.cge-scene.json"), /already registered/);
   assert.throws(() => registerNativeScene(project, scene, "asset-scene-new", "scenes/Another.scene"), /relative .+ path/);
   assert.throws(() => createNativeSceneDocument("   "), /must be non-empty/);
+});
+
+testCase("round-trips a native Prefab with child Nodes through its registered Project asset", () => {
+  const prefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-with-children",
+    name: "Parent Prefab",
+    root: {
+      id: "node-prefab-root",
+      name: "Parent",
+      active: true,
+      transform: { x: 10, y: 20, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [{
+        id: "node-prefab-child",
+        name: "Child",
+        active: true,
+        transform: { x: 5, y: 6, rotation: 15, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [{
+          id: "component-prefab-child-image",
+          typeId: "com.codogma.renderer.image",
+          schemaVersion: 1,
+          enabled: true,
+          properties: { assetId: "asset-player-sprite" },
+        }],
+        children: [],
+      }],
+    },
+  };
+  const registeredProject = addNativePrefabReference(
+    project,
+    prefab,
+    "asset-prefab-with-children",
+    "prefabs/Parent.cge-prefab.json",
+  );
+  const content = serializeNativePrefabDocument(registeredProject, prefab);
+  const reopened = parseNativePrefabDocument(registeredProject, prefab.id, content);
+
+  assert.deepEqual(reopened, prefab);
+  assert.equal(reopened.root.children[0]?.id, "node-prefab-child");
+  assert.equal(reopened.root.children[0]?.components[0]?.properties.assetId, "asset-player-sprite");
 });

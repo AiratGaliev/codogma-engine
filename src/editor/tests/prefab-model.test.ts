@@ -7,6 +7,7 @@ import {
   createNativePrefabDocument,
   createNativePrefabInstanceNode,
   registerNativePrefab,
+  replaceNativePrefabCatalogDocument,
   resolveNativePrefabRoot,
 } from "../src/domain/prefab-model.js";
 
@@ -142,4 +143,23 @@ testCase("rejects unknown target nodes, unknown component ids and malformed prop
       value: true,
     }), /safe property path/);
   }
+});
+
+testCase("refreshes only the saved Prefab in the in-memory catalog and preserves its Project asset reference", () => {
+  const original = createNativePrefabDocument(root);
+  const updatedDocument = { ...original, name: "Saved Crate" };
+  const other = createNativePrefabDocument({ ...root, id: "node-barrel", name: "Barrel" }, "Barrel");
+  const firstEntry = { assetId: "asset-crate", path: "prefabs/Crate.cge-prefab.json", document: original };
+  const secondEntry = { assetId: "asset-barrel", path: "prefabs/Barrel.cge-prefab.json", document: other };
+  const catalog = [firstEntry, secondEntry];
+  const updated = replaceNativePrefabCatalogDocument(catalog, updatedDocument);
+
+  assert.notEqual(updated, catalog);
+  assert.notEqual(updated[0], firstEntry);
+  assert.equal(updated[0]?.document.name, "Saved Crate");
+  assert.equal(updated[0]?.document.id, original.id);
+  assert.equal(updated[0]?.assetId, firstEntry.assetId);
+  assert.equal(updated[0]?.path, firstEntry.path);
+  assert.equal(updated[1], secondEntry);
+  assert.equal(firstEntry.document.name, "Crate");
 });

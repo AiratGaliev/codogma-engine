@@ -10,6 +10,12 @@ import {
 } from "@codogma/cge";
 import { addNativePrefabReference } from "./project-model.js";
 
+export interface NativePrefabCatalogEntry {
+  assetId: string;
+  path: string;
+  document: PrefabDocumentV1;
+}
+
 export interface NativePrefabInstanceOptions {
   name?: string;
   x?: number;
@@ -18,6 +24,19 @@ export interface NativePrefabInstanceOptions {
   transform?: TransformData;
   /** Existing parent Node in the Scene. Omit/null to insert at the Scene root. */
   parentId?: string | null;
+}
+
+/**
+ * Replaces a saved Prefab document in the in-memory Project catalog without
+ * changing its stable Project asset reference or the other catalog entries.
+ */
+export function replaceNativePrefabCatalogDocument(
+  catalog: readonly NativePrefabCatalogEntry[],
+  document: PrefabDocumentV1,
+): NativePrefabCatalogEntry[] {
+  return catalog.map((entry) => entry.document.id === document.id
+    ? { ...entry, document }
+    : entry);
 }
 
 function createId(): string {
