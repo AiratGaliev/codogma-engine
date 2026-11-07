@@ -64,6 +64,8 @@ import {
   recordDocumentChange,
   undoDocumentChange,
   redoDocumentChange,
+  resolveDocumentChangeRollback,
+  type DocumentChangeRollback,
   type DocumentHistoryState,
 } from "./domain/document-history.js";
 import {
@@ -715,6 +717,10 @@ function App() {
 
   async function loadScene(path: string, reloadCurrent = false): Promise<boolean> {
     if (path === scenePath() && !reloadCurrent) return true;
+    if (saving()) {
+      log("warning", "The active native document is being saved; opening another document is temporarily blocked.");
+      return false;
+    }
     if (animationDirty() || scriptDirty()) {
       if (!window.confirm("The active animation or TypeScript source has unsaved changes. Discard them and open the document?")) return false;
     }
@@ -822,13 +828,32 @@ function App() {
     }
   }
 
-  function applySceneChange(next: EditorDocument, selectionAfter = selectedId()) {
-    setHistory((current) => recordDocumentChange(current, next, selectedId(), selectionAfter));
+  function applySceneChange(
+    next: EditorDocument,
+    selectionAfter = selectedId(),
+  ): DocumentChangeRollback<EditorDocument | null> | null {
+    if (saving()) return null;
+
+    const previousDocument = scene();
+    const previousState = history();
+    const previousSelection = selectedId();
+    const committedState = recordDocumentChange(previousState, next, previousSelection, selectionAfter);
+    const rollback: DocumentChangeRollback<EditorDocument | null> = {
+      previousDocument,
+      previousState,
+      previousSelection,
+      committedDocument: next,
+      committedState,
+    };
+
+    setHistory(committedState);
     setScene(next);
     setSelectedId(selectionAfter);
+    return rollback;
   }
 
   function undo() {
+    if (saving()) return;
     const result = undoDocumentChange(history());
     if (!result || !result.document) return;
     setHistory(result.state);
@@ -838,6 +863,7 @@ function App() {
   }
 
   function redo() {
+    if (saving()) return;
     const result = redoDocumentChange(history());
     if (!result || !result.document) return;
     setHistory(result.state);
@@ -2368,10 +2394,25 @@ function App() {
   }
 
   async function persistMcpSceneChange(next: EditorDocument, selectionAfter = selectedId()) {
-    applySceneChange(next, selectionAfter);
+    if (saving()) {
+      throw new Error("The active native document is already being saved. Retry the MCP mutation after the save completes.");
+    }
+
+    const rollback = applySceneChange(next, selectionAfter);
+    if (!rollback) {
+      throw new Error("The active native document changed state before the MCP mutation could be applied.");
+    }
+
     if (!(await saveScene())) {
-      undo();
-      throw new Error("The native document change could not be saved; the in-memory change was reverted.");
+      const restored = resolveDocumentChangeRollback(scene(), history(), rollback);
+      if (restored) {
+        setScene(restored.document);
+        setHistory(restored.state);
+        setSelectedId(restored.selectedId);
+      } else {
+        log("warning", "Native document save failed after a subsequent state change; newer editor state was preserved instead of applying an unsafe rollback.");
+      }
+      throw new Error("The native document change could not be saved.");
     }
     return next;
   }

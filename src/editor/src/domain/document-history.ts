@@ -17,6 +17,37 @@ export interface DocumentHistoryStep<T> {
 
 const MAX_DOCUMENT_HISTORY = 100;
 
+export interface DocumentChangeRollback<T> {
+  previousDocument: T;
+  previousState: DocumentHistoryState<T>;
+  previousSelection: string | null;
+  committedDocument: T;
+  committedState: DocumentHistoryState<T>;
+}
+
+/**
+ * Roll back only when the document and history are still exactly at the
+ * snapshot committed by the operation. A later edit, undo or redo must never
+ * be undone as a side effect of a failed asynchronous save.
+ */
+export function resolveDocumentChangeRollback<T>(
+  currentDocument: T,
+  currentState: DocumentHistoryState<T>,
+  rollback: DocumentChangeRollback<T>,
+): { document: T; state: DocumentHistoryState<T>; selectedId: string | null } | null {
+  if (
+    currentDocument !== rollback.committedDocument ||
+    currentState !== rollback.committedState
+  ) {
+    return null;
+  }
+  return {
+    document: rollback.previousDocument,
+    state: rollback.previousState,
+    selectedId: rollback.previousSelection,
+  };
+}
+
 export function createDocumentHistoryState<T>(document: T): DocumentHistoryState<T> {
   return {
     documents: [document],

@@ -56,3 +56,29 @@ testCase("history remains bounded while undo and redo selection transitions stay
   assert.equal(history.documents.at(-1), 105);
   assert.equal(undoDocumentChange(history)?.selectedId, "104");
 });
+
+testCase("failed asynchronous saves only roll back their own unchanged document snapshot", () => {
+  const first = { id: "scene", value: 0 };
+  const committed = { id: "scene", value: 1 };
+  const laterEdit = { id: "scene", value: 2 };
+  const previousState = createDocumentHistoryState(first);
+  const committedState = recordDocumentChange(previousState, committed, null, "node-1");
+  const rollback = {
+    previousDocument: first,
+    previousState,
+    previousSelection: null,
+    committedDocument: committed,
+    committedState,
+  };
+
+  const exactRollback = resolveDocumentChangeRollback(committed, committedState, rollback);
+  assert.ok(exactRollback);
+  assert.equal(exactRollback.document, first);
+  assert.equal(exactRollback.state, previousState);
+  assert.equal(exactRollback.selectedId, null);
+
+  const laterState = recordDocumentChange(committedState, laterEdit, "node-1", "node-2");
+  assert.equal(resolveDocumentChangeRollback(laterEdit, laterState, rollback), null);
+  assert.equal(resolveDocumentChangeRollback(first, committedState, rollback), null);
+});
+
