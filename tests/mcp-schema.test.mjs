@@ -81,5 +81,5 @@ test("all built-in MCP input schemas have valid nested JSON Schema and optional 
 })
 
 test("native editor operations fail closed when no SolidJS Host session is connected", async () => {
-    await assert.rejects(dispatchTool("scene-list", {}), /not connected to an active MCP bridge session/)
+    await assert.rejects(dispatchTool("scene-list", {}), /require a connected SolidJS Editor Host session/)
 })
