@@ -288,6 +288,9 @@ testCase("round-trips native Scene edits across hierarchy, Component, FX and Ass
   assert.equal(reopenedRenderer?.properties.assetId, "asset-player-sprite");
   assert.equal(getSceneNodeEntries(reopened).find((entry) => entry.id === imageNode.id)?.parentId, "node-player");
   assert.equal(reopenedBloom?.id, bloom.id);
-  assert.equal(reopenedBloom?.source.threshold, 0.75);
-  assert.equal(reopenedBloom?.source.blurSteps, 8);
+  const reopenedBloomSource = reopenedBloom?.source;
+  assert.ok(reopenedBloomSource);
+  if (reopenedBloomSource.type !== "Bloom") throw new Error("Expected the saved native FX component to remain Bloom.");
+  assert.equal(reopenedBloomSource.threshold, 0.75);
+  assert.equal(reopenedBloomSource.blurSteps, 8);
 });
