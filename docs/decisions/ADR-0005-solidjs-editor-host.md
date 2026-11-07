@@ -1,6 +1,6 @@
 # ADR-0005: SolidJS Editor Host и замена Colibri UI
 
-**Статус:** принято как целевое UI-направление; COD-80 (PR #30) реализовал и CI-проверил первый SolidJS Host/Workbench + Scene vertical slice. `source/editor/` frozen и допускает только read-only inventory и временный rollback; регулярная поддержка и модернизация запрещены. Полная реализация native workflows, session-aware MCP routing, production cutover и Colibri removal ещё не завершены.  
+**Статус:** принято как целевое UI-направление; COD-80 (PR #30) реализовал и CI-проверил первый SolidJS Host/Workbench + Scene vertical slice. `source/editor/` frozen и допускает только read-only inventory и временный rollback; регулярная поддержка и модернизация запрещены. COD-113 переводит активные Host/MCP consumers на native Project Model v1 и запрещает native MCP fallback в frozen Colibri session. Полная реализация native workflows, multi-Host MCP routing/acceptance (COD-85), production cutover и Colibri removal ещё не завершены.  
 **Дата:** 30.10.2026  
 **Связанные документы:** [Техническое задание](../technical-specification.md), [Дорожная карта](../roadmap.md), [План миграции Editor UI](../editor-ui-migration.md), [Стандарт reference для 2D Editor Host](../editor-reference-standard.md), [ADR-0004: архивный Svelte PoC](ADR-0004-svelte-poc.md), [ADR-0002: общий TypeScript toolchain](ADR-0002-typescript-toolchain.md), [ADR-0007: нативный Project Model](ADR-0007-native-codogma-project-model.md).
 
@@ -67,7 +67,7 @@
 - Vite проксирует относительные `/editor/*` запросы к backend. Browser code не обращается к backend direct cross-origin.
 - Для нового UI задаётся точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`. Wildcard Origin запрещён; Host/Origin и loopback guards сохраняются. Proxy и Origin forwarding проверяются вместе с `server/request-origin.mjs`.
 - Оба UI могут быть открыты одновременно, но пока нет cross-client locking/versioning contract только один клиент записывает в конкретный `PROJECT_DIR`. Для параллельной write-приёмки используются разные fixture copies и backend instances.
-- Текущий `server/mcp.mjs` рассылает editor SSE-команды всем подключённым clients. Пока нет session-aware routing, общий `/editor/mcp-bridge/events` может принадлежать только одной Editor session. Новый Host подключается к общему SSE transport после реализации адресной маршрутизации или использует изолированный backend.
+- Native MCP commands из `server/mcp.mjs` адресуются только явно активной SolidJS Host session; если активна legacy Colibri session или активный Host не выбран, команда завершается ошибкой и не отправляется другому клиенту. Native tool dispatch не broadcast-ится и не использует legacy fallback. Полная маршрутизация нескольких одновременных SolidJS Host sessions, reconnect/stale-session/timeout/cancellation и shared project write ownership остаются в COD-85; до их acceptance параллельная write проверка использует изолированные project/backend instances.
 - Это временная dev topology. После cutover существующий Node server отдаёт SolidJS build по `/editor/`; legacy route остаётся на ограниченное rollback window, затем удаляется.
 
 ## Порядок реализации
