@@ -441,12 +441,12 @@ defTool(
 const SYSTEM_INSTRUCTIONS = `You are an engineering assistant for Codogma Engine. The active editor data contract is the native, versioned Codogma Project Model v1.
 
 ## Native document model
-- The project manifest is `project.json`; it declares stable project, asset, scene and component-module identities.
-- Scene documents use `.cge-scene.json` and the native SceneDocumentV1 contract: a tree of Nodes with stable IDs, Transform data, Component instances and native references.
-- Prefab documents use `.cge-prefab.json` and PrefabDocumentV1. Prefab instances reference a stable Prefab ID and carry native overrides.
+- The project manifest is 'project.json'; it declares stable project, asset, scene and component-module identities.
+- Scene documents use '.cge-scene.json' and the native SceneDocumentV1 contract: a tree of Nodes with stable IDs, Transform data, Component instances and native references.
+- Prefab documents use '.cge-prefab.json' and PrefabDocumentV1. Prefab instances reference a stable Prefab ID and carry native overrides.
 - Component definitions are declared by native Project manifest componentModules with stable typeId, moduleAssetId, export and version. Component instances have their own stable IDs.
 - FX are native Component instances attached to Nodes. Supported authoring types are Circle, Bloom, Gradient and Shine.
-- Never create, read or write legacy `.scene` / `.components` documents. Never use displayList, plainObjects, sceneType, prefabProperties, name-derived IDs or class-name mappings.
+- Never create, read or write legacy '.scene' / '.components' documents. Never use displayList, plainObjects, sceneType, prefabProperties, name-derived IDs or class-name mappings.
 
 ## Workflow
 1. Inspect the project and available assets with project-list-files and assets-* tools.
