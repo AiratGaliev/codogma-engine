@@ -1,5 +1,5 @@
 import { BUILTIN_COMPONENT_TYPE_IDS, BUILTIN_COMPONENT_TYPES } from "./builtin-component-ids.js";
-import { validateNativeFxComponentProperties } from "./fx-validation.js";
+import { getNativeFxType, validateNativeFxComponentProperties, validateNativeFxPropertyValues } from "./fx-validation.js";
 import {
   parsePrefabDocument,
   parseProjectDocument,
@@ -88,15 +88,55 @@ export function findPrefabReferenceByAssetPath(
   });
 }
 
-function createSceneValidationContext(project: ProjectDocumentV1) {
+function createSceneValidationContext(
+  project: ProjectDocumentV1,
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
+) {
+  const prefabs = new Map(prefabDocuments.map((prefab) => [prefab.id, prefab]));
   return {
     assets: new Map(project.assets.map((asset) => [asset.id, asset])),
     prefabIds: new Set(project.prefabs.map((prefab) => prefab.id)),
+    prefabs,
     registeredComponentTypes: new Set([
       ...BUILTIN_COMPONENT_TYPE_IDS,
       ...project.componentModules.map((module) => module.typeId),
     ]),
   };
+}
+
+function findPrefabNodeById(root: NodeDocument, targetId: string): NodeDocument | undefined {
+  if (root.id === targetId) return root;
+  for (const child of root.children) {
+    const found = findPrefabNodeById(child, targetId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function assertImageAssetReference(
+  project: ProjectDocumentV1,
+  assetId: unknown,
+  path: string,
+  diagnostics: Array<{ code: string; message: string; path: string }>,
+): void {
+  const asset = typeof assetId === "string"
+    ? project.assets.find((item) => item.id === assetId)
+    : undefined;
+  if (!asset) {
+    diagnostics.push({
+      code: "PROJECT_INVALID_REFERENCE",
+      message: typeof assetId === "string" && assetId.trim()
+        ? `Image Asset "${assetId}" is not registered in project.json.`
+        : "Image Renderer assetId must reference a registered Project image Asset.",
+      path,
+    });
+  } else if (asset.kind !== "image") {
+    diagnostics.push({
+      code: "PROJECT_INVALID_REFERENCE",
+      message: `Asset "${assetId}" has kind "${asset.kind}", expected "image".`,
+      path,
+    });
+  }
 }
 
 /**
@@ -110,8 +150,10 @@ function assertNativeBuiltinComponentData(
   roots: readonly NodeDocument[],
   label: string,
   rootPath: "root" | "rootNodes" = "rootNodes",
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
 ): void {
   const diagnostics: Array<{ code: string; message: string; path: string }> = [];
+  const prefabs = new Map(prefabDocuments.map((prefab) => [prefab.id, prefab]));
 
   const visit = (node: NodeDocument, path: string): void => {
     node.components.forEach((component, index) => {
@@ -135,26 +177,68 @@ function assertNativeBuiltinComponentData(
         return;
       }
 
-      const assetId = component.properties.assetId;
-      const asset = typeof assetId === "string"
-        ? project.assets.find((item) => item.id === assetId)
-        : undefined;
-      if (!asset) {
-        diagnostics.push({
-          code: "PROJECT_INVALID_REFERENCE",
-          message: typeof assetId === "string" && assetId.trim()
-            ? `Image Asset "${assetId}" is not registered in project.json.`
-            : "Image Renderer assetId must reference a registered Project image Asset.",
-          path: `${path}.components[${index}].properties.assetId`,
-        });
-      } else if (asset.kind !== "image") {
-        diagnostics.push({
-          code: "PROJECT_INVALID_REFERENCE",
-          message: `Asset "${assetId}" has kind "${asset.kind}", expected "image".`,
-          path: `${path}.components[${index}].properties.assetId`,
+      assertImageAssetReference(
+        project,
+        component.properties.assetId,
+        `${path}.components[${index}].properties.assetId`,
+        diagnostics,
+      );
+    });
+
+    if (node.prefabInstance) {
+      const prefab = prefabs.get(node.prefabInstance.prefabId);
+      if (prefab) {
+        const fxScalarFields = new Set([
+          "threshold", "blurRadius", "blurSteps", "blurQuality", "blendAmount",
+          "alpha", "fromX", "fromY", "toX", "toY", "size", "radius", "direction",
+          "scale", "duration", "thickness", "feather", "color", "backgroundColor",
+          "color1", "color2", "label", "preFX", "reveal", "yoyo",
+        ]);
+        node.prefabInstance.overrides.forEach((override, overrideIndex) => {
+          if (!override.targetComponentId) return;
+          const targetNode = findPrefabNodeById(prefab.root, override.targetNodeId);
+          const targetComponent = targetNode?.components.find((item) => item.id === override.targetComponentId);
+          if (!targetComponent) return; // Core validation reports dangling targets with Prefab documents in context.
+
+          const overridePath = `${path}.prefabInstance.overrides[${overrideIndex}]`;
+          if (targetComponent.typeId === BUILTIN_COMPONENT_TYPES.imageRenderer) {
+            if (override.propertyPath === "assetId") {
+              assertImageAssetReference(project, override.value, `${overridePath}.value`, diagnostics);
+            } else if (override.propertyPath.startsWith("assetId.")) {
+              diagnostics.push({
+                code: "PROJECT_INVALID_REFERENCE",
+                message: "Image Renderer assetId is a scalar Project Asset reference and cannot be overridden through a nested path.",
+                path: `${overridePath}.propertyPath`,
+              });
+            }
+          }
+
+          const fxType = getNativeFxType(targetComponent.typeId);
+          if (fxType) {
+            if (!override.propertyPath.includes(".")) {
+              try {
+                validateNativeFxPropertyValues(fxType, {
+                  ...targetComponent.properties,
+                  [override.propertyPath]: override.value,
+                }, false);
+              } catch (error) {
+                diagnostics.push({
+                  code: "COMPONENT_INVALID_VALUE",
+                  message: error instanceof Error ? error.message : String(error),
+                  path: `${overridePath}.value`,
+                });
+              }
+            } else if (fxScalarFields.has(override.propertyPath.split(".")[0]!)) {
+              diagnostics.push({
+                code: "COMPONENT_INVALID_VALUE",
+                message: `FX scalar property override "${override.propertyPath}" cannot use a nested path.`,
+                path: `${overridePath}.propertyPath`,
+              });
+            }
+          }
         });
       }
-    });
+    }
 
     node.children.forEach((child, index) => visit(child, `${path}.children[${index}]`));
   };
@@ -167,6 +251,7 @@ export function parseNativeSceneDocument(
   project: ProjectDocumentV1,
   sceneId: string,
   content: string,
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
 ): SceneDocumentV1 {
   const asset = resolveSceneAsset(project, sceneId);
   if (!asset.path.endsWith(NATIVE_SCENE_EXTENSION)) {
@@ -174,20 +259,21 @@ export function parseNativeSceneDocument(
   }
   const document = requireParsed(
     `Scene "${sceneId}"`,
-    parseSceneDocument(content, createSceneValidationContext(project)),
+    parseSceneDocument(content, createSceneValidationContext(project, prefabDocuments)),
   );
   if (document.id !== sceneId) {
     throw new Error(`Scene manifest id "${sceneId}" does not match document id "${document.id}".`);
   }
-  assertNativeBuiltinComponentData(project, document.rootNodes, `Scene "${sceneId}"`);
+  assertNativeBuiltinComponentData(project, document.rootNodes, `Scene "${sceneId}"`, "rootNodes", prefabDocuments);
   return document;
 }
 
 export function serializeNativeSceneDocument(
   project: ProjectDocumentV1,
   document: SceneDocumentV1,
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
 ): string {
-  const context = createSceneValidationContext(project);
+  const context = createSceneValidationContext(project, prefabDocuments);
   // Core validation must run before native traversal so accessors, cycles and
   // unsafe prototypes cannot execute while native invariants are inspected.
   const content = serializeSceneDocument(document, context);
@@ -198,7 +284,7 @@ export function serializeNativeSceneDocument(
   if (!asset.path.endsWith(NATIVE_SCENE_EXTENSION)) {
     throw new Error(`Scene asset "${asset.id}" must use the native ${NATIVE_SCENE_EXTENSION} contract.`);
   }
-  assertNativeBuiltinComponentData(project, normalized.rootNodes, `Scene "${normalized.id}"`);
+  assertNativeBuiltinComponentData(project, normalized.rootNodes, `Scene "${normalized.id}"`, "rootNodes", prefabDocuments);
   return content;
 }
 
@@ -206,6 +292,7 @@ export function parseNativePrefabDocument(
   project: ProjectDocumentV1,
   prefabId: string,
   content: string,
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
 ): PrefabDocumentV1 {
   const asset = resolvePrefabAsset(project, prefabId);
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
@@ -213,20 +300,21 @@ export function parseNativePrefabDocument(
   }
   const document = requireParsed(
     `Prefab "${prefabId}"`,
-    parsePrefabDocument(content, createSceneValidationContext(project)),
+    parsePrefabDocument(content, createSceneValidationContext(project, prefabDocuments)),
   );
   if (document.id !== prefabId) {
     throw new Error(`Prefab manifest id "${prefabId}" does not match document id "${document.id}".`);
   }
-  assertNativeBuiltinComponentData(project, [document.root], `Prefab "${prefabId}"`, "root");
+  assertNativeBuiltinComponentData(project, [document.root], `Prefab "${prefabId}"`, "root", prefabDocuments);
   return document;
 }
 
 export function serializeNativePrefabDocument(
   project: ProjectDocumentV1,
   document: PrefabDocumentV1,
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
 ): string {
-  const context = createSceneValidationContext(project);
+  const context = createSceneValidationContext(project, prefabDocuments);
   // Keep the same safe-validation-before-native-traversal order as Scenes.
   const content = serializePrefabDocument(document, context);
   const normalized = requireParsed("Native Prefab document", parsePrefabDocument(content, context));
@@ -236,7 +324,7 @@ export function serializeNativePrefabDocument(
   if (!asset.path.endsWith(NATIVE_PREFAB_EXTENSION)) {
     throw new Error(`Prefab asset "${asset.id}" must use the native ${NATIVE_PREFAB_EXTENSION} contract.`);
   }
-  assertNativeBuiltinComponentData(project, [normalized.root], `Prefab "${normalized.id}"`, "root");
+  assertNativeBuiltinComponentData(project, [normalized.root], `Prefab "${normalized.id}"`, "root", prefabDocuments);
   return content;
 }
 

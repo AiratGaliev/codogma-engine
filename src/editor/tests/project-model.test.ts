@@ -441,3 +441,123 @@ testCase("runs Core safe-data validation before native Scene and Prefab traversa
   assert.equal(getterCalls, 0, "Prefab components getter must not run before Core rejects the document");
 });
 
+testCase("validates built-in Image and FX values after applying native Prefab component overrides", () => {
+  const imagePrefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-image-override",
+    name: "Image Prefab",
+    root: {
+      id: "node-image-prefab",
+      name: "Image",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-image-prefab",
+        typeId: "com.codogma.renderer.image",
+        schemaVersion: 1,
+        enabled: true,
+        properties: { assetId: "asset-player-sprite" },
+      }],
+      children: [],
+    },
+  };
+  const registeredImageProject = addNativePrefabReference(project, imagePrefab, "asset-prefab-image-override", "prefabs/ImageOverride.cge-prefab.json");
+  const baseImageScene = parseNativeSceneDocument(registeredImageProject, "scene-level", sceneContent, [imagePrefab]);
+  const sceneWithImagePrefab = addNativePrefabInstance(baseImageScene, imagePrefab);
+  const imageInstance = sceneWithImagePrefab.rootNodes.at(-1)!;
+  const invalidImageOverride = addNativePrefabOverride(sceneWithImagePrefab, imageInstance.id, imagePrefab, {
+    targetNodeId: "node-image-prefab",
+    targetComponentId: "component-image-prefab",
+    propertyPath: "assetId",
+    value: "asset-not-registered",
+  });
+  assert.throws(
+    () => serializeNativeSceneDocument(registeredImageProject, invalidImageOverride, [imagePrefab]),
+    /Image Asset "asset-not-registered" is not registered/,
+  );
+  assert.throws(
+    () => parseNativeSceneDocument(registeredImageProject, "scene-level", JSON.stringify(invalidImageOverride), [imagePrefab]),
+    /Image Asset "asset-not-registered" is not registered/,
+  );
+
+  const fxPrefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-fx-override",
+    name: "FX Prefab",
+    root: {
+      id: "node-fx-prefab",
+      name: "FX",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-fx-prefab",
+        typeId: "com.codogma.fx.bloom",
+        schemaVersion: 1,
+        enabled: true,
+        properties: { threshold: 0.5 },
+      }],
+      children: [],
+    },
+  };
+  const registeredFxProject = addNativePrefabReference(project, fxPrefab, "asset-prefab-fx-override", "prefabs/FxOverride.cge-prefab.json");
+  const baseFxScene = parseNativeSceneDocument(registeredFxProject, "scene-level", sceneContent, [fxPrefab]);
+  const sceneWithFxPrefab = addNativePrefabInstance(baseFxScene, fxPrefab);
+  const fxInstance = sceneWithFxPrefab.rootNodes.at(-1)!;
+  const invalidFxOverride = addNativePrefabOverride(sceneWithFxPrefab, fxInstance.id, fxPrefab, {
+    targetNodeId: "node-fx-prefab",
+    targetComponentId: "component-fx-prefab",
+    propertyPath: "threshold",
+    value: 1.2,
+  });
+  assert.throws(
+    () => serializeNativeSceneDocument(registeredFxProject, invalidFxOverride, [fxPrefab]),
+    /threshold.*at most 1/,
+  );
+});
+
+testCase("rejects unsafe property path segments on native Prefab overrides", () => {
+  const prefab = {
+    schemaVersion: 1 as const,
+    id: "prefab-safe-path",
+    name: "Safe Path",
+    root: {
+      id: "node-safe-path",
+      name: "Safe Path",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-safe-path",
+        typeId: "com.codogma.renderer.image",
+        schemaVersion: 1,
+        enabled: true,
+        properties: { assetId: "asset-player-sprite" },
+      }],
+      children: [],
+    },
+  };
+  const registered = addNativePrefabReference(project, prefab, "asset-prefab-safe-path", "prefabs/SafePath.cge-prefab.json");
+  const base = parseNativeSceneDocument(registered, "scene-level", sceneContent, [prefab]);
+  const withInstance = addNativePrefabInstance(base, prefab);
+  const instance = withInstance.rootNodes.at(-1)!;
+  const invalid = {
+    ...withInstance,
+    rootNodes: withInstance.rootNodes.map((node) => node.id === instance.id
+      ? {
+          ...node,
+          prefabInstance: {
+            ...node.prefabInstance!,
+            overrides: [{
+              targetNodeId: "node-safe-path",
+              targetComponentId: "component-safe-path",
+              propertyPath: "__proto__.polluted",
+              value: true,
+            }],
+          },
+        }
+      : node),
+  } as SceneDocumentV1;
+  assert.throws(
+    () => serializeNativeSceneDocument(registered, invalid, [prefab]),
+    /safe identifier segments/,
+  );
+});

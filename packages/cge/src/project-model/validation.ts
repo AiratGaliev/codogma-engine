@@ -324,6 +324,14 @@ function validatePrefabOverrides(
       diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab override requires targetNodeId, propertyPath and a JSON-compatible value; targetComponentId must be a non-empty id when present.", overridePath, nodeId));
       return;
     }
+    const propertySegments = override.propertyPath.split(".");
+    if (propertySegments.some((part) =>
+      !/^[A-Za-z_$][\\w$]*$/.test(part) ||
+      ["__proto__", "prototype", "constructor"].includes(part),
+    )) {
+      diagnostics.push(issue("SCENE_INVALID_NODE", "Prefab override propertyPath must contain only safe identifier segments.", overridePath + ".propertyPath", nodeId));
+      return;
+    }
     warnUnknownFields(
       override,
       new Set(["targetNodeId", "propertyPath", "value", "targetComponentId"]),

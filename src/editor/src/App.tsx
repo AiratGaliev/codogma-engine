@@ -758,8 +758,8 @@ function App() {
         projectDocument() !== project
       ) return false;
       const parsed = sceneReference
-        ? parseNativeSceneDocument(project, sceneReference.id, content)
-        : parseNativePrefabDocument(project, prefabReference!.id, content);
+        ? parseNativeSceneDocument(project, sceneReference.id, content, prefabCatalog().map((item) => item.document))
+        : parseNativePrefabDocument(project, prefabReference!.id, content, prefabCatalog().map((item) => item.document));
       stopAnimationPreview(true);
       setScene(parsed);
       setScenePath(path);
@@ -1244,7 +1244,7 @@ function App() {
       });
       const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab])
         .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
-      const sceneContent = serializeNativeSceneDocument(nextProject, nextScene);
+      const sceneContent = serializeNativeSceneDocument(nextProject, nextScene, [...prefabCatalog().map((item) => item.document), prefab]);
 
       if (directory) await ensureProjectFolder(directory);
       await writeProjectFile(path, prefabContent);
@@ -1334,9 +1334,10 @@ function App() {
     ) return false;
     setSaving(true);
     try {
+      const prefabDocuments = prefabCatalog().map((item) => item.document);
       const content = contentOverride ?? (isPrefabDocument(current)
-        ? serializeNativePrefabDocument(project, current)
-        : serializeNativeSceneDocument(project, current));
+        ? serializeNativePrefabDocument(project, current, prefabDocuments)
+        : serializeNativeSceneDocument(project, current, prefabDocuments));
       await writeProjectFile(path, content);
       setSavedContent(content);
       if (isPrefabDocument(current)) {
