@@ -19,6 +19,7 @@ import {
     handleMcpHttpRequest,
     handleBridgeEvents,
     handleBridgeResult,
+    getBridgeStatus,
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
@@ -730,6 +731,11 @@ const server = http.createServer(async (req, res) => {
         // MCP editor bridge (editor client posts command results)
         if (urlPath === "/editor/mcp-bridge/result" && req.method === "POST") {
             return await handleBridgeResult(req, res)
+        }
+
+        // Single Editor Host bridge readiness.
+        if (urlPath === "/editor/mcp-bridge-status") {
+            return sendJSON(res, getBridgeStatus())
         }
 
         // AI Chat (v5-style feature): LLM agent with MCP tool access
