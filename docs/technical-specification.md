@@ -465,8 +465,8 @@ Codogma предоставляет единый публичный Physics API �
 - Server, project-file services и MCP работают с native Project Model v1 и адресуют только Editor Host sessions. Все новые UI/authoring workflows реализуются на native contracts.
 - Переносить следует только пользовательские UI workflows и сформулированные потребности. Data/domain/runtime contracts проектируются как собственные Codogma contracts; реализация Editor Host должна использовать typed API boundaries и общую Project Model.
 - Backend HTTP/file APIs, MCP registry и независимые Phaser algorithms могут переиспользоваться после технической проверки. Project Model, serialization, Script/Component identity и runtime loading path принадлежат собственным Codogma contracts и проверяются native fixtures.
-- Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
-- Cutover и rollback window выполняются в COD-87; Colibri removal — отдельная COD-88 после cutover, consumer audit, inventory sign-off и license review. Механический перенос source/editor → src/editor отменён (COD-22).
+- Capability inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability фиксируются исходное поведение, native contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
+- Native Editor Host является единственной UI-реализацией. Его оставшиеся пользовательские workflows и связанные сервисы развиваются по отдельным engineering issues; механический перенос старого дерева редактора не является архитектурным направлением.
 
 ### 9.0.1. Project Settings, Workspace Settings и Editor Preferences
 
@@ -618,7 +618,7 @@ Codogma предоставляет единый публичный Physics API �
 
 ### 9.3. Приоритеты возможностей 2D
 
-Приоритет задаёт порядок работ по подтверждённым gaps в Engine contracts и SolidJS Host. Общие domain/runtime/security fixes выполняются в соответствующем native слое независимо от UI. Все новые пользовательские UI/authoring workflows разрабатываются в `src/editor/`; `source/editor/` frozen и допускает только read-only inventory, необходимые технические cutover/rollback действия и узкую одноразовую security mitigation при подтверждённой критической уязвимости, пока legacy route принимает production traffic. Новый Project Model/Core не является универсальным предусловием для функций, которые могут безопасно использовать собственные contracts.
+Приоритет задаёт порядок работ по подтверждённым gaps в Engine contracts и Editor Host. Общие domain/runtime/security fixes выполняются в соответствующем native слое независимо от UI. Все пользовательские UI/authoring workflows разрабатываются в `src/editor/` и используют native contracts. Новый Project Model/Core не является универсальным предусловием для функций, которые могут безопасно использовать собственные contracts.
 
 **P0 — необходимый производственный фундамент**
 - единая физическая абстракция с capability map и как минимум одним полноценно поддерживаемым backend;
@@ -852,7 +852,7 @@ codogma-engine/
 └── package.json                 # корень репозитория / npm Workspaces
 ```
 
-Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Frozen Colibri rollback client физически находится в `source/editor/`; новый SolidJS Editor Host находится в `src/editor/` как самостоятельное приложение. Не выполнять механический перенос старого дерева в `src/editor/`: legacy используется только для read-only inventory и ограниченного rollback до cutover. После приёмки нового Host `source/editor/` и его Colibri-only build/config/assets удаляются отдельным cleanup PR с обновлением server paths, scripts, CI, release archive и документации.
+Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Единственное приложение редактора находится в `src/editor/`; его build, dev server, API routing и MCP bridge работают как единая native-система. Структура пакетов отражает ownership contracts и не предполагает механический перенос или дублирование UI/runtime subsystems.
 
 ### Правила границ пакетов
 
@@ -874,8 +874,8 @@ codogma-engine/
 - Config files используют TypeScript (`*.config.ts`), когда инструмент поддерживает такой формат нативно. Не добавлять `.js`/`.mjs` конфиги только ради удобства. Декларативные файлы, чей формат задан внешним контрактом, сохраняют исходный формат: `package.json`, `tsconfig.json`, JSON/YAML/TOML manifests и workflows, HTML, CSS, `.pen` и другие data/assets. Эти файлы не являются JavaScript source и не должны искусственно конвертироваться в TS.
 - Для каждого нового TS/TSX scope обязателен отдельный `tsconfig` с полным профилем: `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `noImplicitOverride: true`, `noImplicitReturns: true`, `noFallthroughCasesInSwitch: true`, `forceConsistentCasingInFileNames: true`. Дополнительно включать `noUnusedLocals` и `noUnusedParameters`, если scope позволяет; `allowJs` не включать.
 - Не создавать `.d.mts`/`.d.ts` sidecar declarations для собственных TS-модулей. Допускаются generated declarations и необходимые ambient/external declarations. Generated JS output не считается авторским исходником.
-- Исключения: существующий legacy-код; vendored/upstream sources; generated files; обязательные внешние manifests; минимальные bootstrap/interop entry points, которые реально не поддерживаются выбранным TS toolchain. Каждое новое исключение требует причины, владельца и условия пересмотра; feature/business logic должна оставаться в TS. Существующие `.js`/`.mjs`/`.cjs` не переписываются массово, но новый функционал не реализуется расширением таких файлов: новая логика выносится в TS-модуль, legacy entry point оставляется минимальным адаптером до отдельной миграции.
-- Строгий профиль должен применяться к новым модулям изолированно: несовместимость с legacy-кодом не является основанием отключать strict flags в новом scope.
+- Исключения: существующие JavaScript-модули, vendored/upstream sources, generated files, обязательные внешние manifests и минимальные bootstrap/interop entry points, которые реально не поддерживаются выбранным TS toolchain. Каждое новое исключение требует причины, владельца и условия пересмотра; feature/business logic должна оставаться в TS. Существующие `.js`/`.mjs`/`.cjs` не переписываются массово, но новый функционал не реализуется расширением таких файлов: новая логика выносится в TS-модуль.
+- Строгий профиль должен применяться ко всем новым модулям; несовместимость старых JS-модулей не является основанием отключать strict flags в новом scope.
 - Не использовать any как способ обхода архитектурной границы. Для неизвестных JSON/SDK/plugin inputs использовать unknown, runtime validation и type narrowing. Casts и non-null assertions требуют локального обоснования, если они пересекают границу доверия или скрывают невозможное состояние.
 - Запрещать @ts-ignore в новом коде; редкое @ts-expect-error допустимо только с пояснением проверяемой причины и тестом. При смене schema, платформенного SDK или external data проверять runtime values, не полагаясь только на compile-time types.
 - Включить type-only imports, discriminated unions, exhaustive handling через never и явные типы публичных экспортов/контрактов там, где это повышает устойчивость API. Не создавать дублирующие декларации одной модели в Core, editor и serializer.
@@ -883,7 +883,7 @@ codogma-engine/
 
 #### Инструменты, которые нужно оценить и ввести поэтапно
 
-- **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для нового scope. TSLint dependency уже удалена из editor manifest, но `source/editor/tslint.json` и `source/editor/lint.sh` ещё существуют; считать их неактивными остатками, а не доступным lint toolchain. Не возвращать TSLint ради новых модулей.
+- **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для всех first-party modules. Не вводить параллельные или неподдерживаемые lint toolchains.
 - **Prettier + eslint-config-prettier** — единый форматтер. ESLint отвечает за ошибки и risky patterns, Prettier — за форматирование; не дублировать спорные stylistic правила. Зафиксировать локальные версии и общий конфиг, подключить format:check в CI. Не форматировать весь существующий source tree автоматически первым PR.
 - **Knip** — анализ неиспользуемых файлов, exports/types, dependencies/devDependencies, binaries и scripts. Настроить корректные entry points для существующего plugin registry, dynamic imports, generated code, command-line tools, test fixtures и editor plugins: динамически загружаемый плагин нельзя удалять только потому, что его import не виден статически. Первый отчёт служит baseline; после исправления конфигурации ошибки вводятся как гейт по новым/изменяемым областям, затем расширяются на репозиторий.
 - **dependency-cruiser** — кандидат для контроля архитектурных границ, циклических импортов и запрещённых зависимостей. Требуемые правила: Core не импортирует editor/desktop UI; runtime game build не импортирует editor/MCP/server/test modules; editor/build-only dependencies не попадают в game runtime; новые запрещённые циклы не появляются. Конкретные правила задаются после фиксации реальной структуры репозитория.
@@ -898,7 +898,7 @@ codogma-engine/
 #### Репозиторные команды и зависимости
 
 - Инструменты статического анализа и форматирования регистрируются в devDependencies того workspace/package, чей код они проверяют, а не в production dependencies игры.
-- Фактически существуют отдельные npm roots/lockfiles для root, временного UI client в `source/editor/`, нового `src/editor/` и отдельных mini-services/packages. Новый Host уже создан как самостоятельное приложение; npm Workspaces и объединение lockfiles остаются отдельным инфраструктурным PoC, который должен проверить package scripts, TypeScript references, server routes, CI/cache и release archive.
+- Фактически существуют отдельные npm roots/lockfiles для root, Editor Host в `src/editor/` и отдельных mini-services/packages. npm Workspaces и объединение lockfiles остаются отдельным инфраструктурным PoC, который должен проверить package scripts, TypeScript references, server routes, CI/cache и release archive.
 - Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
 - Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
 - Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
