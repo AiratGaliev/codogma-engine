@@ -1,7 +1,22 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { WORKSPACE_LAYOUT_SCHEMA_VERSION } from "../src/domain/workspace-layout.ts";
 
+async function scrollInspectorToAddFx(page: Page) {
+  const addFx = page.getByTestId("add-fx");
+  await addFx.evaluate((element) => {
+    element.scrollIntoView({ behavior: "instant", block: "center" });
+  });
+  await expect(addFx).toBeInViewport();
+}
 
+async function waitForEditorProject(page: Page) {
+  await expect(page.locator(".status-bar-left")).not.toContainText("Loading project", {
+    timeout: 20_000,
+  });
+  await expect(page.locator(".connection-overlay")).toHaveCount(0);
+}
 async function dragDockTabWithPointer(page: Page, source: Locator, target: Locator) {
+  await waitForEditorProject(page);
   const sourceBounds = await source.boundingBox();
   const targetBounds = await target.boundingBox();
   if (!sourceBounds || !targetBounds) throw new Error("Dock tab geometry is unavailable.");
@@ -23,6 +38,7 @@ async function dragDockTabWithPointer(page: Page, source: Locator, target: Locat
 }
 
 async function dragDockTabToEmptyZone(page: Page, source: Locator, targetZone: Locator) {
+  await waitForEditorProject(page);
   const sourceBounds = await source.boundingBox();
   if (!sourceBounds) throw new Error("Source dock tab geometry is unavailable.");
   const sourcePoint = {
@@ -50,6 +66,7 @@ async function dragPanelHeaderWithPointer(
   source: Locator,
   targetZone: Locator,
 ) {
+  await waitForEditorProject(page);
   const sourceBounds = await source.boundingBox();
   if (!sourceBounds) throw new Error("Source panel header geometry is unavailable.");
   const sourcePoint = {
@@ -294,7 +311,7 @@ test("Main menu and Add Object menu dismiss on pointer interaction outside", asy
   await expect(page.locator(".menu-popover")).toBeVisible();
   await page.getByRole("menuitem", { name: "Window" }).click();
   await expect(page.getByRole("menuitemradio", { name: "Project" })).toBeVisible();
-  await page.getByRole("tab", { name: "Scene" }).click();
+  await page.locator(".brand-name").click();
   await expect(page.locator(".menu-popover")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Add object" }).click();
@@ -309,7 +326,7 @@ test("Bottom workspace tabs close independently and the dock collapses when empt
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
 
   for (const panel of ["Project", "Animation", "Components", "Console"]) {
-    const closeButton = page.getByRole("button", { name: "Close " + panel });
+    const closeButton = bottomTabs.getByRole("button", { name: "Close " + panel });
     await expect(closeButton).toBeVisible();
     await closeButton.click();
     await expect(bottomTabs.getByRole("tab", { name: panel })).toHaveCount(0);
@@ -394,7 +411,7 @@ test("Console closes and reopens in Bottom and explicit Undock persists", async 
   await bottomTabs.getByRole("tab", { name: "Console" }).click();
   await expect(page.getByTestId("console-panel")).toBeVisible();
 
-  await page.getByRole("button", { name: "Close Console" }).click();
+  await bottomTabs.getByRole("button", { name: "Close Console" }).click();
   await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
   await expect(page.getByTestId("splitter-console")).toHaveCount(0);
   let persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
@@ -564,7 +581,7 @@ test("side panels can be grouped in another dock zone, closed and reopened witho
   await expect(page.getByTestId("scene-stage").locator("canvas")).toHaveCount(1);
 
   const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(persisted.schemaVersion).toBe(2);
+  expect(persisted.schemaVersion).toBe(WORKSPACE_LAYOUT_SCHEMA_VERSION);
   expect(persisted.hierarchyZone).toBe("right");
   expect(persisted.inspectorZone).toBe("right");
 });
@@ -593,6 +610,7 @@ test("pointer dragging a Bottom tab into a side group preserves the drop target 
 test("narrow viewport presents saved side panels in Bottom and restores their zones when widened", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.getByTestId("scene-stage").locator("canvas")).toBeVisible({ timeout: 20_000 });
   await dragPanelHeaderWithPointer(page, page.locator(".hierarchy-panel .panel-header"), page.getByTestId("dock-zone-right"));
   const rightTabs = page.getByRole("tablist", { name: "Right dock panels" });
   await expect(rightTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
@@ -607,7 +625,7 @@ test("narrow viewport presents saved side panels in Bottom and restores their zo
   await bottomTabs.getByRole("tab", { name: "Hierarchy" }).click();
   await expect(page.getByTestId("bottom-docked-content").getByTestId("hierarchy-panel")).toBeVisible();
   const narrowState = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(narrowState.schemaVersion).toBe(2);
+  expect(narrowState.schemaVersion).toBe(WORKSPACE_LAYOUT_SCHEMA_VERSION);
   expect(narrowState.bottomTab).toBe("Hierarchy");
   expect(narrowState.hierarchyZone).toBe("right");
 
@@ -626,6 +644,7 @@ test("narrow viewport presents saved side panels in Bottom and restores their zo
 test("panel-header pointer docking preview can be canceled with Escape", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
   const header = page.locator(".hierarchy-panel .panel-header");
   const target = page.getByTestId("bottom-tabs");
   const a = await header.boundingBox(), b = await target.boundingBox();
@@ -648,6 +667,7 @@ test("panel-header pointer docking preview can be canceled with Escape", async (
 test("tab insertion marker supports dropping before an existing tab", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
   const tabs = page.getByRole("tablist", { name: "Bottom workspace" });
   const sourceTab = tabs.getByRole("tab", { name: "Animation" });
   const targetTab = tabs.getByRole("tab", { name: "Project" });
@@ -722,7 +742,7 @@ test("legacy and unknown layout data restore deterministic, versioned workspaces
   await page.goto("/");
   await expect(page.getByRole("tablist", { name: "Bottom workspace" }).getByRole("tab", { name: "Hierarchy" })).toBeVisible();
   let saved = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(saved.schemaVersion).toBe(2);
+  expect(saved.schemaVersion).toBe(WORKSPACE_LAYOUT_SCHEMA_VERSION);
   expect(saved.hierarchyZone).toBe("bottom");
   expect(saved.leftWidth).toBe(255);
 
@@ -735,7 +755,7 @@ test("legacy and unknown layout data restore deterministic, versioned workspaces
   await page.reload();
   await expect(page.getByTestId("hierarchy-panel")).toBeVisible();
   saved = await page.evaluate(() => JSON.parse(localStorage.getItem("codogma.editor.layout") ?? "{}"));
-  expect(saved.schemaVersion).toBe(2);
+  expect(saved.schemaVersion).toBe(WORKSPACE_LAYOUT_SCHEMA_VERSION);
   expect(saved.hierarchyZone).toBe("left");
   expect(saved.leftWidth).toBe(228);
 });
@@ -1001,6 +1021,7 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
   await page.getByRole("button", { name: "Remove Circle effect" }).click();
   await expect(page.getByTestId("fx-card-5ea3aca1-4a1a-4063-899a-636d14a0d234")).toHaveCount(0);
   await page.getByLabel("New FX type").selectOption("Circle");
+  await scrollInspectorToAddFx(page);
   await page.getByTestId("add-fx").click();
   await expect(page.getByLabel("Circle Ring Color")).toHaveValue("#ff33b2");
   await page.getByLabel("Circle Ring Color").fill("0xA1B2C3");
@@ -1032,6 +1053,7 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
   await page.locator(".inspector-scroll").evaluate((element) => element.scrollTo({ top: 0, behavior: "instant" }));
   await expect(page.getByLabel("New FX type")).toBeVisible();
   await page.getByLabel("New FX type").selectOption("Shine");
+  await scrollInspectorToAddFx(page);
   await page.getByTestId("add-fx").click();
   await expect(page.getByLabel("Shine Duration (ms)")).toHaveValue("2000");
   await saveSceneWithShortcut(page);
@@ -1058,6 +1080,7 @@ test("FX Inspector edits legacy effects and creates and restores a new Shine eff
 test("responsive Bottom Dock sizing follows its splitter and constrains the detached Console", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
 
   const bottomDock = page.getByTestId("bottom-dock");
   const bottomSplitter = page.getByTestId("splitter-bottom");
@@ -1082,6 +1105,7 @@ test("responsive Bottom Dock sizing follows its splitter and constrains the deta
     localStorage.setItem(key, JSON.stringify({ ...current, consoleHeight: 125, consoleDocked: false }));
   });
   await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForEditorProject(page);
 
   const consoleSplitter = page.getByTestId("splitter-console");
   const consolePanel = page.getByTestId("console-panel");
@@ -1143,6 +1167,7 @@ test("side dock tabs support pointer docking and reordering into Bottom", async 
 test("narrow viewport tab reordering preserves the permanent side dock zones", async ({ page }) => {
   await page.setViewportSize({ width: 700, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
   await expect(bottomTabs.getByRole("tab", { name: "Hierarchy" })).toBeVisible();
@@ -1416,12 +1441,14 @@ test("pointer panel-header drag can return a Bottom panel to an empty side dock"
 test("compact Console selection resets only when it is not explicitly docked", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
   await page.evaluate(() => {
     const key = "codogma.editor.layout";
     const current = JSON.parse(localStorage.getItem(key) ?? "{}");
     localStorage.setItem(key, JSON.stringify({ ...current, consoleDocked: false, bottomTab: "Project" }));
   });
   await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForEditorProject(page);
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
   const consoleTab = bottomTabs.getByRole("tab", { name: "Console" });
@@ -1433,6 +1460,7 @@ test("compact Console selection resets only when it is not explicitly docked", a
   await expect(bottomTabs.getByRole("tab", { name: "Console" })).toHaveCount(0);
   await expect(page.getByTestId("console-panel")).toBeVisible();
 
+  await page.setViewportSize({ width: 900, height: 900 });
   await page.evaluate(() => {
     const key = "codogma.editor.layout";
     const current = JSON.parse(localStorage.getItem(key) ?? "{}");
@@ -1442,8 +1470,8 @@ test("compact Console selection resets only when it is not explicitly docked", a
       bottomTab: "Console",
     }));
   });
-  await page.setViewportSize({ width: 900, height: 900 });
   await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForEditorProject(page);
 
   const compactConsoleTab = page.getByRole("tablist", { name: "Bottom workspace" })
     .getByRole("tab", { name: "Console" });
@@ -1533,13 +1561,16 @@ test("short desktop viewports keep the Scene, Bottom Dock and status row inside 
 test("pointercancel clears the drag target and does not swallow a following tab click", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
 
   const bottomTabs = page.getByRole("tablist", { name: "Bottom workspace" });
   const leftTabs = page.getByRole("tablist", { name: "Left dock panels" });
   const source = leftTabs.getByRole("tab", { name: "Hierarchy" });
-  const pointerIdPromise = source.evaluate((element) => new Promise<number>((resolve) => {
-    element.addEventListener("pointerdown", (event) => resolve((event as PointerEvent).pointerId), { once: true });
-  }));
+  await page.evaluate(() => {
+    document.addEventListener("pointerdown", (event) => {
+      document.documentElement.dataset.testPointerId = String((event as PointerEvent).pointerId);
+    }, { once: true, capture: true });
+  });
 
   const bounds = await source.boundingBox();
   if (!bounds) throw new Error("Hierarchy tab geometry is unavailable.");
@@ -1547,9 +1578,14 @@ test("pointercancel clears the drag target and does not swallow a following tab 
   const y = bounds.y + bounds.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  const pointerId = await pointerIdPromise;
-  await page.mouse.move(x + 12, y, { steps: 3 });
-  await expect(page.getByTestId("dock-zone-right")).toBeVisible();
+  await expect.poll(() => page.locator("html").getAttribute("data-test-pointer-id")).not.toBeNull();
+  const pointerId = Number(await page.locator("html").getAttribute("data-test-pointer-id"));
+  expect(Number.isInteger(pointerId)).toBe(true);
+  const targetTab = bottomTabs.getByRole("tab", { name: "Animation" });
+  const targetBounds = await targetTab.boundingBox();
+  if (!targetBounds) throw new Error("Animation tab geometry is unavailable.");
+  await page.mouse.move(targetBounds.x + targetBounds.width / 2, targetBounds.y + targetBounds.height / 2, { steps: 8 });
+  await expect(targetTab).toHaveClass(/dock-drop-insert/);
 
   await source.evaluate((element, id) => {
     element.dispatchEvent(new PointerEvent("pointercancel", {
@@ -1561,19 +1597,22 @@ test("pointercancel clears the drag target and does not swallow a following tab 
       clientY: 0,
     }));
   }, pointerId);
-  await expect(page.getByTestId("dock-zone-right")).not.toBeVisible();
+  await expect(page.getByTestId("dock-zone-right")).toBeVisible();
+  await expect(page.getByTestId("dock-drop-preview")).toHaveCount(0);
   await expect(page.locator(".dock-drop-target")).toHaveCount(0);
+  await expect(page.locator(".dock-drop-insert-before, .dock-drop-insert-after")).toHaveCount(0);
   await page.mouse.up();
 
-  await bottomTabs.getByRole("tab", { name: "Project" }).click();
-  await expect(bottomTabs.getByRole("tab", { name: "Project" })).toHaveAttribute("aria-selected", "true");
-  await expect(source).toHaveAttribute("aria-selected", "false");
+  await bottomTabs.getByRole("tab", { name: "Animation" }).click();
+  await expect(bottomTabs.getByRole("tab", { name: "Animation" })).toHaveAttribute("aria-selected", "true");
+  await expect(source).toHaveAttribute("aria-selected", "true");
 });
 
 
 test("splitter resize ignores unrelated pointer events and stops on lost capture", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForEditorProject(page);
 
   const workbench = page.getByTestId("workbench");
   const splitter = page.getByTestId("splitter-hierarchy");
@@ -1582,14 +1621,17 @@ test("splitter resize ignores unrelated pointer events and stops on lost capture
   if (!bounds) throw new Error("Hierarchy splitter geometry is unavailable.");
   const x = bounds.x + bounds.width / 2;
   const y = bounds.y + bounds.height / 2;
-  const pointerIdPromise = splitter.evaluate((element) => new Promise<number>((resolve) => {
-    element.addEventListener("pointerdown", (event) => resolve((event as PointerEvent).pointerId), { once: true });
-  }));
+  await page.evaluate(() => {
+    document.addEventListener("pointerdown", (event) => {
+      document.documentElement.dataset.testSplitterPointerId = String((event as PointerEvent).pointerId);
+    }, { once: true, capture: true });
+  });
 
   await page.mouse.move(x, y);
   await page.mouse.down();
-  const pointerId = await pointerIdPromise;
-
+  await expect.poll(() => page.locator("html").getAttribute("data-test-splitter-pointer-id")).not.toBeNull();
+  const pointerId = Number(await page.locator("html").getAttribute("data-test-splitter-pointer-id"));
+  expect(Number.isInteger(pointerId)).toBe(true);
   await workbench.dispatchEvent("pointermove", {
     pointerId: pointerId + 1000,
     pointerType: "touch",
@@ -1674,7 +1716,18 @@ test("TypeScript source opens, edits, saves and reopens from the Project browser
     await editor.fill(originalSource + "\\n" + marker);
     await expect(page.getByTestId("save-typescript-source")).toBeEnabled();
     await expect(page.getByTestId("typescript-diagnostics")).not.toContainText("error");
+    const saveResponsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      if (response.url() !== "http://127.0.0.1:5173/editor/api" || request.method() !== "POST") return false;
+      try {
+        return request.postDataJSON()?.method === "SetFileString";
+      } catch {
+        return false;
+      }
+    });
     await page.getByTestId("save-typescript-source").click();
+    const saveResponse = await saveResponsePromise;
+    expect(saveResponse.ok()).toBeTruthy();
     await expect(page.getByTestId("save-typescript-source")).toBeDisabled();
 
     const savedResponse = await page.request.get("http://127.0.0.1:5173/editor/project/" + sourcePath);
@@ -1685,7 +1738,7 @@ test("TypeScript source opens, edits, saves and reopens from the Project browser
     await bottomTabs.getByRole("tab", { name: "Project" }).click();
     await page.locator(".file-tree-row").filter({ hasText: "components" }).first().click();
     await page.locator(".file-tree-row").filter({ hasText: "PushOnClick.ts" }).click();
-    await expect(page.getByTestId("typescript-source-editor")).toContainText(marker);
+    await expect(page.getByTestId("typescript-source-editor")).toHaveValue(/Editor Host source authoring acceptance/);
   } finally {
     await page.request.post("http://127.0.0.1:3000/editor/api", {
       data: {
