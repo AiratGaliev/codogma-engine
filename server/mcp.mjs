@@ -854,6 +854,13 @@ export async function handleBridgeEvents(req, res) {
     res.on?.("error", disconnect)
 }
 
+export function getBridgeStatus() {
+    return {
+        connected: bridgeClient !== null,
+        clientId: bridgeClient?.clientId ?? null
+    }
+}
+
 export async function handleBridgeResult(req, res) {
     const body = await readBody(req)
     const pending = pendingCommands.get(body.id)
