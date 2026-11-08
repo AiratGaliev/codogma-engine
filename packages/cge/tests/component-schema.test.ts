@@ -48,13 +48,11 @@ test("applies defaults and serializes only persisted fields", () => {
     mode: "instant",
     inspectorExpanded: true,
     runtimeValue: 8,
-    futureProperty: "preserved",
   });
   assert.deepEqual(serialized, {
     speed: 25,
     mode: "instant",
     enabled: true,
-    futureProperty: "preserved",
   });
 });
 
@@ -166,15 +164,38 @@ test("rejects malformed type-specific metadata instead of silently ignoring it",
   assert.equal(invalidNode.valid, false);
 });
 
-test("preserves __proto__ as a JSON property without changing the normalized object's prototype", () => {
+test("rejects undeclared Component properties instead of preserving them", () => {
+  const result = validateComponentProperties(schema, {
+    speed: 10,
+    undeclaredPluginValue: { keep: true },
+  });
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.ok(result.diagnostics.some((item) =>
+    item.code === "COMPONENT_UNKNOWN_PROPERTY" &&
+    item.propertyName === "undeclaredPluginValue" &&
+    item.severity === "error",
+  ));
+});
+
+test("rejects unknown Component schema envelope and property-schema fields", () => {
+  const unknownEnvelope = validateComponentTypeSchema({ ...schema, legacyType: "old-component-contract" });
+  const unknownProperty = validateComponentTypeSchema({
+    ...schema,
+    properties: { ...schema.properties, speed: { ...schema.properties.speed, defValue: 120 } },
+  });
+  assert.equal(unknownEnvelope.valid, false);
+  assert.equal(unknownProperty.valid, false);
+  assert.ok(unknownEnvelope.diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"));
+  assert.ok(unknownProperty.diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"));
+});
+
+test("rejects undeclared __proto__ component data without changing object prototypes", () => {
   const input = JSON.parse('{"__proto__":{"future":true}}') as Record<string, unknown>;
   const result = validateComponentProperties(schema, input);
-
-  assert.equal(result.valid, true);
-  assert.ok(result.value);
-  assert.equal(Object.getPrototypeOf(result.value), Object.prototype);
-  assert.equal(Object.prototype.hasOwnProperty.call(result.value, "__proto__"), true);
-  assert.deepEqual(result.value["__proto__"], { future: true });
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.ok(result.diagnostics.some((item) => item.code === "COMPONENT_UNKNOWN_PROPERTY"));
   assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "future"), false);
 });
 

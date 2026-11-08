@@ -3,12 +3,27 @@
   "id": "acceptance-project",
   "name": "Acceptance Slice",
   "scenes": [
-    { "id": "scene-level", "assetId": "asset-scene-level" }
+    {
+      "id": "scene-level",
+      "assetId": "asset-scene-level"
+    }
   ],
   "assets": [
-    { "id": "asset-scene-level", "path": "scenes/Level.cge-scene.json", "kind": "scene" },
-    { "id": "asset-follow-target-module", "path": "src/FollowTarget.ts", "kind": "script" },
-    { "id": "asset-player-sprite", "path": "assets/player.svg", "kind": "image" }
+    {
+      "id": "asset-scene-level",
+      "path": "scenes/Level.cge-scene.json",
+      "kind": "scene"
+    },
+    {
+      "id": "asset-follow-target-module",
+      "path": "src/FollowTarget.ts",
+      "kind": "script"
+    },
+    {
+      "id": "asset-player-sprite",
+      "path": "assets/player.svg",
+      "kind": "image"
+    }
   ],
   "prefabs": [],
   "componentModules": [
@@ -18,6 +33,8 @@
       "version": "1.0.0"
     }
   ],
-  "runtime": { "adapterId": "phaser", "settings": {} },
-  "unknownPluginData": { "keep": true }
+  "runtime": {
+    "adapterId": "phaser",
+    "settings": {}
+  }
 }

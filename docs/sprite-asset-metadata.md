@@ -56,4 +56,4 @@ COD-86 implementation and CODQA-10 browser/runtime acceptance use native Project
 - preview behavior and release of temporary resources;
 - deterministic native Asset serialization and reference validation.
 
-The exact persisted field layout is finalized in code, typed schema and fixtures together. This document defines semantic invariants and does not replace the implementation or automated tests.
+The current persisted Codogma metadata envelope declares `schemaVersion: 1`. Existing metadata without that exact version is rejected; older or unversioned internal snapshots are not converted. A new external Asset Pack entry without Codogma metadata may be initialized directly in the current v1 format. The exact persisted field layout is finalized in code, typed schema and fixtures together. This document defines semantic invariants and does not replace the implementation or automated tests.

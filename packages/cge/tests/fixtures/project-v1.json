@@ -6,6 +6,8 @@
   "assets": [],
   "prefabs": [],
   "componentModules": [],
-  "runtime": { "adapterId": "phaser", "settings": {} },
-  "unknownPluginData": { "keep": true }
+  "runtime": {
+    "adapterId": "phaser",
+    "settings": {}
+  }
 }

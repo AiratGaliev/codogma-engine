@@ -7,8 +7,6 @@ import path from "node:path"
 
 import {
     dispatchTool,
-    getBridgeStatus,
-    handleBridgeActivate,
     handleBridgeEvents,
     handleBridgeResult,
     initMcp
@@ -53,28 +51,28 @@ class FakeResponse extends EventEmitter {
     }
 }
 
-function parseConnectedSession(response) {
-    const match = response.output.match(/event: connected\ndata: ([^\n]+)/)
-    assert.ok(match, "SSE client should receive its server-issued session id")
-    const data = JSON.parse(match[1])
-    assert.equal(typeof data.clientId, "string")
-    assert.ok(data.clientId.length >= 30, "session ids must be unpredictable UUIDs")
-    return data
+function parseEventPayload(response, eventName) {
+    const lines = response.output.split(/\r?\n/)
+    const eventIndex = lines.indexOf(`event: ${eventName}`)
+    assert.ok(eventIndex >= 0, `Editor Host response should contain the "${eventName}" SSE event`)
+    const dataLine = lines[eventIndex + 1]
+    assert.ok(dataLine?.startsWith("data: "), `"${eventName}" event should be followed by an SSE data line`)
+    return JSON.parse(dataLine.slice("data: ".length))
 }
 
 function parseLastCommand(response) {
-    const matches = [...response.output.matchAll(/event: command\ndata: ([^\n]+)/g)]
-    assert.ok(matches.length > 0, "active editor should receive the MCP command event")
-    return JSON.parse(matches.at(-1)[1])
+    const lines = response.output.split(/\r?\n/)
+    const eventIndexes = lines.flatMap((line, index) => line === "event: command" ? [index] : [])
+    assert.ok(eventIndexes.length > 0, "the connected Editor Host should receive the MCP command event")
+    const dataLine = lines[eventIndexes.at(-1) + 1]
+    assert.ok(dataLine?.startsWith("data: "), "command event should contain its payload")
+    return JSON.parse(dataLine.slice("data: ".length))
 }
 
-async function connectEditor(clientType) {
+async function connectEditorHost() {
     const response = new FakeResponse()
-    await handleBridgeEvents(
-        new FakeRequest(`/editor/mcp-bridge/events?clientType=${clientType}`),
-        response
-    )
-    return { response, session: parseConnectedSession(response) }
+    await handleBridgeEvents(new FakeRequest("/editor/mcp-bridge/events"), response)
+    return { response, session: parseEventPayload(response, "connected") }
 }
 
 async function sendResult(body) {
@@ -90,88 +88,60 @@ after(async () => {
     await rm(projectDirectory, { recursive: true, force: true })
 })
 
-test("MCP bridge sends commands only to the active editor and binds results to that session", async () => {
-    const legacy = await connectEditor("legacy")
-    const solid = await connectEditor("solidjs")
+test("MCP bridge routes commands to the single Editor Host and binds results to its session", async () => {
+    const editorHost = await connectEditorHost()
 
     try {
-        const commandPromise = dispatchTool("ide-get-active-scene", {})
-        await new Promise((resolve) => setImmediate(resolve))
+        const commandPromise = dispatchTool("scene-get-active", {})
+        await new Promise(resolve => setImmediate(resolve))
 
-        const command = parseLastCommand(solid.response)
-        assert.equal(command.clientId, solid.session.clientId)
-        assert.equal(command.tool, "ide-get-active-scene")
-        assert.doesNotMatch(legacy.response.output, /event: command/,
-            "a command must not be broadcast to the inactive legacy editor")
+        const command = parseLastCommand(editorHost.response)
+        assert.equal(command.clientId, editorHost.session.clientId)
+        assert.equal(command.tool, "scene-get-active")
 
         const rejected = await sendResult({
             id: command.id,
-            clientId: legacy.session.clientId,
-            result: { scenePath: "scenes/Legacy.scene" }
+            clientId: "unrelated-session",
+            result: { path: "scenes/Level.cge-scene.json", id: "wrong-session" }
         })
         assert.equal(rejected.payload.error, "command result belongs to a different editor session")
 
         const accepted = await sendResult({
             id: command.id,
-            clientId: solid.session.clientId,
-            result: { scenePath: "scenes/Level.scene", sceneKey: "Level", sceneId: "scene-level" }
+            clientId: editorHost.session.clientId,
+            result: { path: "scenes/Level.cge-scene.json", id: "scene-level", name: "Level", documentType: "scene" }
         })
         assert.equal(accepted.payload.ok, true)
 
         const result = await commandPromise
-        assert.match(result.content[0].text, /scenes\/Level\.scene/)
+        assert.ok(result.content[0].text.includes("scenes/Level.cge-scene.json"))
     } finally {
-        legacy.response.emit("close")
-        solid.response.emit("close")
+        editorHost.response.emit("close")
     }
 })
 
-test("editor focus changes command ownership and disconnect selects the remaining Host", async () => {
-    const legacy = await connectEditor("legacy")
-    const solid = await connectEditor("solidjs")
+test("disconnecting the Editor Host rejects its pending MCP command", async () => {
+    const editorHost = await connectEditorHost()
+    const commandPromise = dispatchTool("scene-get-active", {})
+    await new Promise(resolve => setImmediate(resolve))
+    parseLastCommand(editorHost.response)
 
-    try {
-        assert.equal(getBridgeStatus().activeClientType, "solidjs")
-
-        const activationResponse = new FakeResponse()
-        await handleBridgeActivate(
-            new FakeRequest("/editor/mcp-bridge/activate", { clientId: legacy.session.clientId }),
-            activationResponse
-        )
-        assert.equal(JSON.parse(activationResponse.body).activeClientType, "legacy")
-
-        const commandPromise = dispatchTool("ide-get-active-scene", {})
-        await new Promise((resolve) => setImmediate(resolve))
-        const command = parseLastCommand(legacy.response)
-        assert.equal(command.clientId, legacy.session.clientId)
-        await sendResult({
-            id: command.id,
-            clientId: legacy.session.clientId,
-            result: { scenePath: "scenes/Legacy.scene", sceneKey: "Legacy", sceneId: "legacy-id" }
-        })
-        await commandPromise
-
-        legacy.response.emit("close")
-        assert.equal(getBridgeStatus().activeClientType, "solidjs")
-        assert.equal(getBridgeStatus().clients, 1)
-    } finally {
-        legacy.response.emit("close")
-        solid.response.emit("close")
-    }
+    editorHost.response.emit("close")
+    await assert.rejects(commandPromise, /Editor Host session disconnected/)
 })
 
-test("MCP bridge rejects activation and command results for unknown sessions", async () => {
-    const activation = new FakeResponse()
-    await handleBridgeActivate(
-        new FakeRequest("/editor/mcp-bridge/activate", { clientId: "not-a-session" }),
-        activation
-    )
-    assert.equal(JSON.parse(activation.body).error, "Editor bridge session is not connected.")
-
+test("MCP bridge rejects results for unknown commands", async () => {
     const result = await sendResult({
         id: "not-a-command",
-        clientId: "not-a-session",
+        clientId: "unknown-session",
         result: {}
     })
     assert.equal(result.payload.error, "unknown command id")
+})
+
+test("native MCP tools require a connected Editor Host session", async () => {
+    await assert.rejects(
+        dispatchTool("scene-get-active", {}),
+        /require a connected Editor Host session/
+    )
 })

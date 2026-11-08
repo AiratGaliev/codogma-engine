@@ -1,131 +1,172 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
-import type { SceneDocument } from "../src/domain/scene-model.ts";
+import { test as testCase } from "vitest";
+import type { PrefabDocumentV1, SceneDocumentV1 } from "@codogma/cge";
 import {
-  createSceneObject,
-  findScenePaths,
-  formatSceneContent,
-  getSceneObjects,
-  parseSceneContent,
-  removeSceneObject,
-  updateSceneObject,
-} from "../src/domain/scene-model.ts";
+  BUILTIN_COMPONENT_TYPES,
+  createSceneNode,
+  findSceneNode,
+  getSceneNodeEntries,
+  isPrefabDocument,
+  removeSceneNode,
+  reparentSceneNode,
+  updateSceneNode,
+} from "../src/domain/scene-model.js";
 
-
-function at<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new Error(`Expected item at index ${index}.`);
-  return item;
+function scene(): SceneDocumentV1 {
+  return {
+    schemaVersion: 1,
+    id: "scene-main",
+    name: "Main",
+    settings: {},
+    rootNodes: [{
+      id: "node-root",
+      name: "Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-root-renderer",
+        typeId: BUILTIN_COMPONENT_TYPES.container,
+        schemaVersion: 1,
+        enabled: true,
+        properties: {},
+      }],
+      children: [{
+        id: "node-child",
+        name: "Child",
+        active: true,
+        transform: { x: 10, y: 20, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [{
+          id: "component-child-renderer",
+          typeId: BUILTIN_COMPONENT_TYPES.imageRenderer,
+          schemaVersion: 1,
+          enabled: true,
+          properties: { assetId: "asset-hero" },
+        }],
+        children: [],
+      }],
+    }],
+  };
 }
 
-const fixtureScene: SceneDocument = {
-  id: "scene-1",
-  sceneType: "SCENE",
-  settings: { sceneKey: "Level" },
-  displayList: [
-    { id: "image-1", type: "Image", label: "dino", x: 400, y: 245, components: ["PushOnClick"], texture: { key: "dino" } },
-    { id: "text-1", type: "Text", label: "title", x: 100, y: 200, text: "Original" },
-    { id: "prefab-1", prefabId: "prefab-1", label: "Prefab", x: 50, y: 80 },
-  ],
-  plainObjects: [],
-};
-
-test("parses and validates a real scene-shaped document without discarding fields", () => {
-  const parsed = parseSceneContent(JSON.stringify(fixtureScene));
-  assert.equal(parsed.id, "scene-1");
-  assert.equal(parsed.settings?.sceneKey, "Level");
-  assert.equal(at(parsed.displayList, 0).texture?.key, "dino");
-  assert.deepEqual(at(parsed.displayList, 0).components, ["PushOnClick"]);
-});
-
-test("lists display objects and prefab instances with stable ids and useful labels", () => {
-  const entries = getSceneObjects(fixtureScene);
-  assert.deepEqual(entries.map(({ id, name, type }) => [id, name, type]), [
-    ["image-1", "dino", "Image"],
-    ["text-1", "title", "Text"],
-    ["prefab-1", "Prefab", "Prefab"],
+testCase("projects native Node and Transform data into a transient Scene viewport view", () => {
+  const entries = getSceneNodeEntries(scene());
+  assert.deepEqual(entries.map((entry) => [entry.id, entry.parentId, entry.depth, entry.type]), [
+    ["node-root", null, 0, "Container"],
+    ["node-child", "node-root", 1, "Image"],
   ]);
+  assert.equal(entries[1]?.source.texture?.key, "asset-hero");
+  assert.equal(entries[1]?.source.x, 10);
+  assert.equal("displayList" in scene(), false);
+  assert.equal("plainObjects" in scene(), false);
 });
 
-test("updates transforms immutably and preserves unedited object metadata", () => {
-  const updated = updateSceneObject(fixtureScene, "image-1", { x: 465, rotation: 15 });
-  assert.equal(at(updated.displayList, 0).x, 465);
-  assert.equal(at(updated.displayList, 0).rotation, 15);
-  assert.equal(at(updated.displayList, 0).texture?.key, "dino");
-  assert.equal(at(updated.displayList, 0).components?.[0], "PushOnClick");
-  assert.equal(at(fixtureScene.displayList, 0).x, 400);
+testCase("creates native Nodes with explicit, stable built-in component TypeIds and independent instance identities", () => {
+  const next = createSceneNode(scene(), "Text") as SceneDocumentV1;
+  const created = next.rootNodes[1];
+  assert.ok(created);
+  assert.equal(created.name, "New Text");
+  assert.equal(created.components[0]?.typeId, BUILTIN_COMPONENT_TYPES.textRenderer);
+  assert.equal(created.components[0]?.schemaVersion, 1);
+  assert.ok(created.components[0]?.id);
+  assert.notEqual(created.id, created.components[0]?.id);
+  assert.deepEqual(created.children, []);
 });
 
-test("fallback hierarchy ids can update and remove legacy objects without serialized ids", () => {
-  const legacyScene = {
-    ...fixtureScene,
-    displayList: [{ type: "Text", label: "Legacy", x: 12, y: 24 }],
-    plainObjects: [],
+testCase("edits native Transform and renderer properties immutably", () => {
+  const original = scene();
+  const next = updateSceneNode(original, "node-child", { x: 48, rotation: 30 }) as SceneDocumentV1;
+  const originalChild = findSceneNode(original, "node-child");
+  const updatedChild = findSceneNode(next, "node-child");
+  assert.equal(originalChild?.transform.x, 10);
+  assert.equal(updatedChild?.transform.x, 48);
+  assert.equal(updatedChild?.components[0]?.properties.assetId, "asset-hero");
+});
+
+testCase("projects inactive native Nodes as inactive viewport entries", () => {
+  const inactive = updateSceneNode(scene(), "node-child", { active: false }) as SceneDocumentV1;
+  const entry = getSceneNodeEntries(inactive).find((item) => item.id === "node-child");
+  assert.equal(entry?.source.active, false);
+});
+
+testCase("reparents native Nodes and rejects cycles", () => {
+  const original = scene();
+  const withSibling = createSceneNode(original, "Image") as SceneDocumentV1;
+  const sibling = withSibling.rootNodes[1];
+  assert.ok(sibling);
+  const nested = reparentSceneNode(withSibling, sibling.id, "node-root") as SceneDocumentV1;
+  assert.equal(nested.rootNodes.length, 1);
+  assert.equal(nested.rootNodes[0]?.children.length, 2);
+  assert.throws(() => reparentSceneNode(nested, "node-root", sibling.id), /own subtree/);
+});
+
+testCase("removes only the requested Node and preserves sibling and component identities", () => {
+  const original = scene();
+  const next = removeSceneNode(original, "node-child") as SceneDocumentV1;
+  assert.equal(next.rootNodes[0]?.children.length, 0);
+  assert.equal(findSceneNode(original, "node-child")?.id, "node-child");
+  assert.throws(() => removeSceneNode(original, "missing"), /was not found/);
+});
+
+testCase("edits native Prefab root and protects its single-root invariant", () => {
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-crate",
+    name: "Crate",
+    root: {
+      id: "node-crate",
+      name: "Crate",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
   };
-  const entry = at(getSceneObjects(legacyScene), 0);
-  assert.equal(entry.id, "displayList-0");
-
-  const updated = updateSceneObject(legacyScene, entry.id, { x: 64 });
-  assert.equal(at(updated.displayList, 0).x, 64);
-  assert.equal(at(legacyScene.displayList, 0).x, 12);
-
-  const removed = removeSceneObject(updated, entry.id);
-  assert.equal(removed.displayList.length, 0);
-  assert.equal(legacyScene.displayList.length, 1);
+  assert.equal(isPrefabDocument(prefab), true);
+  const next = createSceneNode(prefab, "Image") as PrefabDocumentV1;
+  assert.equal(next.root.children.length, 1);
+  assert.throws(() => removeSceneNode(prefab, "node-crate"), /root Node/);
 });
 
-test("rejects NaN, Infinity and non-numeric transform values", () => {
-  assert.throws(() => updateSceneObject(fixtureScene, "image-1", { x: Number.NaN }), /finite number/);
-  assert.throws(() => updateSceneObject(fixtureScene, "image-1", { scaleY: Number.POSITIVE_INFINITY }), /finite number/);
-  assert.throws(() => updateSceneObject(fixtureScene, "image-1", { rotation: "left" } as never), /finite number/);
+
+testCase("updates native Image Asset references through the renderer component", () => {
+  const imageScene = createSceneNode(scene(), "Image", "asset-player-sprite") as SceneDocumentV1;
+  const node = findSceneNode(imageScene, getSceneNodeEntries(imageScene).at(-1)!.id)!;
+  const updated = updateSceneNode(imageScene, node.id, { assetId: "asset-background" }) as SceneDocumentV1;
+  const renderer = findSceneNode(updated, node.id)!.components.find((component) => component.typeId === BUILTIN_COMPONENT_TYPES.imageRenderer);
+  assert.equal(renderer?.properties.assetId, "asset-background");
 });
 
-test("creates supported Image, Text and Container nodes without changing the legacy schema", () => {
-  const imageScene = createSceneObject(fixtureScene, "Image");
-  const textScene = createSceneObject(imageScene, "Text");
-  const containerScene = createSceneObject(textScene, "Container");
-  const objects = getSceneObjects(containerScene);
-  assert.equal(objects.length, 6);
-  assert.equal(at(objects, 3).source.texture?.key, "dino");
-  assert.equal(at(objects, 4).source.text, "New text");
-  assert.deepEqual(at(objects, 5).source.list, []);
-  assert.equal(fixtureScene.displayList.length, 3);
-});
+testCase("validates Scene Node patch fields and renderer-specific values before mutating the document", () => {
+  const original = scene();
+  const imageId = "node-child";
+  const textScene = createSceneNode(original, "Text") as SceneDocumentV1;
+  const textId = textScene.rootNodes[1]!.id;
 
-test("removes only the selected scene object", () => {
-  const updated = removeSceneObject(fixtureScene, "text-1");
-  assert.deepEqual(updated.displayList.map((item) => item.id), ["image-1", "prefab-1"]);
-  assert.equal(fixtureScene.displayList.length, 3);
-  assert.throws(() => removeSceneObject(updated, "missing"), /was not found/);
-});
+  assert.throws(() => updateSceneNode(original, imageId, { unknownField: true } as never), /Unsupported Scene Node patch field/);
+  assert.throws(() => updateSceneNode(original, imageId, { active: "false" } as never), /active must be a boolean/);
+  assert.throws(() => updateSceneNode(original, imageId, { alpha: 1.1 }), /alpha must be a finite number between 0 and 1/);
+  assert.throws(() => updateSceneNode(original, imageId, { alpha: Number.NaN }), /alpha must be a finite number between 0 and 1/);
+  assert.throws(() => updateSceneNode(original, imageId, { depth: Number.POSITIVE_INFINITY }), /depth must be a finite number/);
+  assert.throws(() => updateSceneNode(original, imageId, { text: "wrong renderer" }), /does not have a Text Renderer/);
+  assert.throws(() => updateSceneNode(textScene, textId, { assetId: "asset-hero" }), /does not have an Image Renderer/);
+  assert.throws(() => updateSceneNode(textScene, textId, { align: "justify" }), /align must be "left", "center" or "right"/);
+  assert.throws(() => updateSceneNode(textScene, textId, { wordWrapWidth: -1 }), /wordWrapWidth must be a finite non-negative number/);
+  assert.throws(() => updateSceneNode(original, imageId, { assetId: "invalid asset id" }), /stable Asset ID/);
 
-test("rejects malformed scene data with a useful message", () => {
-  assert.throws(() => parseSceneContent("{"), /not valid JSON/);
-  assert.throws(() => parseSceneContent(JSON.stringify({ displayList: [] })), /stable id/);
-  assert.throws(() => parseSceneContent(JSON.stringify({ id: "scene-2", displayList: {} })), /displayList must be an array/);
-});
+  const updatedText = updateSceneNode(textScene, textId, {
+    text: "Native text",
+    fontFamily: "Arial",
+    fontSize: "18px",
+    color: "#ffffff",
+    align: "center",
+    wordWrapWidth: 320,
+  }) as SceneDocumentV1;
+  const updatedNode = findSceneNode(updatedText, textId)!;
+  assert.equal(updatedNode.components[0]?.properties.text, "Native text");
+  assert.equal(updatedNode.components[0]?.properties.align, "center");
 
-test("formats scene content as valid JSON and preserves object data", () => {
-  const text = formatSceneContent(fixtureScene);
-  assert.ok(text.endsWith("\n"));
-  assert.deepEqual(JSON.parse(text), fixtureScene);
-});
-
-test("discovers scene files recursively and prioritizes Level.scene", () => {
-  const root = {
-    name: "fixture",
-    isFile: false,
-    children: [
-      { name: "scenes", isFile: false, children: [
-        { name: "Other.scene", isFile: true },
-        { name: "Level.scene", isFile: true },
-      ] },
-      { name: "Main.scene", isFile: true },
-      { name: "notes.txt", isFile: true },
-    ],
-  };
-  assert.deepEqual(findScenePaths(root), ["scenes/Level.scene", "Main.scene", "scenes/Other.scene"]);
-  assert.deepEqual(findScenePaths({ name: "test-typescript", isFile: false, children: [
-    { name: "scenes", isFile: false, children: [{ name: "Level.scene", isFile: true }] },
-  ] }), ["scenes/Level.scene"]);
+  // The Inspector edits names one keystroke at a time, so an intermediate
+  // empty string must remain possible; Core validation rejects it on save.
+  const editingName = updateSceneNode(original, imageId, { label: "" }) as SceneDocumentV1;
+  assert.equal(findSceneNode(editingName, imageId)?.name, "");
 });

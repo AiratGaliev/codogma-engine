@@ -54,6 +54,16 @@ export interface ComponentSchemaContext {
 
 const PROPERTY_TYPES = ["string", "number", "boolean", "enum", "asset", "node"] as const;
 const STORAGE_VALUES = ["persisted", "editorOnly", "runtime"] as const;
+const COMPONENT_SCHEMA_FIELDS = new Set(["schemaVersion", "typeId", "name", "version", "properties"]);
+const PROPERTY_BASE_FIELDS = ["type", "label", "description", "required", "storage", "defaultValue"] as const;
+const PROPERTY_SPECIFIC_FIELDS: Record<(typeof PROPERTY_TYPES)[number], readonly string[]> = {
+  string: ["minLength", "maxLength", "pattern"],
+  number: ["min", "max", "integer"],
+  boolean: [],
+  enum: ["options"],
+  asset: ["assetKinds"],
+  node: ["allowSelf"],
+};
 
 function diagnostic(
   code: CoreDiagnostic["code"],
@@ -113,6 +123,15 @@ function validatePropertySchema(name: string, input: unknown): CoreDiagnostic[] 
     return [diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " has an unsupported type.", name)];
   }
   const errors: CoreDiagnostic[] = [];
+  const supportedFields = new Set([
+    ...PROPERTY_BASE_FIELDS,
+    ...PROPERTY_SPECIFIC_FIELDS[input.type as (typeof PROPERTY_TYPES)[number]],
+  ]);
+  for (const key of Object.keys(input)) {
+    if (!supportedFields.has(key)) {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " contains unsupported schema field " + key + ".", name));
+    }
+  }
   if (input.label !== undefined && typeof input.label !== "string") {
     errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property " + name + " label must be a string.", name));
   }
@@ -196,6 +215,16 @@ export function validateComponentTypeSchema(input: unknown): ValidationResult<Co
     return { valid: false, diagnostics: [diagnostic("COMPONENT_INVALID_SCHEMA", "Component schema requires version 1, typeId, name, version and a properties object.")] };
   }
   const diagnostics: CoreDiagnostic[] = [];
+  for (const key of Object.keys(input)) {
+    if (!COMPONENT_SCHEMA_FIELDS.has(key)) {
+      diagnostics.push({
+        code: "COMPONENT_INVALID_SCHEMA",
+        severity: "error",
+        message: "Component schema contains unsupported field " + key + ".",
+        path: key,
+      });
+    }
+  }
   for (const [name, schema] of Object.entries(input.properties)) {
     if (!/^[A-Za-z_$][\w$]*$/.test(name)) diagnostics.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Property key " + name + " is not a valid identifier.", name));
     else diagnostics.push(...validatePropertySchema(name, schema));
@@ -254,8 +283,11 @@ export function validateComponentProperties(
       diagnostics.push(diagnostic("COMPONENT_INVALID_VALUE", "Unknown property " + name + " is not JSON-compatible.", name));
       continue;
     }
-    setJsonProperty(normalized, name, value);
-    diagnostics.push(diagnostic("COMPONENT_UNKNOWN_PROPERTY", "Unknown property " + name + " was preserved.", name, "warning"));
+    diagnostics.push(diagnostic(
+      "COMPONENT_UNKNOWN_PROPERTY",
+      "Property " + name + " is not declared by component " + schema.typeId + ".",
+      name,
+    ));
   }
 
   return hasErrors(diagnostics)

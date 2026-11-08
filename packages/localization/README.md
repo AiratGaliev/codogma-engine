@@ -74,7 +74,7 @@ together with the manifest and tooling configuration. The package files were
 normalized in the pilot branch and the CI check now runs in read-only check
 mode. Run the root `npm ci` first, then `npm ci` here for the package's pinned
 TypeScript compiler. Strict TypeScript, ESLint and formatting gates remain
-scoped to this package; they are not applied to the legacy editor tree.
+scoped to this package; they are not applied to unrelated application source.
 
 `quality:report` is report-only: Knip uses `--no-exit-code`; dependency-cruiser
 rules use warning severity. Review findings before promoting either report to a

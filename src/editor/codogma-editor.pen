@@ -6431,7 +6431,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -6447,7 +6447,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -6463,7 +6463,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -6479,7 +6479,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -8678,7 +8678,7 @@
               "fill": {
                 "type": "image",
                 "enabled": true,
-                "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                "url": "./design-assets/dino.png",
                 "mode": "contain"
               },
               "layout": "none"
@@ -8886,7 +8886,7 @@
               "fill": {
                 "type": "image",
                 "enabled": true,
-                "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                "url": "./design-assets/dino.png",
                 "mode": "contain"
               },
               "stroke": "$border-subtle",
@@ -13206,7 +13206,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -13222,7 +13222,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -13238,7 +13238,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -13254,7 +13254,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -15453,7 +15453,7 @@
               "fill": {
                 "type": "image",
                 "enabled": true,
-                "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                "url": "./design-assets/dino.png",
                 "mode": "contain"
               },
               "layout": "none"
@@ -15661,7 +15661,7 @@
               "fill": {
                 "type": "image",
                 "enabled": true,
-                "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                "url": "./design-assets/dino.png",
                 "mode": "contain"
               },
               "stroke": "$border-subtle",
@@ -19773,7 +19773,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none"
@@ -21495,7 +21495,7 @@
                   "fill": {
                     "type": "image",
                     "enabled": true,
-                    "url": "../../tests/workspace/test-typescript/assets/dino.png",
+                    "url": "./design-assets/dino.png",
                     "mode": "contain"
                   },
                   "layout": "none",
@@ -44392,7 +44392,7 @@
           "fill": {
             "type": "image",
             "enabled": true,
-            "url": "../../tests/workspace/test-typescript/assets/dino.png",
+            "url": "./design-assets/dino.png",
             "mode": "contain"
           },
           "width": 42,
@@ -44407,7 +44407,7 @@
           "fill": {
             "type": "image",
             "enabled": true,
-            "url": "../../tests/workspace/test-typescript/assets/dino.png",
+            "url": "./design-assets/dino.png",
             "mode": "contain"
           },
           "width": 78,
@@ -44434,7 +44434,7 @@
           "fill": {
             "type": "image",
             "enabled": true,
-            "url": "../../tests/workspace/test-typescript/assets/dino.png",
+            "url": "./design-assets/dino.png",
             "mode": "contain"
           },
           "width": 42,
@@ -45225,7 +45225,7 @@
           "fill": {
             "type": "image",
             "enabled": true,
-            "url": "../../tests/workspace/test-typescript/assets/dino.png",
+            "url": "./design-assets/dino.png",
             "mode": "contain"
           },
           "width": 64,

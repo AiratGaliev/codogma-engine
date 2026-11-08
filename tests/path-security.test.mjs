@@ -639,14 +639,14 @@ test("writeNewFileSafely rejects a parent symlink swap and does not create outsi
     const t = createTempTree()
     const parent = path.join(t.base, "assets")
     const parkedParent = path.join(t.base, "assets-internal")
-    const target = path.join(parent, "new-scene.scene")
-    const outsideTarget = path.join(t.outside, "new-scene.scene")
+    const target = path.join(parent, "new-scene.cge-scene.json")
+    const outsideTarget = path.join(t.outside, "new-scene.cge-scene.json")
     const originalOpen = fs.openSync
     let swapped = false
 
     try {
         fs.openSync = function (filePath, ...args) {
-            if (!swapped && typeof filePath === "string" && /^\/proc\/self\/fd\/\d+\/new-scene\.scene$/.test(filePath)) {
+            if (!swapped && typeof filePath === "string" && /^\/proc\/self\/fd\/\d+\/new-scene\.cge-scene\.json$/.test(filePath)) {
                 fs.renameSync(parent, parkedParent)
                 fs.symlinkSync(t.outside, parent, "dir")
                 swapped = true
@@ -657,7 +657,7 @@ test("writeNewFileSafely rejects a parent symlink swap and does not create outsi
         assert.equal(writeNewFileSafely(t.base, target, "scene-data"), false)
         assert.equal(swapped, true, "the test must replace the parent immediately before the descriptor-anchored create")
         assert.equal(fs.existsSync(outsideTarget), false, "the outside directory must not receive the created file")
-        assert.equal(fs.existsSync(path.join(parkedParent, "new-scene.scene")), false,
+        assert.equal(fs.existsSync(path.join(parkedParent, "new-scene.cge-scene.json")), false,
             "a rejected create must clean up its own staged file")
     } finally {
         fs.openSync = originalOpen

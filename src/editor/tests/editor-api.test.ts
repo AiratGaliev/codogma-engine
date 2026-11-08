@@ -1,24 +1,27 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { renameProjectFile } from "../src/services/editor-api.ts";
+import { renameProjectEntry } from "../src/services/editor-api.ts";
 
-test("renameProjectFile sends the server RenameFile oldPath/newPath DTO", async () => {
+test("renameProjectEntry sends the native project operation contract", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: unknown;
+  let requestUrl = "";
 
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requestUrl = String(input);
     requestBody = JSON.parse(String(init?.body));
     return new Response("{}", { status: 200 });
   }) as typeof fetch;
 
   try {
-    await renameProjectFile("assets\\hero.png", "hero-renamed.png");
+    await renameProjectEntry("assets\\hero.png", "hero-renamed.png");
 
+    assert.equal(requestUrl, "/editor/project/operations");
     assert.deepEqual(requestBody, {
-      method: "RenameFile",
-      body: {
-        oldPath: "assets/hero.png",
-        newPath: "assets/hero-renamed.png",
+      operation: "project.renameEntry",
+      arguments: {
+        sourcePath: "assets/hero.png",
+        destinationPath: "assets/hero-renamed.png",
       },
     });
   } finally {
@@ -26,8 +29,8 @@ test("renameProjectFile sends the server RenameFile oldPath/newPath DTO", async 
   }
 });
 
-test("renameProjectFile rejects unsafe relative paths and non-segment names", async () => {
-  await assert.rejects(renameProjectFile("../outside.png", "inside.png"), /invalid relative path/);
-  await assert.rejects(renameProjectFile("assets/hero.png", "../outside.png"), /single non-empty path segment/);
-  await assert.rejects(renameProjectFile("assets/hero.png", "sub/other.png"), /single non-empty path segment/);
+test("renameProjectEntry rejects unsafe relative paths and non-segment names", async () => {
+  await assert.rejects(renameProjectEntry("../outside.png", "inside.png"), /invalid relative path/);
+  await assert.rejects(renameProjectEntry("assets/hero.png", "../outside.png"), /single non-empty path segment/);
+  await assert.rejects(renameProjectEntry("assets/hero.png", "sub/other.png"), /single non-empty path segment/);
 });

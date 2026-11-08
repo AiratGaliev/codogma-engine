@@ -4,9 +4,9 @@ Host-neutral contracts and the first component-object Core slice.
 
 ## Boundaries
 
-- project-model owns versioned project/scene/node/transform/component/prefab/asset contracts, validation, migration and deterministic serialization.
+- project-model owns versioned project/scene/node/transform/component/prefab/asset contracts, validation and deterministic serialization.
 - components owns the component schema, registry, lifecycle and explicit-tick scheduler.
-- The package does not depend on Phaser, DOM/editor UI, Colibri, Node-only APIs or platform SDKs.
+- The package does not depend on Phaser, browser DOM, Editor Host UI, Node-only APIs or platform SDKs.
 - The Core never creates a game loop. A runtime adapter calls ComponentWorld.update(deltaSeconds) from its controlled tick.
 - A scene host owns one ComponentWorld lifetime per active scene. Replacing a scene disposes the previous world before creating the next one.
 - Component modules are supplied through explicit registration. Project data stores stable type/module references; it never supplies executable import paths or source code.
@@ -67,29 +67,13 @@ For standalone Core development and its full quality suite, continue to use the
 commands above in the Boundaries section from this package directory.
 
 
-## Persisted Project migrations
-
-Project v0 migration and legacy .scene compatibility converters are explicit in-memory APIs:
-
-- migrateProjectDocument(input) deep-copies JSON data, defaults only absent v0 optional fields and rejects malformed present fields with structured diagnostics.
-- migrateSceneDocument(input, options) and migratePrefabDocument(input, options) validate v1 documents or opt in to conversion from legacy sceneType: "SCENE" | "PREFAB" envelopes.
-- migrateLegacySceneDocument / migrateLegacyPrefabDocument are legacy-only entry points. They preserve source payloads, require stable existing IDs and apply Component/Prefab mappings only when the caller supplies explicit mappings.
-- Their results expose LegacyMigratedSceneDocument / LegacyMigratedPrefabDocument and recursive LegacyMigratedNodeDocument types. The full original JSON is stored once in document-level legacySource; each Node stores only legacySourcePath, legacyCollection and optional legacyComponents. Prefab declarations remain available at legacySource.prefabProperties. The general migrateSceneDocument / migratePrefabDocument APIs return the versioned document or the typed legacy-migrated document; sourceVersion distinguishes cge-scene-v1 / cge-prefab-v1 from legacy source versions.
-- Materializing a mapped Component requires validationContext.registeredComponentTypes and a matching validationContext.componentSchemas entry. A mapped Prefab requires its full document in validationContext.prefabs so rootNodeId can be verified; prefabIds alone is insufficient.
-- Legacy renderer, texture/asset keys, plainObjects, nested Prefab metadata and other unrepresented fields are preserved with diagnostics rather than being assigned invented v1 runtime semantics.
-- A present but malformed hierarchy/Component collection (displayList, Node list or components) is a blocking migration error; the converter does not return a partial Scene tree. Missing optional collections remain empty.
-
-These functions do not perform file I/O, execute project code, resolve arbitrary module paths or rewrite source files. A caller must inspect diagnostics and own the save/confirmation workflow. See docs/legacy-project-model-compatibility.md for the field mapping, limits and fixture evidence.
-
-Run the standalone Core suite from this directory with:
-
-    npm run quality:check
-
 ## Initial contracts
 
-Schema versions and API signatures are intentionally small and test-backed. The v0-to-v1 project migration is an in-memory compatibility operation; opening a file never writes migrated data automatically.
+Schema versions and API signatures are intentionally small and test-backed. Project Model v1 is the first supported persisted contract. The parser rejects unpublished schema snapshots instead of reinterpreting them; schema migrations are introduced only when a prior contract has been published and requires a versioned transition.
 
 
-### Unknown fields and validation diagnostics
+### Native contract field policy
 
-Project, Scene, Prefab, Node, Transform, Asset and Component envelope extensions that contain JSON-compatible values are preserved by validation and serialization and produce `PROJECT_UNKNOWN_FIELD_PRESERVED` warnings with the exact document path. Unknown Component property values are preserved separately with `COMPONENT_UNKNOWN_PROPERTY` warnings. Invalid non-JSON values, accessors, custom prototypes, symbol properties, sparse arrays and cyclic object graphs are rejected at the JSON boundary without executing getters. Future Project, Scene and Prefab schema versions are blocking errors.
+Project, Scene, Prefab, Asset, Node, Transform, Component-instance and Prefab-instance envelopes accept only fields declared by the current native schema. Unknown envelope fields and unknown fields in a registered Component schema are blocking validation errors; they are never copied through validation or serialization. Undeclared Component properties are rejected with `COMPONENT_UNKNOWN_PROPERTY` when the matching `ComponentTypeSchemaV1` is supplied.
+
+The native extension points are explicit JSON data bags: `Project.runtime.settings` and `Scene.settings`. Component-instance `properties` remain JSON data owned by the Component; when a registered schema is present, only its declared persisted properties are accepted and editor/runtime-only fields are omitted by serialization. JSON boundary safety rejects accessors, custom prototypes, symbols, sparse arrays, cyclic graphs and non-JSON values. Future Project, Scene and Prefab schema versions are blocking errors.

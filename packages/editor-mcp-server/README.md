@@ -32,13 +32,28 @@ This package is deliberately an adapter, not a second implementation of editor t
 - `get-system-instructions` remains an engine-owned tool. The engine's initialization instructions are passed through to the stdio server.
 - The tool list is read when this process starts. Restart the MCP process after updating the engine or its tool registry.
 
-The adapter connects directly to `POST /editor/mcp`. It does not use the legacy WebSocket helper on port `1902` and does not import Phaser-specific MCP tool definitions.
+The adapter connects directly to `POST /editor/mcp`. It does not start or depend on a second WebSocket or port-`1902` transport, and does not import Phaser-specific MCP tool definitions.
+
+## Native tool surface
+
+The engine registry exposes native Project Model v1 operations:
+
+- **Scene:** list, open, create, save, read the active document and inspect its Node hierarchy.
+- **Nodes:** create, update, delete, reparent and clear native Nodes using stable IDs.
+- **Prefabs:** list, read, create and instantiate native PrefabDocumentV1 assets.
+- **Components:** attach/detach registered Component modules and change instance enabled state.
+- **FX:** add, update and remove Circle, Bloom, Gradient and Shine Component instances.
+- **Viewport:** capture a screenshot of the active native Scene.
+
+The adapter also preserves file/project utilities and read-only or metadata-oriented integrations for external Phaser Asset Pack, animation, Tiled tilemap, Spine, texture, bitmap-font and Google Fonts assets.
+
+Native Project, Scene and Prefab authoring is performed through dedicated tools and the Editor Host's validation/persistence boundary. Generic project-file operations remain scoped to their supported file contract. External Phaser Asset Pack and animation formats use separate import/runtime contracts.
 
 ## Requirements
 
 - Node.js 22 or newer.
 - Codogma Engine server running locally.
-- For active-scene, screenshot and other UI-dependent tools, the editor page must be open and its SSE bridge connected.
+- For Scene, Node, Prefab, Component, FX and screenshot operations, the project must be open in the **Codogma Editor Host** and its SSE bridge connected.
 
 ## Local development
 
@@ -114,5 +129,5 @@ Requests are limited to 32 MiB and responses to 64 MiB. Diagnostics go to stderr
 - This adapter uses the official `@modelcontextprotocol/server` SDK and the low-level `Server` API because the engine already owns complete JSON Schemas. Returning these schemas unchanged avoids a second schema registry or lossy schema conversion.
 - The engine currently serves a stateless JSON-RPC MCP endpoint. This package performs the engine-side initialize handshake before exposing its own stdio transport.
 - Invalid tool arguments are rejected by the adapter's Ajv validation against the unmodified engine JSON Schemas before they reach the engine. Editor/runtime and project-file errors are still reported by the engine's actual tool handlers.
-- The legacy `server/mcp-stdio.mjs` remains as a dependency-free fallback. The old `mini-services/phaser-editor-mcp` WebSocket bridge is retained for legacy editor-side compatibility and security testing; this new package does not depend on it.
+- This is the only supported stdio adapter. The launcher fails closed when this package is missing or has not been built; no dependency-free fallback, third-party Phaser bridge or port-`1902` transport is started.
 - This package does not install dependencies into game projects and is not a Core/runtime package. It is editor/developer tooling and must stay out of production game bundles.

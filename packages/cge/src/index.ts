@@ -2,8 +2,6 @@ export * from "./json.js";
 export * from "./diagnostics.js";
 export * from "./project-model/contracts.js";
 export * from "./project-model/validation.js";
-export * from "./project-model/migrations.js";
-export * from "./project-model/legacy-migrations.js";
 export * from "./project-model/serialization.js";
 export * from "./components/component-schema.js";
 export * from "./components/component-registry.js";

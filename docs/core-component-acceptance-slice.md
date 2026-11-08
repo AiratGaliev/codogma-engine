@@ -25,7 +25,7 @@ The fixture and tests cover:
 - Typed Asset/Node/Prefab references and invalid/missing reference diagnostics.
 - Explicit Script/module manifest registration and deterministic resolution.
 - Schema-driven property types, defaults, required/optional fields and constraints.
-- JSON-safe serialization, deterministic round-trip and unknown-field policy.
+- JSON-safe serialization, deterministic round-trip and strict validation of typed envelope fields; arbitrary JSON is accepted only in the explicit native settings bags and Component properties governed by their registered schema.
 - Rejection of unknown future schema versions without downgrade or mutation.
 - Scene as a data document; no companion TypeScript Scene class/file is required.
 

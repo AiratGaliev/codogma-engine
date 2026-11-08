@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   isValidStableId,
-  migrateProjectDocument,
   parseProjectDocument,
   serializeProjectDocument,
   validateComponentTypeSchema,
@@ -30,12 +29,14 @@ const validProject: ProjectDocumentV1 = {
   runtime: { adapterId: "phaser", settings: {} },
 };
 
-test("validates the versioned project envelope and preserves unknown JSON fields", () => {
-  const input = JSON.parse(JSON.stringify(validProject)) as Record<string, unknown>;
-  input.extensionData = { source: "plugin", keep: true };
+test("rejects fields outside the native Project v1 envelope", () => {
+  const input = { ...validProject, extensionData: { source: "unsupported", keep: true } };
   const result = validateProjectDocument(input);
-  assert.equal(result.valid, true);
-  assert.deepEqual((result.value as unknown as Record<string, unknown>).extensionData, { source: "plugin", keep: true });
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => [item.code, item.path]), [
+    ["PROJECT_INVALID_DOCUMENT", "project.extensionData"],
+  ]);
 });
 
 test("serializes deterministic JSON and round-trips the same semantic document", () => {
@@ -45,25 +46,30 @@ test("serializes deterministic JSON and round-trips the same semantic document",
   assert.equal(first.endsWith("\n"), true);
 });
 
-test("migrates only the explicit v0 project shape in memory", () => {
-  const result = migrateProjectDocument({
-    schemaVersion: 0,
-    id: "legacy-project",
-    name: "Old project",
-    unknownPluginData: { keep: "yes" },
-  });
-  assert.equal(result.fromVersion, 0);
-  assert.equal(result.toVersion, 1);
-  assert.equal(result.document.runtime.adapterId, "phaser");
-  assert.deepEqual((result.document as unknown as Record<string, unknown>).unknownPluginData, { keep: "yes" });
+test("rejects unpublished and unsupported Project schema versions without changing the input", () => {
+  assert.equal(parseProjectDocument("{").diagnostics[0]?.code, "PROJECT_PARSE_ERROR");
+  for (const schemaVersion of [0, 2, 7]) {
+    const input = {
+      schemaVersion,
+      id: "unsupported-project",
+      name: "Unsupported",
+      extensionData: { keep: true },
+    };
+    const before = JSON.stringify(input);
+    const result = parseProjectDocument(JSON.stringify(input));
+    assert.equal(result.value, undefined);
+    assert.equal(result.diagnostics[0]?.code, "PROJECT_UNSUPPORTED_VERSION");
+    assert.equal(JSON.stringify(input), before);
+  }
 });
 
-test("reports parse and unsupported-version diagnostics without rewriting source", () => {
-  assert.equal(parseProjectDocument("{").diagnostics[0]?.code, "PROJECT_PARSE_ERROR");
-  assert.equal(
-    parseProjectDocument(JSON.stringify({ schemaVersion: 7 })).diagnostics[0]?.code,
-    "PROJECT_UNSUPPORTED_VERSION",
-  );
+test("checked-in Project fixture uses only the current native schema", () => {
+  const fixture = JSON.parse(readFileSync(
+    resolve(process.cwd(), "tests/fixtures/project-v1.json"),
+    "utf8",
+  )) as unknown;
+  const parsed = parseProjectDocument(JSON.stringify(fixture));
+  assert.equal(parsed.value?.schemaVersion, 1);
 });
 
 test("rejects dangling scene refs, duplicate ids and traversal paths", () => {
@@ -111,26 +117,6 @@ test("scene validation catches duplicate node ids and invalid transforms", () =>
   assert.equal(result.valid, false);
   assert.equal(result.diagnostics.some((item) => item.code === "SCENE_DUPLICATE_ID"), true);
   assert.equal(result.diagnostics.some((item) => item.code === "SCENE_INVALID_TRANSFORM"), true);
-});
-
-test("checked-in project v0/v1 compatibility fixtures are exercised by the parser", () => {
-  const legacy = readFileSync(resolve(process.cwd(), "tests/fixtures/project-v0.json"), "utf8");
-  const current = readFileSync(resolve(process.cwd(), "tests/fixtures/project-v1.json"), "utf8");
-
-  const migrated = parseProjectDocument(legacy);
-  const parsed = parseProjectDocument(current);
-
-  assert.equal(migrated.value?.schemaVersion, 1);
-  assert.equal(migrated.migratedFrom, 0);
-  assert.deepEqual(
-    (migrated.value as unknown as Record<string, unknown>).unknownPluginData,
-    { keep: true },
-  );
-  assert.equal(parsed.value?.schemaVersion, 1);
-  assert.deepEqual(
-    (parsed.value as unknown as Record<string, unknown>).unknownPluginData,
-    { keep: true },
-  );
 });
 
 test("rejects non-JSON objects and safely preserves an own __proto__ data key", () => {
@@ -310,226 +296,92 @@ test("enforces one stable ID grammar across project, scene and component contrac
 });
 
 
-test("Project migration deep-copies JSON values and never aliases or mutates the source", () => {
-  const input = {
-    schemaVersion: 0,
-    id: "legacy-project-copy",
-    name: "Copy test",
-    scenes: [],
-    assets: [],
-    nestedPluginData: { values: [1, 2, 3] },
-  };
-  const before = JSON.stringify(input);
-  const result = migrateProjectDocument(input);
-  assert.equal(JSON.stringify(input), before);
-
-  const migratedExtension = (result.document as unknown as Record<string, unknown>).nestedPluginData as { values: number[] };
-  assert.notEqual(migratedExtension, input.nestedPluginData);
-  migratedExtension.values.push(4);
-  assert.deepEqual(input.nestedPluginData.values, [1, 2, 3]);
-});
-
-test("Project v0 migration rejects malformed present fields instead of silently defaulting them", () => {
-  const base = {
-    schemaVersion: 0,
-    id: "legacy-project-malformed",
-    name: "Malformed legacy project",
-  };
-  const malformedFields: Array<[string, unknown]> = [
-    ["scenes", { unexpected: true }],
-    ["assets", "not-an-array"],
-    ["prefabs", 1],
-    ["componentModules", null],
-    ["runtime", "phaser"],
-    ["runtime", { adapterId: "phaser", settings: "not-an-object" }],
-    ["runtime", { adapterId: "", settings: {} }],
-  ];
-
-  for (const [field, value] of malformedFields) {
-    const input = field === "runtime" && typeof value === "object" && value !== null
-      ? { ...base, runtime: value }
-      : { ...base, [field]: value };
-    assert.throws(
-      () => migrateProjectDocument(input),
-      (error: unknown): boolean => {
-        if (!(error instanceof Error) || !("diagnostics" in error)) return false;
-        const diagnostics = (error as Error & {
-          diagnostics: Array<{ code?: string; path?: string }>;
-        }).diagnostics;
-        return diagnostics.some((item) =>
-          item.code === "PROJECT_MIGRATION_INVALID_INPUT" &&
-          (item.path === field || item.path === "runtime.settings" || item.path === "runtime"));
-      },
-    );
-  }
-});
-test("Project v0 migration defaults only absent optional collections and runtime fields", () => {
-  const migrated = migrateProjectDocument({
-    schemaVersion: 0,
-    id: "legacy-project-defaults",
-    name: "Defaults",
-  });
-  assert.deepEqual(migrated.document.scenes, []);
-  assert.deepEqual(migrated.document.assets, []);
-  assert.deepEqual(migrated.document.prefabs, []);
-  assert.deepEqual(migrated.document.componentModules, []);
-  assert.deepEqual(migrated.document.runtime, { adapterId: "phaser", settings: {} });
-
-  const withRuntime = migrateProjectDocument({
-    schemaVersion: 0,
-    id: "legacy-project-runtime",
-    name: "Runtime",
-    runtime: { adapterId: "phaser", pluginRuntimeData: { keep: true } },
-  });
-  assert.deepEqual(withRuntime.document.runtime.settings, {});
-  assert.deepEqual((withRuntime.document.runtime as unknown as Record<string, unknown>).pluginRuntimeData, { keep: true });
-});
-
-
-test("Project migration rejects future schema versions without modifying source data", () => {
-  const future = {
-    ...validProject,
-    schemaVersion: 2,
-    futureExtension: { nested: ["keep", true] },
-  };
-  const before = JSON.stringify(future);
-  assert.throws(
-    () => migrateProjectDocument(future),
-    (error: unknown) => error instanceof Error &&
-      "diagnostics" in error &&
-      (error as Error & { diagnostics: Array<{ code?: string; path?: string }> })
-        .diagnostics.some((item) =>
-          item.code === "PROJECT_UNSUPPORTED_VERSION" &&
-          item.path === "schemaVersion"),
-  );
-  assert.equal(JSON.stringify(future), before);
-});
-
-
-test("preserves unknown Project and Asset fields with structured warnings", () => {
+test("rejects unknown Project, runtime and Asset fields while retaining native settings bags", () => {
   const input = {
     ...validProject,
-    extensionData: { source: "plugin", retained: true },
+    extensionData: { source: "unsupported", retained: true },
     runtime: {
       ...validProject.runtime,
+      settings: { adapterOption: { enabled: true } },
       pluginRuntimeData: { retained: true },
     },
-    assets: [{
-      ...validProject.assets[0]!,
-      importMetadata: { importer: "legacy", retained: true },
-    }],
+    assets: [{ ...validProject.assets[0]!, importMetadata: { retained: true } }],
   };
-
   const result = validateProjectDocument(input);
-  assert.equal(result.valid, true);
-  assert.deepEqual(
-    result.diagnostics
-      .filter((item) => item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED")
-      .map((item) => item.path)
-      .sort(),
-    ["assets[0].importMetadata", "project.extensionData", "runtime.pluginRuntimeData"],
-  );
-  assert.deepEqual(
-    (result.value as unknown as Record<string, unknown>).extensionData,
-    input.extensionData,
-  );
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
+    "assets[0].importMetadata", "project.extensionData", "runtime.pluginRuntimeData",
+  ]);
+
+  const settings = validateProjectDocument({
+    ...validProject,
+    runtime: { ...validProject.runtime, settings: { adapterOption: { enabled: true } } },
+  });
+  assert.equal(settings.valid, true);
+  assert.deepEqual(settings.value?.runtime.settings, { adapterOption: { enabled: true } });
 });
 
-test("preserves unknown Scene, Node, Transform and Component fields with exact diagnostics", () => {
+test("rejects unknown Scene, Node, Transform and Component fields without closing Scene settings", () => {
   const schema: ComponentTypeSchemaV1 = {
-    schemaVersion: 1,
-    typeId: "com.codogma.test.follow-target",
-    name: "Follow Target",
-    version: "1.0.0",
-    properties: {
-      speed: { type: "number" },
-    },
+    schemaVersion: 1, typeId: "com.codogma.test.follow-target", name: "Follow Target", version: "1.0.0",
+    properties: { speed: { type: "number" } },
   };
   const scene = {
-    schemaVersion: 1,
-    id: "scene-extensions",
-    name: "Extensions",
-    settings: {},
+    schemaVersion: 1, id: "scene-extensions", name: "Extensions",
+    settings: { nativeSetting: { enabled: true } },
     extensionMetadata: { keep: true },
     rootNodes: [{
-      id: "node-extensions",
-      name: "Root",
-      active: true,
-      editorMetadata: { selected: true },
+      id: "node-extensions", name: "Root", active: true, editorMetadata: { selected: true },
       transform: {
         x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
         legacyPivot: { keep: true },
       },
       components: [{
-        id: "component-extensions",
-        typeId: schema.typeId,
-        schemaVersion: 1,
-        enabled: true,
+        id: "component-extensions", typeId: schema.typeId, schemaVersion: 1, enabled: true,
         customComponentMetadata: { keep: true },
-        properties: {
-          speed: 2,
-          pluginProperty: { keep: true },
-        },
+        properties: { speed: 2, pluginProperty: { keep: true } },
       }],
       children: [],
     }],
   };
-
   const result = validateSceneDocument(scene, {
     componentSchemas: new Map([[schema.typeId, schema]]),
+    registeredComponentTypes: new Set([schema.typeId]),
   });
-  assert.equal(result.valid, true);
-  const warnings = result.diagnostics.filter((item) =>
-    item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED" ||
-    item.code === "COMPONENT_UNKNOWN_PROPERTY");
-  assert.deepEqual(
-    warnings.map((item) => item.path).sort(),
-    [
-      "rootNodes[0].components[0].customComponentMetadata",
-      "rootNodes[0].components[0].properties.pluginProperty",
-      "rootNodes[0].editorMetadata",
-      "rootNodes[0].transform.legacyPivot",
-      "scene.extensionMetadata",
-    ],
-  );
-  assert.deepEqual(
-    (result.value!.rootNodes[0] as unknown as Record<string, unknown>).editorMetadata,
-    { selected: true },
-  );
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
+    "rootNodes[0].components[0].customComponentMetadata",
+    "rootNodes[0].components[0].properties.pluginProperty",
+    "rootNodes[0].editorMetadata",
+    "rootNodes[0].transform.legacyPivot",
+    "scene.extensionMetadata",
+  ]);
+
+  const settings = validateSceneDocument({
+    schemaVersion: 1, id: "scene-settings", name: "Settings",
+    settings: { editor: { gridSize: 16 } }, rootNodes: [],
+  });
+  assert.equal(settings.valid, true);
+  assert.deepEqual(settings.value?.settings, { editor: { gridSize: 16 } });
 });
 
-test("preserves unknown Prefab and root Node fields with document-relative paths", () => {
-  const prefab = {
-    schemaVersion: 1,
-    id: "prefab-extensions",
-    name: "Extensions",
+test("rejects unknown Prefab and root Node fields at the native boundary", () => {
+  const result = validatePrefabDocument({
+    schemaVersion: 1, id: "prefab-extensions", name: "Extensions",
     pluginMetadata: { keep: true },
     root: {
-      id: "prefab-root",
-      name: "Root",
-      active: true,
-      transform: {
-        x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
-      },
-      components: [],
-      children: [],
-      customNodeMetadata: { keep: true },
+      id: "prefab-root", name: "Root", active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [], children: [], customNodeMetadata: { keep: true },
     },
-  };
-
-  const result = validatePrefabDocument(prefab);
-  assert.equal(result.valid, true);
-  assert.deepEqual(
-    result.diagnostics
-      .filter((item) => item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED")
-      .map((item) => item.path)
-      .sort(),
-    ["prefab.pluginMetadata", "root.customNodeMetadata"],
-  );
-  assert.deepEqual(
-    (result.value!.root as unknown as Record<string, unknown>).customNodeMetadata,
-    { keep: true },
-  );
+  });
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
+    "prefab.pluginMetadata", "root.customNodeMetadata",
+  ]);
 });
 
 test("rejects future Scene and Prefab versions with explicit version diagnostics", () => {
@@ -727,5 +579,111 @@ test("reports Project, Scene, Node and Prefab envelope errors at exact paths", (
   ];
   for (const [input, expectedPath] of prefabCases) {
     assert.equal(validatePrefabDocument(input).diagnostics[0]?.path, expectedPath);
+  }
+});
+
+test("rejects unsafe property path segments in Prefab overrides", () => {
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-safe-path",
+    name: "Safe Path",
+    root: {
+      id: "prefab-root",
+      name: "Root",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  };
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-safe-override",
+    name: "Safe Override",
+    settings: {},
+    rootNodes: [{
+      id: "instance-safe-override",
+      name: "Instance",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+      prefabInstance: {
+        prefabId: prefab.id,
+        overrides: [{
+          targetNodeId: "prefab-root",
+          propertyPath: "__proto__.polluted",
+          value: true,
+        }],
+      },
+    }],
+  };
+  const result = validateSceneDocument(scene, { prefabs: new Map([[prefab.id, prefab]]) });
+  assert.equal(result.valid, false);
+  assert.ok(result.diagnostics.some((item) =>
+    item.path === "rootNodes[0].prefabInstance.overrides[0].propertyPath" &&
+    item.message.includes("safe identifier segments"),
+  ));
+});
+
+test("rejects unsupported and malformed Node-level Prefab overrides", () => {
+  const prefab: PrefabDocumentV1 = {
+    schemaVersion: 1,
+    id: "prefab-node-overrides",
+    name: "Node Overrides",
+    root: {
+      id: "prefab-node",
+      name: "Node",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+    },
+  };
+  const makeScene = (propertyPath: string, value: unknown) => ({
+    schemaVersion: 1,
+    id: "scene-node-overrides",
+    name: "Scene",
+    settings: {},
+    rootNodes: [{
+      id: "instance-node",
+      name: "Instance",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [],
+      children: [],
+      prefabInstance: {
+        prefabId: prefab.id,
+        overrides: [{ targetNodeId: prefab.root.id, propertyPath, value }],
+      },
+    }],
+  });
+  for (const [propertyPath, value] of [
+    ["alpha", 0.5],
+    ["name", ""],
+    ["name", 12],
+    ["active", "false"],
+    ["transform.x", "10"],
+    ["transform.scaleZ", 1],
+  ] as const) {
+    const result = validateSceneDocument(makeScene(propertyPath, value), {
+      prefabs: new Map([[prefab.id, prefab]]),
+    });
+    assert.equal(result.valid, false, `expected "${propertyPath}" override to be rejected`);
+    assert.ok(result.diagnostics.some((item) =>
+      item.path === "rootNodes[0].prefabInstance.overrides[0].propertyPath" &&
+      item.message.includes("Node-level Prefab overrides"),
+    ));
+  }
+  for (const [propertyPath, value] of [
+    ["name", "Renamed"],
+    ["active", false],
+    ["transform.x", 20],
+    ["transform.rotation", Math.PI],
+  ] as const) {
+    const result = validateSceneDocument(makeScene(propertyPath, value), {
+      prefabs: new Map([[prefab.id, prefab]]),
+    });
+    assert.equal(result.valid, true, `expected "${propertyPath}" override to remain valid`);
   }
 });
