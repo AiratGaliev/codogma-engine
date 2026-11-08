@@ -117,7 +117,7 @@ npm Workspaces не настроены. Отдельные lockfiles — тек�
 | `src/editor/vite.config.ts` | Static SolidJS + Tailwind Vite plugins, Vite/Vitest config | Не является dynamic package/extension loader |
 | `src/editor/playwright.config.ts` | Chromium browser tests под `browser-tests/` | Browser acceptance не является обычным topic-PR CI gate |
 
-Root ESLint/Knip references на отсутствующие `mini-services/phaser-editor-mcp/index.mjs` и `server/mcp-stdio.mjs` — config residue, а не evidence активных service/package roots. Текущий tree содержит `mini-services/ai-chat/` и перечисленные `server/*.mjs` modules. Явные ESLint entries в `source/editor/` также находятся вне active native toolchain scope. Эти ссылки зафиксированы для отдельной scoped cleanup; COD-18 не удаляет и не переписывает quality configuration.
+В `eslint.config.mjs` и `knip.json` есть ссылки на отсутствующие service paths: оба конфига ссылаются на `mini-services/phaser-editor-mcp/index.mjs`, а только `knip.json` дополнительно содержит `server/mcp-stdio.mjs`. Это config residue, а не evidence активных service/package roots. Текущий tree содержит `mini-services/ai-chat/` и перечисленные `server/*.mjs` modules. Явные ESLint entries в `source/editor/` также находятся вне active native toolchain scope. Эти ссылки зафиксированы для отдельной scoped cleanup; COD-18 не удаляет и не переписывает quality configuration.
 
 ## 7. Generated artifacts и dynamic entry points
 
