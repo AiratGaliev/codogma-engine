@@ -60,8 +60,8 @@ Codogma Engine нужен собственный Web-first 2D Editor с Unity-li
 - Production Node server обслуживает Vite build из `src/editor/dist` по `/editor/`.
 - Development Vite работает на `127.0.0.1:5173`, проксирует native `/editor/*` API к loopback Node backend и использует точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`. Wildcard Origin запрещён.
 - Engine-owned MCP registry содержит native Project/Scene/Node/Prefab/Component/FX и external asset inspection tools. Stdio adapter только передаёт schemas/calls, не создаёт второй registry.
-- Каждое окно Host получает server-issued session ID. Команда направляется активной сессии, result принимается только от исходной сессии. Команды не broadcast-ятся.
-- Multi-Host reconnect, stale-session handling, cancellation/timeout и shared project write ownership остаются COD-85. До принятия соответствующих контрактов параллельные write acceptance использует изолированные project/backend instances.
+- Единственное приложение Editor Host получает server-issued session ID для текущего SSE connection. Каждая MCP command/result привязана к этой connection; stale/duplicate responses отклоняются.
+- Disconnect завершает pending operations, reconnect выдаёт новую identity. Несколько одновременно открытых Host clients, focus arbitration, broadcast и shared multi-Host write ownership не поддерживаются; COD-85 проверяет надёжность single-Host bridge.
 
 ## Фактические границы и дальнейшая работа
 
