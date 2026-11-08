@@ -22,7 +22,7 @@ test("loads the versioned Component Schema from a static module definition", asy
   assert.equal(result.value?.schemaVersion, 1);
   assert.equal(result.value?.properties.sprite?.type, "asset");
   assert.equal(result.value?.properties.target?.type, "node");
-  assert.deepEqual(result.value?.properties.speed, {
+  assert.deepEqual({ ...result.value?.properties.speed }, {
     type: "number",
     min: 0,
     defaultValue: 1,
@@ -76,5 +76,5 @@ test("rejects a module that does not declare an exported Component Definition", 
   );
 
   assert.equal(result.valid, false);
-  assert.match(result.diagnostics[0]?.message ?? "", /must export a static componentDefinition/);
+  assert.match(result.diagnostics[0]?.message ?? "", /must export a componentDefinition constant/);
 });

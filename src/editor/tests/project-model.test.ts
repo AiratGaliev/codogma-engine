@@ -88,10 +88,18 @@ testCase("uses one Component Schema for native Scene reference validation and st
 
   const invalid = structuredClone(reopened);
   invalid.rootNodes[0]!.components[0]!.properties.target = { nodeId: "node-missing" };
-  assert.throws(
-    () => serializeNativeSceneDocument(project, invalid, undefined, schemas),
-    /COMPONENT_INVALID_REFERENCE/,
-  );
+  let serializationError: unknown;
+  try {
+    serializeNativeSceneDocument(project, invalid, undefined, schemas);
+  } catch (error) {
+    serializationError = error;
+  }
+  assert.ok(serializationError instanceof Error);
+  assert.ok("diagnostics" in serializationError);
+  const diagnostics = (serializationError as Error & {
+    diagnostics: Array<{ code: string }>;
+  }).diagnostics;
+  assert.ok(diagnostics.some((item) => item.code === "COMPONENT_INVALID_REFERENCE"));
 });
 
 testCase("rejects unpublished or unsupported document shapes at the native boundary", () => {
