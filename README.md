@@ -510,8 +510,6 @@ The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` 
 
 The repository uses `.gitattributes` to keep ordinary source, configuration, documentation and SVG files on LF line endings across operating systems. Do not use a repository-wide `git add --renormalize .` as a routine cleanup: a line-ending migration must be reviewed and committed separately.
 
-`source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts` is generated Phaser TypeScript declaration output. Its current upstream-generated blob contains non-standard mixed carriage-return bytes, so Git deliberately does not apply end-of-line conversion to that one file and EditorConfig leaves its line-ending policy unset. It is also excluded from formatting. **Do not open and save it with automatic line-ending conversion, run a formatter on it, or hand-edit it.** Change the generator/input instead, regenerate the declarations, and review that generated output separately.
-
 When reviewing a diff that may contain line-ending noise, compare with `git diff --ignore-space-at-eol` to identify whether meaningful code changes remain. This is a diagnostic aid, not a substitute for checking the actual generated output.
 
 ### Pull Request description checklist
