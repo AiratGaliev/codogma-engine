@@ -1,90 +1,112 @@
-# Build Guide
+# Build and Run Guide
 
-Codogma Engine is all based on web technologies. It has a server-side and an HTML5 client-side.
+Codogma Engine is a Web-first 2D game engine. The repository contains one browser-based editor application, native Project Model/Core packages, a Node.js backend and first-party MCP tooling.
 
-> **Current repository state:** the default local server still serves the frozen legacy client from `source/editor/`. The commands below are operational instructions for reproducing/serving that existing rollback artifact only; they do not authorize source changes, feature work, refactoring, dependency upgrades or other maintenance of Colibri. Do not change its manifest, lockfile, scripts or dependencies. All new UI and authoring work belongs in `src/editor/` (see [the migration policy](docs/editor-ui-migration.md)).
->
-> To run the existing local server: `npm run dev` in the repository root. The original upstream build instructions below are retained as historical context; use them only when necessary to reproduce the existing client, not as a development target.
+## Requirements
 
-The server is a small, native program that serves the editor and project files and interacts with the Operating System.
+- Node.js 22 or newer.
+- npm.
+- A modern Chromium-based browser for development and browser acceptance.
 
-The client is the bigger part and contains all the graphical user interface.
+## Install dependencies
 
-This repository contains all the client code. This means that you can modify it and build it.
+From the repository root:
 
-The main two reasons you may find to build the client code are: 
-
-* You are contributing to the code.
-* You want to try the in-development version.
-
-
-## 1) Download the source code
-
-First, you have to clone this repo to get the source code:
-
-```
-$ git clone https://github.com/PhaserEditor2D/PhaserEditor2D-v3.git
+```bash
+npm ci
+npm --prefix src/editor ci
 ```
 
-By default, the current branch is `master`. It shows the latest, public version of the editor. To try the latest in-development changes, you should switch to the `develop` branch:
+Install optional package dependencies only when working in those packages, for example:
 
-```
-$ cd PhaserEditor2D-v3/source/editor
-$ git checkout develop
-```
-
-If you want to contribute your modifications, you should create a pull request against the `develop` branch.
-
-## 2) Install dependencies
-
-Dependencies are managed with [NPM](https://www.npmjs.com/), you have to install it first:
-
-```
-$ npm install
-
+```bash
+npm --prefix packages/editor-mcp-server ci
+npm --prefix mini-services/ai-chat ci
 ```
 
-## 3) Run the build script
+## Build the Editor Host
 
-```
-$ npm run build
-```
-
-It should run the TypeScript compiler (installed in the `node_modules`) to compile the client's source code.
-If you want to build the project each time you modify a file, you can run the `watch` script:
-
-```
-$ npm start
-```
- 
-## 4) Run the server with the new client
-
-Phaser Editor 2D Core allows running the server with a different client. It is what you need to do here, to run the latest stable server but loading this client:
-
-```
-$ npx phasereditor2d-launcher -editor . -dev -disable-plugins phasereditor2d.code -project path/to/game
+```bash
+npm run build
 ```
 
-The [phasereditor2d-launcher](https://www.npmjs.com/package/phasereditor2d-launcher) is a cli-based node module. It launches the latest version of Phaser Editor 2D Core.
+The root build command builds the SolidJS Editor Host from `src/editor/` into `src/editor/dist/`. Equivalent explicit command:
 
-The `-editor` option configures a new location of the client code.
-
-The `-dev` option disables the browser cache, so it always fetches a fresh version of the files.  **Note:** You will also need to manually disable your browser cache in your browser's Developer Tools.
-
-The `-disable-plugins` option disables the [Advanced Javascript Editor](https://docs.codogma.com/v3/code-editor/index.html), which is used in Phaser Editor 2D All-in-One but not in Core.
-
-The `-project` flag indicates the path to the game project. It is mandatory.
-
-## 5) Open the browser and run the IDE
-
-Open this address in a browser:
-
-```
-http://127.0.0.1:1959/editor
+```bash
+npm run build:editor-host
 ```
 
-Please, use a modern and updated browser.
+Typecheck and tests:
 
-If you used a previous version of the editor, be sure to clear your browser cache in your browser's Developer Tools before loading the new code.
+```bash
+npm --prefix src/editor run typecheck
+npm --prefix src/editor run test
+npm --prefix packages/cge run typecheck
+npm --prefix packages/cge run test
+```
 
-If you have any issues, please, open an issue in this repository or contact us at `contact@codogma.com`. 
+Use the scripts declared in each package manifest as the authoritative list of available commands.
+
+## Run the Editor Host in development
+
+Bash:
+
+```bash
+CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173 npm run dev:editor-host
+```
+
+PowerShell:
+
+```powershell
+$env:CODOGMA_ALLOWED_ORIGINS = "http://127.0.0.1:5173"
+npm run dev:editor-host
+```
+
+Open:
+
+```
+http://127.0.0.1:5173/
+```
+
+Vite binds to loopback and proxies native `/editor/*` backend requests to the Node.js server. The exact Origin allow-list is required; do not use a wildcard or expose the development services on a public interface.
+
+## Run the production-like local server
+
+Build the Host, then start the Node.js server:
+
+```bash
+npm run build
+npm start
+```
+
+Open:
+
+```
+http://127.0.0.1:3000/editor/
+```
+
+The server serves the build from `EDITOR_HOST_DIR`, which defaults to `src/editor/dist`.
+
+## Select a project
+
+By default, the server opens the native Project Model v1 fixture at:
+
+```
+packages/cge/tests/fixtures/acceptance-project
+```
+
+To open another project, set `PROJECT_DIR` to its absolute path before starting the server.
+
+## MCP
+
+The engine-owned MCP endpoint is:
+
+```
+http://127.0.0.1:3000/editor/mcp
+```
+
+For live Scene, Node, Prefab, Component, FX and viewport operations, open the project in the Editor Host and wait for the session bridge to connect. The first-party stdio adapter is available under `packages/editor-mcp-server/`.
+
+## Runtime and game preview
+
+Game View loads generated project runtime output through the server's project-scoped runtime-file route. The runtime output is separate from the Editor Host production bundle. Runtime adapter, Scene Loader, Preview lifecycle and reproducible HTML5 Build are validated through their respective engine tasks and native project fixtures.
