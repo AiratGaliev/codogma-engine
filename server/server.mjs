@@ -345,141 +345,161 @@ function apiError(res, message, statusCode = 200) {
     res.end(body)
 }
 
-async function handleAPI(req, res) {
-    let reqData
+async function handleProjectOperation(req, res) {
+    let request
     try {
-        reqData = await readBodyJSON(req)
-    } catch (e) {
+        request = await readBodyJSON(req)
+    } catch (error) {
         return apiError(
             res,
-            e.statusCode === 413 ? e.message : "invalid request body",
-            e.statusCode || 400
+            error.statusCode === 413 ? error.message : "invalid project operation request",
+            error.statusCode || 400
         )
     }
-    const method = reqData.method
-    const body = reqData.body || {}
-    log("api:", method)
+
+    const operation = request.operation
+    const args = request.arguments || {}
+    log("project operation:", operation)
 
     try {
-        switch (method) {
+        switch (operation) {
+            case "project.getContentHash":
+                return sendJSON(res, { contentHash: computeProjectHash() })
 
-            case "GetProjectFilesHash":
-                return sendJSON(res, { hash: computeProjectHash() })
-
-            case "GetProjectFiles": {
-                const hash = computeProjectHash()
-                const files = [], folders = []
-                walkTree(PROJECT_DIR, "", files, folders)
-                const rootFile = buildRootFileData(PROJECT_DIR)
+            case "project.listEntries": {
+                const entries = collectProjectEntries(PROJECT_DIR)
                 return sendJSON(res, {
-                    hash,
-                    maxNumberOfFiles: 1000000,
-                    projectNumberOfFiles: files.length + folders.length,
-                    rootFile,
-                    error: ""
+                    contentHash: computeProjectHash(),
+                    entryLimit: 1000000,
+                    entryCount: entries.length,
+                    root: buildProjectTree(PROJECT_DIR)
                 })
             }
 
-            case "CreateFolder": {
-                const full = safeJoin(PROJECT_DIR, body.path)
-                if (!full) return apiError(res, "invalid path")
+            case "project.createDirectory": {
+                const fullPath = safeJoin(PROJECT_DIR, args.relativePath)
+                if (!fullPath) return apiError(res, "invalid project path")
 
-                // Read metadata from the verified directory descriptor. A
-                // second fsp.stat(pathname) here would reopen a race window
-                // after the descriptor-anchored validation/creation.
-                let st = statProjectDirectorySafelySync(PROJECT_DIR, full)
-                if (!st) {
-                    if (!await ensureProjectDirectorySafely(PROJECT_DIR, full)) {
-                        return apiError(res, "invalid path")
+                let stat = statProjectDirectorySafelySync(PROJECT_DIR, fullPath)
+                if (!stat) {
+                    if (!await ensureProjectDirectorySafely(PROJECT_DIR, fullPath)) {
+                        return apiError(res, "invalid project path")
                     }
-                    st = statProjectDirectorySafelySync(PROJECT_DIR, full)
+                    stat = statProjectDirectorySafelySync(PROJECT_DIR, fullPath)
                 }
 
-                if (!st || !st.isDirectory()) return apiError(res, "invalid path")
-                return sendJSON(res, { modTime: Math.floor(st.mtimeMs) })
+                if (!stat || !stat.isDirectory()) return apiError(res, "invalid project path")
+                hashCache.value = ""
+                return sendJSON(res, {
+                    relativePath: args.relativePath,
+                    kind: "directory",
+                    size: 0,
+                    modifiedAt: Math.floor(stat.mtimeMs)
+                })
             }
 
-            case "SetFileString": {
-                const full = safeJoin(PROJECT_DIR, body.path)
-                if (!full) return apiError(res, "invalid path")
-                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) return apiError(res, "invalid path")
-                const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
-                if (!handle) return apiError(res, "invalid path")
-                let st
+            case "project.writeFile": {
+                if (typeof args.relativePath !== "string" || typeof args.text !== "string") {
+                    return apiError(res, "relativePath and text are required")
+                }
+
+                const fullPath = safeJoin(PROJECT_DIR, args.relativePath)
+                if (!fullPath || fullPath === PROJECT_DIR) return apiError(res, "invalid project path")
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(fullPath))) {
+                    return apiError(res, "invalid project path")
+                }
+
+                const handle = await openSafeProjectFileForWrite(PROJECT_DIR, fullPath)
+                if (!handle) return apiError(res, "invalid project path")
+                let stat
                 try {
                     await handle.truncate(0)
-                    await handle.writeFile(body.content ?? "", "utf8")
-                    st = await handle.stat()
+                    await handle.writeFile(args.text, "utf8")
+                    stat = await handle.stat()
                 } finally {
-                    await handle.close().catch(() => { })
+                    await handle.close().catch(() => {})
                 }
+
                 hashCache.value = ""
                 return sendJSON(res, {
-                    name: path.basename(body.path),
-                    isFile: true,
-                    size: Buffer.byteLength(body.content ?? "", "utf8"),
-                    modTime: Math.floor(st.mtimeMs)
+                    entry: {
+                        name: path.basename(args.relativePath),
+                        relativePath: args.relativePath,
+                        kind: "file",
+                        size: Buffer.byteLength(args.text, "utf8"),
+                        modifiedAt: Math.floor(stat.mtimeMs)
+                    }
                 })
             }
 
-            case "DeleteFiles": {
-                for (const p of (body.paths || [])) {
-                    const full = safeJoin(PROJECT_DIR, p)
-                    if (!full || full === PROJECT_DIR) continue
-                    if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) {
-                        return apiError(res, "invalid path")
+            case "project.deleteEntries": {
+                const relativePaths = Array.isArray(args.relativePaths) ? args.relativePaths : []
+                for (const relativePath of relativePaths) {
+                    const fullPath = safeJoin(PROJECT_DIR, relativePath)
+                    if (!fullPath || fullPath === PROJECT_DIR) continue
+                    if (!await removeProjectEntrySafely(PROJECT_DIR, fullPath, { recursive: true, force: true })) {
+                        return apiError(res, "invalid project path")
                     }
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
             }
 
-            case "RenameFile": {
-                const from = safeJoin(PROJECT_DIR, body.oldPath)
-                const to = safeJoin(PROJECT_DIR, body.newPath)
-                if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
-                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(to))) {
-                    return apiError(res, "invalid path")
+            case "project.renameEntry": {
+                const sourcePath = safeJoin(PROJECT_DIR, args.sourcePath)
+                const destinationPath = safeJoin(PROJECT_DIR, args.destinationPath)
+                if (!sourcePath || !destinationPath || sourcePath === PROJECT_DIR || destinationPath === PROJECT_DIR) {
+                    return apiError(res, "invalid project path")
                 }
-                if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
-                    return apiError(res, "invalid path")
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(destinationPath))) {
+                    return apiError(res, "invalid project path")
+                }
+                if (!await renameProjectEntrySafely(PROJECT_DIR, sourcePath, destinationPath)) {
+                    return apiError(res, "invalid project path")
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
             }
 
-            case "CopyFile": {
-                const from = safeJoin(PROJECT_DIR, body.fromPath)
-                const to = safeJoin(PROJECT_DIR, body.toPath)
-                if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
-                if (!await copyProjectEntrySafely(PROJECT_DIR, from, to)) return apiError(res, "invalid path")
+            case "project.copyEntry": {
+                const sourcePath = safeJoin(PROJECT_DIR, args.sourcePath)
+                const destinationPath = safeJoin(PROJECT_DIR, args.destinationPath)
+                if (!sourcePath || !destinationPath || sourcePath === PROJECT_DIR || destinationPath === PROJECT_DIR) {
+                    return apiError(res, "invalid project path")
+                }
+                if (!await copyProjectEntrySafely(PROJECT_DIR, sourcePath, destinationPath)) {
+                    return apiError(res, "invalid project path")
+                }
 
                 hashCache.value = ""
-                return sendJSON(res, { file: fileData(PROJECT_DIR, body.toPath) })
+                return sendJSON(res, { entry: getProjectEntry(PROJECT_DIR, args.destinationPath) })
             }
 
-            case "MoveFiles": {
-                const toDir = safeJoin(PROJECT_DIR, body.movingToPath)
-                if (!toDir) return apiError(res, "invalid path")
-                if (!await ensureProjectDirectorySafely(PROJECT_DIR, toDir)) return apiError(res, "invalid path")
+            case "project.moveEntries": {
+                const destinationDirectory = safeJoin(PROJECT_DIR, args.destinationDirectory)
+                if (!destinationDirectory) return apiError(res, "invalid project path")
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, destinationDirectory)) {
+                    return apiError(res, "invalid project path")
+                }
 
-                for (const p of (body.movingPaths || [])) {
-                    const from = safeJoin(PROJECT_DIR, p)
-                    if (!from || from === PROJECT_DIR) continue
-                    const to = path.join(toDir, path.basename(p))
-                    if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
-                        return apiError(res, "invalid path")
+                const sourcePaths = Array.isArray(args.sourcePaths) ? args.sourcePaths : []
+                for (const sourcePath of sourcePaths) {
+                    const fullSourcePath = safeJoin(PROJECT_DIR, sourcePath)
+                    if (!fullSourcePath || fullSourcePath === PROJECT_DIR) continue
+                    const fullDestinationPath = path.join(destinationDirectory, path.basename(sourcePath))
+                    if (!await renameProjectEntrySafely(PROJECT_DIR, fullSourcePath, fullDestinationPath)) {
+                        return apiError(res, "invalid project path")
                     }
                 }
                 hashCache.value = ""
                 return sendJSON(res, {})
             }
 
-            case "GetImageSize": {
-                const full = safeJoin(PROJECT_DIR, body.path)
-                if (!full) return apiError(res, "file not found")
-                const handle = await openSafeProjectFileForRead(PROJECT_DIR, full)
-                if (!handle) return apiError(res, "file not found")
+            case "project.readImageDimensions": {
+                const fullPath = safeJoin(PROJECT_DIR, args.relativePath)
+                if (!fullPath) return apiError(res, "project file not found")
+                const handle = await openSafeProjectFileForRead(PROJECT_DIR, fullPath)
+                if (!handle) return apiError(res, "project file not found")
                 let data
                 try {
                     const buffer = Buffer.alloc(65536)
@@ -488,18 +508,18 @@ async function handleAPI(req, res) {
                 } finally {
                     await handle.close().catch(() => {})
                 }
-                const size = getImageSize(data, path.extname(full))
-                if (!size) return apiError(res, "cannot read image size")
-                return sendJSON(res, size)
+                const dimensions = getImageSize(data, path.extname(fullPath))
+                if (!dimensions) return apiError(res, "cannot read image dimensions")
+                return sendJSON(res, dimensions)
             }
 
             default:
-                log("unknown api method:", method)
-                return apiError(res, `unknown method "${method}"`)
+                log("unknown project operation:", operation)
+                return apiError(res, `unknown project operation "${operation}"`)
         }
-    } catch (e) {
-        log("api error:", method, e.message)
-        return apiError(res, e.message, e.statusCode || 200)
+    } catch (error) {
+        log("project operation error:", operation, error.message)
+        return apiError(res, error.message, error.statusCode || 200)
     }
 }
 
@@ -745,8 +765,8 @@ const server = http.createServer(async (req, res) => {
             return
         }
 
-        // Immutable Vite assets for the opt-in SolidJS production entrypoint.
-        // The path is resolved and served only from the configured dist root.
+        // Immutable Vite assets for the native Editor Host production bundle.
+        // The path is resolved and served only from the configured build root.
         if (rest.startsWith("assets/")) {
             // Preserve the "assets/" segment: Vite emits URLs relative to the
             // dist root, not relative to dist/assets.
@@ -760,19 +780,19 @@ const server = http.createServer(async (req, res) => {
             return serveFile(req, res, full, "public, max-age=31536000, immutable", EDITOR_HOST_DIR)
         }
 
-        // api
-        if (rest === "api") {
+        // Native project operations use their own request/response contract.
+        if (rest === "project/operations") {
             if (req.method !== "POST") {
-                res.writeHead(405, { "Content-Type": "text/plain" })
+                res.writeHead(405, { "Content-Type": "text/plain", "Allow": "POST" })
                 res.end("Method Not Allowed")
                 return
             }
-            return await handleAPI(req, res)
+            return await handleProjectOperation(req, res)
         }
 
-        // plugin resources
-        if (rest.startsWith("app/editor-icons/")) {
-            const rel = rest.slice("app/editor-icons/".length).split("?")[0]
+        // Shared SVG assets consumed by the native Editor Host.
+        if (rest.startsWith("icons/")) {
+            const rel = rest.slice("icons/".length).split("?")[0]
             if (!/^(dark|light)\/godot\/[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/.test(rel)) {
                 res.writeHead(404, { "Content-Type": "text/plain" })
                 res.end("Not Found")
