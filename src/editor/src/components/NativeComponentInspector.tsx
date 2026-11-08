@@ -99,7 +99,6 @@ function NumberControl(props: {
       onBlur={() => {
         const draft = raw().trim();
         const nextValue = draft.length === 0 ? undefined : Number(draft);
-        if (nextValue !== undefined && !Number.isFinite(nextValue)) return;
         if (props.field.onCommit(props.name, nextValue)) props.field.onDraftChange(key, undefined);
       }}
     />
@@ -152,49 +151,86 @@ function AssetControl(props: {
   invalid: boolean;
 }) {
   const value = () => fieldValue(props.field, props.name, props.schema);
+  const label = () => props.schema.label ?? props.name;
   const currentAssetId = () => {
     const candidate = value();
     return candidate && typeof candidate === "object" && "assetId" in candidate && typeof candidate.assetId === "string"
       ? candidate.assetId
       : "";
   };
+  const currentSubResourceId = () => {
+    const candidate = value();
+    return candidate && typeof candidate === "object" && "subResourceId" in candidate &&
+      typeof candidate.subResourceId === "string"
+      ? candidate.subResourceId
+      : "";
+  };
   const options = () => props.field.assets.filter((asset) =>
     !props.schema.assetKinds || props.schema.assetKinds.includes(asset.kind),
   );
-  const currentIsSelectable = () => options().some((asset) => asset.id === currentAssetId());
+  const registeredAsset = () => props.field.assets.find((asset) => asset.id === currentAssetId());
+  const selectedAsset = () => options().find((asset) => asset.id === currentAssetId());
+  const currentIsSelectable = () => selectedAsset() !== undefined;
+  const showSubResource = () => props.schema.allowSubResource === true || currentSubResourceId().length > 0;
+  const availableSubResourceId = () => props.schema.allowSubResource === true ? selectedAsset()?.subResourceId ?? "" : "";
+  const subResourceIsSelectable = () =>
+    currentSubResourceId().length === 0 || currentSubResourceId() === availableSubResourceId();
+
   return (
-    <select
-      aria-label={props.schema.label ?? props.name}
-      value={currentAssetId()}
-      required={props.schema.required}
-      aria-invalid={props.invalid ? "true" : undefined}
-      onChange={(event) => {
-        const assetId = event.currentTarget.value;
-        if (!assetId) {
-          props.field.onCommit(props.name, undefined);
-          return;
-        }
-        const selected = options().find((asset) => asset.id === assetId);
-        if (!selected) return;
-        const assetValue = {
-          assetId: selected.id,
-          ...(props.schema.allowSubResource && selected.subResourceId
-            ? { subResourceId: selected.subResourceId }
-            : {}),
-        };
-        props.field.onCommit(props.name, assetValue);
-      }}
-    >
-      <option value="">Select Asset…</option>
-      <Show when={currentAssetId() && !currentIsSelectable()}>
-        <option value={currentAssetId()} disabled>
-          Missing or incompatible Asset ({currentAssetId()})
-        </option>
+    <>
+      <select
+        aria-label={label()}
+        value={currentAssetId()}
+        required={props.schema.required}
+        aria-invalid={props.invalid ? "true" : undefined}
+        onChange={(event) => {
+          const assetId = event.currentTarget.value;
+          if (!assetId) {
+            props.field.onCommit(props.name, undefined);
+            return;
+          }
+          const selected = options().find((asset) => asset.id === assetId);
+          if (!selected) return;
+          // Changing the Asset clears the old sub-resource. It must never be
+          // silently reassigned to a different Asset.
+          props.field.onCommit(props.name, { assetId: selected.id });
+        }}
+      >
+        <option value="">{options().length > 0 ? "Select Asset…" : "No compatible Assets in this Project"}</option>
+        <Show when={currentAssetId() && !currentIsSelectable()}>
+          <option value={currentAssetId()} disabled>
+            {registeredAsset() ? "Incompatible Asset" : "Missing Asset"} ({currentAssetId()})
+          </option>
+        </Show>
+        <For each={options()}>
+          {(asset) => <option value={asset.id}>{asset.path} · {asset.kind}</option>}
+        </For>
+      </select>
+      <Show when={showSubResource()}>
+        <select
+          aria-label={`${label()} sub-resource`}
+          value={currentSubResourceId()}
+          disabled={!availableSubResourceId() && !currentSubResourceId()}
+          aria-invalid={props.invalid ? "true" : undefined}
+          onChange={(event) => {
+            const assetId = currentAssetId();
+            if (!assetId) return;
+            const subResourceId = event.currentTarget.value;
+            props.field.onCommit(props.name, subResourceId ? { assetId, subResourceId } : { assetId });
+          }}
+        >
+          <option value="">No sub-resource</option>
+          <Show when={currentSubResourceId() && !subResourceIsSelectable()}>
+            <option value={currentSubResourceId()} disabled>
+              Missing or incompatible sub-resource ({currentSubResourceId()})
+            </option>
+          </Show>
+          <Show when={availableSubResourceId()}>
+            <option value={availableSubResourceId()}>{availableSubResourceId()}</option>
+          </Show>
+        </select>
       </Show>
-      <For each={options()}>
-        {(asset) => <option value={asset.id}>{asset.path} · {asset.kind}</option>}
-      </For>
-    </select>
+    </>
   );
 }
 
@@ -211,6 +247,7 @@ function NodeControl(props: {
       ? candidate.nodeId
       : "";
   };
+  const registeredNode = () => props.field.nodes.find((node) => node.id === currentNodeId());
   const options = () => props.field.nodes.filter((node) =>
     (props.schema.allowSelf !== false || node.id !== props.field.ownerNodeId) &&
     (!props.schema.nodeKinds || props.schema.nodeKinds.includes(node.type)),
@@ -228,10 +265,10 @@ function NodeControl(props: {
         else if (options().some((node) => node.id === nodeId)) props.field.onCommit(props.name, { nodeId });
       }}
     >
-      <option value="">Select Node…</option>
+      <option value="">{options().length > 0 ? "Select Node…" : "No compatible Nodes in the active Scene"}</option>
       <Show when={currentNodeId() && !currentIsSelectable()}>
         <option value={currentNodeId()} disabled>
-          Missing or incompatible Node ({currentNodeId()})
+          {registeredNode() ? "Incompatible Node" : "Missing Node"} ({currentNodeId()})
         </option>
       </Show>
       <For each={options()}>

@@ -3,6 +3,7 @@ import { test as testCase } from "vitest";
 import type { ProjectDocumentV1, SceneDocumentV1 } from "@codogma/cge";
 import {
   attachNativeComponent,
+  createNativeComponentContext,
   detachNativeComponent,
   getNativeComponentInstances,
   setNativeComponentEnabled,
@@ -10,6 +11,12 @@ import {
   validateNativeComponentProperties,
 } from "../src/domain/components-model.js";
 import { findSceneNode } from "../src/domain/scene-model.js";
+import {
+  createDocumentHistoryState,
+  recordDocumentChange,
+  undoDocumentChange,
+  redoDocumentChange,
+} from "../src/domain/document-history.js";
 
 const schema = {
   schemaVersion: 1 as const,
@@ -125,6 +132,138 @@ testCase("detaches only the selected instance and rejects malformed property pay
 });
 
 
+testCase("builds one complete Project/Scene resolver context for Inspector and MCP operations", () => {
+  const document: SceneDocumentV1 = {
+    ...scene(),
+    rootNodes: [
+      ...scene().rootNodes,
+      {
+        id: "node-enemy",
+        name: "Enemy",
+        active: true,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [],
+        children: [],
+      },
+    ],
+  };
+  const referenceSchema = {
+    ...schema,
+    properties: {
+      source: { type: "asset" as const, assetKinds: ["script" as const], required: true },
+      target: { type: "node" as const, allowSelf: false, nodeKinds: ["Node" as const], required: true },
+    },
+  };
+  const schemas = new Map([[referenceSchema.typeId, referenceSchema]]);
+  const resolved = createNativeComponentContext(document, project, schemas);
+
+  assert.equal(resolved.schemas, schemas);
+  assert.equal(resolved.assets?.get("asset-script")?.kind, "script");
+  assert.equal(resolved.nodeIds?.has("node-player"), true);
+  assert.equal(resolved.nodeIds?.has("node-enemy"), true);
+  assert.equal(resolved.nodeKinds?.get("node-enemy"), "Node");
+
+  const valid = attachNativeComponent(document, "node-player", referenceSchema.typeId, resolved, {
+    source: { assetId: "asset-script" },
+    target: { nodeId: "node-enemy" },
+  }) as SceneDocumentV1;
+  const instance = findSceneNode(valid, "node-player")?.components[0];
+  assert.ok(instance);
+  assert.deepEqual(instance.properties, {
+    source: { assetId: "asset-script" },
+    target: { nodeId: "node-enemy" },
+  });
+
+  assert.throws(
+    () => attachNativeComponent(document, "node-player", referenceSchema.typeId, resolved, {
+      source: { assetId: "asset-scene" },
+      target: { nodeId: "node-enemy" },
+    }),
+    /incompatible kind/,
+  );
+  assert.throws(
+    () => attachNativeComponent(document, "node-player", referenceSchema.typeId, resolved, {
+      source: { assetId: "asset-script" },
+      target: { nodeId: "node-missing" },
+    }),
+    /does not exist/,
+  );
+});
+
+testCase("keeps Asset and Node references intact through Component property undo and redo", () => {
+  const document: SceneDocumentV1 = {
+    ...scene(),
+    rootNodes: [
+      ...scene().rootNodes,
+      ...["node-enemy", "node-guard"].map((id) => ({
+        id,
+        name: id === "node-enemy" ? "Enemy" : "Guard",
+        active: true,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [],
+        children: [],
+      })),
+    ],
+  };
+  const referenceSchema = {
+    ...schema,
+    properties: {
+      source: { type: "asset" as const, assetKinds: ["script" as const], required: true },
+      target: { type: "node" as const, allowSelf: false, required: true },
+    },
+  };
+  const context = createNativeComponentContext(
+    document,
+    project,
+    new Map([[referenceSchema.typeId, referenceSchema]]),
+  );
+  const attached = attachNativeComponent(document, "node-player", referenceSchema.typeId, context, {
+    source: { assetId: "asset-script" },
+    target: { nodeId: "node-enemy" },
+  }) as SceneDocumentV1;
+  const instance = findSceneNode(attached, "node-player")?.components[0];
+  assert.ok(instance);
+
+  const changed = updateNativeComponentProperties(attached, "node-player", instance.id, {
+    source: { assetId: "asset-script" },
+    target: { nodeId: "node-guard" },
+  }, context) as SceneDocumentV1;
+  let history = createDocumentHistoryState(attached);
+  history = recordDocumentChange(history, changed, "node-player", "node-player");
+
+  const undone = undoDocumentChange(history);
+  assert.ok(undone);
+  const undoneInstance = findSceneNode(undone.document, "node-player")?.components[0];
+  assert.deepEqual(undoneInstance?.properties, {
+    source: { assetId: "asset-script" },
+    target: { nodeId: "node-enemy" },
+  });
+  assert.equal(validateNativeComponentProperties(
+    referenceSchema.typeId,
+    undoneInstance!.properties,
+    context,
+    "node-player",
+    undone.document,
+    instance.id,
+  ).valid, true);
+
+  const redone = redoDocumentChange(undone.state);
+  assert.ok(redone);
+  const redoneInstance = findSceneNode(redone.document, "node-player")?.components[0];
+  assert.deepEqual(redoneInstance?.properties, {
+    source: { assetId: "asset-script" },
+    target: { nodeId: "node-guard" },
+  });
+  assert.equal(validateNativeComponentProperties(
+    referenceSchema.typeId,
+    redoneInstance!.properties,
+    context,
+    "node-player",
+    redone.document,
+    instance.id,
+  ).valid, true);
+});
+
 testCase("validates native Component properties with Project/Scene reference contexts and persisted diagnostics", () => {
   const original = scene();
   const withTarget = {
@@ -172,6 +311,33 @@ testCase("validates native Component properties with Project/Scene reference con
     item.propertyName === "hp",
   ));
   assert.ok(invalid.diagnostics.some((item) => item.propertyName === "target" && item.code === "COMPONENT_INVALID_REFERENCE"));
+
+  const invalidNumber = validateNativeComponentProperties(
+    "com.example.health",
+    { hp: Number.POSITIVE_INFINITY, armor: true, target: { nodeId: "node-enemy" } },
+    context,
+    "node-player",
+    attached,
+    instance.id,
+  );
+  assert.equal(invalidNumber.valid, false);
+  assert.ok(invalidNumber.diagnostics.some((item) =>
+    item.code === "COMPONENT_INVALID_VALUE" &&
+    item.path === "rootNodes[0].components[0].properties.hp" &&
+    item.propertyName === "hp" &&
+    item.componentInstanceId === instance.id &&
+    item.message.includes("JSON-compatible"),
+  ));
+  assert.throws(
+    () => updateNativeComponentProperties(
+      attached,
+      "node-player",
+      instance.id,
+      { hp: Number.POSITIVE_INFINITY, armor: true, target: { nodeId: "node-enemy" } },
+      context,
+    ),
+    /hp must be JSON-compatible/,
+  );
   assert.deepEqual(findSceneNode(attached, "node-player")?.components[0]?.properties, { hp: 100, armor: false });
 });
 

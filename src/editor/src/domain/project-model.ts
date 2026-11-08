@@ -18,10 +18,10 @@ import {
 } from "@codogma/cge";
 
 export const PROJECT_MANIFEST_PATH = "project.json";
-export const NATIVE_SCENE_EXTENSION = ".cge-scene.json";
-export const NATIVE_PREFAB_EXTENSION = ".cge-prefab.json";
+const NATIVE_SCENE_EXTENSION = ".cge-scene.json";
+const NATIVE_PREFAB_EXTENSION = ".cge-prefab.json";
 
-export class NativeProjectDocumentError extends Error {
+class NativeProjectDocumentError extends Error {
   readonly diagnostics: readonly { code: string; message: string; path?: string }[];
 
   constructor(label: string, diagnostics: readonly { code: string; message: string; path?: string }[]) {

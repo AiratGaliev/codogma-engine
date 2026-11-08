@@ -27,6 +27,12 @@ function createTempTree() {
     return { root, base, outside }
 }
 
+function restoreSwappedDirectory(currentPath, parkedPath) {
+    // Remove the injected replacement first; rmSync unlinks symlinks without following them.
+    fs.rmSync(currentPath, { recursive: true, force: true })
+    if (fs.existsSync(parkedPath)) fs.renameSync(parkedPath, currentPath)
+}
+
 function withSymlinks(t, fn) {
     const { base, outside } = t
     fs.symlinkSync(outside, path.join(base, "outside-link"), "dir")
@@ -249,8 +255,7 @@ test("readFileSafely rejects a parent-symlink swap between path validation and o
             "the outside file must not be returned to the caller")
     } finally {
         fs.openSync = originalOpenSync
-        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedAssets, assets) } catch {}
+        restoreSwappedDirectory(assets, parkedAssets)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -283,8 +288,7 @@ test("writeFileSafely rejects a parent-symlink swap immediately before open with
             "failed validation must not truncate or overwrite the outside file")
     } finally {
         fs.openSync = originalOpenSync
-        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedAssets, assets) } catch {}
+        restoreSwappedDirectory(assets, parkedAssets)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -346,8 +350,7 @@ test("removeProjectEntrySafely anchors deletion to the opened parent if its path
         assert.equal(fs.existsSync(path.join(parkedAssets, "delete.txt")), false)
     } finally {
         fsp.rm = originalRm
-        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedAssets, assets) } catch {}
+        restoreSwappedDirectory(assets, parkedAssets)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -383,8 +386,7 @@ test("renameProjectEntrySafely anchors destination to the opened parent if its p
         assert.equal(fs.existsSync(source), false)
     } finally {
         fsp.rename = originalRename
-        try { fs.rmSync(destination, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedDestination, destination) } catch {}
+        restoreSwappedDirectory(destination, parkedDestination)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -414,8 +416,7 @@ test("ensureProjectDirectorySafely does not create a directory through a swapped
         assert.equal(fs.existsSync(outsideTarget), false, "mkdir must not create a directory through the swapped outside symlink")
     } finally {
         fsp.mkdir = originalMkdir
-        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedAssets, assets) } catch {}
+        restoreSwappedDirectory(assets, parkedAssets)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -448,8 +449,7 @@ test("readProjectDirectoryEntriesSafelySync does not enumerate an outside symlin
         assert.ok(!names.includes("outside-only.txt"), "enumeration must not be redirected to the outside symlink")
     } finally {
         fs.readdirSync = originalReaddir
-        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedAssets, assets) } catch {}
+        restoreSwappedDirectory(assets, parkedAssets)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -536,8 +536,7 @@ test("copyProjectEntrySafely rejects an outside destination-parent swap before c
         )
     } finally {
         fsp.open = originalOpen
-        try { fs.rmSync(destination, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedDestination, destination) } catch {}
+        restoreSwappedDirectory(destination, parkedDestination)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })
@@ -616,8 +615,7 @@ test("copyProjectEntrySafely rejects a source-parent swap to an outside symlink"
         assert.equal(fs.readFileSync(path.join(parkedAssets, "source.txt"), "utf8"), "INSIDE SOURCE")
     } finally {
         fsp.open = originalOpen
-        try { fs.rmSync(assets, { recursive: true, force: true }) } catch {}
-        try { fs.renameSync(parkedAssets, assets) } catch {}
+        restoreSwappedDirectory(assets, parkedAssets)
         fs.rmSync(t.root, { recursive: true, force: true })
     }
 })

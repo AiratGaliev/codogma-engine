@@ -8,7 +8,7 @@ import {
   onMount,
 } from "solid-js";
 import designTokens from "../design-system/tokens.json";
-import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue, NodeDocument } from "@codogma/cge";
+import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue } from "@codogma/cge";
 import { NativeComponentInspector } from "./components/NativeComponentInspector.tsx";
 import { parseComponentSchemaSource } from "./domain/component-schema-source.js";
 import {
@@ -74,6 +74,7 @@ import {
 import { beginSceneLoadRequest } from "./domain/scene-load-request.js";
 import {
   attachNativeComponent,
+  createNativeComponentContext,
   detachNativeComponent,
   setNativeComponentEnabled,
   updateNativeComponentProperties,
@@ -724,24 +725,6 @@ function App() {
   let documentLoadSequence = 0;
   let scriptCheckSequence = 0;
 
-  function createNativeComponentContext(document: EditorDocument, project: import("@codogma/cge").ProjectDocumentV1) {
-    const roots = isPrefabDocument(document) ? [document.root] : document.rootNodes;
-    const nodeIds = new Set<string>();
-    const collectNodeIds = (node: NodeDocument): void => {
-      nodeIds.add(node.id);
-      node.children.forEach(collectNodeIds);
-    };
-    roots.forEach(collectNodeIds);
-    const entries = getSceneNodeEntries(document, prefabCatalog().map((item) => item.document))
-      .filter((entry) => nodeIds.has(entry.id));
-    return {
-      project,
-      schemas: componentSchemas(),
-      assets: new Map(project.assets.map((asset) => [asset.id, asset])),
-      nodeIds,
-      nodeKinds: new Map(entries.map((entry) => [entry.id, entry.type])),
-    };
-  }
 
   let componentSchemaRefreshSequence = 0;
 
@@ -1298,7 +1281,7 @@ function App() {
     const project = projectDocument();
     if (!current || !selected || !project) return;
     try {
-      const context = createNativeComponentContext(current, project);
+      const context = createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document));
       const next = attachNativeComponent(current, selected.id, typeId, context);
       const committed = applySceneChange(next, selected.id);
       if (committed) setComponentToAttach("");
@@ -1322,7 +1305,7 @@ function App() {
       writable: true,
     });
 
-    const context = createNativeComponentContext(current, project);
+    const context = createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document));
     const validation = validateNativeComponentProperties(
       instance.typeId,
       properties,
@@ -2833,7 +2816,13 @@ function App() {
         throw new Error("Component properties must be an object.");
       }
       const before = new Set(findSceneNode(current, nodeId)?.components.map((item) => item.id) ?? []);
-      const next = attachNativeComponent(current, nodeId, typeId, { project }, properties as Record<string, unknown>);
+      const next = attachNativeComponent(
+        current,
+        nodeId,
+        typeId,
+        createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document)),
+        properties as Record<string, unknown>,
+      );
       const instance = findSceneNode(next, nodeId)?.components.find((item) => !before.has(item.id));
       if (!instance) throw new Error("Native Component attach did not produce an instance identity.");
       await persistMcpSceneChange(next, nodeId);
@@ -3067,7 +3056,7 @@ function App() {
     const project = projectDocument();
     if (!selected || !current || !project) return [];
     const modules = new Map(project.componentModules.map((module) => [module.typeId, module]));
-    const context = createNativeComponentContext(current, project);
+    const context = createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document));
     const nodeOptions = sceneObjects().filter((entry) => context.nodeIds?.has(entry.id));
     return selected.node.components.flatMap((instance) => {
       const module = modules.get(instance.typeId);

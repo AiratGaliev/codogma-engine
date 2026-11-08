@@ -1,4 +1,4 @@
-export interface DocumentSelectionChange {
+interface DocumentSelectionChange {
   before: string | null;
   after: string | null;
 }

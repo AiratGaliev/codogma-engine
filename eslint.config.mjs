@@ -28,9 +28,7 @@ const nodeSources = [
     "packages/localization/bin/validate-localization.mjs"
 ]
 
-const localizationTypeScriptSources = [
-    "packages/localization/src/**/*.ts"
-]
+const localizationTypeScriptSources = ["packages/localization/src/**/*.ts"]
 
 const editorTypeScriptSources = [
     "source/editor/plugins/colibri/src/Plugin.ts",

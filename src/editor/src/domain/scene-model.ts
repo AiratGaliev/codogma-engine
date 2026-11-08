@@ -21,7 +21,7 @@ const RENDERER_TYPES: Readonly<Record<string, "Image" | "Text" | "Container">> =
 const TRANSFORM_KEYS = ["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"] as const;
 type TransformKey = (typeof TRANSFORM_KEYS)[number];
 
-export interface SceneNodeView {
+interface SceneNodeView {
   id: string;
   name: string;
   label: string;
@@ -471,17 +471,3 @@ function isDescendant(node: NodeDocument, id: string): boolean {
 export function findSceneNode(document: EditorDocument, id: string): NodeDocument | undefined {
   return getSceneNodeEntries(document).find((entry) => entry.id === id)?.node;
 }
-
-export function assertNativeSceneDocument(value: unknown): asserts value is SceneDocumentV1 {
-  if (!value || typeof value !== "object" || (value as { schemaVersion?: unknown }).schemaVersion !== 1 ||
-      !Array.isArray((value as { rootNodes?: unknown }).rootNodes)) {
-    throw new TypeError("Expected a native SceneDocumentV1.");
-  }
-}
-
-export function assertNativeNodeIdentity(value: unknown): asserts value is NodeDocument {
-  if (!value || typeof value !== "object" || !isValidStableId((value as { id?: unknown }).id)) {
-    throw new TypeError("A native Node requires a stable id.");
-  }
-}
-

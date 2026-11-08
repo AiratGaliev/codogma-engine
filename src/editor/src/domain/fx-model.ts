@@ -14,9 +14,9 @@ import {
 export { FX_COMPONENT_TYPES } from "./builtin-component-ids.js";
 
 export type FxType = NativeFxType;
-export type FxColor = string | number;
+type FxColor = string | number;
 
-export interface FxBase extends Record<string, unknown> {
+interface FxBase extends Record<string, unknown> {
   id: string;
   type: FxType;
   label: string;
@@ -81,16 +81,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function isFxType(value: unknown): value is FxType {
+function isFxType(value: unknown): value is FxType {
   return typeof value === "string" && Object.hasOwn(FX_COMPONENT_TYPES, value);
 }
 
-export function getFxTypeFromComponentTypeId(typeId: string): FxType | undefined {
+function getFxTypeFromComponentTypeId(typeId: string): FxType | undefined {
   return getNativeFxType(typeId);
-}
-
-export function isFxComponent(component: ComponentInstanceDocument): boolean {
-  return getNativeFxType(component.typeId) !== undefined;
 }
 
 function defaults(type: FxType, id: string, preFX: boolean): FxObject {

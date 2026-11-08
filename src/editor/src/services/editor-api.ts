@@ -47,7 +47,7 @@ async function readJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function callProjectOperation<T>(
+async function callProjectOperation<T>(
   operation: string,
   args: Record<string, unknown> = {},
 ): Promise<T> {

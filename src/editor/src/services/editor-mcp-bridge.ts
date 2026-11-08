@@ -1,4 +1,4 @@
-export interface EditorMcpCommand {
+interface EditorMcpCommand {
   id: string;
   clientId: string;
   tool: string;
@@ -9,7 +9,7 @@ export type EditorMcpHandler = (
   args: Record<string, unknown>,
 ) => unknown | Promise<unknown>;
 
-export type EditorMcpBridgeStatus = "connecting" | "connected" | "disconnected";
+type EditorMcpBridgeStatus = "connecting" | "connected" | "disconnected";
 
 export interface EditorMcpBridgeOptions {
   onFilesChanged?: () => void | Promise<void>;

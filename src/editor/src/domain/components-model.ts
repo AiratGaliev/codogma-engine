@@ -1,5 +1,4 @@
 import {
-  isJsonValue,
   isValidStableId,
   validateComponentProperties,
   type ComponentInstanceDocument,
@@ -8,6 +7,7 @@ import {
   type CoreDiagnostic,
   type JsonObject,
   type NodeDocument,
+  type PrefabDocumentV1,
   type ProjectDocumentV1,
   type ValidationResult,
 } from "@codogma/cge";
@@ -24,6 +24,31 @@ export interface NativeComponentContext {
   assets?: ReadonlyMap<string, ProjectDocumentV1["assets"][number]>;
   nodeIds?: ReadonlySet<string>;
   nodeKinds?: ReadonlyMap<string, NodeReferenceKind>;
+}
+
+export function createNativeComponentContext(
+  document: EditorDocument,
+  project: ProjectDocumentV1,
+  schemas: ReadonlyMap<string, ComponentTypeSchemaV1>,
+  prefabDocuments: readonly PrefabDocumentV1[] = [],
+): NativeComponentContext {
+  const roots = isPrefabDocument(document) ? [document.root] : document.rootNodes;
+  const nodeIds = new Set<string>();
+  const collectNodeIds = (node: NodeDocument): void => {
+    nodeIds.add(node.id);
+    node.children.forEach(collectNodeIds);
+  };
+  roots.forEach(collectNodeIds);
+  const entries = getSceneNodeEntries(document, prefabDocuments)
+    .filter((entry) => nodeIds.has(entry.id));
+
+  return {
+    project,
+    schemas,
+    assets: new Map(project.assets.map((asset) => [asset.id, asset])),
+    nodeIds,
+    nodeKinds: new Map(entries.map((entry) => [entry.id, entry.type])),
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -65,7 +90,7 @@ function validateProperties(
   context: NativeComponentContext,
   nodeId: string,
 ): ValidationResult<JsonObject> {
-  if (!isPlainObject(properties) || !isJsonValue(properties)) {
+  if (!isPlainObject(properties)) {
     return {
       valid: false,
       diagnostics: [{
