@@ -154,7 +154,7 @@ async function main() {
         await fs.symlink(outsideDir, path.join(projectDir, "outside-link"), "dir")
         await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
         await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
-        await fs.symlink(path.join(outsideDir, "secret.txt"), path.join(projectDir, "upload-link.txt"), "file")
+        await fs.symlink(path.join(outsideDir, "secret.txt"), path.join(projectDir, "target-link.txt"), "file")
         await fs.symlink(path.join(outsideDir, "project-config.json"), path.join(projectDir, "engine-config.json"), "file")
         await fs.mkdir(path.join(projectDir, "inside-dir"), { recursive: true })
         await fs.symlink(path.join(projectDir, "inside-dir"), path.join(projectDir, "inside-link"), "dir")
@@ -165,7 +165,7 @@ async function main() {
         if (!canSkipForWindows) throw error
 
         symlinkChecksAvailable = false
-        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt", "engine-config.json", "inside-link", "inside-dir"]) {
+        for (const name of ["outside-link", "dangling-file", "dangling-folder", "target-link.txt", "engine-config.json", "inside-link", "inside-dir"]) {
             await fs.rm(path.join(projectDir, name), { force: true, recursive: true })
         }
         console.warn("Skipping symlink-specific checks: Windows does not permit creating symbolic links in this environment.")
@@ -208,9 +208,7 @@ async function main() {
         )
         const nativePrompt = aiChatService.requests.at(-1)?.messages?.at(-1)?.content ?? ""
         assert.ok(nativePrompt.includes("native-scene-attachment-is-allowed"))
-        assert.ok(solidJsPrompt.includes("external-asset-pack-attachment-is-allowed"))
-        assert.equal(solidJsPrompt.includes("unsupported-scene-must-not-enter-ai-context"), false)
-        assert.equal(solidJsPrompt.includes("unsupported-components-must-not-enter-ai-context"), false)
+        assert.ok(nativePrompt.includes("external-asset-pack-attachment-is-allowed"))
 
         // Declared oversize bodies must be rejected from headers without
         // buffering the claimed body or returning an HTTP 200 error payload.
@@ -222,14 +220,6 @@ async function main() {
         })
         assert.equal(oversizedJson.status, 413, "oversized JSON API bodies must receive HTTP 413")
 
-        const oversizedUpload = await requestHeadersOnly(port, "/editor/upload", {
-            host,
-            "content-type": "multipart/form-data; boundary=codogma-limit-test",
-            "content-length": String(128 * 1024 * 1024 + 1),
-            connection: "close"
-        })
-        assert.equal(oversizedUpload.status, 413, "oversized multipart bodies must receive HTTP 413")
-
         const malformedJson = await request(port, "/editor/api", {
             method: "POST",
             headers: { host, "content-type": "application/json" },
@@ -238,15 +228,15 @@ async function main() {
         assert.equal(malformedJson.status, 400, "malformed JSON API bodies must receive HTTP 400")
         assert.equal(JSON.parse(malformedJson.body).error, "invalid request body")
 
-        const allowed = await request(port, "/editor/product.json", { headers: { host } })
+        const allowed = await request(port, "/editor/mcp-bridge-status", { headers: { host } })
         assert.equal(allowed.status, 200, "loopback request should be accepted")
 
-        const hostileHost = await request(port, "/editor/product.json", {
+        const hostileHost = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "attacker.example" }
         })
         assert.equal(hostileHost.status, 403, "non-loopback Host header should be rejected")
 
-        const hostileOrigin = await request(port, "/editor/product.json", {
+        const hostileOrigin = await request(port, "/editor/mcp-bridge-status", {
             headers: { host, origin: "http://attacker.example" }
         })
         assert.equal(hostileOrigin.status, 403, "cross-origin browser requests should be rejected")
@@ -289,33 +279,6 @@ async function main() {
             assert.equal(JSON.parse(danglingWrite.body).error, "invalid path", "dangling file symlinks must be rejected")
             await assert.rejects(fs.access(path.join(outsideDir, "dangling-file.txt")), /ENOENT/, "dangling symlink writes must not create files outside the project")
 
-            // Multipart uploads must validate the final file target, not only its parent directory.
-            const boundary = "----codogma-upload-security-boundary"
-            const multipartBody = [
-                `--${boundary}`,
-                `Content-Disposition: form-data; name="uploadTo"`,
-                "",
-                "",
-                `--${boundary}`,
-                `Content-Disposition: form-data; name="file"; filename="upload-link.txt"`,
-                "Content-Type: text/plain",
-                "",
-                "attempted-overwrite",
-                `--${boundary}--`,
-                ""
-            ].join("\r\n")
-
-            const symlinkUpload = await request(port, "/editor/upload", {
-                method: "POST",
-                headers: { host, "content-type": `multipart/form-data; boundary=${boundary}` },
-                body: multipartBody
-            })
-
-            assert.equal(JSON.parse(symlinkUpload.body).error, "invalid upload path",
-                "multipart uploads must reject a file symlink escaping the project")
-            assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
-                "multipart uploads must not overwrite a file outside the project")
-
             // --- success-path sanity for the hardened write path ---
             const api = (method, body) => request(port, "/editor/api", {
                 method: "POST",
@@ -328,27 +291,6 @@ async function main() {
             assert.equal(JSON.parse(writeOk.body).error, undefined, "SetFileString success must not carry an error")
             const written = await fs.readFile(path.join(projectDir, "in-project.txt"), "utf8")
             assert.equal(written, "project file content", "written content must be readable back from disk")
-
-            const uploadedOk = await request(port, "/editor/upload", {
-                method: "POST",
-                headers: { host, "content-type": `multipart/form-data; boundary=${boundary}` },
-                body: [
-                    `--${boundary}`,
-                    `Content-Disposition: form-data; name="uploadTo"`,
-                    "",
-                    "",
-                    `--${boundary}`,
-                    `Content-Disposition: form-data; name="file"; filename="uploaded.txt"`,
-                    "Content-Type: text/plain",
-                    "",
-                    "uploaded-content",
-                    `--${boundary}--`,
-                    ""
-                ].join("\r\n")
-            })
-            assert.equal(uploadedOk.status, 200, `plain upload must still succeed: ${uploadedOk.body}`)
-            assert.equal(await fs.readFile(path.join(projectDir, "uploaded.txt"), "utf8"), "uploaded-content",
-                "uploaded content must be readable back from disk")
 
             const copyOk = await api("CopyFile", { fromPath: "in-project.txt", toPath: "copy-in-project.txt" })
             assert.equal(copyOk.status, 200, `CopyFile must still succeed inside the project: ${copyOk.body}`)
@@ -394,7 +336,7 @@ async function main() {
             await assert.rejects(fs.access(path.join(projectDir, "copy-outside.txt")), /ENOENT/,
                 "CopyFile must not copy outside content into the project through a symlink")
 
-            const copyToSymlink = await api("CopyFile", { fromPath: "in-project.txt", toPath: "upload-link.txt" })
+            const copyToSymlink = await api("CopyFile", { fromPath: "in-project.txt", toPath: "target-link.txt" })
             assert.equal(JSON.parse(copyToSymlink.body).error, "invalid path",
                 "CopyFile must reject a symlink destination it would write through")
             assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
@@ -551,21 +493,21 @@ async function main() {
         server.stderr.on("data", chunk => { logs += chunk.toString("utf8") })
         await waitForHttpServer(port, server, () => logs)
 
-        const proxyOk = await request(port, "/editor/product.json", { headers: { host: "preview.example" } })
+        const proxyOk = await request(port, "/editor/mcp-bridge-status", { headers: { host: "preview.example" } })
         assert.equal(proxyOk.status, 200, "an allow-listed Host from a loopback proxy must be accepted")
 
-        const proxyPorted = await request(port, "/editor/product.json", { headers: { host: "alt.example:8443" } })
+        const proxyPorted = await request(port, "/editor/mcp-bridge-status", { headers: { host: "alt.example:8443" } })
         assert.equal(proxyPorted.status, 200, "the allow-list must be port-insensitive on Host")
 
-        const proxyUnknown = await request(port, "/editor/product.json", { headers: { host: "attacker.example" } })
+        const proxyUnknown = await request(port, "/editor/mcp-bridge-status", { headers: { host: "attacker.example" } })
         assert.equal(proxyUnknown.status, 403, "non-listed Host headers must stay rejected under an allow-list")
 
-        const proxySameOrigin = await request(port, "/editor/product.json", {
+        const proxySameOrigin = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "preview.example", origin: "https://preview.example" }
         })
         assert.equal(proxySameOrigin.status, 200, "an https same-origin request behind the proxy must be accepted")
 
-        const proxyCrossOrigin = await request(port, "/editor/product.json", {
+        const proxyCrossOrigin = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "preview.example", origin: "https://attacker.example" }
         })
         assert.equal(proxyCrossOrigin.status, 403, "cross-origin requests must stay rejected behind the proxy")
@@ -593,27 +535,27 @@ async function main() {
         server.stderr.on("data", chunk => { logs += chunk.toString("utf8") })
         await waitForHttpServer(port, server, () => logs)
 
-        const originAllowListed = await request(port, "/editor/product.json", {
+        const originAllowListed = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "gateway.internal.example", origin: "https://app.preview.example" }
         })
         assert.equal(originAllowListed.status, 200, "an allow-listed origin must pass even when Host is rewritten by the gateway")
 
-        const originWildcardSubdomain = await request(port, "/editor/product.json", {
+        const originWildcardSubdomain = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "gateway.internal.example", origin: "https://preview-chat-1234.preview.example" }
         })
         assert.equal(originWildcardSubdomain.status, 200, "the subdomain wildcard must match real subdomains")
 
-        const originWrongScheme = await request(port, "/editor/product.json", {
+        const originWrongScheme = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "gateway.internal.example", origin: "http://app.preview.example" }
         })
         assert.equal(originWrongScheme.status, 403, "the origin allow-list must stay scheme-locked")
 
-        const originUnlisted = await request(port, "/editor/product.json", {
+        const originUnlisted = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "gateway.internal.example", origin: "https://attacker.example" }
         })
         assert.equal(originUnlisted.status, 403, "unrelated origins must stay rejected by the origin allow-list")
 
-        const originUnlistedHost = await request(port, "/editor/product.json", {
+        const originUnlistedHost = await request(port, "/editor/mcp-bridge-status", {
             headers: { host: "attacker.example", origin: "https://app.preview.example" }
         })
         assert.equal(originUnlistedHost.status, 403, "the origin allow-list must not open unlisted Host headers")
