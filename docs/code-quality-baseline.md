@@ -1,7 +1,7 @@
 # Baseline качества кода и проверок
 
 **Обновлено:** 08.11.2026.  
-**Охват:** активные native package roots, TypeScript configs, CI workflows, unit/contract/security tests и ключевые server/MCP paths. Это engineering baseline; он не подтверждает полную browser/runtime acceptance или performance measurements.
+**Охват:** активные native package roots, TypeScript configs, CI workflows, unit/contract/security tests и ключевые server/MCP paths. Детальный снимок compiler options, scripts, lockfiles и entry points: [TypeScript toolchain baseline](typescript-toolchain-baseline.md). Это engineering baseline; он не подтверждает полную browser/runtime acceptance или performance measurements.
 
 ## Активные package roots и проверки
 
@@ -13,6 +13,7 @@
 | Editor Host domain tests | Vitest `tests/**/*.test.ts`; package `test` script | Domain/model/service unit и integration regression | Полный Playwright/browser workflow |
 | Editor Host browser tests | Playwright `browser-tests/**/*.spec.ts`; package `test:browser` script | Реальное Chromium поведение реализованных сценариев | Все браузеры, ОС, mobile devices и специализированные capabilities |
 | Codogma Core | `packages/cge/` build/typecheck/test steps в CI Fast | Project Model v1 contracts, validation, serialization, ComponentWorld lifecycle и regressions | Runtime adapter, Scene Loader, Preview и Build parity |
+| Game Test Bridge contract | `packages/game-test-bridge-contract/` имеет собственные build/typecheck/test scripts и lockfile | Versioned transport-neutral JSON contracts и schema conformance на package-level | В текущем `.github/workflows/ci.yml` нет отдельного install/test/audit шага для этого package |
 | Server smoke | Запуск `server/server.mjs`, обращение к native Editor Host/MCP status endpoints | Server startup, native routing и loopback request flow | Полную безопасность всех mutation paths и пользовательскую game/runtime корректность |
 | Security smoke | `tests/security-smoke-test.mjs` и mini-service security suite | Loopback/Host/Origin guards, symlink containment, request limits, project-file boundaries, MCP/AI Chat security cases | Adversarial TOCTOU race across path-based mutation syscalls; все permutations MCP argument schemas |
 | MCP contracts | Engine registry/schema tests, Host bridge-routing tests и first-party stdio adapter tests | Native tool schemas, argument validation, session-correlated routing, stdio forwarding и external-asset inspection contracts | Полный живой browser workflow по каждому tool или multi-Host concurrency acceptance |
@@ -28,7 +29,9 @@ CI Fast и Editor Host job являются быстрыми инженерны�
 - Editor Host dependencies: SolidJS `1.9.16`; devDependencies include TypeScript `5.9.3`, Vite `8.3.5`, `vite-plugin-solid 2.11.14`, Tailwind CSS `4.3.3`, `@tailwindcss/vite 4.3.3`, Vitest `5.0.5`, Node types and Playwright `1.64.1`.
 - Host-owned implementation, tests and supported tool configs are TypeScript/TSX. `src/editor/tsconfig.json` enables `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `forceConsistentCasingInFileNames`, `noUnusedLocals` and `noUnusedParameters`.
 - Root manifests include ESLint/typescript-eslint, Prettier, Knip and dependency-cruiser. Knip/dependency-cruiser remain report-oriented where documented; a report does not imply a repo-wide blocking policy.
-- `packages/cge/`, `packages/editor-mcp-server/`, `packages/localization/` and `mini-services/ai-chat/` retain independent package boundaries where declared. npm Workspaces are not enabled.
+- Активные npm roots: root, `src/editor/`, `packages/cge/`, `packages/editor-mcp-server/`, `packages/game-test-bridge-contract/`, `packages/localization/` и `mini-services/ai-chat/`; у каждого свой lockfile. npm Workspaces не включены.
+- TypeScript pins: Localization `5.3.3`, Core и Editor Host `5.9.3`, Editor MCP и Game Test Bridge `6.0.3`. Root `package.json` не объявляет TypeScript напрямую; TypeScript entry в root lockfile не является root compiler policy.
+- Активные TS configs не используют project references; Host собирает Core отдельным npm script перед собственной typecheck/build. Детали scope и compiler options — в [toolchain baseline](typescript-toolchain-baseline.md).
 
 ## Быстрый локальный engineering loop
 
@@ -54,7 +57,7 @@ For Core and MCP packages, use the scripts declared in each package manifest. Do
 | P0 | Некоторые runtime capabilities требуют browser acceptance | FX/Box2D/asset/codegen native fixtures, Preview/runtime lifecycle tests и журнал ручной проверки | До заявления о готовности соответствующих user workflows |
 | P1 | Live MCP coverage не доказывает все UI-dependent workflows | Contract/schema tests на каждый tool group; promotion E2E для live Scene/Node/Prefab/Component/FX/screenshots; multi-Host session acceptance в COD-85 | Перед расширением или изменением native MCP contracts |
 | P1 | Нет полного mobile/target-browser matrix для Editor Host | Добавлять browser coverage по поддерживаемой browser/OS/device matrix, не заявляя Chromium coverage как универсальную совместимость | Перед release readiness соответствующих UI capabilities |
-| P2 | Root/Host formatting и lint gates ещё не покрывают все активные native packages одинаково | Расширять ESLint + Prettier ratchet и CI package scope постепенно, без массовых непросмотренных rewrites | После clean install, scoped test и report review |
+| P2 | Root/Host formatting и lint gates ещё не покрывают все активные native packages одинаково; Game Test Bridge не подключён к CI Fast | Расширять ESLint + Prettier ratchet и добавить отдельный package CI/audit scope после проверки manifests, lockfile и scripts | После clean install, scoped test и report review |
 | P2 | Metadata descriptions и notices пакетов должны соответствовать актуальному ownership | Сверять package descriptions, exports, repository URLs и attribution с current native package boundaries | До публикации пакетов |
 
 ## Правила обновления baseline
