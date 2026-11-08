@@ -265,18 +265,18 @@ async function main() {
                     arguments: { relativePath: "outside-link/created.txt", text: "should not escape" }
                 })
             })
-            assert.equal(JSON.parse(symlinkWrite.body).error, "invalid path", "API writes must reject symlink escapes")
+            assert.equal(JSON.parse(symlinkWrite.body).error, "invalid project path", "Project writes must reject symlink escapes")
             await assert.rejects(fs.access(path.join(outsideDir, "created.txt")), /ENOENT/, "no file may be created outside the project")
 
             const danglingWrite = await request(port, "/editor/project/operations", {
                 method: "POST",
                 headers: { host, "content-type": "application/json" },
                 body: JSON.stringify({
-                    method: "project.writeFile",
-                    body: { path: "dangling-file", content: "must not follow a dangling link" }
+                    operation: "project.writeFile",
+                    arguments: { relativePath: "dangling-file", text: "must not follow a dangling link" }
                 })
             })
-            assert.equal(JSON.parse(danglingWrite.body).error, "invalid path", "dangling file symlinks must be rejected")
+            assert.equal(JSON.parse(danglingWrite.body).error, "invalid project path", "dangling file symlinks must be rejected")
             await assert.rejects(fs.access(path.join(outsideDir, "dangling-file.txt")), /ENOENT/, "dangling symlink writes must not create files outside the project")
 
             // --- success-path sanity for the hardened write path ---
