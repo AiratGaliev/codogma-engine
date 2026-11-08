@@ -80,7 +80,7 @@ Phaser 4.2.1 — выбранный HTML5 runtime target. Runtime adapter, Scene
 | Build Profiles / Build Settings | Reproducible Development/Release profile contracts описаны; dedicated Host workflow ещё не реализован | COD-35, COD-95 |
 | Project Settings / Editor Preferences | Полный domain ownership и отдельные Host pages ещё проектируются | COD-96/97 |
 | Input Actions Editor | Authoring UI и remapping/conflict workflow ещё не реализованы | COD-98/99 |
-| MCP live bridge | Native registry, schemas, stdio adapter и session-aware Host routing реализованы; multi-Host acceptance ещё не завершена | COD-85, CODQA-8 |
+| MCP live bridge | Native registry, schemas, stdio adapter and single-Host SSE bridge; connection reliability and live operation acceptance remain tracked separately | COD-85, CODQA-8 |
 
 Статус capability должен подтверждаться implementation и tests. UI controls, существование MCP schema или успешно собравшийся bundle сами по себе не доказывают завершённый runtime workflow.
 
@@ -135,7 +135,7 @@ Node server обслуживает production bundle из `src/editor/dist` по
 
 `@codogma/editor-mcp-server` — stdio adapter над engine-owned tool registry. Engine остаётся единственным источником schemas, system instructions, dispatch и project-file security.
 
-Live Scene/Node/Prefab/Component/FX и screenshot operations выполняются через SSE bridge конкретной Editor Host session. Сервер создаёт session ID; MCP command отправляется активной сессии, а result принимается только от исходной сессии. Команды не broadcast-ятся. Multi-Host reconnect, cancellation/timeout и shared project write ownership остаются COD-85; пока этот контракт не принят, параллельные write tests используют отдельные project/backend instances.
+Live Scene/Node/Prefab/Component/FX and screenshot operations are forwarded through one SSE connection to the native Editor Host. The server issues a session ID; each command/result is bound to that connection. Disconnect invalidates pending commands and reconnect establishes a new identity. Broadcast, focus arbitration, multiple simultaneous Host clients and multi-Host write ownership are not part of the architecture. COD-85 covers single-Host bridge reliability, not multi-Host support.
 
 File-only MCP tools выполняются на backend и не требуют открытого UI. External asset inspection не подменяет native Project/Scene authoring contracts.
 
