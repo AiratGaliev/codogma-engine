@@ -10,10 +10,6 @@ const fixtureFiles = [
   ["src/FollowTarget.ts", "src/FollowTarget.ts"],
   ["assets/player.svg", "assets/player.svg"],
 ] as const;
-const createdPaths = [
-  ...fixtureFiles.map(([, projectPath]) => projectPath),
-  "assets/alternative.svg",
-];
 
 async function writeProjectFile(page: Page, relativePath: string, text: string) {
   const response = await page.request.post("http://127.0.0.1:3000/editor/project/operations", {
@@ -72,10 +68,18 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page }) => {
+  for (const [fixturePath, projectPath] of fixtureFiles) {
+    await writeProjectFile(
+      page,
+      projectPath,
+      readFileSync(resolve(fixtureRoot, fixturePath), "utf8"),
+    );
+  }
+
   const response = await page.request.post("http://127.0.0.1:3000/editor/project/operations", {
     data: {
       operation: "project.deleteEntries",
-      arguments: { relativePaths: createdPaths },
+      arguments: { relativePaths: ["assets/alternative.svg"] },
     },
   });
   expect(response.ok()).toBeTruthy();
