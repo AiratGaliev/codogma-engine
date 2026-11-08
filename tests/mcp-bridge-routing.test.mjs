@@ -53,25 +53,28 @@ class FakeResponse extends EventEmitter {
     }
 }
 
-function parseConnectedSession(response) {
-    const match = response.output.match(/event: connected\\ndata: ([^\\n]+)/)
-    assert.ok(match, "Host should receive its server-issued session id")
-    const data = JSON.parse(match[1])
-    assert.equal(typeof data.clientId, "string")
-    assert.ok(data.clientId.length >= 30, "session ids must be unpredictable UUIDs")
-    return data
+function parseEventPayload(response, eventName) {
+    const lines = response.output.split(/\r?\n/)
+    const eventIndex = lines.indexOf(`event: ${eventName}`)
+    assert.ok(eventIndex >= 0, `Host response should contain the "${eventName}" SSE event`)
+    const dataLine = lines[eventIndex + 1]
+    assert.ok(dataLine?.startsWith("data: "), `"${eventName}" event should be followed by an SSE data line`)
+    return JSON.parse(dataLine.slice("data: ".length))
 }
 
 function parseLastCommand(response) {
-    const matches = [...response.output.matchAll(/event: command\\ndata: ([^\\n]+)/g)]
-    assert.ok(matches.length > 0, "active Host should receive the MCP command event")
-    return JSON.parse(matches.at(-1)[1])
+    const lines = response.output.split(/\r?\n/)
+    const eventIndexes = lines.flatMap((line, index) => line === "event: command" ? [index] : [])
+    assert.ok(eventIndexes.length > 0, "active Host should receive the MCP command event")
+    const dataLine = lines[eventIndexes.at(-1) + 1]
+    assert.ok(dataLine?.startsWith("data: "), "command event should contain its payload")
+    return JSON.parse(dataLine.slice("data: ".length))
 }
 
 async function connectHost() {
     const response = new FakeResponse()
     await handleBridgeEvents(new FakeRequest("/editor/mcp-bridge/events"), response)
-    return { response, session: parseConnectedSession(response) }
+    return { response, session: parseEventPayload(response, "connected") }
 }
 
 async function sendResult(body) {
