@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as testCase } from "vitest";
-import type { PrefabDocumentV1, SceneDocumentV1 } from "@codogma/cge";
+import type { ComponentTypeSchemaV1, PrefabDocumentV1, SceneDocumentV1 } from "@codogma/cge";
 import { reparentSceneNode, getSceneNodeEntries, findSceneNode, createSceneNode } from "../src/domain/scene-model.js";
 import { setNativeComponentEnabled } from "../src/domain/components-model.js";
 import {
@@ -50,6 +50,125 @@ testCase("parses and serializes the native Scene contract without changing manif
   assert.equal(scene.id, "scene-level");
   assert.equal(scene.rootNodes[0]?.id, "node-player");
   assert.equal(JSON.parse(serializeNativeSceneDocument(project, scene)).id, "scene-level");
+});
+
+testCase("uses one Component Schema for native Scene reference validation and stable round-trip", () => {
+  const schema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.acceptance.follow-target",
+    name: "Follow Target",
+    version: "1.0.0",
+    properties: {
+      sprite: { type: "asset", assetKinds: ["image"], required: true },
+      target: { type: "node", allowSelf: false },
+      speed: { type: "number", min: 0, defaultValue: 1 },
+    },
+  };
+  const schemas = new Map([[schema.typeId, schema]]);
+  const input = JSON.parse(sceneContent) as {
+    rootNodes: Array<{ components: Array<{ properties: Record<string, unknown> }> }>;
+  };
+  const playerComponent = input.rootNodes[0]?.components[0];
+  assert.ok(playerComponent);
+  playerComponent.properties.futurePluginValue = { retained: true };
+
+  const parsed = parseNativeSceneDocument(
+    project,
+    "scene-level",
+    JSON.stringify(input),
+    undefined,
+    schemas,
+  );
+  const serialized = serializeNativeSceneDocument(project, parsed, undefined, schemas);
+  const reopened = parseNativeSceneDocument(project, "scene-level", serialized, undefined, schemas);
+  const properties = reopened.rootNodes[0]?.components[0]?.properties;
+  assert.deepEqual(properties?.sprite, { assetId: "asset-player-sprite" });
+  assert.deepEqual(properties?.target, { nodeId: "node-enemy" });
+  assert.deepEqual(properties?.futurePluginValue, { retained: true });
+
+  const invalid = structuredClone(reopened);
+  invalid.rootNodes[0]!.components[0]!.properties.target = { nodeId: "node-missing" };
+  let serializationError: unknown;
+  try {
+    serializeNativeSceneDocument(project, invalid, undefined, schemas);
+  } catch (error) {
+    serializationError = error;
+  }
+  assert.ok(serializationError instanceof Error);
+  assert.ok("diagnostics" in serializationError);
+  const diagnostics = (serializationError as Error & {
+    diagnostics: Array<{ code: string }>;
+  }).diagnostics;
+  assert.ok(diagnostics.some((item) => item.code === "COMPONENT_INVALID_REFERENCE"));
+});
+
+testCase("round-trips optional Asset sub-resource references and rejects stale sub-resource ids", () => {
+  const projectWithSubResource = {
+    ...project,
+    assets: project.assets.map((asset) => asset.id === "asset-player-sprite"
+      ? { ...asset, subResourceId: "frame-player" }
+      : asset),
+  };
+  const schema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.acceptance.follow-target",
+    name: "Follow Target",
+    version: "1.0.0",
+    properties: {
+      sprite: { type: "asset", assetKinds: ["image"], allowSubResource: true, required: true },
+    },
+  };
+  const schemas = new Map([[schema.typeId, schema]]);
+  const input = JSON.parse(sceneContent) as {
+    rootNodes: Array<{ components: Array<{ properties: Record<string, unknown> }> }>;
+  };
+  const playerComponent = input.rootNodes[0]?.components[0];
+  assert.ok(playerComponent);
+  playerComponent.properties.sprite = {
+    assetId: "asset-player-sprite",
+    subResourceId: "frame-player",
+  };
+
+  const parsed = parseNativeSceneDocument(
+    projectWithSubResource,
+    "scene-level",
+    JSON.stringify(input),
+    undefined,
+    schemas,
+  );
+  const serialized = serializeNativeSceneDocument(projectWithSubResource, parsed, undefined, schemas);
+  const reopened = parseNativeSceneDocument(
+    projectWithSubResource,
+    "scene-level",
+    serialized,
+    undefined,
+    schemas,
+  );
+  assert.deepEqual(
+    reopened.rootNodes[0]?.components[0]?.properties.sprite,
+    { assetId: "asset-player-sprite", subResourceId: "frame-player" },
+  );
+
+  const staleReference = structuredClone(reopened);
+  staleReference.rootNodes[0]!.components[0]!.properties.sprite = {
+    assetId: "asset-player-sprite",
+    subResourceId: "frame-deleted",
+  };
+  let serializationError: unknown;
+  try {
+    serializeNativeSceneDocument(projectWithSubResource, staleReference, undefined, schemas);
+  } catch (error) {
+    serializationError = error;
+  }
+  assert.ok(serializationError instanceof Error);
+  assert.ok("diagnostics" in serializationError);
+  const diagnostics = (serializationError as Error & {
+    diagnostics: Array<{ code: string; message: string }>;
+  }).diagnostics;
+  assert.ok(diagnostics.some((item) =>
+    item.code === "COMPONENT_INVALID_REFERENCE" &&
+    item.message.includes("Sub-resource frame-deleted is not registered"),
+  ));
 });
 
 testCase("rejects unpublished or unsupported document shapes at the native boundary", () => {

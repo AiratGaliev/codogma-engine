@@ -13,6 +13,7 @@ import {
   isJsonValue,
   stableStringify,
   type ComponentTypeSchemaV1,
+  type NodeReferenceKind,
   type JsonValue,
   type PrefabDocumentV1,
   type ProjectDocumentV1,
@@ -358,6 +359,36 @@ test("rejects unknown Scene, Node, Transform and Component fields without closin
     "rootNodes[0].transform.legacyPivot",
     "scene.extensionMetadata",
   ]);
+  assert.ok(result.diagnostics.some((item) =>
+    item.code === "COMPONENT_UNKNOWN_PROPERTY" &&
+    item.propertyName === "pluginProperty" &&
+    item.severity === "warning",
+  ));
+  const extensionOnly = validateSceneDocument({
+    schemaVersion: 1,
+    id: "scene-component-extension",
+    name: "Component Extension",
+    settings: {},
+    rootNodes: [{
+      id: "node-extension",
+      name: "Node",
+      active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [{
+        id: "component-extension",
+        typeId: schema.typeId,
+        schemaVersion: 1,
+        enabled: true,
+        properties: { speed: 2, pluginProperty: { keep: true } },
+      }],
+      children: [],
+    }],
+  }, {
+    componentSchemas: new Map([[schema.typeId, schema]]),
+    registeredComponentTypes: new Set([schema.typeId]),
+  });
+  assert.equal(extensionOnly.valid, true);
+  assert.deepEqual(extensionOnly.value?.rootNodes[0]?.components[0]?.properties.pluginProperty, { keep: true });
 
   const settings = validateSceneDocument({
     schemaVersion: 1, id: "scene-settings", name: "Settings",
@@ -365,6 +396,72 @@ test("rejects unknown Scene, Node, Transform and Component fields without closin
   });
   assert.equal(settings.valid, true);
   assert.deepEqual(settings.value?.settings, { editor: { gridSize: 16 } });
+});
+
+test("validates Component Node references against the resolved Scene node kinds", () => {
+  const schema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.test.image-target",
+    name: "Image Target",
+    version: "1.0.0",
+    properties: {
+      target: { type: "node", nodeKinds: ["Image"], allowSelf: false },
+    },
+  };
+  const scene = {
+    schemaVersion: 1,
+    id: "scene-node-kind",
+    name: "Node Kind",
+    settings: {},
+    rootNodes: [
+      {
+        id: "node-owner",
+        name: "Owner",
+        active: true,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [{
+          id: "component-owner",
+          typeId: schema.typeId,
+          schemaVersion: 1,
+          enabled: true,
+          properties: { target: { nodeId: "node-image" } },
+        }],
+        children: [],
+      },
+      {
+        id: "node-image",
+        name: "Image",
+        active: true,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+        components: [],
+        children: [],
+      },
+    ],
+  };
+  const context = {
+    componentSchemas: new Map([[schema.typeId, schema]]),
+    registeredComponentTypes: new Set([schema.typeId]),
+    nodeKinds: new Map<string, NodeReferenceKind>([
+      ["node-owner", "Node"],
+      ["node-image", "Image"],
+    ]),
+  };
+  const valid = validateSceneDocument(scene, context);
+  assert.equal(valid.valid, true);
+
+  const invalid = validateSceneDocument(scene, {
+    ...context,
+    nodeKinds: new Map<string, NodeReferenceKind>([
+      ["node-owner", "Node"],
+      ["node-image", "Text"],
+    ]),
+  });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.diagnostics.some((item) =>
+    item.code === "COMPONENT_INVALID_REFERENCE" &&
+    item.propertyName === "target" &&
+    item.path === "rootNodes[0].components[0].properties.target",
+  ));
 });
 
 test("rejects unknown Prefab and root Node fields at the native boundary", () => {

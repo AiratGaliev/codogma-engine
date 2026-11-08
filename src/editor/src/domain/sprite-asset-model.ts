@@ -1,5 +1,5 @@
-export interface SpriteAssetRect { x: number; y: number; width: number; height: number; }
-export interface SpriteAssetSize { width: number; height: number; }
+interface SpriteAssetRect { x: number; y: number; width: number; height: number; }
+interface SpriteAssetSize { width: number; height: number; }
 export interface SpriteAssetFrameDescriptor {
   key: string;
   sourceRect: SpriteAssetRect;
@@ -8,7 +8,7 @@ export interface SpriteAssetFrameDescriptor {
 }
 export interface SpriteAssetSourceInfo { size: number; modifiedAt: number; }
 
-export interface SpriteFrameMetadata extends Record<string, unknown> {
+interface SpriteFrameMetadata extends Record<string, unknown> {
   id?: string;
   sourceRect?: SpriteAssetRect;
   sourceSize?: SpriteAssetSize;
@@ -19,8 +19,8 @@ export interface SpriteFrameMetadata extends Record<string, unknown> {
   collisionShapes?: unknown[];
 }
 
-export interface SpriteAssetArchivedFrame extends SpriteFrameMetadata { frameKey: string; }
-export interface SpriteAssetConflict extends Record<string, unknown> {
+interface SpriteAssetArchivedFrame extends SpriteFrameMetadata { frameKey: string; }
+interface SpriteAssetConflict extends Record<string, unknown> {
   id: string;
   type: "frame-geometry-changed" | "frame-removed";
   frameKey: string;

@@ -8,6 +8,9 @@ import {
   onMount,
 } from "solid-js";
 import designTokens from "../design-system/tokens.json";
+import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue } from "@codogma/cge";
+import { NativeComponentInspector } from "./components/NativeComponentInspector.tsx";
+import { parseComponentSchemaSource } from "./domain/component-schema-source.js";
 import {
   createSceneNode,
   findSceneNode,
@@ -71,8 +74,11 @@ import {
 import { beginSceneLoadRequest } from "./domain/scene-load-request.js";
 import {
   attachNativeComponent,
+  createNativeComponentContext,
   detachNativeComponent,
   setNativeComponentEnabled,
+  updateNativeComponentProperties,
+  validateNativeComponentProperties,
 } from "./domain/components-model.ts";
 import {
   addNativeNodeFx,
@@ -390,6 +396,10 @@ function App() {
   const [scriptChecking, setScriptChecking] = createSignal(false);
   const [scriptDiagnostics, setScriptDiagnostics] = createSignal<TypeScriptSourceDiagnostic[]>([]);
   const [componentToAttach, setComponentToAttach] = createSignal("");
+  const [componentSchemas, setComponentSchemas] = createSignal<ReadonlyMap<string, ComponentTypeSchemaV1>>(new Map());
+  const [componentSchemaDiagnostics, setComponentSchemaDiagnostics] = createSignal<ReadonlyMap<string, readonly CoreDiagnostic[]>>(new Map());
+  const [componentEditDiagnostics, setComponentEditDiagnostics] = createSignal<ReadonlyMap<string, readonly CoreDiagnostic[]>>(new Map());
+  const [componentDrafts, setComponentDrafts] = createSignal<Record<string, string>>({});
   const [prefabCatalog, setPrefabCatalog] = createSignal<NativePrefabCatalogEntry[]>([]);
   const [selectedPrefabPath, setSelectedPrefabPath] = createSignal("");
   const [history, setHistory] = createSignal<DocumentHistoryState<EditorDocument | null>>(
@@ -502,6 +512,8 @@ function App() {
       return {
         path: asset?.path ?? "",
         module,
+        schema: componentSchemas().get(module.typeId),
+        diagnostics: componentSchemaDiagnostics().get(module.typeId) ?? [],
       };
     }).filter((item) => item.path.length > 0);
   });
@@ -713,6 +725,78 @@ function App() {
   let documentLoadSequence = 0;
   let scriptCheckSequence = 0;
 
+
+  let componentSchemaRefreshSequence = 0;
+
+  async function loadComponentSchemas(project: import("@codogma/cge").ProjectDocumentV1) {
+    const sequence = ++componentSchemaRefreshSequence;
+    const schemas = new Map<string, ComponentTypeSchemaV1>();
+    const diagnosticsByType = new Map<string, readonly CoreDiagnostic[]>();
+    for (const module of project.componentModules) {
+      const asset = project.assets.find((candidate) => candidate.id === module.moduleAssetId);
+      if (!asset || asset.kind !== "script") {
+        diagnosticsByType.set(module.typeId, [{
+          code: "COMPONENT_INVALID_SCHEMA",
+          severity: "error",
+          message: `Component module "${module.typeId}" must resolve to a registered Script asset.`,
+          path: `project.json.componentModules.${module.typeId}`,
+          entityId: module.typeId,
+        }]);
+        continue;
+      }
+      try {
+        const source = await readProjectFile(asset.path);
+        const result = await parseComponentSchemaSource(source, asset.path, module.typeId, module.version);
+        if (result.valid && result.value) schemas.set(module.typeId, result.value);
+        else diagnosticsByType.set(module.typeId, result.diagnostics.map((item) => ({
+          ...item,
+          entityId: module.typeId,
+        })));
+      } catch (error) {
+        diagnosticsByType.set(module.typeId, [{
+          code: "COMPONENT_INVALID_SCHEMA",
+          severity: "error",
+          message: error instanceof Error ? error.message : String(error),
+          path: asset.path,
+          entityId: module.typeId,
+        }]);
+      }
+    }
+    if (sequence !== componentSchemaRefreshSequence) return schemas;
+    setComponentSchemas(schemas);
+    setComponentSchemaDiagnostics(diagnosticsByType);
+    return schemas;
+  }
+
+  async function refreshComponentSchemaForPath(path: string, source: string) {
+    const project = projectDocument();
+    const module = project?.componentModules.find((item) =>
+      project.assets.find((asset) => asset.id === item.moduleAssetId)?.path === path,
+    );
+    if (!project || !module) return;
+    const sequence = ++componentSchemaRefreshSequence;
+    const result = await parseComponentSchemaSource(source, path, module.typeId, module.version);
+    if (sequence !== componentSchemaRefreshSequence) return;
+    if (result.valid && result.value) {
+      setComponentSchemas((current) => new Map(current).set(module.typeId, result.value!));
+      setComponentSchemaDiagnostics((current) => {
+        const next = new Map(current);
+        next.delete(module.typeId);
+        return next;
+      });
+    } else {
+      setComponentSchemas((current) => {
+        const next = new Map(current);
+        next.delete(module.typeId);
+        return next;
+      });
+      setComponentSchemaDiagnostics((current) => new Map(current).set(
+        module.typeId,
+        result.diagnostics.map((item) => ({ ...item, entityId: module.typeId })),
+      ));
+    }
+  }
+
   async function loadScene(
     path: string,
     reloadCurrent = false,
@@ -756,8 +840,8 @@ function App() {
         projectDocument() !== project
       ) return false;
       const parsed = sceneReference
-        ? parseNativeSceneDocument(project, sceneReference.id, content, prefabCatalog().map((item) => item.document))
-        : parseNativePrefabDocument(project, prefabReference!.id, content, prefabCatalog().map((item) => item.document));
+        ? parseNativeSceneDocument(project, sceneReference.id, content, prefabCatalog().map((item) => item.document), componentSchemas())
+        : parseNativePrefabDocument(project, prefabReference!.id, content, prefabCatalog().map((item) => item.document), componentSchemas());
       stopAnimationPreview(true);
       setScene(parsed);
       setScenePath(path);
@@ -794,7 +878,12 @@ function App() {
       const manifestContent = await readProjectFile(PROJECT_MANIFEST_PATH);
       const project = parseNativeProjectDocument(manifestContent);
       setProjectDocument(project);
+      setComponentSchemas(new Map());
+      setComponentSchemaDiagnostics(new Map());
+      setComponentDrafts({});
+      setComponentEditDiagnostics(new Map());
       setSavedProjectContent(serializeNativeProjectDocument(project));
+      await loadComponentSchemas(project);
 
       const files = flattenProjectEntries(result.root);
       const availableProjectPaths = new Set(files.filter(({ entry }) => entry.kind === "file").map(({ path }) => path));
@@ -827,7 +916,7 @@ function App() {
 
       const prefabs = await Promise.all(project.prefabs.map(async (reference) => {
         const asset = resolvePrefabAsset(project, reference.id);
-        const document = parseNativePrefabDocument(project, reference.id, await readProjectFile(asset.path));
+        const document = parseNativePrefabDocument(project, reference.id, await readProjectFile(asset.path), undefined, componentSchemas());
         return { assetId: reference.assetId, path: asset.path, document };
       }));
       setPrefabCatalog(prefabs);
@@ -1115,6 +1204,8 @@ function App() {
     try {
       const content = sourceContent ?? await readProjectFile(path);
       if (request !== documentLoadSequence) return;
+      await refreshComponentSchemaForPath(path, content);
+      if (request !== documentLoadSequence) return;
       setScriptSourcePath(path);
       setScriptSource(content);
       setSavedScriptSource(content);
@@ -1139,6 +1230,7 @@ function App() {
       await writeProjectFile(path, content);
       setSavedScriptSource(content);
       await runTypeScriptSourceCheck(path, content);
+      await refreshComponentSchemaForPath(path, content);
       log("success", `Saved TypeScript source ${path}`);
     } catch (error) {
       log("error", `TypeScript source save failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -1189,9 +1281,58 @@ function App() {
     const project = projectDocument();
     if (!current || !selected || !project) return;
     try {
-      applySceneChange(attachNativeComponent(current, selected.id, typeId, { project }), selected.id);
-      setComponentToAttach("");
+      const context = createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document));
+      const next = attachNativeComponent(current, selected.id, typeId, context);
+      const committed = applySceneChange(next, selected.id);
+      if (committed) setComponentToAttach("");
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
+  }
+
+  function updateNativeComponentProperty(instanceId: string, propertyName: string, value: JsonValue | undefined): boolean {
+    const current = scene();
+    const selected = selectedObject();
+    const project = projectDocument();
+    if (!current || !selected || !project || saving()) return false;
+    const instance = selected.node.components.find((item) => item.id === instanceId);
+    if (!instance) return false;
+
+    const properties: Record<string, unknown> = { ...instance.properties };
+    if (value === undefined) delete properties[propertyName];
+    else Object.defineProperty(properties, propertyName, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+
+    const context = createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document));
+    const validation = validateNativeComponentProperties(
+      instance.typeId,
+      properties,
+      context,
+      selected.id,
+      current,
+      instanceId,
+    );
+    setComponentEditDiagnostics((previous) => new Map(previous).set(instanceId, validation.diagnostics));
+    if (!validation.valid || !validation.value) return false;
+
+    try {
+      const next = updateNativeComponentProperties(current, selected.id, instanceId, properties, context);
+      return applySceneChange(next, selected.id) !== null;
+    } catch (error) {
+      log("error", `Component property update failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  function updateComponentDraft(key: string, value: string | undefined) {
+    setComponentDrafts((current) => {
+      const next = { ...current };
+      if (value === undefined) delete next[key];
+      else next[key] = value;
+      return next;
+    });
   }
 
   function detachComponentFromSelected(instanceId: string) {
@@ -1227,7 +1368,7 @@ function App() {
       const assetId = globalThis.crypto?.randomUUID?.();
       if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
       const nextProject = registerNativePrefab(project, prefab, assetId, path);
-      const prefabContent = serializeNativePrefabDocument(nextProject, prefab);
+      const prefabContent = serializeNativePrefabDocument(nextProject, prefab, undefined, componentSchemas());
       const manifestContent = serializeNativeProjectDocument(nextProject);
 
       // Build and validate the replacement Scene before any file is written.
@@ -1242,7 +1383,7 @@ function App() {
       });
       const instance = getSceneNodeEntries(nextScene, [...prefabCatalog().map((item) => item.document), prefab])
         .find((entry) => !previousNodeIds.has(entry.id) && entry.node.prefabInstance?.prefabId === prefab.id);
-      const sceneContent = serializeNativeSceneDocument(nextProject, nextScene, [...prefabCatalog().map((item) => item.document), prefab]);
+      const sceneContent = serializeNativeSceneDocument(nextProject, nextScene, [...prefabCatalog().map((item) => item.document), prefab], componentSchemas());
 
       if (directory) await ensureProjectFolder(directory);
       await writeProjectFile(path, prefabContent);
@@ -1330,12 +1471,25 @@ function App() {
       !current || !path || !project || saving() ||
       (nativeProjectMutationInProgress && !allowDuringProjectMutation)
     ) return false;
+    const prefabDocuments = prefabCatalog().map((item) => item.document);
+    const activeComponentIds = new Set(
+      getSceneNodeEntries(current, prefabDocuments).flatMap((entry) =>
+        entry.node.components.map((component) => component.id),
+      ),
+    );
+    const hasPendingDraft = Object.keys(componentDrafts()).some((key) => {
+      const separator = key.lastIndexOf(":");
+      return separator > 0 && activeComponentIds.has(key.slice(0, separator));
+    });
+    if (hasPendingDraft) {
+      log("warning", "Resolve the invalid Component property draft before saving the active document.");
+      return false;
+    }
     setSaving(true);
     try {
-      const prefabDocuments = prefabCatalog().map((item) => item.document);
       const content = contentOverride ?? (isPrefabDocument(current)
-        ? serializeNativePrefabDocument(project, current, prefabDocuments)
-        : serializeNativeSceneDocument(project, current, prefabDocuments));
+        ? serializeNativePrefabDocument(project, current, prefabDocuments, componentSchemas())
+        : serializeNativeSceneDocument(project, current, prefabDocuments, componentSchemas()));
       await writeProjectFile(path, content);
       setSavedContent(content);
       if (isPrefabDocument(current)) {
@@ -2516,7 +2670,7 @@ function App() {
       const assetId = globalThis.crypto?.randomUUID?.();
       if (!assetId) throw new Error("Secure randomUUID support is required to register native Project assets.");
       const nextProject = registerNativeScene(project, sceneDocument, assetId, path);
-      const sceneContent = serializeNativeSceneDocument(nextProject, sceneDocument);
+      const sceneContent = serializeNativeSceneDocument(nextProject, sceneDocument, undefined, componentSchemas());
       const manifestContent = serializeNativeProjectDocument(nextProject);
       assertNewProjectFilePath(path);
       const directory = path.split("/").slice(0, -1).join("/");
@@ -2662,7 +2816,13 @@ function App() {
         throw new Error("Component properties must be an object.");
       }
       const before = new Set(findSceneNode(current, nodeId)?.components.map((item) => item.id) ?? []);
-      const next = attachNativeComponent(current, nodeId, typeId, { project }, properties as Record<string, unknown>);
+      const next = attachNativeComponent(
+        current,
+        nodeId,
+        typeId,
+        createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document)),
+        properties as Record<string, unknown>,
+      );
       const instance = findSceneNode(next, nodeId)?.components.find((item) => !before.has(item.id));
       if (!instance) throw new Error("Native Component attach did not produce an instance identity.");
       await persistMcpSceneChange(next, nodeId);
@@ -2892,14 +3052,32 @@ function App() {
 
   const selectedComponentDefinitions = createMemo(() => {
     const selected = selectedObject();
+    const current = scene();
     const project = projectDocument();
-    if (!selected || !project) return [];
+    if (!selected || !current || !project) return [];
     const modules = new Map(project.componentModules.map((module) => [module.typeId, module]));
+    const context = createNativeComponentContext(current, project, componentSchemas(), prefabCatalog().map((item) => item.document));
+    const nodeOptions = sceneObjects().filter((entry) => context.nodeIds?.has(entry.id));
     return selected.node.components.flatMap((instance) => {
       const module = modules.get(instance.typeId);
       if (!module) return [];
       const asset = project.assets.find((item) => item.id === module.moduleAssetId);
-      return asset ? [{ instance, module, asset }] : [];
+      if (!asset) return [];
+      const schema = componentSchemas().get(module.typeId);
+      const schemaDiagnostics = componentSchemaDiagnostics().get(module.typeId) ?? [];
+      const validation = schema
+        ? validateNativeComponentProperties(instance.typeId, instance.properties, context, selected.id, current, instance.id)
+        : { valid: false, diagnostics: [] as CoreDiagnostic[] };
+      const editDiagnostics = componentEditDiagnostics().get(instance.id) ?? [];
+      return [{
+        instance,
+        module,
+        asset,
+        schema,
+        schemaDiagnostics,
+        nodeOptions,
+        diagnostics: [...validation.diagnostics, ...editDiagnostics],
+      }];
     });
   });
 
@@ -2907,7 +3085,9 @@ function App() {
 
   const hasUnattachedComponents = createMemo(() => {
     const attached = new Set(components());
-    return componentRegistry().filter((entry) => !attached.has(entry.module.typeId));
+    return componentRegistry().filter((entry) =>
+      entry.schema && entry.diagnostics.length === 0 && !attached.has(entry.module.typeId),
+    );
   });
 
   const selectedPrefab = createMemo(() => {
@@ -3670,8 +3850,24 @@ function App() {
                             </button>
                           </div>
                           <div class="inspector-note">Instance {entry.instance.id} · {entry.instance.enabled ? "Enabled" : "Disabled"}</div>
-                          <Show when={Object.keys(entry.instance.properties).length > 0}>
-                            <pre class="component-properties-json">{JSON.stringify(entry.instance.properties, null, 2)}</pre>
+                          <Show when={entry.schema} fallback={
+                            <div class="component-schema-error" role="alert">
+                              <strong>Component Schema unavailable</strong>
+                              <For each={entry.schemaDiagnostics}>{(diagnostic) => <div>{diagnostic.path ? `${diagnostic.path}: ` : ""}{diagnostic.message}</div>}</For>
+                            </div>
+                          }>
+                            <NativeComponentInspector
+                              instanceId={entry.instance.id}
+                              schema={entry.schema!}
+                              properties={entry.instance.properties}
+                              assets={projectDocument()?.assets ?? []}
+                              nodes={entry.nodeOptions}
+                              ownerNodeId={selectedObject()?.id ?? ""}
+                              diagnostics={entry.diagnostics}
+                              drafts={componentDrafts()}
+                              onDraftChange={updateComponentDraft}
+                              onCommit={(propertyName, value) => updateNativeComponentProperty(entry.instance.id, propertyName, value)}
+                            />
                           </Show>
                           <button class="subtle-button" onClick={() => void openTypeScriptFile(entry.asset.path)}>Open Script Asset</button>
                         </div>

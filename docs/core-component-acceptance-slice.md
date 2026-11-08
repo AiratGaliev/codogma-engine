@@ -24,8 +24,9 @@ The fixture and tests cover:
 - Stable document, Node, Component definition, Component instance, module and Asset identities.
 - Typed Asset/Node/Prefab references and invalid/missing reference diagnostics.
 - Explicit Script/module manifest registration and deterministic resolution.
-- Schema-driven property types, defaults, required/optional fields and constraints.
-- JSON-safe serialization, deterministic round-trip and strict validation of typed envelope fields; arbitrary JSON is accepted only in the explicit native settings bags and Component properties governed by their registered schema.
+- Schema-driven property types, defaults, required/optional fields and constraints, including typed Asset/Node pickers backed by Project/Scene resolver contexts.
+- Stable Asset/Node IDs and permitted Asset sub-resource IDs survive Scene/Prefab round-trip; stale/missing/incompatible references remain diagnosable and are never silently reassigned.
+- JSON-safe serialization, deterministic round-trip and strict validation of typed envelope fields; unknown JSON-compatible Component properties are preserved as extension data with warning, while non-JSON values and declared-schema violations block mutation/save.
 - Rejection of unknown future schema versions without downgrade or mutation.
 - Scene as a data document; no companion TypeScript Scene class/file is required.
 
@@ -76,7 +77,7 @@ The fixture and tests cover:
 
 Core tests use native Project/Scene/Prefab/Component fixtures authored against the current Codogma schema. Tests cover validation, serialization, stable identities, module resolution, references, lifecycle ordering, cancellation and cleanup.
 
-SolidJS Host tests cover Script authoring, Component attach/detach, Inspector state, Undo/Redo and save/reopen. Browser tests use disposable native Project fixtures and record the exact build/commit SHA.
+SolidJS Host tests cover Script authoring, Component attach/detach, typed Inspector controls, invalid draft preservation, Asset/Node picker filtering, Undo/Redo and save/reopen. Browser tests use disposable native Project fixtures and record the exact build/commit SHA. The COD-27 browser scenario is defined separately from the normal feature-branch CI path; independent browser/runtime acceptance remains owned by CODQA-21.
 
 ## 8. UX and implementation references
 

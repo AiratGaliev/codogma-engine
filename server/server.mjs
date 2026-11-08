@@ -23,7 +23,7 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { isInsideBase, safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFileSafely, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync } from "./path-security.mjs"
+import { safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 import { readRequestBuffer } from "./request-body.mjs"
 
@@ -88,14 +88,6 @@ function log(...args) {
  * they can be unit-tested directly; the TOCTOU-specific write helper below
  * stays here because it depends on the server's PROJECT_DIR.
  */
-
-function realBaseOrNull() {
-    try {
-        return fs.realpathSync(PROJECT_DIR)
-    } catch {
-        return null
-    }
-}
 
 /*
  * Additional Host headers and browser Origins accepted from loopback peers,

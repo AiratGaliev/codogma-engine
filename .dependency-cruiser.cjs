@@ -31,11 +31,11 @@ module.exports = {
         {
             name: "tests-standalone",
             severity: "error",
-            comment: "Tests exercise the public surface (HTTP) and pure extracted modules (path-security, request-origin); they must not reach into other server internals.",
+            comment: "Tests exercise HTTP and exported server contracts (path-security, request-origin, request-body and MCP bridge); they must not import unrelated server internals.",
             from: { path: "^tests/" },
             to: {
-                path: "^server/(?!path-security\\.mjs$|request-origin\\.mjs$)",
-                pathNot: "^server/(?:path-security|request-origin)\\.mjs$"
+                path: "^server/(?!path-security\\.mjs$|request-origin\\.mjs$|request-body\\.mjs$|mcp\\.mjs$)",
+                pathNot: "^server/(?:path-security|request-origin|request-body|mcp)\\.mjs$"
             }
         }
     ],

@@ -17,6 +17,14 @@ import path from "path"
 import fsp from "fs/promises"
 import crypto from "crypto"
 
+function closeSyncBestEffort(fd) {
+    try {
+        fs.closeSync(fd)
+    } catch {
+        // Cleanup must not replace the primary operation result.
+    }
+}
+
 /**
  * True when `target`'s real location is the base itself or inside it.
  *
@@ -615,7 +623,7 @@ function openSafeProjectDirectorySync(base, target) {
     }
 
     if (!isSafeOpenProjectDirectory(base, full, fd)) {
-        try { fs.closeSync(fd) } catch {}
+        closeSyncBestEffort(fd)
         return null
     }
     return { fd, full }
@@ -664,94 +672,7 @@ export function readProjectDirectoryEntriesSafelySync(base, target) {
     } catch {
         return null
     } finally {
-        try { fs.closeSync(opened.fd) } catch {}
-    }
-}
-
-/**
- * Synchronous counterpart for existing synchronous MCP scene helpers.
- * Linux operations are descriptor-anchored; the non-Linux fallback is path-based
- * and therefore retains the documented portable race limitation.
- */
-export function ensureProjectDirectorySafelySync(base, target) {
-    if (typeof target !== "string") return false
-
-    const lexicalBase = path.resolve(base)
-    const full = path.resolve(target)
-    if (!isInsideBase(lexicalBase, full)) return false
-
-    if (full === lexicalBase) {
-        try {
-            return fs.statSync(base).isDirectory() && fs.realpathSync(base) === fs.realpathSync(lexicalBase)
-        } catch {
-            return false
-        }
-    }
-
-    try {
-        if (!isWithinRealBase(base, full)) return false
-    } catch {
-        return false
-    }
-
-    if (process.platform !== "linux") {
-        try {
-            fs.mkdirSync(full, { recursive: true })
-            const realBase = fs.realpathSync(base)
-            const realFull = fs.realpathSync(full)
-            return isInsideBase(realBase, realFull) && fs.statSync(full).isDirectory()
-        } catch {
-            return false
-        }
-    }
-
-    const relative = path.relative(lexicalBase, full)
-    if (!relative || relative.startsWith(".." + path.sep) || relative === ".." || path.isAbsolute(relative)) {
-        return false
-    }
-
-    const segments = relative.split(path.sep).filter(Boolean)
-    let currentPath = lexicalBase
-    let currentFd
-    try {
-        currentFd = fs.openSync(currentPath, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0))
-        if (!isSafeOpenProjectDirectory(base, currentPath, currentFd)) return false
-
-        for (const segment of segments) {
-            if (segment === "." || segment === ".." || segment.includes(path.sep)) return false
-            if (!isSafeOpenProjectDirectory(base, currentPath, currentFd)) return false
-
-            const childPath = path.join(currentPath, segment)
-            const operationPath = `/proc/self/fd/${currentFd}/${segment}`
-            try {
-                fs.mkdirSync(operationPath)
-            } catch (error) {
-                if (error.code !== "EEXIST") return false
-            }
-
-            let childFd
-            try {
-                childFd = fs.openSync(operationPath, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0))
-            } catch {
-                return false
-            }
-
-            if (!isSafeOpenProjectDirectory(base, childPath, childFd)) {
-                fs.closeSync(childFd)
-                return false
-            }
-
-            fs.closeSync(currentFd)
-            currentFd = childFd
-            currentPath = childPath
-        }
-        return true
-    } catch {
-        return false
-    } finally {
-        if (currentFd !== undefined) {
-            try { fs.closeSync(currentFd) } catch {}
-        }
+        closeSyncBestEffort(opened.fd)
     }
 }
 
@@ -1048,7 +969,7 @@ export function statProjectDirectorySafelySync(base, target) {
     } catch {
         return null
     } finally {
-        try { fs.closeSync(opened.fd) } catch {}
+        closeSyncBestEffort(opened.fd)
     }
 }
 
@@ -1118,9 +1039,9 @@ export function writeNewFileSafely(base, target, content) {
         }
 
         if (fd !== undefined) {
-            try { fs.closeSync(fd) } catch {}
+            closeSyncBestEffort(fd)
         }
-        try { fs.closeSync(parent.fd) } catch {}
+        closeSyncBestEffort(parent.fd)
     }
 }
 

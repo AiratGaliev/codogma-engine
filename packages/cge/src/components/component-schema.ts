@@ -26,8 +26,17 @@ export interface NumberPropertySchema extends ComponentPropertyBase {
 }
 export interface BooleanPropertySchema extends ComponentPropertyBase { type: "boolean"; }
 export interface EnumPropertySchema extends ComponentPropertyBase { type: "enum"; options: string[]; }
-export interface AssetPropertySchema extends ComponentPropertyBase { type: "asset"; assetKinds?: AssetKind[]; }
-export interface NodePropertySchema extends ComponentPropertyBase { type: "node"; allowSelf?: boolean; }
+export interface AssetPropertySchema extends ComponentPropertyBase {
+  type: "asset";
+  assetKinds?: AssetKind[];
+  allowSubResource?: boolean;
+}
+export type NodeReferenceKind = "Node" | "Image" | "Text" | "Container" | "Prefab";
+export interface NodePropertySchema extends ComponentPropertyBase {
+  type: "node";
+  allowSelf?: boolean;
+  nodeKinds?: NodeReferenceKind[];
+}
 
 export type ComponentPropertySchema =
   | StringPropertySchema
@@ -49,6 +58,7 @@ export interface NodePropertyValue { nodeId: string; }
 export interface ComponentSchemaContext {
   assets?: ReadonlyMap<string, AssetReference>;
   nodeIds?: ReadonlySet<string>;
+  nodeKinds?: ReadonlyMap<string, NodeReferenceKind>;
   ownerNodeId?: string;
 }
 
@@ -61,8 +71,8 @@ const PROPERTY_SPECIFIC_FIELDS: Record<(typeof PROPERTY_TYPES)[number], readonly
   number: ["min", "max", "integer"],
   boolean: [],
   enum: ["options"],
-  asset: ["assetKinds"],
-  node: ["allowSelf"],
+  asset: ["assetKinds", "allowSubResource"],
+  node: ["allowSelf", "nodeKinds"],
 };
 
 function diagnostic(
@@ -102,17 +112,33 @@ function validateValue(
     case "asset": {
       if (!isRecord(value) || !isValidStableId(value.assetId) ||
           (value.subResourceId !== undefined && !isValidStableId(value.subResourceId))) return fail(name + " must contain an assetId reference.");
+      if (Object.keys(value).some((key) => key !== "assetId" && key !== "subResourceId")) {
+        return fail(name + " may contain only assetId and optional subResourceId.");
+      }
+      if (value.subResourceId !== undefined && schema.allowSubResource !== true) {
+        return [diagnostic("COMPONENT_INVALID_REFERENCE", name + " does not allow sub-resource references.", name)];
+      }
       const asset = context.assets?.get(value.assetId);
       if (context.assets && !asset) return [diagnostic("COMPONENT_INVALID_REFERENCE", "Asset " + value.assetId + " referenced by " + name + " does not exist.", name)];
       if (asset && schema.assetKinds && !schema.assetKinds.includes(asset.kind)) {
         return [diagnostic("COMPONENT_INVALID_REFERENCE", "Asset " + value.assetId + " has an incompatible kind for " + name + ".", name)];
       }
+      if (value.subResourceId !== undefined && asset?.subResourceId !== value.subResourceId) {
+        return [diagnostic("COMPONENT_INVALID_REFERENCE", "Sub-resource " + value.subResourceId + " is not registered for Asset " + value.assetId + ".", name)];
+      }
       return [];
     }
     case "node": {
       if (!isRecord(value) || !isValidStableId(value.nodeId)) return fail(name + " must contain a nodeId reference.");
+      if (Object.keys(value).some((key) => key !== "nodeId")) return fail(name + " may contain only nodeId.");
       if (context.nodeIds && !context.nodeIds.has(value.nodeId)) return [diagnostic("COMPONENT_INVALID_REFERENCE", "Node " + value.nodeId + " referenced by " + name + " does not exist.", name)];
       if (context.ownerNodeId === value.nodeId && schema.allowSelf === false) return [diagnostic("COMPONENT_INVALID_REFERENCE", name + " cannot reference its owning node.", name)];
+      if (schema.nodeKinds && context.nodeKinds) {
+        const targetKind = context.nodeKinds.get(value.nodeId);
+        if (!targetKind || !schema.nodeKinds.includes(targetKind)) {
+          return [diagnostic("COMPONENT_INVALID_REFERENCE", "Node " + value.nodeId + " has an incompatible kind for " + name + ".", name)];
+        }
+      }
       return [];
     }
   }
@@ -186,12 +212,29 @@ function validatePropertySchema(name: string, input: unknown): CoreDiagnostic[] 
        new Set(input.options).size !== input.options.length)) {
     errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Enum property " + name + " requires unique non-empty options.", name));
   }
-  if (input.type === "asset" && input.assetKinds !== undefined &&
-      (!Array.isArray(input.assetKinds) || input.assetKinds.some((kind) => !ASSET_KINDS.includes(kind as AssetKind)))) {
-    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Asset property " + name + " has an unsupported asset kind.", name));
+  if (input.type === "asset") {
+    if (input.assetKinds !== undefined &&
+        (!Array.isArray(input.assetKinds) || input.assetKinds.length === 0 ||
+         input.assetKinds.some((kind) => !ASSET_KINDS.includes(kind as AssetKind)) ||
+         new Set(input.assetKinds).size !== input.assetKinds.length)) {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Asset property " + name + " has unsupported or duplicate asset kinds.", name));
+    }
+    if (input.allowSubResource !== undefined && typeof input.allowSubResource !== "boolean") {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Asset property " + name + " allowSubResource must be boolean.", name));
+    }
   }
-  if (input.type === "node" && input.allowSelf !== undefined && typeof input.allowSelf !== "boolean") {
-    errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Node property " + name + " allowSelf must be boolean.", name));
+  if (input.type === "node") {
+    if (input.allowSelf !== undefined && typeof input.allowSelf !== "boolean") {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Node property " + name + " allowSelf must be boolean.", name));
+    }
+    const nodeKinds = input.nodeKinds;
+    const supportedNodeKinds = ["Node", "Image", "Text", "Container", "Prefab"];
+    if (nodeKinds !== undefined &&
+        (!Array.isArray(nodeKinds) || nodeKinds.length === 0 ||
+         nodeKinds.some((kind) => typeof kind !== "string" || !supportedNodeKinds.includes(kind)) ||
+         new Set(nodeKinds).size !== nodeKinds.length)) {
+      errors.push(diagnostic("COMPONENT_INVALID_SCHEMA", "Node property " + name + " has unsupported or duplicate target kinds.", name));
+    }
   }
 
   if (input.defaultValue !== undefined && !isJsonValue(input.defaultValue)) {
@@ -283,10 +326,12 @@ export function validateComponentProperties(
       diagnostics.push(diagnostic("COMPONENT_INVALID_VALUE", "Unknown property " + name + " is not JSON-compatible.", name));
       continue;
     }
+    setJsonProperty(normalized, name, value);
     diagnostics.push(diagnostic(
       "COMPONENT_UNKNOWN_PROPERTY",
-      "Property " + name + " is not declared by component " + schema.typeId + ".",
+      "Property " + name + " is not declared by component " + schema.typeId + " and was preserved as an extension value.",
       name,
+      "warning",
     ));
   }
 

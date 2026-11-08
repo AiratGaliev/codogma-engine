@@ -78,6 +78,56 @@ test("validates resource and node references by stable ids", () => {
   assert.equal(result.diagnostics.filter((item) => item.code === "COMPONENT_INVALID_REFERENCE").length, 2);
 });
 
+test("validates Asset sub-resource policy and Node target kinds against Project/Scene contexts", () => {
+  const referenceSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.reference-test",
+    name: "Reference Test",
+    version: "1.0.0",
+    properties: {
+      atlas: { type: "asset", assetKinds: ["other"], allowSubResource: true },
+      target: { type: "node", nodeKinds: ["Image"], allowSelf: false },
+    },
+  };
+  const assets = new Map([
+    ["asset-atlas", { id: "asset-atlas", path: "assets/ui.json", kind: "other" as const, subResourceId: "frame-player" }],
+  ]);
+  const context = {
+    assets,
+    nodeIds: new Set(["node-owner", "node-image", "node-text"]),
+    nodeKinds: new Map([
+      ["node-owner", "Node" as const],
+      ["node-image", "Image" as const],
+      ["node-text", "Text" as const],
+    ]),
+    ownerNodeId: "node-owner",
+  };
+
+  const valid = validateComponentProperties(referenceSchema, {
+    atlas: { assetId: "asset-atlas", subResourceId: "frame-player" },
+    target: { nodeId: "node-image" },
+  }, context);
+  assert.equal(valid.valid, true);
+
+  const invalidSubResource = validateComponentProperties(referenceSchema, {
+    atlas: { assetId: "asset-atlas", subResourceId: "frame-missing" },
+    target: { nodeId: "node-image" },
+  }, context);
+  const invalidTargetKind = validateComponentProperties(referenceSchema, {
+    atlas: { assetId: "asset-atlas", subResourceId: "frame-player" },
+    target: { nodeId: "node-text" },
+  }, context);
+  const disallowedSubResource = validateComponentProperties({
+    ...referenceSchema,
+    properties: { ...referenceSchema.properties, atlas: { type: "asset", assetKinds: ["other"] } },
+  }, {
+    atlas: { assetId: "asset-atlas", subResourceId: "frame-player" },
+  }, context);
+  assert.equal(invalidSubResource.valid, false);
+  assert.equal(invalidTargetKind.valid, false);
+  assert.equal(disallowedSubResource.valid, false);
+});
+
 test("round-trips Scene component values using the same schema and stable resource references", () => {
   const assets = new Map([
     ["image-player", { id: "image-player", path: "assets/player.png", kind: "image" as const }],
@@ -159,22 +209,44 @@ test("rejects malformed type-specific metadata instead of silently ignoring it",
     properties: { target: { type: "node", allowSelf: "false" } },
   });
 
+  const invalidAsset = validateComponentTypeSchema({
+    schemaVersion: 1,
+    typeId: "com.codogma.invalid-asset",
+    name: "Invalid Asset",
+    version: "1.0.0",
+    properties: { texture: { type: "asset", allowSubResource: "yes" } },
+  });
+  const invalidNodeKinds = validateComponentTypeSchema({
+    schemaVersion: 1,
+    typeId: "com.codogma.invalid-node-kinds",
+    name: "Invalid Node Kinds",
+    version: "1.0.0",
+    properties: { target: { type: "node", nodeKinds: ["Image", "Image"] } },
+  });
+
   assert.equal(invalidNumber.valid, false);
   assert.equal(invalidString.valid, false);
   assert.equal(invalidNode.valid, false);
+  assert.equal(invalidAsset.valid, false);
+  assert.equal(invalidNodeKinds.valid, false);
 });
 
-test("rejects undeclared Component properties instead of preserving them", () => {
+test("preserves undeclared JSON Component properties as forward-compatible extension values", () => {
   const result = validateComponentProperties(schema, {
     speed: 10,
     undeclaredPluginValue: { keep: true },
   });
-  assert.equal(result.valid, false);
-  assert.equal(result.value, undefined);
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.value, {
+    speed: 10,
+    mode: "smooth",
+    enabled: true,
+    undeclaredPluginValue: { keep: true },
+  });
   assert.ok(result.diagnostics.some((item) =>
     item.code === "COMPONENT_UNKNOWN_PROPERTY" &&
     item.propertyName === "undeclaredPluginValue" &&
-    item.severity === "error",
+    item.severity === "warning",
   ));
 });
 
@@ -190,13 +262,30 @@ test("rejects unknown Component schema envelope and property-schema fields", () 
   assert.ok(unknownProperty.diagnostics.some((item) => item.code === "COMPONENT_INVALID_SCHEMA"));
 });
 
-test("rejects undeclared __proto__ component data without changing object prototypes", () => {
+test("preserves undeclared __proto__ data without changing object prototypes", () => {
   const input = JSON.parse('{"__proto__":{"future":true}}') as Record<string, unknown>;
   const result = validateComponentProperties(schema, input);
-  assert.equal(result.valid, false);
-  assert.equal(result.value, undefined);
-  assert.ok(result.diagnostics.some((item) => item.code === "COMPONENT_UNKNOWN_PROPERTY"));
+  assert.equal(result.valid, true);
+  assert.ok(result.value);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.value, "__proto__"), true);
+  assert.deepEqual(result.value["__proto__"], { future: true });
   assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "future"), false);
+});
+
+test("rejects undeclared fields inside typed Asset and Node references", () => {
+  const asset = validateComponentPropertyValue(schema, "texture", {
+    assetId: "image-player",
+    unexpected: true,
+  });
+  const node = validateComponentPropertyValue(schema, "target", {
+    nodeId: "node-enemy",
+    unexpected: true,
+  });
+
+  assert.equal(asset.valid, false);
+  assert.equal(node.valid, false);
+  assert.match(asset.diagnostics[0]?.message ?? "", /only assetId and optional subResourceId/);
+  assert.match(node.diagnostics[0]?.message ?? "", /only nodeId/);
 });
 
 test("rejects non-JSON values for typed property validation with diagnostics", () => {
