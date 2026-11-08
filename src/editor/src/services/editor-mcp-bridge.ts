@@ -57,9 +57,7 @@ export function connectEditorMcpBridge(
   let disposed = false;
   let activationPending = false;
 
-  const url = new URL("/editor/mcp-bridge/events", window.location.origin);
-  url.searchParams.set("clientType", "solidjs");
-  const source = new EventSource(url.pathname + url.search);
+  const source = new EventSource("/editor/mcp-bridge/events");
 
   const reportError = (error: unknown) => {
     const message = errorMessage(error);
