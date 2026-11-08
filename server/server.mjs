@@ -791,6 +791,18 @@ const server = http.createServer(async (req, res) => {
             return serveFile(req, res, full, "no-cache", PROJECT_DIR)
         }
 
+        // Generated runtime output loaded by the native Editor Host Game View.
+        if (rest.startsWith("external/")) {
+            const rel = rest.slice("external/".length).split("?")[0]
+            const full = safeJoin(PROJECT_DIR, rel)
+            if (!full) {
+                res.writeHead(403)
+                res.end("Forbidden")
+                return
+            }
+            return serveFile(req, res, full, "no-cache", PROJECT_DIR)
+        }
+
         res.writeHead(404, { "Content-Type": "text/plain" })
         res.end("Not Found")
     } catch (e) {
