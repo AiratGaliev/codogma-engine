@@ -311,52 +311,52 @@ async function main() {
                 sourcePath: "renamed-in-project.txt",
                 destinationPath: "../outside/renamed.txt"
             })
-            assert.equal(JSON.parse(unsafeRename.body).error, "invalid path",
+            assert.equal(JSON.parse(unsafeRename.body).error, "invalid project path",
                 "project.renameEntry must reject traversal in the destinationPath")
             await assert.doesNotReject(fs.access(path.join(projectDir, "renamed-in-project.txt")),
                 "a rejected rename must keep the source file intact")
 
             // --- create-folder escape attempts ---
             const mkdirEscape = await projectOperation("project.createDirectory", { relativePath: "outside-link/newdir" })
-            assert.equal(JSON.parse(mkdirEscape.body).error, "invalid path",
+            assert.equal(JSON.parse(mkdirEscape.body).error, "invalid project path",
                 "project.createDirectory must reject a symlinked parent pointing outside the project")
             await assert.rejects(fs.access(path.join(outsideDir, "newdir")), /ENOENT/,
                 "project.createDirectory must not create folders outside the project")
 
             const mkdirDangling = await projectOperation("project.createDirectory", { relativePath: "dangling-folder/sub" })
-            assert.equal(JSON.parse(mkdirDangling.body).error, "invalid path",
+            assert.equal(JSON.parse(mkdirDangling.body).error, "invalid project path",
                 "project.createDirectory must reject dangling-symlink parents")
             await assert.rejects(fs.access(path.join(outsideDir, "dangling-folder")), /ENOENT/,
                 "project.createDirectory must not create the dangling symlink target")
 
             // --- copy escape attempts ---
             const copyFromOutside = await projectOperation("project.copyEntry", { sourcePath: "outside-link/secret.txt", destinationPath: "copy-outside.txt" })
-            assert.equal(JSON.parse(copyFromOutside.body).error, "invalid path",
+            assert.equal(JSON.parse(copyFromOutside.body).error, "invalid project path",
                 "project.copyEntry must reject a source symlink escaping the project")
             await assert.rejects(fs.access(path.join(projectDir, "copy-outside.txt")), /ENOENT/,
                 "project.copyEntry must not copy outside content into the project through a symlink")
 
             const copyToSymlink = await projectOperation("project.copyEntry", { sourcePath: "in-project.txt", destinationPath: "target-link.txt" })
-            assert.equal(JSON.parse(copyToSymlink.body).error, "invalid path",
+            assert.equal(JSON.parse(copyToSymlink.body).error, "invalid project path",
                 "project.copyEntry must reject a symlink destination it would write through")
             assert.equal(await fs.readFile(path.join(outsideDir, "secret.txt"), "utf8"), "outside-project-secret",
                 "project.copyEntry must not overwrite the symlink's outside target")
 
             // --- rename / move escape attempts ---
             const renameFromOutside = await projectOperation("project.renameEntry", { sourcePath: "outside-link/secret.txt", destinationPath: "renamed.txt" })
-            assert.equal(JSON.parse(renameFromOutside.body).error, "invalid path",
+            assert.equal(JSON.parse(renameFromOutside.body).error, "invalid project path",
                 "project.renameEntry must reject a source symlink escaping the project")
             await assert.doesNotReject(fs.access(path.join(outsideDir, "secret.txt")),
                 "project.renameEntry must not move the outside target")
 
             const renameToOutside = await projectOperation("project.renameEntry", { sourcePath: "in-project.txt", destinationPath: "outside-link/renamed.txt" })
-            assert.equal(JSON.parse(renameToOutside.body).error, "invalid path",
+            assert.equal(JSON.parse(renameToOutside.body).error, "invalid project path",
                 "project.renameEntry must reject a destination parent outside the project")
             await assert.doesNotReject(fs.access(path.join(projectDir, "in-project.txt")),
                 "project.renameEntry must keep the source file")
 
             const moveOutside = await projectOperation("project.moveEntries", { sourcePaths: ["in-project.txt"], destinationDirectory: "outside-link" })
-            assert.equal(JSON.parse(moveOutside.body).error, "invalid path",
+            assert.equal(JSON.parse(moveOutside.body).error, "invalid project path",
                 "project.moveEntries must reject a destination folder outside the project")
             await assert.doesNotReject(fs.access(path.join(projectDir, "in-project.txt")),
                 "project.moveEntries must keep the moved file")
