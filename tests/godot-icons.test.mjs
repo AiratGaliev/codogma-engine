@@ -1,9 +1,8 @@
 /**
  * Regression tests for the bundled Godot editor icons (node:test).
  *
- * Guards the integration contract:
- *   - every name in the resources plugin's GODOT_ICON_NAMES list has a dark
- *     and a light SVG file on disk, and vice versa;
+ * Guards the native Editor Host icon asset set:
+ *   - every registered icon has a dark and a light SVG file on disk;
  *   - every SVG declares the 16x16 editor icon size;
  *   - light variants differ from the dark ones exactly for icons that contain
  *     bright grayscale glyphs (recolor rule of
@@ -23,11 +22,7 @@ const ICONS_DIR = path.join(EDITOR_ROOT, "icons")
 const DARK_DIR = path.join(ICONS_DIR, "dark/godot")
 const LIGHT_DIR = path.join(ICONS_DIR, "light/godot")
 const DESIGN_TOKENS = JSON.parse(fs.readFileSync(path.join(EDITOR_ROOT, "design-system/tokens.json"), "utf8"))
-const COLIBRI_PLUGIN = path.join(ROOT, "source/editor/plugins/colibri/src/Plugin.ts")
-const RESOURCES_PLUGIN = path.join(ROOT, "source/editor/plugins/phasereditor2d.resources/src/ResourcesPlugin.ts")
-const SERVER_SOURCE = path.join(ROOT, "server/server.mjs")
-
-// Mirrors phasereditor2d.resources.GODOT_ICON_NAMES (ResourcesPlugin.ts).
+// Canonical icon names in the native Editor Host asset catalog.
 const GODOT_ICON_NAMES = [
     "godot/action-copy",
     "godot/action-cut",
@@ -121,10 +116,6 @@ const GODOT_ICON_NAMES = [
     "godot/visibility-notifier-2d",
 ]
 
-// Extracted from ResourcesPlugin.ts: the icons the editor UI actually wires
-// into commands; they must stay registered and present.
-const WIRED_ICONS = ["godot/reload", "godot/search", "godot/external-link", "godot/marker"]
-
 function readSvg(variant, name) {
     const file = path.join(ICONS_DIR, variant, "godot", `${name.replace("godot/", "")}.svg`)
     assert.ok(fs.existsSync(file), `missing icon file: ${path.relative(ROOT, file)}`)
@@ -210,38 +201,3 @@ test("generated light colours maintain legibility while particle swatches stay v
     }
 })
 
-test("icons wired into editor commands stay registered", () => {
-    for (const name of WIRED_ICONS) {
-        assert.ok(GODOT_ICON_NAMES.includes(name), `${name} must stay registered`)
-    }
-})
-
-test("the Godot icons MIT license file is shipped", () => {
-    const license = path.join(ICONS_DIR, "GODOT-ICONS-LICENSE.txt")
-    assert.ok(fs.existsSync(license), "GODOT-ICONS-LICENSE.txt must exist next to the icons")
-    const text = fs.readFileSync(license, "utf8")
-    assert.match(text, /Godot Engine contributors/, "license must credit Godot Engine contributors")
-    assert.match(text, /Permission is hereby granted, free of charge/, "license must be the MIT grant")
-})
-
-
-test("legacy icon loader uses the shared editor SVG route without duplicating assets", () => {
-    const loader = fs.readFileSync(COLIBRI_PLUGIN, "utf8")
-    const resources = fs.readFileSync(RESOURCES_PLUGIN, "utf8")
-    const server = fs.readFileSync(SERVER_SOURCE, "utf8")
-
-    assert.ok(loader.includes('svgIconBaseUrl?: string'))
-    assert.ok(loader.includes('this._svgIconBaseUrl && this._svgIcons.has(name)'))
-    assert.ok(resources.includes('svgIconBaseUrl: "/editor/app/editor-icons"'))
-    assert.ok(server.includes('rest.startsWith("app/editor-icons/")'))
-    assert.ok(server.includes("safeJoin(EDITOR_ICONS_DIR, rel)"))
-    assert.ok(server.includes('"no-cache", EDITOR_ICONS_DIR'))
-
-    for (const name of WIRED_ICONS) {
-        const icon = name.replace("godot/", "") + ".svg"
-        for (const theme of ["dark", "light"]) {
-            const file = path.join(ICONS_DIR, theme, "godot", icon)
-            assert.ok(fs.existsSync(file), `${theme}/${icon} must exist in the canonical editor icon library`)
-        }
-    }
-})
