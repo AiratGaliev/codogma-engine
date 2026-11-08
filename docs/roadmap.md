@@ -17,7 +17,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 | 3 | Оставшиеся authoring workflows | **P1 по подтверждённым gaps** | Docking (COD-83), Asset/Sprite (COD-86), Prefab (COD-8), Components/TypeScript (COD-91), 2D UI authoring (COD-43), Camera/coordinates/sorting (COD-41), Tilemap (COD-40), Physics (COD-42), Animation (COD-84), Spine (COD-90), Audio/Particles (COD-61), Atlas analysis (COD-55), import extensions (COD-59). UI создаётся заново в SolidJS; проверенные контракты переиспользуются. FX authoring and generated-game parity are implemented/verified in PR #32; CODQA-19 remains for independent visual/reference sign-off.
 | 4 | Engine/data/runtime/security contracts | **P0/P1 по конкретному gap** | Native Project Model/Core, Asset metadata/importers, Preview/Build и Phaser runtime развиваются как собственные типизированные contracts с едиными fixtures и validation.
 | 5 | Preview, diagnostics и live integrations | **P1** | Общий Preview Host, runtime identity, live Inspector/Console, EngineLogger и session-aware MCP SSE имеют явные session/lifecycle/ownership contracts. COD-80 Game View iframe не является полноценным Preview Host. |
-| 6 | Functional browser/runtime acceptance | **QA/release readiness, не Engineering gate** | CODQA-18 и CODQA-10/11/12/13/14/16/17/19/20/21 и другие применимые QA issues выполняют пакетную проверку реализованных workflows на одном integrated `test` candidate после попадания соответствующих изменений в ветку `test`. До подходящего candidate задачи остаются в `Todo`. Результаты определяют readiness кандидата к дальнейшему promotion/cutover, но не блокируют закрытие Engineering issues, следующие независимые dev slices или темп разработки. Старые Done QA issues остаются историческим evidence. |
+| 6 | Functional browser/runtime acceptance | **QA/release readiness, не Engineering gate** | CODQA-18 и CODQA-10/11/12/13/14/16/17/19/20/21 и другие применимые QA issues выполняют пакетную проверку реализованных workflows на одном integrated `test` candidate после попадания соответствующих изменений в ветку `test`. До подходящего candidate задачи остаются в `Todo`. Результаты определяют readiness кандидата к дальнейшему promotion, но не блокируют закрытие Engineering issues, следующие независимые dev slices или темп разработки. Завершённые QA issues остаются историческим evidence. |
 | 7 | Удаление неиспользуемых исторических файлов | **Отдельная repository cleanup задача** | После проверки отсутствия активных consumers удалить неиспользуемые исходные/генерируемые файлы и соответствующие notices/build metadata; это не включает второй runtime path или UI rollback mechanism. |
 | 8 | Core, Build, Platform Services, Game QA, Package Manager, Tauri | **Отдельные потоки** | Развивать по собственным зависимостям и acceptance; не делать их искусственными prerequisites для независимых Host workflows. |
 
@@ -45,7 +45,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 4. Реализовывать следующие vertical slices в SolidJS Host: COD-86 Asset Library/Sprite; COD-8 Prefab; COD-41 Camera/coordinates/sorting; COD-43 2D UI authoring; COD-83 Docking/layout; далее Tilemap/Physics/Animation/Audio/Spine по dependencies и capability matrix. FX authoring реализован в PR #32; CODQA-19 закрывает независимую visual/reference приёмку. Использовать native Project Model и engine-owned services.
 5. Устранить интеграционные blockers: Preview Host/session lifecycle; полный multi-Host MCP routing/reconnect/cancel acceptance COD-85 (native registry уже направляет commands только в active SolidJS Host); единый project write ownership; общий EngineLogger/diagnostics без зависимости от UI framework.
 6. Пройти функциональную browser/runtime acceptance соответствующих CODQA issues на новом Host. Старые Done QA issues и CI tests остаются evidence только для своих исторических/автоматизированных сценариев, не принимают новый UI.
-7. Завершить native Host workflows и независимую acceptance на integrated `test` candidate. Удаление неиспользуемых исторических repository files выполнять отдельно после проверки references, package boundaries и license obligations; это не является cutover или условием запуска Host.
+7. Завершить native Host workflows и независимую acceptance на integrated `test` candidate. Неиспользуемые repository files удалять отдельно после проверки references, package boundaries и license obligations.
 
 ### Что можно выполнять параллельно Editor UI migration
 
@@ -71,13 +71,13 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 1. Один PR — одна логически завершённая задача. Работу крупной фазы не переносить целиком одним большим PR.
 2. Не закрывать чекбокс по наличию кода или успешной компиляции: нужен результат соответствующего acceptance test.
-3. Перед реализацией нового workflow изучить существующий Colibri/Phaser Editor client только как read-only reference: зафиксировать наблюдаемое поведение, пользовательскую потребность и необходимые reusable contracts. Не исправлять, не рефакторить и не переносить legacy implementation; новую функциональность реализовывать на native Codogma contracts в SolidJS Host.
-4. Новый модуль проходит критерии и сравнивается с legacy-сценарием до удаления старой реализации.
+3. Перед реализацией нового workflow определить пользовательскую цель, основные сценарии и необходимые native domain/runtime contracts; свериться с утверждёнными Unity/Cocos/Godot references и зафиксировать adopt/adapt/reject. Реализацию выполнять на native Codogma contracts в SolidJS Host.
+4. Каждый новый модуль проходит критерии качества и acceptance для своего native workflow до включения в интегрированный release candidate.
 5. Не создавать вторую сущность, сцену или игровой цикл там, где можно добавить adapter к существующей реализации.
 6. Исходники самостоятельных, независимо подключаемых возможностей оформлять как пакеты в `packages/` внутри монорепозитория; не создавать пакет на каждый класс. Публичную публикацию выполнять только после стабилизации API, SemVer/compatibility policy, тестов и документации. Локальную совместную разработку связывать через npm Workspaces.
 7. Для новых архитектурных рисков формулировать проверяемую гипотезу и критерии решения. Выбор SolidJS для UI уже закреплён в ADR-0005 и не требует повторного PoC; это не означает автоматического выбора Tauri, PixiJS или ECS.
 8. Значимые пользовательские изменения фиксировать в `CHANGELOG.MD`; обновлять ТЗ и roadmap, когда меняется цель, формат проекта или критерии этапа.
-9. Сохранять применимые upstream-уведомления и лицензии. Удаление legacy-кода не означает автоматического права убрать авторские уведомления.
+9. Сохранять применимые upstream-уведомления и лицензии. Изменение структуры файлов или переработка исходников не отменяют лицензионных обязательств и авторских notices.
 
 ## Как использовать ТЗ, roadmap и технические источники
 
@@ -107,13 +107,13 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 Ожидаемый рабочий порядок:
 1. Использовать merged code evidence PR #30 (merge commit `7aa0f2c8cd85df795e35b3678de95794de693a5d`) и зафиксировать отдельный integrated candidate SHA после promotion `dev → test` для CODQA-18; не смешивать candidate SHA с code-commit CI evidence.
 2. Выполнить independent browser acceptance CODQA-18 на disposable project copy: visual artboards, Scene open/edit/save/reopen, Hierarchy/Inspector, Transform, Undo/Redo, focus/commands, базовый docking, Game View iframe cleanup и negative states.
-3. Завершить migration inventory COD-16 вместе с COD-82: для каждой capability разделить legacy reference, reusable data/domain/runtime contract, SolidJS implementation status, test fixtures, browser/runtime acceptance и owner issue.
+3. Поддерживать capability inventory COD-16 совместно с COD-82: для каждой capability фиксировать user workflow, native data/domain/runtime contract, Host implementation status, test fixtures, browser/runtime acceptance и owner issue.
 4. Реализовывать следующие вертикальные slices в SolidJS Host: Asset/Sprite (COD-86), Prefab (COD-8), camera/coordinates/sorting (COD-41), 2D UI authoring (COD-43), docking (COD-83), user components/scripts (COD-91), Animation (COD-84), Spine (COD-90), Tilemap/Physics/Audio/Particles и другие gaps по dependencies. FX authoring и generated-game parity реализованы/проверены в PR #32; CODQA-19 закрывает независимый visual/reference sign-off.
-5. Общие engine/data/runtime/security defects исправлять в соответствующих слоях; не переносить UI ради использования legacy panels. Новые зависимости (Monaco/CodeMirror/docking library) добавлять только после конкретного gap и ограниченного evidence.
-6. Native MCP commands уже адресуются одной active SolidJS Host session и не broadcast-ятся во frozen legacy client. До завершения COD-85 multi-Host routing/timeout/reconnect acceptance и общего project write ownership не допускать concurrent writes в один PROJECT_DIR; параллельную acceptance выполнять на изолированных project/backend instances.
-7. После принятия migration inventory выполнить COD-87 cutover с rollback window, затем отдельную COD-88 cleanup после consumer/provenance/license audit.
+5. Общие engine/data/runtime/security defects исправлять в соответствующих native слоях; UI должен использовать общие сервисы и contracts. Новые зависимости (Monaco/CodeMirror/docking library) добавлять только после конкретного gap и ограниченного evidence.
+6. Native MCP commands адресуются активной Editor Host session и не broadcast-ятся. До завершения COD-85 multi-Host routing/timeout/reconnect acceptance и общего project write ownership не допускать concurrent writes в один PROJECT_DIR; параллельную acceptance выполнять на изолированных project/backend instances.
+7. После принятия capability inventory, browser/runtime acceptance, MCP/Preview и project write ownership завершить интегрированную приёмку native Host на promotion candidate. COD-88 может отдельно удалить неиспользуемые historical repository artifacts после consumer/provenance/license review.
 
-Для каждого workflow фиксируются пользовательская цель, SolidJS status, native Codogma contract, owner issue, native fixtures и browser/runtime acceptance. UI reference выбирается из утверждённых Unity/Cocos/Godot источников. `src/editor/` уже существует как самостоятельное приложение; `source/editor/` не переносится. npm Workspaces и lockfile consolidation остаются отдельным инфраструктурным решением.
+Для каждого workflow фиксируются пользовательская цель, Editor Host status, native Codogma contract, owner issue, native fixtures и browser/runtime acceptance. UI reference выбирается из утверждённых Unity/Cocos/Godot источников. npm Workspaces и lockfile consolidation остаются отдельными инфраструктурными решениями.
 
 ### Подготовленные reference-документы — использовать, не пересоздавать
 
@@ -378,7 +378,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Этап 5 — native Editor Host и 2D authoring workflows
 
-Нормативный product/UX и implementation-reference baseline для всех UI/authoring slices — [стандарт reference для 2D Editor Host](editor-reference-standard.md). На каждую задачу проверять конкретные Unity 6.6 и Cocos Creator 4.0 2D workflows, а при наличии релевантной подсистемы изучать Godot source на закреплённом commit; в issue/PR фиксировать ссылки на страницы/файлы и adopt/adapt/reject. Godot не является UX pass/fail target; Colibri не использовать как визуальную или архитектурную спецификацию.
+Нормативный product/UX и implementation-reference baseline для всех UI/authoring slices — [стандарт reference для 2D Editor Host](editor-reference-standard.md). На каждую задачу проверять конкретные Unity 6.6 и Cocos Creator 4.0 2D workflows, а при наличии релевантной подсистемы изучать Godot source на закреплённом commit; в issue/PR фиксировать ссылки на страницы/файлы и adopt/adapt/reject. Godot не является UX pass/fail target.
 
 **Цель:** развивать единый SolidJS Editor Host до полноценной Web-first 2D authoring environment. COD-80 реализовал первый Workbench/Scene slice, COD-83 — docking/workspace; далее capabilities добавляются отдельными вертикальными срезами в `src/editor/` на native Codogma contracts.
 
