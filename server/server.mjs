@@ -840,9 +840,8 @@ function parseToolCalls(text) {
 }
 
 /*
- * AI Chat project-file attachments. Paths are project-relative (without the
- * leading project folder name). Unpublished internal .scene/.components
- * documents are not part of the native Project Model and are never attached.
+ * AI Chat project-file attachments. Paths are project-relative and resolved
+ * against the configured native project root before any file is read.
  */
 function normalizeAttachmentPath(rawPath) {
 
