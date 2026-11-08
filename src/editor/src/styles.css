@@ -2930,6 +2930,115 @@ textarea::placeholder {
   accent-color: var(--accent-selection);
 }
 
+.native-component-inspector {
+  display: grid;
+  gap: 7px;
+  margin: 7px 3px 4px;
+}
+
+.component-property-field {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--surface-panel) 72%, transparent);
+}
+
+.component-property-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.component-property-default,
+.component-property-storage-note {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.component-property-description {
+  color: var(--text-secondary);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.component-property-field > input:not([type="checkbox"]),
+.component-property-field > select {
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  padding: 3px 5px;
+  border: 1px solid var(--border-control);
+  border-radius: 2px;
+  background: var(--surface-inset);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.component-property-field > input[aria-invalid="true"],
+.component-property-field > select[aria-invalid="true"] {
+  border-color: var(--semantic-danger);
+}
+
+.component-property-field > input[type="checkbox"] {
+  width: 15px;
+  min-height: 15px;
+  accent-color: var(--accent-selection);
+}
+
+.component-property-clear {
+  justify-self: start;
+  padding: 2px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
+  background: var(--surface-control);
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.component-property-clear:hover:not(:disabled) {
+  border-color: var(--border-control);
+  color: var(--text-primary);
+}
+
+.component-property-error,
+.component-schema-error {
+  color: var(--semantic-danger);
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.component-property-warning {
+  color: var(--semantic-warning);
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.component-schema-error {
+  display: grid;
+  gap: 4px;
+  margin: 6px 3px;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--semantic-danger) 40%, var(--border-subtle));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--semantic-danger) 7%, transparent);
+}
+
+.component-schema-error strong {
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
 .component-attach-row {
   display: flex;
   gap: 5px;

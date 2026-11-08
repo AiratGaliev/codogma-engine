@@ -17,6 +17,7 @@ import {
 export interface SceneValidationContext {
   assets?: ReadonlyMap<string, AssetReference>;
   componentSchemas?: ReadonlyMap<string, ComponentTypeSchemaV1>;
+  nodeKinds?: ReadonlyMap<string, import("../components/component-schema.js").NodeReferenceKind>;
   registeredComponentTypes?: ReadonlySet<string>;
   prefabIds?: ReadonlySet<string>;
   prefabs?: ReadonlyMap<string, PrefabDocumentV1>;
@@ -473,6 +474,7 @@ function validateNode(
     const result = validateComponentProperties(schema, component.properties, {
       ...(context.assets === undefined ? {} : { assets: context.assets }),
       nodeIds,
+      ...(context.nodeKinds === undefined ? {} : { nodeKinds: context.nodeKinds }),
       ownerNodeId: nodeId,
     });
     diagnostics.push(...result.diagnostics.map((item) => ({
