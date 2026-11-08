@@ -133,84 +133,94 @@ function rejectNonLocalRequest(req, res) {
     return true
 }
 
-function walkTree(dirPath, relPrefix, files, folders, metadata = new Map()) {
-    const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dirPath)
-    if (!entries) return metadata
+function collectProjectEntries(projectRoot, directoryPath = projectRoot, prefix = "") {
+    const entries = readProjectDirectoryEntriesSafelySync(projectRoot, directoryPath) || []
+    const result = []
 
     for (const entry of entries) {
         if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
-        const rel = relPrefix ? relPrefix + "/" + entry.name : entry.name
-        const full = path.join(dirPath, entry.name)
+        const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+        const fullPath = path.join(directoryPath, entry.name)
+
         if (entry.isDirectory) {
-            folders.push(rel)
-            metadata.set(rel, entry)
-            walkTree(full, rel, files, folders, metadata)
+            result.push({
+                relativePath,
+                kind: "directory",
+                size: 0,
+                modifiedAt: Math.floor(entry.mtimeMs)
+            })
+            result.push(...collectProjectEntries(projectRoot, fullPath, relativePath))
         } else if (entry.isFile) {
-            files.push(rel)
-            metadata.set(rel, entry)
+            result.push({
+                relativePath,
+                kind: "file",
+                size: entry.size,
+                modifiedAt: Math.floor(entry.mtimeMs)
+            })
         }
     }
-    return metadata
+
+    return result
 }
 
-/*
- * The IDE client sends file paths with the project root folder as the first
- * segment, while /editor/project URLs are relative to the project root.
- */
+function buildProjectTree(projectRoot, directoryPath = projectRoot, relativePath = "", directoryMtime = null) {
+    const entries = readProjectDirectoryEntriesSafelySync(projectRoot, directoryPath) || []
+    const children = []
+
+    for (const entry of entries) {
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
+        const childPath = relativePath ? `${relativePath}/${entry.name}` : entry.name
+        const fullPath = path.join(directoryPath, entry.name)
+
+        if (entry.isDirectory) {
+            children.push(buildProjectTree(projectRoot, fullPath, childPath, entry.mtimeMs))
+        } else if (entry.isFile) {
+            children.push({
+                name: entry.name,
+                relativePath: childPath,
+                kind: "file",
+                size: entry.size,
+                modifiedAt: Math.floor(entry.mtimeMs)
+            })
+        }
+    }
+
+    const stat = directoryMtime === null
+        ? statProjectDirectorySafelySync(projectRoot, directoryPath)
+        : null
+
+    return {
+        name: relativePath ? path.basename(directoryPath) : path.basename(projectRoot),
+        relativePath,
+        kind: "directory",
+        size: 0,
+        modifiedAt: Math.floor(directoryMtime ?? stat?.mtimeMs ?? Date.now()),
+        children
+    }
+}
 
 /**
- * Return metadata from a verified parent-directory enumeration rather than
- * following a client-controlled pathname with stat().
+ * Resolve one project entry from verified parent-directory metadata.
  */
-function fileData(projectDir, relPath) {
-    const full = safeJoin(projectDir, relPath)
-    if (!full || full === projectDir) return null
-    const entries = readProjectDirectoryEntriesSafelySync(projectDir, path.dirname(full))
+function getProjectEntry(projectRoot, relativePath) {
+    const fullPath = safeJoin(projectRoot, relativePath)
+    if (!fullPath || fullPath === projectRoot) return null
+
+    const entries = readProjectDirectoryEntriesSafelySync(projectRoot, path.dirname(fullPath))
     if (!entries) return null
-    const entry = entries.find(candidate => candidate.name === path.basename(full))
+    const entry = entries.find(candidate => candidate.name === path.basename(fullPath))
     if (!entry || entry.isSymbolicLink || (!entry.isFile && !entry.isDirectory)) return null
+
+    if (entry.isDirectory) {
+        return buildProjectTree(projectRoot, fullPath, relativePath, entry.mtimeMs)
+    }
+
     return {
-        name: path.basename(relPath),
-        isFile: entry.isFile,
-        size: entry.isFile ? entry.size : 0,
-        modTime: Math.floor(entry.mtimeMs),
-        children: entry.isFile ? undefined : []
-    }
-}
-
-function buildRootFileData(projectDir) {
-    const name = path.basename(projectDir)
-    const children = []
-    const entries = readProjectDirectoryEntriesSafelySync(projectDir, projectDir) || []
-    for (const entry of entries) {
-        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
-        const full = path.join(projectDir, entry.name)
-        if (entry.isDirectory) {
-            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(entry.mtimeMs), children: [] }
-            buildFolderData(projectDir, full, entry.name, sub)
-            children.push(sub)
-        } else if (entry.isFile) {
-            children.push({ name: entry.name, isFile: true, size: entry.size, modTime: Math.floor(entry.mtimeMs) })
-        }
-    }
-    return { name, isFile: false, size: 0, modTime: Date.now(), children }
-}
-
-function buildFolderData(projectRoot, dirPath, relPrefix, node) {
-    const entries = readProjectDirectoryEntriesSafelySync(projectRoot, dirPath)
-    if (!entries) return
-
-    for (const entry of entries) {
-        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
-        const rel = relPrefix + "/" + entry.name
-        const full = path.join(dirPath, entry.name)
-        if (entry.isDirectory) {
-            const sub = { name: entry.name, isFile: false, size: 0, modTime: Math.floor(entry.mtimeMs), children: [] }
-            buildFolderData(projectRoot, full, rel, sub)
-            node.children.push(sub)
-        } else if (entry.isFile) {
-            node.children.push({ name: entry.name, isFile: true, size: entry.size, modTime: Math.floor(entry.mtimeMs) })
-        }
+        name: path.basename(relativePath),
+        relativePath,
+        kind: "file",
+        size: entry.size,
+        modifiedAt: Math.floor(entry.mtimeMs)
     }
 }
 
@@ -221,14 +231,12 @@ function computeProjectHash() {
     if (hashCache.value && now - hashCache.stamp < 1000) {
         return hashCache.value
     }
-    const files = [], folders = [], metadata = new Map()
-    walkTree(PROJECT_DIR, "", files, folders, metadata)
-    const parts = []
-    for (const rel of files.concat(folders).sort()) {
-        const entry = metadata.get(rel)
-        if (entry) parts.push(`${rel}|${Math.floor(entry.mtimeMs)}|${entry.size}`)
-    }
-    const value = crypto.createHash("sha1").update(parts.join("\n")).digest("hex")
+
+    const entries = collectProjectEntries(PROJECT_DIR)
+    const parts = entries
+        .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+        .map(entry => `${entry.relativePath}|${entry.modifiedAt}|${entry.size}`)
+    const value = crypto.createHash("sha1").update(parts.join("\\n")).digest("hex")
     hashCache.value = value
     hashCache.stamp = now
     return value
