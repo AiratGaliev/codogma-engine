@@ -2959,7 +2959,7 @@ function App() {
       },
     ],
     Help: [
-      { label: "Editor Host architecture", action: () => log("info", "SolidJS Host · legacy Colibri remains available at /editor/") },
+      { label: "Editor Host architecture", action: () => log("info", "Native Codogma Editor Host") },
     ],
   }));
 
