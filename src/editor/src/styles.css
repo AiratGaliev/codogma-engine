@@ -495,12 +495,9 @@ textarea::placeholder {
   background: var(--surface-panel);
 }
 
-.left-side-dock {
-  border-right: 1px solid var(--border-subtle);
-}
-
+.left-side-dock,
 .right-side-dock {
-  border-left: 1px solid var(--border-subtle);
+  border: 0;
 }
 
 .side-dock-tabs {
