@@ -902,7 +902,7 @@ function App() {
     const root = projectTree();
     if (!root) throw new Error("The project tree is not loaded.");
     const existing = flattenProjectEntries(root).find((item) => item.path === relativePath);
-    if (existing && !existing.entry.kind === "file") return;
+    if (existing?.entry.kind === "directory") return;
     if (existing?.entry.kind === "file") throw new Error(`A file already exists at "${relativePath}".`);
     await createProjectDirectory(relativePath);
     await refreshProjectTree();
