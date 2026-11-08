@@ -192,8 +192,8 @@ Tauri и Electron не выбираются только по размеру д�
 
 - Built Host обслуживается Node server под `/editor/`; в development Vite работает на `127.0.0.1:5173` и проксирует API к backend на `127.0.0.1:3000`.
 - Для proxy-origin backend получает точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`; wildcard Origin запрещён. Реальная proxy конфигурация проверяется вместе с `server/request-origin.mjs`.
-- Каждое открытое окно Host получает отдельный MCP session ID. Команда направляется активной сессии, а результат принимается только от сессии, получившей команду.
-- Multi-Host routing, reconnect, stale-session handling, cancellation/timeouts и shared project write ownership остаются COD-85. До их acceptance параллельная запись в один project directory не поддерживается; для write acceptance использовать изолированные fixture/backend instances.
+- Единственный native Editor Host получает server-issued MCP session ID на время SSE connection. Каждая команда и её результат связаны с этой connection; незнакомые, устаревшие и повторные ответы отклоняются.
+- Disconnect/reconnect, stale pending commands, timeout/cancellation и cleanup проверяются в COD-85. Несколько одновременно подключённых Host clients, выбор активного окна и multi-Host write ownership не поддерживаются. Один project directory редактируется одним Host writer.
 - Production и development используют один и тот же Editor Host; отличается только способ доставки frontend bundle.
 
 ### 4.3. Зависимости должны идти в одном направлении
@@ -1071,7 +1071,7 @@ CI Fast намеренно не выполняет E2E: обычные PR в `de
 - Существующие пользовательские сценарии и новый функциональный контракт покрываются regression tests в том же PR.
 - Все авторские workflows используют один Editor Host, один native Project Model и одну session-aware MCP bridge.
 - Для локальной разработки Vite проксирует API к loopback Node backend; точные Origin allow-lists, project write ownership и MCP SSE ownership входят в acceptance.
-- Каждое окно Host получает отдельный session ID. До завершения multi-Host write contract одна project directory должна иметь только одного активного writer; параллельные write tests используют отдельные project/backend instances.
+- Единственное приложение Editor Host использует один server-issued session ID на текущее SSE connection. Один project directory имеет одного Host writer; отдельный multi-Host write contract не предусматривается.
 - Для Scene workflow авторским источником истины является native Scene document.
 - Не держать два источника истины для Transform/состояния компонентов или иных authoring data.
 - Не переносить все игровые подсистемы на новую архитектуру одновременно.
@@ -1333,4 +1333,4 @@ UI-independent logging contract используется Editor Host и engine s
 **Ключевой принцип ТЗ:** Codogma должен постепенно перейти от текущей IDE к целостной среде Web-first 2D-разработки, где проектные данные, TypeScript API, игровой runtime, живой Inspector, сборка и платформенные adapters согласованы между собой. Новая архитектура должна проверяться на реальных проектах, а не считаться успешной только потому, что код компилируется.
 
 
-The get-system-instructions tool is part of the native Editor MCP contract. It documents the supported Project Model v1 workflows for Scene/Node hierarchy, Prefab references/instances, registered Component modules/instances, native FX components, external Asset Pack/animation/Tiled/Spine metadata inspection, Google Fonts and project-file operations. Live editor operations require an active Editor Host session. Changes to the native tool catalogue update these instructions and package contract tests in the same change.
+The get-system-instructions tool is part of the native Editor MCP contract. It documents the supported Project Model v1 workflows for Scene/Node hierarchy, Prefab references/instances, registered Component modules/instances, native FX components, external Asset Pack/animation/Tiled/Spine metadata inspection, Google Fonts and project-file operations. Live editor operations require the single native Editor Host to be connected. Changes to the native tool catalogue update these instructions and package contract tests in the same change.
