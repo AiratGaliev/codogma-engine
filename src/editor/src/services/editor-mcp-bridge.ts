@@ -55,7 +55,6 @@ export function connectEditorMcpBridge(
 ): () => void {
   let clientId: string | null = null;
   let disposed = false;
-  let activationPending = false;
 
   const source = new EventSource("/editor/mcp-bridge/events");
 
@@ -63,32 +62,6 @@ export function connectEditorMcpBridge(
     const message = errorMessage(error);
     options.onError?.(message);
     options.onStatus?.("disconnected", message);
-  };
-
-  const activate = async () => {
-    if (disposed || !clientId || activationPending) return;
-    activationPending = true;
-
-    try {
-      const response = await fetch("/editor/mcp-bridge/activate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ clientId }),
-      });
-      if (!response.ok) {
-        throw new Error(`Editor MCP activation failed (${response.status}).`);
-      }
-
-      const result: unknown = await response.json();
-      if (isRecord(result) && typeof result.error === "string") {
-        throw new Error(result.error);
-      }
-    } catch (error) {
-      reportError(error);
-    } finally {
-      activationPending = false;
-    }
   };
 
   const postResult = async (
@@ -131,7 +104,7 @@ export function connectEditorMcpBridge(
     try {
       const handler = handlers[command.tool];
       if (!handler) {
-        throw new Error(`The SolidJS Editor Host does not implement "${command.tool}".`);
+        throw new Error(`The Editor Host does not implement "${command.tool}".`);
       }
       const result = await handler(command.args ?? {});
       await postResult(command, result);
@@ -151,9 +124,7 @@ export function connectEditorMcpBridge(
         throw new Error("The MCP server returned an invalid editor session.");
       }
       clientId = payload.clientId;
-      activationPending = false;
       options.onStatus?.("connected");
-      void activate();
     } catch (error) {
       reportError(error);
     }
@@ -168,37 +139,23 @@ export function connectEditorMcpBridge(
   });
 
   source.onopen = () => {
-    if (clientId) {
-      options.onStatus?.("connected");
-      void activate();
-    }
+    if (clientId) options.onStatus?.("connected");
   };
 
   source.onerror = () => {
     // EventSource reconnects automatically; the next "connected" event
     // establishes a fresh server-owned session id.
     clientId = null;
-    activationPending = false;
     options.onStatus?.("connecting");
   };
 
-  const handleWindowFocus = () => { void activate(); };
-  const handleVisibilityChange = () => {
-    if (document.visibilityState === "visible") void activate();
-  };
-
-  window.addEventListener("focus", handleWindowFocus);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
   options.onStatus?.("connecting");
 
   return () => {
     if (disposed) return;
     disposed = true;
     clientId = null;
-    activationPending = false;
     source.close();
-    window.removeEventListener("focus", handleWindowFocus);
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
     options.onStatus?.("disconnected");
   };
 }
