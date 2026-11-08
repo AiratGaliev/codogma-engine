@@ -47,13 +47,13 @@ The engine registry exposes native Project Model v1 operations:
 
 The adapter also preserves file/project utilities and read-only or metadata-oriented integrations for external Phaser Asset Pack, animation, Tiled tilemap, Spine, texture, bitmap-font and Google Fonts assets.
 
-The registry does **not** publish Phaser Editor Scene/Prefab mutation tools or internal `.scene` / `.components` readers and writers. Native Project, Scene and Prefab documents cannot be overwritten or deleted through generic file operations; they must pass the Editor Host's native validation and persistence boundary. External Phaser Asset Pack and animation formats remain separate import/runtime contracts.
+Native Project, Scene and Prefab authoring is performed through dedicated tools and the Editor Host's validation/persistence boundary. Generic project-file operations remain scoped to their supported file contract. External Phaser Asset Pack and animation formats use separate import/runtime contracts.
 
 ## Requirements
 
 - Node.js 22 or newer.
 - Codogma Engine server running locally.
-- For Scene, Node, Prefab, Component, FX and screenshot operations, the project must be open in the **SolidJS Editor Host** and its SSE bridge connected. A frozen legacy Colibri editor session is never a target for native MCP commands.
+- For Scene, Node, Prefab, Component, FX and screenshot operations, the project must be open in the **Codogma Editor Host** and its SSE bridge connected.
 
 ## Local development
 
