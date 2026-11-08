@@ -47,7 +47,7 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Audio groups and particle preview | Native SolidJS authoring/preview controls are not yet implemented. See COD-61 and CODQA-13. |
 | Editable tilemaps | Native Tilemap authoring is not yet implemented in SolidJS Host. See COD-40 and CODQA-14. |
 | Physics authoring | Native Arcade/Box2D authoring and runtime integration are being developed in COD-42; live Box2D runtime acceptance remains in CODQA-1. Standalone B2Body/B2Shape nodes are not currently supported. |
-| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes native Project Model v1 tools over stdio and routes live editor operations to the active Editor Host session; multi-Host routing/acceptance remains COD-85/CODQA-8. |
+| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes native Project Model v1 tools over stdio and routes live editor operations to the single connected native Editor Host; COD-85 owns single-Host bridge reliability and CODQA-8 owns live operations acceptance. |
 | AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
 This table is a practical overview, not a guarantee that every feature has identical behaviour in every runtime. Tools that open a scene in the live editor or capture a screenshot require the editor UI to be running and connected. Some generated game code can also require runtime modules that are not included in the core Phaser bundle. Verify the relevant feature and runtime dependencies before shipping a game.
@@ -118,7 +118,7 @@ npm run test:editor-host
 npm run test:editor-host:browser
 ```
 
-Browser acceptance uses a temporary copy of `packages/cge/tests/fixtures/acceptance-project`; it never points the test backend at a developer's project. Live MCP commands target an active Editor Host session. Multi-Host reconnect and shared project write/version ownership are tracked separately; use one writer per project directory until those contracts are accepted.
+Browser acceptance uses a temporary copy of `packages/cge/tests/fixtures/acceptance-project`; it never points the test backend at a developer's project. Live MCP commands target the single connected native Editor Host. The SSE bridge owns one connection at a time; multiple simultaneous editor clients and shared multi-Host project ownership are not supported. Use one writer per project directory.
 
 ### Select a game project
 
@@ -234,7 +234,7 @@ The server also integrates with the optional AI Chat backend. That backend is a 
 
 Production runs the built Editor Host from <code>src/editor/dist</code> under the Node server at <code>/editor/</code>. Development runs the same Host through Vite at <code>http://127.0.0.1:5173/</code>, with requests to <code>/editor/*</code> proxied to the Node backend on port 3000. The Vite proxy requires an exact <code>CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173</code> entry because it forwards browser requests to the loopback backend. Do not use a wildcard Origin or bind development services to a public interface.
 
-The Editor SSE bridge assigns a session ID to each Host window, routes MCP commands to the active session and accepts results only from the session that received the command. Multi-Host reconnect, cancellation, timeout and shared project write ownership remain COD-85 scope. Until those contracts are complete, use one writing Host session per project directory at a time. File-only HTTP MCP tools do not require a live editor session.
+The Editor SSE bridge connects one native Editor Host instance to the engine-owned MCP registry. The server issues a session ID and binds every command/result to that connection. Disconnect/reconnect invalidates stale pending operations. Multiple simultaneous Host windows, focus switching, active-client arbitration and multi-Host write ownership are not supported. Use one Editor Host writer per project directory. File-only HTTP MCP tools do not require a connected Host.
 
 ### HTTP endpoints
 
@@ -595,4 +595,4 @@ Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integrati
 
 ## MCP native contract
 
-The engine-owned get-system-instructions response and MCP package tests describe the supported Project Model v1 Scene/Node/Prefab/Component/FX workflows. The registry exposes native document operations through the active Editor Host session and external asset inspection through project services. Phaser Asset Pack, animation JSON, Tiled tilemap and Spine skeleton/atlas metadata remain separate asset workflows; a Spine skin screenshot is not exposed until the Editor Host has a renderer/handler.
+The engine-owned get-system-instructions response and MCP package tests describe the supported Project Model v1 Scene/Node/Prefab/Component/FX workflows. The registry exposes native document operations through the single connected Editor Host and external asset inspection through project services. Phaser Asset Pack, animation JSON, Tiled tilemap and Spine skeleton/atlas metadata remain separate asset workflows; a Spine skin screenshot is not exposed until the Editor Host has a renderer/handler.
