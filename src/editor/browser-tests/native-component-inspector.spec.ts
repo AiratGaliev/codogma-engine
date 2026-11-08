@@ -9,9 +9,11 @@ const fixtureFiles = [
   ["scenes/Level.cge-scene.json", "scenes/Level.cge-scene.json"],
   ["src/FollowTarget.ts", "src/FollowTarget.ts"],
   ["assets/player.svg", "assets/player.svg"],
-  ["assets/alternative.svg", "assets/player.svg"],
 ] as const;
-const createdPaths = fixtureFiles.map(([, projectPath]) => projectPath);
+const createdPaths = [
+  ...fixtureFiles.map(([, projectPath]) => projectPath),
+  "assets/alternative.svg",
+];
 
 async function writeProjectFile(page: Page, relativePath: string, text: string) {
   const response = await page.request.post("http://127.0.0.1:3000/editor/project/operations", {
@@ -59,6 +61,11 @@ test.beforeEach(async ({ page }) => {
     }
     await writeProjectFile(page, projectPath, content);
   }
+  await writeProjectFile(
+    page,
+    "assets/alternative.svg",
+    readFileSync(resolve(fixtureRoot, "assets/player.svg"), "utf8"),
+  );
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await waitForNativeProject(page);
