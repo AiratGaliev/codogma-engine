@@ -165,7 +165,7 @@ async function main() {
         if (!canSkipForWindows) throw error
 
         symlinkChecksAvailable = false
-        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt", "phasereditor2d.json", "inside-link", "inside-dir"]) {
+        for (const name of ["outside-link", "dangling-file", "dangling-folder", "upload-link.txt", "engine-config.json", "inside-link", "inside-dir"]) {
             await fs.rm(path.join(projectDir, name), { force: true, recursive: true })
         }
         console.warn("Skipping symlink-specific checks: Windows does not permit creating symbolic links in this environment.")
@@ -583,8 +583,6 @@ async function main() {
                 ...process.env,
                 PORT: String(port),
                 PROJECT_DIR: projectDir,
-                EDITOR_DIR,
-                CODOGMA_EDITOR_UI: "solidjs",
                 AI_CHAT_SERVICE: aiChatService.url,
                 CODOGMA_ALLOWED_HOSTS: "gateway.internal.example",
                 CODOGMA_ALLOWED_ORIGINS: "https://*.preview.example"
