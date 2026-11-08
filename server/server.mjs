@@ -235,7 +235,7 @@ function computeProjectHash() {
     const parts = entries
         .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
         .map(entry => `${entry.relativePath}|${entry.modifiedAt}|${entry.size}`)
-    const value = crypto.createHash("sha1").update(parts.join("\\n")).digest("hex")
+    const value = crypto.createHash("sha1").update(parts.join("\n")).digest("hex")
     hashCache.value = value
     hashCache.stamp = now
     return value
@@ -243,7 +243,7 @@ function computeProjectHash() {
 
 /* ============================== image size =============================== */
 
-function getImageSize(input, extension) {
+function parseImageDimensions(input, extension) {
     if (!Buffer.isBuffer(input)) return null
     const data = input.subarray(0, 65536)
 
@@ -507,7 +507,7 @@ async function handleProjectOperation(req, res) {
                 } finally {
                     await handle.close().catch(() => {})
                 }
-                const dimensions = getImageSize(data, path.extname(fullPath))
+                const dimensions = parseImageDimensions(data, path.extname(fullPath))
                 if (!dimensions) return apiError(res, "cannot read image dimensions")
                 return sendJSON(res, dimensions)
             }
