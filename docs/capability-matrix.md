@@ -84,7 +84,7 @@
 | Preview/live Inspector | Project Model snapshot, runtime identity, Preview lifecycle | **Partial; no shared Preview Host contract** | COD-30/31/32/47/58; CODQA-16 |
 | Diagnostics/Console | Engine-owned logging/session diagnostics | **Console surface only; no general EditorLogger** | COD-47; docs/editor-logging-and-diagnostics.md |
 | Live Editor MCP bridge | Native HTTP tool registry, stdio adapter and session-owned SSE routing | **Single-Host routing implemented; multi-Host acceptance pending** | COD-85; CODQA-8 |
-| Production /editor/ | SolidJS production route and bounded UI rollback | **Not cut over** | COD-87; COD-88 |
+| Production Editor Host | Node server serves the built native SolidJS Host at `/editor/`; Vite serves the same application during development | **Native Host is the only editor route** | COD-80; COD-82 |
 
 
 ## Core Runtime, ECS и Build capabilities — архитектурная ревизия 05.11.2026
