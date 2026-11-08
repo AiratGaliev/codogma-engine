@@ -9,7 +9,7 @@
  *
  * Tools that operate purely on project files are executed server-side.
  * Native Scene/Node/Prefab/Component/FX operations and viewport screenshots
- * are forwarded only to a connected SolidJS Editor Host over the SSE bridge.
+ * are forwarded only to the connected Editor Host over the SSE bridge.
  */
 
 import fs from "fs"
