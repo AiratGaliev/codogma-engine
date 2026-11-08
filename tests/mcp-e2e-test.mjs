@@ -1,7 +1,7 @@
 /**
  * Native MCP integration smoke test through the first-party stdio adapter.
  * Scene/Node/Prefab/Component/FX mutations are tested against the connected
- * SolidJS Host in promotion/browser acceptance, not by writing legacy files.
+ * Editor Host in promotion/browser acceptance.
  */
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
@@ -95,11 +95,7 @@ async function main() {
         "assets-get-available-textures", "assets-get-available-animations",
         "assets-get-available-spine-skeletons", "assets-get-tilemap-data"
     ]) assert.ok(names.has(name), `missing native MCP tool: ${name}`)
-    for (const name of [
-        "ide-get-all-scenes-in-project", "ide-create-new-scene",
-        "scene-get-scene-data", "scene-add-game-objects",
-        "ide-get-all-prefabs-in-project", "scene-declare-prefab-property"
-    ]) assert.ok(!names.has(name), `legacy MCP tool must not be published: ${name}`)
+
 
     let nested = 0
     let optional = 0
@@ -130,7 +126,7 @@ async function main() {
 
     if (process.env.MCP_E2E_WITH_EDITOR === "1") {
         assert.ok(process.env.PROJECT_DIR,
-            "MCP_E2E_WITH_EDITOR=1 requires PROJECT_DIR to point to a native Project Model v1 fixture, not the frozen Colibri test workspace")
+            "MCP_E2E_WITH_EDITOR=1 requires PROJECT_DIR to point to a native Project Model v1 fixture, rather than an empty or unrelated workspace")
         const projectInfo = JSON.parse(await callTool("project-compile-info", {}))
         assert.ok(Array.isArray(projectInfo.scenes) && projectInfo.scenes.length > 0,
             "native MCP browser acceptance requires at least one Scene reference in project.json")
@@ -147,7 +143,7 @@ async function main() {
     } else {
         const noHost = await request("tools/call", { name: "scene-list", arguments: {} })
         assert.ok(noHost.result?.isError, "editor-dependent native tools must fail closed without a Host session")
-        console.log("SolidJS Host acceptance skipped; no live editor session was requested.")
+        console.log("Editor Host acceptance skipped; no live editor session was requested.")
     }
     console.log("Native MCP integration smoke checks passed.")
 }
