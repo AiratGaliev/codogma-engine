@@ -6,7 +6,7 @@ Host-neutral contracts and the first component-object Core slice.
 
 - project-model owns versioned project/scene/node/transform/component/prefab/asset contracts, validation and deterministic serialization.
 - components owns the component schema, registry, lifecycle and explicit-tick scheduler.
-- The package does not depend on Phaser, DOM/editor UI, Colibri, Node-only APIs or platform SDKs.
+- The package does not depend on Phaser, browser DOM, Editor Host UI, Node-only APIs or platform SDKs.
 - The Core never creates a game loop. A runtime adapter calls ComponentWorld.update(deltaSeconds) from its controlled tick.
 - A scene host owns one ComponentWorld lifetime per active scene. Replacing a scene disposes the previous world before creating the next one.
 - Component modules are supplied through explicit registration. Project data stores stable type/module references; it never supplies executable import paths or source code.
