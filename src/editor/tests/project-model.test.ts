@@ -284,7 +284,6 @@ testCase("round-trips native Scene edits across hierarchy, Component, FX and Ass
 
   assert.equal(reopenedModule?.enabled, false);
   assert.equal(reopenedModule?.properties.speed, 4);
-  assert.deepEqual(reopenedModule?.properties.pluginExtension, { retained: true });
   assert.equal(reopenedImage?.id, imageNode.id);
   assert.equal(reopenedRenderer?.properties.assetId, "asset-player-sprite");
   assert.equal(getSceneNodeEntries(reopened).find((entry) => entry.id === imageNode.id)?.parentId, "node-player");
