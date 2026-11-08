@@ -1,71 +1,76 @@
-export interface ProjectEntry {
+export interface ProjectTreeEntry {
   name: string;
-  isFile: boolean;
+  relativePath: string;
+  kind: "file" | "directory";
   size: number;
-  modTime: number;
-  children?: ProjectEntry[];
+  modifiedAt: number;
+  children?: ProjectTreeEntry[];
 }
 
-export interface ProjectFilesResponse {
-  hash: string;
-  maxNumberOfFiles: number;
-  projectNumberOfFiles: number;
-  rootFile: ProjectEntry;
-  error: string;
+export interface ProjectDirectorySnapshot {
+  contentHash: string;
+  entryLimit: number;
+  entryCount: number;
+  root: ProjectTreeEntry;
 }
 
-interface ApiErrorResponse {
+interface ProjectOperationError {
   error?: string;
 }
 
 async function readJson<T>(response: Response): Promise<T> {
-  const text = await response.text();
+  const responseText = await response.text();
 
   if (!response.ok) {
     throw new Error(
-      `Editor backend returned ${response.status}: ${text || response.statusText}`,
+      `Project service returned ${response.status}: ${responseText || response.statusText}`,
     );
   }
 
   let data: unknown;
   try {
-    data = JSON.parse(text);
+    data = JSON.parse(responseText);
   } catch {
-    throw new Error("Editor backend returned invalid JSON.");
+    throw new Error("Project service returned invalid JSON.");
   }
 
   if (
     data &&
     typeof data === "object" &&
     "error" in data &&
-    typeof (data as ApiErrorResponse).error === "string" &&
-    (data as ApiErrorResponse).error
+    typeof (data as ProjectOperationError).error === "string" &&
+    (data as ProjectOperationError).error
   ) {
-    throw new Error((data as ApiErrorResponse).error);
+    throw new Error((data as ProjectOperationError).error);
   }
 
   return data as T;
 }
 
-export async function callEditorApi<T>(
-  method: string,
-  body: Record<string, unknown> = {},
+export async function callProjectOperation<T>(
+  operation: string,
+  args: Record<string, unknown> = {},
 ): Promise<T> {
-  const response = await fetch("/editor/api", {
+  const response = await fetch("/editor/project/operations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method, body }),
+    body: JSON.stringify({ operation, arguments: args }),
     credentials: "same-origin",
   });
 
   return readJson<T>(response);
 }
 
-export async function getProjectFiles(): Promise<ProjectFilesResponse> {
-  const result = await callEditorApi<ProjectFilesResponse>("GetProjectFiles");
+export async function getProjectDirectorySnapshot(): Promise<ProjectDirectorySnapshot> {
+  const result = await callProjectOperation<ProjectDirectorySnapshot>("project.listEntries");
 
-  if (!result.rootFile || !Array.isArray(result.rootFile.children)) {
-    throw new Error("The project file API returned an invalid rootFile tree.");
+  if (
+    !result.root ||
+    result.root.kind !== "directory" ||
+    result.root.relativePath !== "" ||
+    !Array.isArray(result.root.children)
+  ) {
+    throw new Error("The project service returned an invalid directory tree.");
   }
 
   return result;
@@ -93,21 +98,20 @@ export async function readProjectFile(relativePath: string): Promise<string> {
 
 export async function writeProjectFile(
   relativePath: string,
-  content: string,
+  text: string,
 ): Promise<void> {
-  await callEditorApi("SetFileString", {
-    path: relativePath,
-    content,
-  });
+  await callProjectOperation("project.writeFile", { relativePath, text });
 }
 
-
-export async function createProjectFolder(relativePath: string): Promise<void> {
-  await callEditorApi("CreateFolder", { path: relativePath });
+export async function createProjectDirectory(relativePath: string): Promise<void> {
+  await callProjectOperation("project.createDirectory", { relativePath });
 }
 
-export async function renameProjectFile(relativePath: string, newName: string): Promise<void> {
-  const normalizedPath = relativePath.replace(/\\/g, "/");
+export async function renameProjectEntry(
+  sourcePath: string,
+  destinationName: string,
+): Promise<void> {
+  const normalizedPath = sourcePath.replace(/\\/g, "/");
   const segments = normalizedPath.split("/");
 
   if (
@@ -116,30 +120,30 @@ export async function renameProjectFile(relativePath: string, newName: string): 
     /^[a-zA-Z]:/.test(normalizedPath) ||
     segments.some((segment) => !segment || segment === "." || segment === "..")
   ) {
-    throw new Error("Cannot rename a project file with an invalid relative path.");
+    throw new Error("Cannot rename a project entry with an invalid relative path.");
   }
 
   if (
-    !newName ||
-    newName === "." ||
-    newName === ".." ||
-    newName.includes("/") ||
-    newName.includes("\\") ||
-    newName.includes(String.fromCharCode(0))
+    !destinationName ||
+    destinationName === "." ||
+    destinationName === ".." ||
+    destinationName.includes("/") ||
+    destinationName.includes("\\") ||
+    destinationName.includes(String.fromCharCode(0))
   ) {
-    throw new Error("The new file name must be a single non-empty path segment.");
+    throw new Error("The destination name must be a single non-empty path segment.");
   }
 
   const parentPath = segments.slice(0, -1).join("/");
-  const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+  const destinationPath = parentPath ? `${parentPath}/${destinationName}` : destinationName;
 
-  await callEditorApi("RenameFile", {
-    oldPath: normalizedPath,
-    newPath,
+  await callProjectOperation("project.renameEntry", {
+    sourcePath: normalizedPath,
+    destinationPath,
   });
 }
 
-export async function deleteProjectFiles(relativePaths: string[]): Promise<void> {
+export async function deleteProjectEntries(relativePaths: string[]): Promise<void> {
   if (relativePaths.length === 0) return;
-  await callEditorApi("DeleteFiles", { paths: relativePaths });
+  await callProjectOperation("project.deleteEntries", { relativePaths });
 }
