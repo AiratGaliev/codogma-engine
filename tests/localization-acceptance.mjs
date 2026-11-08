@@ -30,7 +30,7 @@ import {
 } from "@codogma/localization"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const PROJECT_DIR = path.join(ROOT, "tests", "workspace", "test-typescript")
+const PROJECT_DIR = path.join(ROOT, "packages", "localization", "tests", "fixtures", "sample-project")
 
 function freePort() {
     const server = net.createServer()
@@ -76,7 +76,7 @@ async function main() {
             }
 
             try {
-                const response = await fetch(`http://127.0.0.1:${port}/editor/product.json`)
+                const response = await fetch(`http://127.0.0.1:${port}/editor/mcp-bridge-status`)
                 up = response.ok
             } catch {
                 // still starting
@@ -88,7 +88,7 @@ async function main() {
         }
 
         if (!up) {
-            throw new Error(`Editor server did not start in time:\n${serverLogs}`)
+            throw new Error(`Engine server did not start in time:\n${serverLogs}`)
         }
 
         console.log(`server is up on port ${port}`)
