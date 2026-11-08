@@ -8,7 +8,7 @@
 
 Codogma включает Node.js services, Core packages, SolidJS Editor Host, Phaser runtime adapters, MCP tooling, build tooling и automated tests. Эти части должны иметь строгую типизацию, воспроизводимые toolchains и одинаково проверяемые контракты.
 
-Существующий UI application в `source/editor/` и новый SolidJS Host в `src/editor/` являются отдельными package roots с собственными manifests и lockfiles. Текущий TypeScript 5.3.3 — только зафиксированная характеристика frozen UI client; его toolchain не является целью развития и не обновляется. SolidJS Host использует TypeScript 5.9.3. Различие версий не должно протекать в native Core API или consumer contracts.
+Единственный Editor Host находится в `src/editor/` и использует TypeScript 5.9.3 с собственным manifest/lockfile. Core packages имеют собственные manifests и lockfiles; их compiler settings и public contracts остаются независимыми от UI toolchain.
 
 ## Решения
 
@@ -65,7 +65,7 @@ Codogma включает Node.js services, Core packages, SolidJS Editor Host, P
 - `packages/cge/` имеет собственный strict TS scope и не импортирует Phaser, DOM, SolidJS, Node-only APIs или platform SDKs в public contracts.
 - `src/editor/` — самостоятельный SolidJS Host package со своим TypeScript config, lockfile, typecheck/build/tests и browser acceptance.
 - `server/` — отдельный Node.js service boundary; новые сервисы и contracts следуют TypeScript-first правилам, где это применимо.
-- Frozen UI client в `source/editor/` остаётся отдельным package root только для текущей эксплуатации/rollback до cutover; его manifest, lockfile, scripts, dependencies и toolchain не модернизируются. Это не ограничивает TypeScript standards для новых Codogma modules и не создаёт зависимости между UI package roots.
+- Editor Host в `src/editor/` — единственное приложение редактора и единственная UI package root. Root/server/Core/first-party packages сохраняют собственные package boundaries и lockfiles; TypeScript contracts не должны протекать через UI-specific implementation details.
 - Root smoke/security scripts и минимальные JS bootstrap entry points остаются в своих инструментальных границах до отдельного изменения; новая domain/feature logic не размещается в них.
 
 ### 5. Rollout и ratchet
