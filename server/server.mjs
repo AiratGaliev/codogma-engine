@@ -1,25 +1,9 @@
 /**
- * Codogma Engine — local open-source server implementation.
+ * Codogma Engine — native Editor Host server.
  *
- * The official server binary is closed-source and only distributed from
- * updates.phasereditor2d.com (not reachable from this sandbox), so this
- * server re-implements the client/server protocol used by the open-source
- * IDE client (source/editor/plugins/**):
- *
- *   POST /editor/api            { method, body } -> JSON
- *   POST /editor/upload         multipart (uploadTo, file) -> JSON
- *   GET  /editor/               generated index.html (plugin scripts/styles)
- *   GET  /editor/product.json   product metadata
- *   GET  /editor/app/plugins/<id>/<path>   plugin static resources
- *   GET  /editor/app/editor-icons/<theme>/godot/<name>.svg shared Godot SVG resources
- *   GET  /editor/project/<path> project files (with ?m= cache busting)
- *   GET  /editor/external/*     project files for the "Play" mode
- *
- * Supported api methods:
- *   GetServerMode, GetProjectConfig, GetProjectFiles, GetProjectFilesHash,
- *   CreateFolder, SetFileString, DeleteFiles, RenameFile, CopyFile,
- *   MoveFiles, GetImageSize, GetNewVersionAvailable, UnlockEditor,
- *   OpenBrowser, OpenFileManager, OpenVSCode
+ * Serves the SolidJS Editor Host, native project files, and the first-party
+ * Codogma MCP server/bridge. The server has one active UI and one Project
+ * Model contract.
  */
 
 import 'dotenv/config'
@@ -48,18 +32,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
 
 const PORT = Number(process.env.PORT || 3000)
-const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "tests", "workspace", "test-typescript"))
+const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "packages", "cge", "tests", "fixtures", "acceptance-project"))
 const MAX_API_BODY_BYTES = 32 * 1024 * 1024
-const MAX_UPLOAD_BODY_BYTES = 128 * 1024 * 1024
-const EDITOR_DIR = path.resolve(process.env.EDITOR_DIR || path.join(ROOT, "source", "editor"))
 const EDITOR_HOST_DIR = path.resolve(process.env.EDITOR_HOST_DIR || path.join(ROOT, "src", "editor", "dist"))
-const EDITOR_UI = process.env.CODOGMA_EDITOR_UI || "legacy"
-if (!["legacy", "solidjs"].includes(EDITOR_UI)) {
-    throw new Error(`Unsupported CODOGMA_EDITOR_UI value "${EDITOR_UI}". Use "legacy" or "solidjs".`)
-}
-const PLUGINS_DIR = path.join(EDITOR_DIR, "plugins")
 const EDITOR_ICONS_DIR = path.resolve(ROOT, "src", "editor", "icons")
-const DEV_MODE = process.env.DEV_MODE === "1"
 
 const MIME = {
     ".html": "text/html; charset=utf-8",
@@ -100,9 +76,7 @@ const MIME = {
     ".tmx": "application/xml; charset=utf-8",
     ".glsl": "text/plain; charset=utf-8",
     ".frag": "text/plain; charset=utf-8",
-    ".vert": "text/plain; charset=utf-8",
-    ".scene": "application/json; charset=utf-8",
-    ".components": "application/json; charset=utf-8"
+    ".vert": "text/plain; charset=utf-8"
 }
 
 function log(...args) {
@@ -183,14 +157,6 @@ function walkTree(dirPath, relPrefix, files, folders, metadata = new Map()) {
  * The IDE client sends file paths with the project root folder as the first
  * segment, while /editor/project URLs are relative to the project root.
  */
-function apiPath(p) {
-    if (typeof p !== "string" || p.length === 0) return p
-    const parts = p.split(/[\\/]/).filter(Boolean)
-    if (parts.length > 1 && parts[0] === path.basename(PROJECT_DIR)) {
-        return parts.slice(1).join("/")
-    }
-    return p
-}
 
 /**
  * Return metadata from a verified parent-directory enumeration rather than
@@ -336,76 +302,14 @@ function getImageSize(input, extension) {
     return null
 }
 
-/* ============================== index.html =============================== */
-
-function readPluginsManifest() {
-    const plugins = []
-    for (const entry of fs.readdirSync(PLUGINS_DIR, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue
-        const pjPath = path.join(PLUGINS_DIR, entry.name, "plugin.json")
-        if (!fs.existsSync(pjPath)) continue
-        try {
-            const meta = JSON.parse(fs.readFileSync(pjPath, "utf8"))
-            plugins.push({ folder: entry.name, meta })
-        } catch (e) {
-            log("bad plugin.json:", pjPath)
-        }
-    }
-    plugins.sort((a, b) => {
-        const pa = a.meta.priority ?? 0
-        const pb = b.meta.priority ?? 0
-        if (pa !== pb) return pa - pb
-        return a.folder.localeCompare(b.folder)
-    })
-    return plugins
-}
-
-function pluginAssetURL(pluginId, rel) {
-    return `/editor/app/plugins/${pluginId}/${rel}`
-}
+/* ============================== native host ============================== */
 
 function renderIndexHTML() {
-    if (EDITOR_UI === "solidjs") {
-        const indexPath = safeJoin(EDITOR_HOST_DIR, "index.html")
-        if (!indexPath || !fs.existsSync(indexPath) || !fs.statSync(indexPath).isFile()) {
-            throw new Error(`SolidJS Editor Host production bundle is missing at "${EDITOR_HOST_DIR}". Run "npm --prefix src/editor run build" or roll back with CODOGMA_EDITOR_UI=legacy.`)
-        }
-        return fs.readFileSync(indexPath, "utf8")
+    const indexPath = safeJoin(EDITOR_HOST_DIR, "index.html")
+    if (!indexPath || !fs.existsSync(indexPath) || !fs.statSync(indexPath).isFile()) {
+        throw new Error(`Editor Host production bundle is missing at "${EDITOR_HOST_DIR}". Run "npm --prefix src/editor run build".`)
     }
-
-    const productPath = path.join(EDITOR_DIR, "product.json")
-    const product = JSON.parse(fs.readFileSync(productPath, "utf8"))
-    const plugins = readPluginsManifest()
-
-    const styles = []
-    const scripts = []
-    for (const { meta } of plugins) {
-        for (const s of (DEV_MODE ? (meta["scripts-dev"] || meta.scripts || []) : (meta.scripts || []))) {
-            scripts.push(pluginAssetURL(meta.id, s))
-        }
-        for (const s of (meta.styles || [])) {
-            styles.push(pluginAssetURL(meta.id, s))
-        }
-    }
-
-    const version = product.version || "1.0"
-
-    return `<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${product.title || "Codogma Engine"} v${version}</title>
-    <link rel="icon" href="/editor/static/favicon.png">
-${styles.map(s => `    <link rel="stylesheet" href="${s}">`).join("\n")}
-</head>
-
-<body>
-${scripts.map(s => `    <script src="${s}"></script>`).join("\n")}
-</body>
-
-</html>`
+    return fs.readFileSync(indexPath, "utf8")
 }
 
 /* =============================== API layer =============================== */
@@ -451,28 +355,6 @@ async function handleAPI(req, res) {
     try {
         switch (method) {
 
-            case "GetServerMode":
-                return sendJSON(res, {
-                    desktop: false,
-                    unlocked: true,
-                    externalEditorName: "VSCode"
-                })
-
-            case "GetProjectConfig": {
-                // The project root can contain symlinks too. Keep this read under
-                // the same real-path containment policy as other project files.
-                const configPath = safeJoin(PROJECT_DIR, "phasereditor2d.json")
-                if (configPath && fs.existsSync(configPath)) {
-                    try {
-                        return sendJSON(res, JSON.parse(readFileSafely(PROJECT_DIR, configPath, "utf8", 1024 * 1024)))
-                    } catch (e) { /* fallthrough */ }
-                }
-                return sendJSON(res, {})
-            }
-
-            case "GetNewVersionAvailable":
-                return sendJSON(res, { available: false })
-
             case "GetProjectFilesHash":
                 return sendJSON(res, { hash: computeProjectHash() })
 
@@ -491,7 +373,7 @@ async function handleAPI(req, res) {
             }
 
             case "CreateFolder": {
-                const full = safeJoin(PROJECT_DIR, apiPath(body.path))
+                const full = safeJoin(PROJECT_DIR, body.path)
                 if (!full) return apiError(res, "invalid path")
 
                 // Read metadata from the verified directory descriptor. A
@@ -510,7 +392,7 @@ async function handleAPI(req, res) {
             }
 
             case "SetFileString": {
-                const full = safeJoin(PROJECT_DIR, apiPath(body.path))
+                const full = safeJoin(PROJECT_DIR, body.path)
                 if (!full) return apiError(res, "invalid path")
                 if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) return apiError(res, "invalid path")
                 const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
@@ -534,7 +416,7 @@ async function handleAPI(req, res) {
 
             case "DeleteFiles": {
                 for (const p of (body.paths || [])) {
-                    const full = safeJoin(PROJECT_DIR, apiPath(p))
+                    const full = safeJoin(PROJECT_DIR, p)
                     if (!full || full === PROJECT_DIR) continue
                     if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) {
                         return apiError(res, "invalid path")
@@ -545,8 +427,8 @@ async function handleAPI(req, res) {
             }
 
             case "RenameFile": {
-                const from = safeJoin(PROJECT_DIR, apiPath(body.oldPath))
-                const to = safeJoin(PROJECT_DIR, apiPath(body.newPath))
+                const from = safeJoin(PROJECT_DIR, body.oldPath)
+                const to = safeJoin(PROJECT_DIR, body.newPath)
                 if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
                 if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(to))) {
                     return apiError(res, "invalid path")
@@ -559,22 +441,22 @@ async function handleAPI(req, res) {
             }
 
             case "CopyFile": {
-                const from = safeJoin(PROJECT_DIR, apiPath(body.fromPath))
-                const to = safeJoin(PROJECT_DIR, apiPath(body.toPath))
+                const from = safeJoin(PROJECT_DIR, body.fromPath)
+                const to = safeJoin(PROJECT_DIR, body.toPath)
                 if (!from || !to || from === PROJECT_DIR || to === PROJECT_DIR) return apiError(res, "invalid path")
                 if (!await copyProjectEntrySafely(PROJECT_DIR, from, to)) return apiError(res, "invalid path")
 
                 hashCache.value = ""
-                return sendJSON(res, { file: fileData(PROJECT_DIR, apiPath(body.toPath)) })
+                return sendJSON(res, { file: fileData(PROJECT_DIR, body.toPath) })
             }
 
             case "MoveFiles": {
-                const toDir = safeJoin(PROJECT_DIR, apiPath(body.movingToPath))
+                const toDir = safeJoin(PROJECT_DIR, body.movingToPath)
                 if (!toDir) return apiError(res, "invalid path")
                 if (!await ensureProjectDirectorySafely(PROJECT_DIR, toDir)) return apiError(res, "invalid path")
 
                 for (const p of (body.movingPaths || [])) {
-                    const from = safeJoin(PROJECT_DIR, apiPath(p))
+                    const from = safeJoin(PROJECT_DIR, p)
                     if (!from || from === PROJECT_DIR) continue
                     const to = path.join(toDir, path.basename(p))
                     if (!await renameProjectEntrySafely(PROJECT_DIR, from, to)) {
@@ -586,7 +468,7 @@ async function handleAPI(req, res) {
             }
 
             case "GetImageSize": {
-                const full = safeJoin(PROJECT_DIR, apiPath(body.path))
+                const full = safeJoin(PROJECT_DIR, body.path)
                 if (!full) return apiError(res, "file not found")
                 const handle = await openSafeProjectFileForRead(PROJECT_DIR, full)
                 if (!handle) return apiError(res, "file not found")
@@ -603,95 +485,12 @@ async function handleAPI(req, res) {
                 return sendJSON(res, size)
             }
 
-            case "UnlockEditor":
-                return sendJSON(res, { unlocked: true })
-
-            case "OpenBrowser":
-            case "OpenFileManager":
-            case "OpenVSCode":
-                log(`external request ignored: ${method}`)
-                return sendJSON(res, {})
-
             default:
                 log("unknown api method:", method)
                 return apiError(res, `unknown method "${method}"`)
         }
     } catch (e) {
         log("api error:", method, e.message)
-        return apiError(res, e.message, e.statusCode || 200)
-    }
-}
-
-/* ============================ multipart upload =========================== */
-
-async function handleUpload(req, res) {
-    try {
-        const contentType = req.headers["content-type"] || ""
-        const m = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/)
-        if (!m) return apiError(res, "no boundary")
-        const boundary = "--" + (m[1] || m[2])
-
-        const buffer = await readRequestBuffer(req, MAX_UPLOAD_BODY_BYTES)
-
-        const parts = []
-        let start = buffer.indexOf(boundary)
-        while (start !== -1) {
-            const next = buffer.indexOf(boundary, start + boundary.length)
-            if (next === -1) break
-            parts.push(buffer.subarray(start + boundary.length, next))
-            start = next
-        }
-
-        let uploadTo = ""
-        let fileDataOut = null
-
-        for (const part of parts) {
-            const headerEnd = part.indexOf("\r\n\r\n")
-            if (headerEnd === -1) continue
-            const header = part.toString("utf8", 0, headerEnd)
-            const data = part.subarray(headerEnd + 4, part.length - 2) // strip trailing \r\n
-
-            const nameMatch = header.match(/name="([^"]*)"/)
-            const fileMatch = header.match(/filename="([^"]*)"/)
-            const fieldName = nameMatch ? nameMatch[1] : ""
-
-            if (fieldName === "uploadTo") {
-                uploadTo = apiPath(data.toString("utf8"))
-            } else if (fileMatch && fileMatch[1]) {
-                const fileName = path.basename(fileMatch[1])
-                const dirFull = safeJoin(PROJECT_DIR, uploadTo)
-                if (!dirFull) return apiError(res, "invalid upload path")
-                const fileFull = safeJoin(PROJECT_DIR, path.join(uploadTo, fileName))
-                if (!fileFull) return apiError(res, "invalid upload path")
-
-                if (!await ensureProjectDirectorySafely(PROJECT_DIR, dirFull)) return apiError(res, "invalid upload path")
-                // Same TOCTOU discipline as SetFileString: verified handle at open,
-                // kernel-path re-verification after the open.
-                const handle = await openSafeProjectFileForWrite(PROJECT_DIR, fileFull)
-                if (!handle) return apiError(res, "invalid upload path")
-                let st
-                try {
-                    await handle.truncate(0)
-                    await handle.writeFile(data)
-                    st = await handle.stat()
-                } finally {
-                    await handle.close().catch(() => { })
-                }
-                fileDataOut = {
-                    name: fileName,
-                    isFile: true,
-                    size: st.size,
-                    modTime: Math.floor(st.mtimeMs)
-                }
-            }
-        }
-
-        hashCache.value = ""
-
-        if (!fileDataOut) return apiError(res, "no file in request")
-        return sendJSON(res, { file: fileDataOut })
-    } catch (e) {
-        log("upload error:", e.message)
         return apiError(res, e.message, e.statusCode || 200)
     }
 }
@@ -922,10 +721,6 @@ const server = http.createServer(async (req, res) => {
             return await handleAiChat(req, res)
         }
 
-        if (urlPath === "/favicon.png") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600", EDITOR_DIR)
-        }
-
         if (!urlPath.startsWith("/editor/")) {
             res.writeHead(404, { "Content-Type": "text/plain" })
             res.end("Not Found — open /editor/")
@@ -944,7 +739,7 @@ const server = http.createServer(async (req, res) => {
 
         // Immutable Vite assets for the opt-in SolidJS production entrypoint.
         // The path is resolved and served only from the configured dist root.
-        if (EDITOR_UI === "solidjs" && rest.startsWith("assets/")) {
+        if (rest.startsWith("assets/")) {
             // Preserve the "assets/" segment: Vite emits URLs relative to the
             // dist root, not relative to dist/assets.
             const relativeAssetPath = rest.split("?")[0]
@@ -957,18 +752,6 @@ const server = http.createServer(async (req, res) => {
             return serveFile(req, res, full, "public, max-age=31536000, immutable", EDITOR_HOST_DIR)
         }
 
-        if (rest === "host-mode") {
-            return sendJSON(res, { ui: EDITOR_UI, rollbackAvailable: EDITOR_UI !== "legacy" })
-        }
-
-        if (rest === "product.json") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "product.json"), "no-store", EDITOR_DIR)
-        }
-
-        if (rest === "static/favicon.png") {
-            return serveFile(req, res, path.join(EDITOR_DIR, "static", "favicon.png"), "max-age=3600", EDITOR_DIR)
-        }
-
         // api
         if (rest === "api") {
             if (req.method !== "POST") {
@@ -977,15 +760,6 @@ const server = http.createServer(async (req, res) => {
                 return
             }
             return await handleAPI(req, res)
-        }
-
-        if (rest === "upload") {
-            if (req.method !== "POST") {
-                res.writeHead(405, { "Content-Type": "text/plain" })
-                res.end("Method Not Allowed")
-                return
-            }
-            return await handleUpload(req, res)
         }
 
         // plugin resources
@@ -1005,32 +779,9 @@ const server = http.createServer(async (req, res) => {
             return serveFile(req, res, full, "no-cache", EDITOR_ICONS_DIR)
         }
 
-        if (rest.startsWith("app/plugins/")) {
-            const rel = rest.slice("app/plugins/".length)
-            const full = safeJoin(PLUGINS_DIR, rel)
-            if (!full) {
-                res.writeHead(403)
-                res.end("Forbidden")
-                return
-            }
-            return serveFile(req, res, full, "no-cache", PLUGINS_DIR)
-        }
-
         // project files (editor views)
         if (rest.startsWith("project/")) {
             const rel = rest.slice("project/".length).split("?")[0]
-            const full = safeJoin(PROJECT_DIR, rel)
-            if (!full) {
-                res.writeHead(403)
-                res.end("Forbidden")
-                return
-            }
-            return serveFile(req, res, full, "no-cache", PROJECT_DIR)
-        }
-
-        // play mode
-        if (rest.startsWith("external/")) {
-            const rel = rest.slice("external/".length).split("?")[0]
             const full = safeJoin(PROJECT_DIR, rel)
             if (!full) {
                 res.writeHead(403)
@@ -1333,9 +1084,7 @@ async function handleAiChat(req, res) {
 server.listen(PORT, "127.0.0.1", () => {
     log(`Codogma Engine server running at http://localhost:${PORT}/editor/`)
     log(`  project:  ${PROJECT_DIR}`)
-    log(`  editor:   ${EDITOR_DIR}`)
-    log(`  editor ui: ${EDITOR_UI}${EDITOR_UI === "solidjs" ? ` (bundle: ${EDITOR_HOST_DIR})` : ""}`)
-    log(`  dev mode: ${DEV_MODE}`)
+    log(`  host:     ${EDITOR_HOST_DIR}`)
     log(`  mcp:      http://localhost:${PORT}/editor/mcp (Streamable HTTP)`)
     log(`  stdio:    node server/mcp-launcher.mjs (@codogma/editor-mcp-server)`)
     log(`            set CODOGMA_MCP_URL=http://127.0.0.1:${PORT}/editor/mcp when using a non-default HTTP port`)
