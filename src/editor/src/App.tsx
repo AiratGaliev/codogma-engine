@@ -165,7 +165,7 @@ interface MenuItem {
 }
 
 function iconPath(theme: Theme, name: string): string {
-  return `/editor/app/editor-icons/${theme}/godot/${name}.svg`;
+  return `/editor/icons/${theme}/godot/${name}.svg`;
 }
 
 function Icon(props: {
