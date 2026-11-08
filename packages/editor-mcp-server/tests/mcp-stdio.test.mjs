@@ -421,7 +421,7 @@ test("native registry and preserved external asset tools expose valid schemas", 
     assert.match(getChatSystemPrompt(), /scene-create-node/);
 });
 
-test("generic MCP file operations cannot read or overwrite legacy/native documents", async () => {
+test("generic MCP file operations enforce native document and text-file boundaries", async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), "codogma-mcp-native-boundary-"));
     try {
         initMcp({ projectDir, log: () => {} });
@@ -430,14 +430,45 @@ test("generic MCP file operations cannot read or overwrite legacy/native documen
             assets: [{ id: "scene-asset-level", kind: "scene", path: "scenes/Level.cge-scene.json" }],
             scenes: [{ id: "scene-level", assetId: "scene-asset-level" }]
         }));
+        await writeFile(path.join(projectDir, "settings.json"), JSON.stringify({ quality: "high" }));
+        await writeFile(path.join(projectDir, "resource.bin"), Buffer.from([0, 1, 2, 3]));
 
-        await assert.rejects(dispatchTool("project-read-file", { path: "old.scene" }), /legacy Scene\/Component documents/);
-        await assert.rejects(dispatchTool("project-read-file", { path: "old.components" }), /legacy Scene\/Component documents/);
-        await assert.rejects(dispatchTool("project-write-file", { path: "old.scene", content: "{}" }), /legacy Scene\/Component documents/);
-        await assert.rejects(dispatchTool("project-write-file", { path: "old.components", content: "{}" }), /legacy Scene\/Component documents/);
-        await assert.rejects(dispatchTool("project-write-file", { path: "project.json", content: "{}" }), /Native Project, Scene and Prefab/);
-        await assert.rejects(dispatchTool("project-write-file", { path: "scenes/Level.cge-scene.json", content: "{}" }), /Native Project, Scene and Prefab/);
-        await assert.rejects(dispatchTool("project-delete-file", { path: "scenes/Level.cge-scene.json" }), /Native Project, Scene and Prefab/);
+        await assert.rejects(
+            dispatchTool("project-read-file", { path: "project.json" }),
+            /Native Project, Scene and Prefab documents must be read through validated native Editor MCP tools/
+        );
+        await assert.rejects(
+            dispatchTool("project-read-file", { path: "scenes/Level.cge-scene.json" }),
+            /Native Project, Scene and Prefab documents must be read through validated native Editor MCP tools/
+        );
+        await assert.rejects(
+            dispatchTool("project-read-file", { path: "prefabs/Player.cge-prefab.json" }),
+            /Native Project, Scene and Prefab documents must be read through validated native Editor MCP tools/
+        );
+        await assert.rejects(
+            dispatchTool("project-read-file", { path: "resource.bin" }),
+            /Unsupported project text file type/
+        );
+        await assert.rejects(
+            dispatchTool("project-write-file", { path: "resource.bin", content: "text" }),
+            /Unsupported project text file type/
+        );
+
+        const settings = JSON.parse((await dispatchTool("project-read-file", { path: "settings.json" })).content[0].text);
+        assert.deepEqual(settings, { quality: "high" });
+
+        await assert.rejects(
+            dispatchTool("project-write-file", { path: "project.json", content: "{}" }),
+            /Native Project, Scene and Prefab documents must be changed through validated native Editor MCP tools/
+        );
+        await assert.rejects(
+            dispatchTool("project-write-file", { path: "scenes/Level.cge-scene.json", content: "{}" }),
+            /Native Project, Scene and Prefab documents must be changed through validated native Editor MCP tools/
+        );
+        await assert.rejects(
+            dispatchTool("project-delete-file", { path: "scenes/Level.cge-scene.json" }),
+            /Native Project, Scene and Prefab/
+        );
 
         const compileInfo = JSON.parse((await dispatchTool("project-compile-info", {})).content[0].text);
         assert.deepEqual(compileInfo.scenes, [{
