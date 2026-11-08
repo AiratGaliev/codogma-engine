@@ -6,20 +6,20 @@
 
 ## Контекст
 
-Codogma Engine развивается из существующего редактора на базе Phaser Editor/Colibri в самостоятельный Web-first 2D-движок. Нужны независимые пакеты с собственными API и версиями, выборочная установка возможностей в пользовательские игровые проекты и возможность расширять UI редактора без изменения его исходников.
+Codogma Engine — самостоятельный Web-first 2D game engine. Ему нужны независимые пакеты с собственными API и версиями, выборочная установка возможностей в пользовательские игровые проекты и расширяемая архитектура Editor Host, runtime и build tooling.
 
 Модель исходников и управления пакетами вдохновляется EVA.js, а UX Package Manager и интеграция пакетов в редактор — Unity Package Manager. Реестр функций и выборочная сборка также изучены по исходникам COCOS 4.0: это reference для описания возможностей, их зависимостей и build-time selection, а не указание превращать каждый модуль в npm-пакет. npm остаётся источником истины по установке, разрешению package dependencies и lockfile. Эти референсы не означают копирования чужих API или форматов.
 
-Аудит текущей ветки `dev` дополнительно установил, что Codogma подключает Phaser 4.2.1 через вендорный runtime bundle из `source/editor/plugins/phasereditor2d.phaser/plugin.json` (`scripts/phaser.min.js` для production и `scripts/phaser.js` для development), а не через прямую npm dependency. При этом исходники upstream Phaser модульно организованы и у тега `v4.2.1` есть отдельные варианты сборки. Поэтому текущее ограничение относится к **пути поставки и интеграции Codogma**, а не к абсолютной невозможности модульной сборки самого Phaser. См. [аудит в ТЗ](../technical-specification.md#уточнение-фактическая-интеграция-phaser-421) и [каталог исходников](../REFERENCE-SOURCES.md).
+Native SolidJS Editor Host подключает Phaser Scene runtime через явный project-level script reference: viewport извлекает script URL из project index.html либо находит runtime script в выбранном Project directory и загружает его через project-scoped file service. Этот workflow не использует UI plugin registry и не привязывает Engine Core к Phaser. Phaser 4.2.1 является выбранным runtime target; provider/version, artifact provenance и build inclusion должны быть подтверждены native project/build fixtures. См. [аудит в ТЗ](../technical-specification.md) и [каталог исходников](../REFERENCE-SOURCES.md).
 
-**Текущее состояние на 06.11.2026:** в репозитории существуют root npm project, frozen legacy Colibri app в `source/editor/` и самостоятельный SolidJS Editor Host в `src/editor/`, каждый со своим manifest/lockfile. Новый Host создан COD-80; PR #30 смержен в `dev`. `packages/*` развиваются отдельными package roots. npm Workspaces и единый workspace lockfile пока не внедрены. Этот ADR определяет дальнейшую package architecture, а не утверждает, что workspace consolidation уже выполнена.
+**Текущее состояние на 08.11.2026:** в репозитории существуют root npm project, единственный SolidJS Editor Host в `src/editor/` и самостоятельные package roots в `packages/*`/mini-services. Host создан COD-80; PR #30 смержен в `dev`. Root scripts, Node server и CI направлены на native Host. npm Workspaces и единый workspace lockfile пока не внедрены. Этот ADR определяет package architecture, а не утверждает, что workspace consolidation уже выполнена.
 
 ## Принятые архитектурные принципы
 
 ### 1. Editor Host и корень исходников редактора
 
 - Целевой путь приложения редактора — `src/editor/`. Это Editor Host: он отвечает за рабочую среду, регистрацию расширений, UI shell и взаимодействие с типизированными extension contracts.
-- `src/editor/` уже содержит самостоятельное SolidJS приложение с собственным manifest/lockfile, Vite Host, UI source, design system и tests. `source/editor/` — frozen Colibri client: только read-only inventory и временный rollback artifact. **Не переносить его исходники или TypeScript project references в `src/editor/`** и не копировать Colibri UI abstractions. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и модернизация code/manifests/lockfiles/scripts/dependencies. Допускаются только необходимые технические cutover/rollback действия COD-87 и минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic. Colibri removal — отдельно в COD-88.
+- `src/editor/` содержит единственное приложение SolidJS Editor Host с собственным manifest/lockfile, Vite Host, UI source, design system и tests. Использовать его native domain/services/contracts; не вводить альтернативные UI implementations, параллельные state models или дополнительные compatibility adapters.
 - Перенос редактора, переход на npm Workspaces и реализация нового Core не объединяются в один большой PR. Сначала проводится audit/path migration; включение в Workspaces и консолидация lockfiles — отдельное проверяемое изменение.
 
 ### 2. Source monorepo и самостоятельные пакеты
@@ -70,7 +70,7 @@ Codogma Engine развивается из существующего редак
 - Editor Host предоставляет типизированные, версионированные extension points. Package может объявить editor entry point и регистрировать через публичный API команды, пункты меню/hotkeys, panels/views, application/project settings, custom Inspector editors, schema validators, asset importers/reimport handlers, Scene Editor gizmos/brushes, profiler/debug views и build hooks.
 - В начальной модели Editor Host обнаруживает только packages, явно заявленные в зависимостях активного проекта, включённые для этого проекта и снабжённые корректными metadata/entry points с совместимой API version. Глобальная установка editor extensions вне проекта не входит в MVP. Наличие произвольного пакета в `node_modules` не является разрешением выполнить его код.
 - Установка, наличие, включённость и активация extension — разные состояния. Нужна project-level диагностика и целевая возможность отключить extension без удаления npm dependency и без повреждения проектных данных; точная схема пользовательских настроек и lifecycle подтверждается PoC.
-- Extension registration не должен требовать правок исходников Editor Host или приватных импортов Colibri. При недоступной/ошибочной регистрации редактор должен предоставить понятную ошибку и не падать без обработки.
+- Extension registration не должен требовать правок внутренней реализации Editor Host или приватных imports. При недоступной/ошибочной регистрации редактор должен предоставить понятную ошибку и не падать без обработки.
 - Метаданные сами по себе не создают sandbox. Сторонний extension, выполняющийся в процессе редактора, имеет права соответствующего процесса, пока не реализована отдельная изоляция.
 
 ### 8. Package Manager Service
@@ -105,7 +105,7 @@ Codogma Engine развивается из существующего редак
 ## Последовательность реализации
 
 1. Провести инвентаризацию root/editor manifests, lockfiles, scripts, CI и release packaging; подтвердить dependency/capability baseline.
-2. Новый SolidJS Host уже создан в `src/editor/` (COD-80 / PR #30). Следующая работа — реализовывать новые workflows на native Host contracts, используя `source/editor/` только как read-only inventory reference; legacy source tree не меняется и не переносится. Обновление server default route, release/archive/CI paths проводится только на cutover COD-87; удаление Colibri — отдельная cleanup COD-88.
+2. Новый SolidJS Host уже создан в `src/editor/` (COD-80 / PR #30). Дальнейшая работа реализует workflows на native Host contracts. Root scripts, server entrypoint и CI используют этот Host; package/workspace changes остаются отдельными проверяемыми изменениями.
 3. Отдельным PoC подключить npm Workspaces для `packages/*` и `src/editor`, проверить clean install, TypeScript build, server smoke, MCP integration/release archive и согласованность единого root lockfile.
 4. Создать минимальный `packages/cge` и только необходимые для первого vertical slice package roots; проверить strict typecheck, tests и dependency boundaries. В согласованном с Roadmap build-пилоте проверить базовый registry на built-in features и test provider без зависимости от готового Package Manager UI.
 5. Утвердить package metadata и package-provided Feature/Capability descriptors на fixture package: проверить feature dependencies/conflicts, project/target selection и передачу выбранных capabilities в build report.
@@ -121,7 +121,7 @@ Codogma Engine развивается из существующего редак
 - Семантика required/default/optional features, conflicts, target-specific overrides и диагностика отсутствующего provider.
 - Какие bundler/module graph guarantees доступны в реальном pipeline и при каких side effects/dynamic imports можно доказать, что выключенный feature code не попадает в output.
 - Какой путь поставки Phaser 4.2.1 следует поддерживать для target-specific build: существующий bundle, официальный альтернативный bundle или кастомная сборка; критерии — API coverage, совместимость generated code, внешние runtime-модули, реальный raw/gzip output и сложность поддержки.
-- Граница и точные exports `@codogma/editor-api`, версия Editor Extension API и совместимость с существующим Colibri/plugin registry.
+- Граница и точные exports `@codogma/editor-api`, версия Editor Extension API и совместимость с native Editor Host extension registry.
 - Как проектно хранить enabled/disabled state editor extensions и как обрабатывать миграцию/ошибки их активации.
 - Какой набор источников будет включён по умолчанию и какая политика применяется к npm lifecycle scripts, лицензиям, vulnerability/provenance checks и сторонним extensions.
 - Нужны ли собственный публичный package registry/catalogue, curated feature sets или отдельная process isolation для extensions в desktop-сценарии.
