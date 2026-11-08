@@ -9,7 +9,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const EDITOR_DIR = path.join(ROOT, "source", "editor")
 
 async function freePort() {
     const server = net.createServer()
@@ -91,7 +90,7 @@ async function waitForHttpServer(port, child, getLogs) {
             throw new Error(`Editor server exited early (${child.exitCode}):\n${getLogs()}`)
         }
         try {
-            const response = await request(port, "/editor/product.json")
+            const response = await request(port, "/editor/mcp-bridge-status")
             if (response.status === 200) return
         } catch {
             // The server is still starting.
@@ -146,8 +145,6 @@ async function main() {
     await fs.mkdir(outsideDir, { recursive: true })
     await fs.writeFile(path.join(outsideDir, "secret.txt"), "outside-project-secret", "utf8")
     await fs.writeFile(path.join(outsideDir, "project-config.json"), JSON.stringify({ outsideSecret: "outside-project-config-secret" }), "utf8")
-    await fs.writeFile(path.join(projectDir, "unsupported.scene"), JSON.stringify({ unsupportedSceneMarker: "unsupported-scene-must-not-enter-ai-context" }), "utf8")
-    await fs.writeFile(path.join(projectDir, "unsupported.components"), JSON.stringify({ unsupportedComponentMarker: "unsupported-components-must-not-enter-ai-context" }), "utf8")
     await fs.writeFile(path.join(projectDir, "Level.cge-scene.json"), JSON.stringify({ nativeSceneMarker: "native-scene-attachment-is-allowed" }), "utf8")
     await fs.writeFile(path.join(projectDir, "asset-pack.json"), JSON.stringify({ assetPackMarker: "external-asset-pack-attachment-is-allowed" }), "utf8")
     const aiChatService = await startMockAiChatService()
@@ -158,7 +155,7 @@ async function main() {
         await fs.symlink(path.join(outsideDir, "dangling-file.txt"), path.join(projectDir, "dangling-file"), "file")
         await fs.symlink(path.join(outsideDir, "dangling-folder"), path.join(projectDir, "dangling-folder"), "dir")
         await fs.symlink(path.join(outsideDir, "secret.txt"), path.join(projectDir, "upload-link.txt"), "file")
-        await fs.symlink(path.join(outsideDir, "project-config.json"), path.join(projectDir, "phasereditor2d.json"), "file")
+        await fs.symlink(path.join(outsideDir, "project-config.json"), path.join(projectDir, "engine-config.json"), "file")
         await fs.mkdir(path.join(projectDir, "inside-dir"), { recursive: true })
         await fs.symlink(path.join(projectDir, "inside-dir"), path.join(projectDir, "inside-link"), "dir")
     } catch (error) {
@@ -183,8 +180,6 @@ async function main() {
             ...process.env,
             PORT: String(port),
             PROJECT_DIR: projectDir,
-            EDITOR_DIR,
-            CODOGMA_EDITOR_UI: "solidjs",
             AI_CHAT_SERVICE: aiChatService.url
         },
         stdio: ["ignore", "pipe", "pipe"]
@@ -196,23 +191,23 @@ async function main() {
         await waitForHttpServer(port, server, () => logs)
         const host = `127.0.0.1:${port}`
 
-        const solidJsChat = await request(port, "/editor/ai-chat", {
+        const nativeChat = await request(port, "/editor/ai-chat", {
             method: "POST",
             headers: { host, "content-type": "application/json" },
             body: JSON.stringify({
                 messages: [{ role: "user", content: "Inspect these project files." }],
-                attachments: ["unsupported.scene", "unsupported.components", "Level.cge-scene.json", "asset-pack.json"]
+                attachments: ["Level.cge-scene.json", "asset-pack.json"]
             })
         })
-        assert.equal(solidJsChat.status, 200, "AI Chat must continue to work in SolidJS Host mode")
-        const solidJsChatBody = JSON.parse(solidJsChat.body)
+        assert.equal(nativeChat.status, 200, "AI Chat must continue to work in the native Editor Host")
+        const nativeChatBody = JSON.parse(nativeChat.body)
         assert.deepEqual(
-            solidJsChatBody.attachments,
+            nativeChatBody.attachments,
             ["Level.cge-scene.json", "asset-pack.json"],
-            "SolidJS Host must exclude unpublished internal document formats before reading attachments"
+            "AI Chat must include the requested native Scene and external Asset Pack attachments"
         )
-        const solidJsPrompt = aiChatService.requests.at(-1)?.messages?.at(-1)?.content ?? ""
-        assert.ok(solidJsPrompt.includes("native-scene-attachment-is-allowed"))
+        const nativePrompt = aiChatService.requests.at(-1)?.messages?.at(-1)?.content ?? ""
+        assert.ok(nativePrompt.includes("native-scene-attachment-is-allowed"))
         assert.ok(solidJsPrompt.includes("external-asset-pack-attachment-is-allowed"))
         assert.equal(solidJsPrompt.includes("unsupported-scene-must-not-enter-ai-context"), false)
         assert.equal(solidJsPrompt.includes("unsupported-components-must-not-enter-ai-context"), false)
@@ -257,13 +252,9 @@ async function main() {
         assert.equal(hostileOrigin.status, 403, "cross-origin browser requests should be rejected")
 
         if (symlinkChecksAvailable) {
-            const configRead = await request(port, "/editor/api", {
-                method: "POST",
-                headers: { host, "content-type": "application/json" },
-                body: JSON.stringify({ method: "GetProjectConfig" })
-            })
-            assert.deepEqual(JSON.parse(configRead.body), {},
-                "GetProjectConfig must not read a project-root symlink that points outside the project")
+            const configSymlinkRead = await request(port, "/editor/project/engine-config.json", { headers: { host } })
+            assert.equal(configSymlinkRead.status, 403,
+                "project file serving must reject a symlink that points outside the project")
 
             const symlinkRead = await request(port, "/editor/project/outside-link/secret.txt", { headers: { host } })
             assert.equal(symlinkRead.status, 403, "project static serving must reject a symlink escaping the project")
@@ -551,8 +542,6 @@ async function main() {
                 ...process.env,
                 PORT: String(port),
                 PROJECT_DIR: projectDir,
-                EDITOR_DIR,
-                CODOGMA_EDITOR_UI: "solidjs",
                 AI_CHAT_SERVICE: aiChatService.url,
                 CODOGMA_ALLOWED_HOSTS: "preview.example,alt.example"
             },
