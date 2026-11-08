@@ -1,7 +1,7 @@
 # Матрица зависимостей и capabilities
 
 **Scope:** активные first-party package roots, непосредственные dependencies и пути разработки/поставки. Это не полный SBOM и не юридическое заключение по всем транзитивным пакетам.
-**Статус:** inventory по manifests и lockfiles текущей native architecture. Конкретные версии сверяются с package manifests и lockfiles при каждом изменении.
+**Статус:** inventory по manifests и lockfiles текущей native architecture. Конкретные версии сверяются с package manifests и lockfiles при каждом изменении. Подробная карта TypeScript configs/scripts и compiler versions приведена в [TypeScript toolchain baseline](typescript-toolchain-baseline.md).
 
 ## Активные package roots
 
@@ -12,6 +12,7 @@
 | src/editor | vite, vite-plugin-solid, tailwindcss, @tailwindcss/vite, typescript, @playwright/test, vitest | См. src/editor/package.json | Host development/build/typecheck, domain tests and browser acceptance | CI Editor Host job checks this package; tests/build stay separate from root/server scopes |
 | packages/cge | TypeScript toolchain | См. packages/cge/package.json | Host-neutral Project Model v1, validation/serialization, Component Schema/Registry/World | Core remains independent of UI framework, browser DOM and Phaser-specific runtime objects |
 | packages/editor-mcp-server | @modelcontextprotocol/server, ajv | 2.4.0, 8.20.0 | First-party stdio adapter and Ajv validation against engine-owned native JSON Schemas | Own package/lockfile; tool registry, system instructions and execution remain in server/mcp.mjs |
+| packages/game-test-bridge-contract | ajv | 8.20.0 | Versioned transport-neutral JSON contract and schema package for Game Test Bridge | Own package/lockfile and public schema subpath; package scripts exist, but current CI has no dedicated install/test/audit step |
 | packages/localization | Localization package dependencies | См. package manifest/lockfile | Versioned localization tables, fallback, validation and CLI | Optional engine tooling; does not introduce a second Editor UI |
 | mini-services/ai-chat | z-ai-web-dev-sdk | ^0.0.18 | Optional standalone LLM backend | Separate loopback service; not required to boot the Editor Host; independent security/privacy/dependency review before external exposure |
 | Native Phaser runtime | Phaser 4.2.1 | Runtime target | HTML5 game runtime and Scene/Preview integration | Runtime adapter, artifact provenance, selected build variant and external runtime dependencies must be explicit and verified on native project fixtures; a TypeScript declaration alone does not provide runtime code |
@@ -39,9 +40,9 @@
 
 ## Lockfiles и установка
 
-- Активные npm roots имеют отдельные manifests/lockfiles: root, src/editor/, packages/cge/, packages/localization/, packages/editor-mcp-server/ и mini-services/ai-chat/.
+- Активные npm roots имеют отдельные manifests/lockfiles: root, src/editor/, packages/cge/, packages/editor-mcp-server/, packages/game-test-bridge-contract/, packages/localization/ и mini-services/ai-chat/.
 - npm Workspaces в текущей архитектуре не объявлены. Единый workspace graph и консолидация lockfiles — отдельный PoC/migration, а не текущая реализация.
-- CI Fast устанавливает зависимости и запускает checks для native Host/Core/server/MCP/service scopes, затронутых PR. Scope-specific audits запускаются, когда меняются соответствующие manifests, lockfiles или применимые .npmrc.
+- CI Fast устанавливает зависимости и запускает checks для native Host/Core/server/MCP/localization/service scopes, затронутых PR. `packages/game-test-bridge-contract/` пока не имеет отдельного install/test/audit шага в CI. Scope-specific audits запускаются, когда меняются соответствующие manifests, lockfiles или применимые .npmrc.
 - npm audit не заменяет лицензионный/provenance review.
 - Direct dependencies перечислены по текущим manifests. Транзитивные версии и integrity hashes находятся в lockfiles; перед публикацией и крупными dependency upgrades требуется отдельная SBOM/license/provenance проверка с результатом в PR.
 
