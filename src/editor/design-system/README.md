@@ -46,7 +46,7 @@
 
 ## Godot SVG и Pencil
 
-Исходные файлы в `src/editor/icons/{dark,light}/godot` — единственный источник геометрии. Pencil не загружает SVG как обычную image-заливку, поэтому importer преобразует SVG shapes в редактируемые `path` nodes. Каждый icon frame хранит относительный путь к SVG, upstream revision и MIT license в metadata. Этот же набор используют новый Editor Host и legacy Colibri; legacy-загрузчик получает SVG через ограниченный read-only маршрут сервера, поэтому копии иконок в каталоге плагина не нужны.
+Исходные файлы в `src/editor/icons/{dark,light}/godot` — единственный источник геометрии. Pencil не загружает SVG как обычную image-заливку, поэтому importer преобразует SVG shapes в редактируемые `path` nodes. Каждый icon frame хранит относительный путь к SVG, upstream revision и MIT license в metadata. Этот набор используется единственным native Editor Host; геометрия не дублируется в feature modules.
 
 Light SVG генерируются из тёмных исходников по `lightIconColorMap` из `tokens.json`. Исключение — многоцветный `particle-material.svg`: палитра swatches остаётся исходной.
 
