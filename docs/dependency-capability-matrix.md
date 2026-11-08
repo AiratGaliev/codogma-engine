@@ -1,55 +1,55 @@
 # Матрица зависимостей и capabilities
 
-**Scope note:** эта матрица перечисляет direct package roots и пути поставки bundle; это не текущий SBOM или scan каждого нового head. Наличие `PhaserBox2D.js` в test fixture не доказывает совместимость любой внешней версии runtime/helper.
-**Статус:** первоначальная инвентаризация непосредственных зависимостей и путей доставки. Это не полный SBOM и не юридическое заключение по лицензиям всех транзитивных пакетов.
+**Scope:** активные first-party package roots, непосредственные dependencies и пути разработки/поставки. Это не полный SBOM и не юридическое заключение по всем транзитивным пакетам.
+**Статус:** inventory по manifests и lockfiles текущей native architecture. Конкретные версии сверяются с package manifests и lockfiles при каждом изменении.
 
 ## Активные package roots
 
 | Package root | Прямые зависимости / инструмент | Версия в manifest | Назначение / scope | Следствие для разработки |
 |---|---|---|---|---|
-| Корень репозитория | Собственный engine MCP HTTP registry в `server/mcp.mjs` | Без стороннего MCP SDK в root manifest | Native Project Model v1 tool schemas/execution, project/file security boundary и dispatch в SolidJS Host | Engine-owned registry; не зависит от Phaser Editor MCP server, Colibri или root Zod override |
-| `packages/editor-mcp-server` | `@modelcontextprotocol/server`, `ajv` | `2.4.0`, `8.20.0` | First-party stdio adapter и Ajv validation against engine-owned native JSON Schemas | Собственный package/lockfile; tool registry и execution остаются в engine server; не устанавливает Phaser Editor MCP dependencies в root/game projects |
-| `source/editor` (frozen) | `typescript` | `5.3.3` | Inventory-only baseline существующего UI client; не является target для развития | Не обновлять; не определяет toolchain Core или SolidJS Host |
-| `source/editor` (frozen) | `colibri-packer` | `^1.0.1` | Inventory-only baseline legacy resource/atlas tooling | Не обновлять и не модернизировать; UI-only dependency удаляется вместе с client в COD-88 |
-| `src/editor` | `solid-js` | `1.9.15` | Независимый SolidJS Editor Host | UI/reactivity layer; не зависит от Colibri и не включает его controls/registry |
-| `src/editor` | `vite`, `vite-plugin-solid`, `tailwindcss`, `@tailwindcss/vite`, `typescript`, `@playwright/test` | `8.3.5`, `2.11.14`, `4.3.3`, `4.3.3`, `5.9.3`, `1.64.1` | Host dev/build/typecheck и Chromium browser tests | Собственный package/lockfile; CI job editor-host; не смешивать с root dependencies без отдельного workspace decision |
-| `mini-services/ai-chat` | `z-ai-web-dev-sdk` | `^0.0.18` | Необязательный отдельный LLM backend | Не является обязательной зависимостью старта IDE; нужен отдельный security/privacy/dependency review перед production exposure |
-| Editor/runtime artifacts | Phaser runtime bundle | `4.2.1` (вендорный) | `scripts/phaser.min.js` production и `scripts/phaser.js` development, подключаются через editor plugin | Текущий путь использует full bundle; upstream v4.2.1 содержит отдельный UMD `phaser-arcade-physics(.min)` без Matter.js, но package root не объявляет public `exports` subpath для Arcade-only artifact. ESM entry point не доказывает tree shaking; feature-pruned output не доказан |
-| Native Box2D runtime integration | `@phaserjs/phaser-box2d` / selected runtime helper modules | Runtime dependency | Physics API used by the native Phaser adapter | Runtime provider/version must be explicit in the native Project/Build dependency graph. Ambient declarations do not provide runtime implementation; browser acceptance is required. |
-| Frozen legacy UI client | Existing editor UI source | Existing source tree | `source/editor/` and its UI packages; read-only inventory and temporary rollback only | No feature/fix/refactor/dependency/performance/compatibility maintenance; preserve applicable upstream notices until physical removal in COD-88 |
-| Root + SolidJS Host | ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, strict TypeScript and test tooling | Root quality tools in root manifest; Host TypeScript 5.9.3, Node node:test, Playwright 1.64.1 in src/editor | Scoped checks for engine-owned modules and Host | Extend only within reviewed scopes and confirm dynamically loaded entry points before making checks blocking |
+| Корень репозитория | dotenv, @codogma/localization; ESLint, Prettier, Knip, dependency-cruiser и TypeScript tooling | См. package.json и package-lock.json | Native Node server, root scripts, repository quality gates | Root build/watch направлены на единственный native Editor Host; не устанавливает UI runtime другого приложения |
+| src/editor | solid-js | 1.9.16 | Единственный SolidJS Editor Host | UI/reactivity layer; отдельный package root и lockfile |
+| src/editor | vite, vite-plugin-solid, tailwindcss, @tailwindcss/vite, typescript, @playwright/test, vitest | См. src/editor/package.json | Host development/build/typecheck, domain tests and browser acceptance | CI Editor Host job checks this package; tests/build stay separate from root/server scopes |
+| packages/cge | TypeScript toolchain | См. packages/cge/package.json | Host-neutral Project Model v1, validation/serialization, Component Schema/Registry/World | Core remains independent of UI framework, browser DOM and Phaser-specific runtime objects |
+| packages/editor-mcp-server | @modelcontextprotocol/server, ajv | 2.4.0, 8.20.0 | First-party stdio adapter and Ajv validation against engine-owned native JSON Schemas | Own package/lockfile; tool registry, system instructions and execution remain in server/mcp.mjs |
+| packages/localization | Localization package dependencies | См. package manifest/lockfile | Versioned localization tables, fallback, validation and CLI | Optional engine tooling; does not introduce a second Editor UI |
+| mini-services/ai-chat | z-ai-web-dev-sdk | ^0.0.18 | Optional standalone LLM backend | Separate loopback service; not required to boot the Editor Host; independent security/privacy/dependency review before external exposure |
+| Native Phaser runtime | Phaser 4.2.1 | Runtime target | HTML5 game runtime and Scene/Preview integration | Runtime adapter, artifact provenance, selected build variant and external runtime dependencies must be explicit and verified on native project fixtures; a TypeScript declaration alone does not provide runtime code |
+| Native Physics integration | @phaserjs/phaser-box2d / selected runtime helper modules | Target/provider versions owned by Physics integration | Native Physics Component and Phaser adapter | Provider/version must be explicit in the native Project/Build dependency graph; browser acceptance is required |
+| Root + native packages | ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser, strict TypeScript and test tooling | См. root and package manifests | Quality gates for first-party code and package boundaries | Expand checks only within reviewed scopes and verify dynamic entry points before turning report-only checks into blocking gates |
 
 ## Planned optional runtime packages — не активные зависимости
 
-Следующие package boundaries утверждены архитектурно, но на момент этой ревизии **не существуют в `packages/` и не являются активными npm dependencies**:
+Следующие package boundaries утверждены архитектурно, но на момент этой ревизии **не существуют в packages/ и не являются активными npm dependencies**:
 
 | Package | Status | Intended scope | Dependency / exclusion rule | Linear owner |
 |---|---|---|---|---|
-| `@codogma/ecs` | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Dependency boundary and host-neutral constraints: ADR-0004 | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
-| `@codogma/ecs-phaser` | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Optional adapter boundary and base-runtime independence: ADR-0004 | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
+| @codogma/ecs | Planned — Todo | Optional, host-neutral Data-Oriented ECS runtime | Dependency boundary and host-neutral constraints: ADR-0004 | [COD-111](https://linear.app/codogma-engine/issue/COD-111/sozdat-nezavisimyj-optional-codogmaecs-package-s-data-oriented-storage) |
+| @codogma/ecs-phaser | Planned — Backlog | Optional ECS ↔ Phaser 4 adapter | Optional adapter boundary and base-runtime independence: ADR-0004 | [COD-112](https://linear.app/codogma-engine/issue/COD-112/sozdat-optional-codogmaecs-phaser-adapter) |
 
-Таблица выше — инвентаризация package roots, статусов и владельцев. ECS feature IDs/providers, opt-in/dependency relationships, mapping между object/component Core и runtime ECS, а также правила физического исключения optional code из Release определены только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+Таблица выше — inventory package roots, статусов и владельцев. ECS feature IDs/providers, opt-in/dependency relationships, mapping между object/component Core и runtime ECS, а также правила физического исключения optional code из Release определены только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ## Phaser 4.2.1 bundle analysis constraints
 
-- Codogma's current integration is a vendored full Phaser bundle, not a tree-shaken npm ESM consumer.
-- Upstream v4.2.1 offers the separate UMD `phaser-arcade-physics` variant, which excludes Matter.js; the package manifest's root ESM export is a bundled artifact and does not prove internal dead-code elimination.
-- No public package `exports` subpath for the Arcade-only file is declared in the checked v4.2.1 manifest. Do not invent an import path. Any direct artifact consumption or custom build needs a reproducible fixture and explicit distribution contract.
-- Compare API coverage, generated code compatibility, external helper requirements, raw/gzip size, parse/startup and browser behavior before choosing a new delivery path. Until then the current vendor bundle remains the verified integration path, and its feature-pruning is unverified.
+- Phaser 4.2.1 является выбранным HTML5 runtime target.
+- Upstream v4.2.1 предлагает отдельный UMD phaser-arcade-physics variant, который исключает Matter.js; root ESM export не доказывает internal dead-code elimination.
+- Не предполагать, что наличие модульных исходников означает selective bundling или физическое исключение неиспользуемых подсистем.
+- Любой выбранный artifact/build path должен иметь reproducible native game fixture, API coverage evidence, explicit external dependencies и результаты raw/gzip size, parse/startup и browser runtime checks.
+- До принятия такого evidence не заявлять feature pruning или production bundle-size reduction как реализованные возможности.
 
 ## Lockfiles и установка
 
-- У root проекта, legacy `source/editor` и нового `src/editor` свои `package.json` и `package-lock.json`; отдельные lockfiles также есть у mini-services и packages. Новый Host уже является самостоятельным package root. npm Workspaces и единая консолидация lockfile не включены.
-- npm Workspaces в текущем `dev` не объявлены. Единый workspace graph и консолидация lockfiles — отдельный PoC/migration, а не текущая реализация.
-- CI в PR #10 запускал `npm ci` и `npm audit --audit-level=low` для root и editor dependency trees и сообщил `0 vulnerabilities` на зафиксированном head `3c96dde67eb865a0ee70fdbd5134ab995f846443`. PR #10 затем был слит в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01`. Это временной снимок vulnerability database, а не гарантия отсутствия неизвестных проблем и не аудит лицензий.
-- В этой ревизии не выполнялись новые `npm ci`, `npm audit` или license scanner локально; используются опубликованные CI results PR #10 и manifests в текущем `dev`.
-- Direct dependencies в таблице перечислены по текущим manifests. Транзитивные версии и integrity hashes находятся в lockfiles; до публикации и крупных dependency upgrades требуется отдельная SBOM/license/provenance проверка с результатом в PR.
+- Активные npm roots имеют отдельные manifests/lockfiles: root, src/editor/, packages/cge/, packages/localization/, packages/editor-mcp-server/ и mini-services/ai-chat/.
+- npm Workspaces в текущей архитектуре не объявлены. Единый workspace graph и консолидация lockfiles — отдельный PoC/migration, а не текущая реализация.
+- CI Fast устанавливает зависимости и запускает checks для native Host/Core/server/MCP/service scopes, затронутых PR. Scope-specific audits запускаются, когда меняются соответствующие manifests, lockfiles или применимые .npmrc.
+- npm audit не заменяет лицензионный/provenance review.
+- Direct dependencies перечислены по текущим manifests. Транзитивные версии и integrity hashes находятся в lockfiles; перед публикацией и крупными dependency upgrades требуется отдельная SBOM/license/provenance проверка с результатом в PR.
 
 ## Отложенные решения / обязательные gates
 
-1. Перед toolchain pilot для нового/изменяемого Codogma-owned scope сверить совместимые версии TypeScript, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser и Vitest на Node.js 22, установить lockfile и проверить clean install. Не требуется ждать начала Core, чтобы применить проверки к отдельной editor-модернизации.
-2. Не подменять `npm audit` лицензионным/provenance review: это разные проверки.
-3. Проверить root override Zod 4.6.7 на все используемые схемы MCP прежде, чем обновлять официальный пакет или Zod.
-4. Перед решением о Phaser modularization сделать один воспроизводимый build fixture: сравнить API coverage, runtime dependencies и raw/gzip размер, проверить generated game без editor UI.
-5. Перед npm Workspaces отдельно проверить TypeScript references, root/editor scripts, server path, release ZIP, CI/cache paths и чистую установку; не удалять editor lockfile до зелёного PoC.
-6. Не передавать Package Manager файловые операции до закрытия остаточного filesystem TOCTOU: content-file write paths уже проверяют открытый descriptor, но folder creation/rename/copy/move/delete остаются pathname-based. Нужны OS-aware mutation design и adversarial concurrent-race tests либо документированная модель угроз с ограничением экспозиции.
+1. Перед крупным toolchain upgrade сверить совместимые версии TypeScript, ESLint/typescript-eslint, Prettier, Knip, dependency-cruiser и Vitest на Node.js 22, установить lockfile и проверить clean install.
+2. Не подменять npm audit лицензионным/provenance review: это разные проверки.
+3. Проверить root override Zod на все используемые MCP schemas прежде, чем обновлять официальный MCP пакет или Zod.
+4. Перед решением о Phaser modularization сделать воспроизводимый build fixture: сравнить API coverage, runtime dependencies и raw/gzip размер, проверить generated game без Editor Host.
+5. Перед npm Workspaces отдельно проверить TypeScript references, root/Host scripts, server paths, release ZIP, CI/cache paths и чистую установку; не удалять отдельные lockfiles до зелёного PoC.
+6. Не передавать Package Manager файловые операции до закрытия остаточного filesystem TOCTOU: нужны OS-aware mutation design и adversarial concurrent-race tests либо документированная модель угроз с ограничением экспозиции.
