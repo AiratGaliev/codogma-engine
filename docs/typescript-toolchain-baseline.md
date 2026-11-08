@@ -150,7 +150,42 @@ Root ESLint/Knip references на отсутствующие `mini-services/phase
 
 Это описание committed workflow на snapshot SHA выше; оно не утверждает, что каждый объявленный package script выполняется CI.
 
-## 9. TypeScript 5.3.3: compatibility и upgrade constraints
+## 9. Initial toolchain scope и target boundary
+
+### Уже выполненный scoped pilot
+
+COD-19 закрепил первым ограниченным pilot package `packages/localization/`, а не repo-wide compiler/lint migration:
+
+| Tool | Version на snapshot | Ownership / actual use |
+|---|---:|---|
+| TypeScript | `5.3.3` | Direct devDependency и package-local lockfile Localization |
+| ESLint | `10.13.0` | Root devDependency; scoped ESLint config включает Localization TS/MJS |
+| typescript-eslint | `8.72.1` | Root devDependency; Localization использует `tseslint.configs.recommended` без type-aware project service |
+| Prettier | `3.9.10` | Root devDependency; Localization имеет свой format config и package `format:check` |
+| Knip | `6.43.0` | Root devDependency; Localization scoped `knip:report`, report-only |
+| dependency-cruiser | `18.7.0` | Root devDependency; Localization scoped `deps:report`, report-only |
+| Tests | Node.js `node:test` | Package-owned tests; no second test runner in this pilot |
+
+Версии shared quality tools закреплены в root manifest/lockfile; compiler Localization закреплён отдельно в package manifest/lockfile. COD-19 подтверждает этот pilot scope, но не распространяет его quality gates автоматически на Core, MCP, Bridge Contract или Editor Host.
+
+### Целевой baseline для действующих roots
+
+С учётом ADR-0002 и результата COD-19 целевая модель для нового/изменяемого first-party TS scope такова:
+
+1. TypeScript compiler и его lockfile принадлежат конкретному package root; root lockfile не подменяет compiler dependency package.
+2. Каждый TS scope имеет явный `tsconfig` с базовым strict-набором из ADR-0002 (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `forceConsistentCasingInFileNames`). `noUnusedLocals/Parameters` добавляются, если scope позволяет; generated/interop исключения должны быть локальными и обоснованными.
+3. Package manifest объявляет воспроизводимые build/typecheck/test commands и явные public exports. Tests используют runner, принадлежащий package contract: Node `node:test` или существующий Host Vitest; Playwright остаётся browser acceptance layer.
+4. Shared ESLint/typescript-eslint и Prettier могут оставаться в root tooling lockfile, но каждый scope обязан явно попасть в lint/format patterns и CI. Установка tool в root не означает его фактическое покрытие.
+5. Knip и dependency-cruiser остаются report-only до проверки dynamic entry points/generated output и triage findings; они не объявляются repo-wide gates по факту наличия конфигурации.
+6. CI устанавливает и проверяет именно затронутые package roots. Не подменять missing package-specific job успешным root/Host job.
+
+На snapshot это целевая политика, а не уже повсеместно достигнутое состояние: текущие TS configs, ESLint/Prettier scopes и CI gaps перечислены выше.
+
+### Отдельный cleanup вне COD-18
+
+`source/editor/lint.sh` и `source/editor/tslint.json` существуют только внутри исключённого исторического дерева `source/editor/`. Они не являются действующими toolchain scripts/configs для root, `packages/*` или `src/editor/`; их cleanup должен идти отдельно после pilot и в контексте COD-88, а не расширять native quality scope.
+
+## 10. TypeScript 5.3.3: compatibility и upgrade constraints
 
 Pin `5.3.3` принадлежит только `packages/localization/` и отражает исходный COD-19 pilot baseline. Это **не repository-wide minimum или maximum**: Core и Editor Host используют `5.9.3`, Editor MCP и Game Test Bridge — `6.0.3`.
 
@@ -164,7 +199,7 @@ Pin `5.3.3` принадлежит только `packages/localization/` и от
 
 Snapshot показывает, что более новые compiler versions уже используются в независимых package scopes, но сам по себе не доказывает безрисковость обновления Localization с 5.3.3 или пригодность 6.0.3 как единого target.
 
-## 10. Findings и follow-up boundaries
+## 11. Findings и follow-up boundaries
 
 | Finding | Evidence | Consequence / owner boundary |
 |---|---|---|
