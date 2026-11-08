@@ -38,13 +38,14 @@
 
 Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
 
-## Правила выбора целевого Editor UI (01.11.2026)
+## Единая архитектура Editor Host
 
-- Все новые пользовательские панели, UX и authoring workflows редактора реализуются в самостоятельном SolidJS Host `src/editor/`.
-- `source/editor/` — frozen legacy boundary: только read-only inventory, временный rollback artifact и последующее удаление через COD-88. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и модернизация code/manifests/lockfiles/scripts/dependencies. Единственное исключение — минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic; technical cutover/rollback действия допускаются только в необходимом объёме COD-87.
-- Все новые пользовательские workflows и feature contracts проектируются и реализуются в SolidJS Host с собственными typed services, state owners, tests и runtime integration.
-- Наличие панели или завершённой Engineering issue не считается готовностью end-to-end workflow. Проверять native Project Model save/reopen, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [migration plan](editor-ui-migration.md). Координация UI rollout — COD-82.
-- `source/editor/` и `src/editor/` остаются самостоятельными приложениями до production cutover. COD-87 переводит маршрут `/editor/` на новый Host; COD-88 удаляет временный UI client после rollback window.
+- Единственное приложение редактора находится в `src/editor/` и построено на SolidJS + TypeScript/TSX + Vite + Tailwind CSS 4.
+- Все новые UI, authoring workflows, исправления, state owners, services и browser integration реализуются внутри native Host или соответствующих native Core/runtime packages.
+- Node server обслуживает production build Host по `/editor/`; Vite запускает то же приложение в development и проксирует native backend API через loopback.
+- Project Model/Core, server, MCP, Preview и Build используют один набор native Codogma contracts. Не добавлять переключатели UI implementation, alternate editor routes, fallback adapters или отдельную модель данных для инструментов.
+- MCP registry и system instructions принадлежат engine server. Live editor operations маршрутизируются в активную Editor Host session; multi-Host reconnect/timeout/cancellation и shared project write ownership проверяются в COD-85.
+- Наличие панели или завершённой Engineering issue не считается готовностью end-to-end workflow. Проверять native Project Model save/reopen, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [Editor Host roadmap](editor-ui-migration.md). Координация authoring workflows — COD-82.
 
 ## 1. Перед началом каждой задачи
 
