@@ -1,0 +1,31 @@
+{
+    "name": "@codogma/localization",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Optional Codogma Engine localization module: versioned locale tables, deterministic fallback and structured diagnostics.",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "prepare": "npm run build",
+        "test": "npm run build && node --test tests/*.test.mjs",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "lint": "eslint \"src/**/*.ts\" \"tests/*.test.mjs\" \"bin/**/*.mjs\"",
+        "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.mjs\" \"bin/**/*.mjs\" package.json tsconfig.json knip.json .dependency-cruiser.cjs .prettierrc.json",
+        "deps:report": "depcruise src --config .dependency-cruiser.cjs --output-type err-long",
+        "knip:report": "knip --config knip.json --reporter compact --no-exit-code",
+        "quality:check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+        "quality:report": "npm run knip:report && npm run deps:report"
+    },
+    "devDependencies": {
+        "typescript": "5.3.3"
+    },
+    "license": "MIT"
+}

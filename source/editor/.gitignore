@@ -1,5 +1,10 @@
 *.tsbuildinfo
 node_modules/
 plugins/*/_out/
+# svelte PoC (ADR-0004): the compiled bundle IS committed, because tsc cannot
+# compile .svelte sources; build/build.mjs reproduces it byte-identically.
+!plugins/phasereditor2d.sveltepoc/_out/
+plugins/phasereditor2d.sveltepoc/_out/*
+!plugins/phasereditor2d.sveltepoc/_out/svelte-poc.js
 .vscode
 .DS_Store

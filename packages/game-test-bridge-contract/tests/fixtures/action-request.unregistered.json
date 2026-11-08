@@ -1,0 +1,1 @@
+{"kind":"game-test-bridge.action-request","requestId":"request-102","testSessionId":"session-42","actionId":"session.execute-code","actionVersion":"1.0.0","input":{"source":"arbitrary code is not a supported action"}}

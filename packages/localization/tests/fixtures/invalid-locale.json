@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "locale": "ru_RU",
+  "messages": [
+    { "id": "menu.play", "text": "Играть" }
+  ]
+}

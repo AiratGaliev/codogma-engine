@@ -20,6 +20,10 @@
 
     const MCP_BRIDGE_EVENTS = "/editor/mcp-bridge/events";
     const MCP_BRIDGE_RESULT = "/editor/mcp-bridge/result";
+    const MCP_BRIDGE_ACTIVATE = "/editor/mcp-bridge/activate";
+
+    let bridgeClientId = null;
+    let bridgeActivationPending = false;
 
     const AI_CHAT_MAX_ATTACHMENTS = 8;
 
@@ -78,12 +82,34 @@
         return strip(a) === strip(b);
     }
 
-    function postResult(id, result) {
+    function activateBridgeSession() {
+
+        if (!bridgeClientId || bridgeActivationPending) return;
+
+        bridgeActivationPending = true;
+
+        fetch(MCP_BRIDGE_ACTIVATE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ clientId: bridgeClientId })
+        })
+            .catch(e => console.warn("[Phaser Editor AI] MCP session activation failed", e))
+            .finally(() => { bridgeActivationPending = false; });
+    }
+
+    function postResult(id, result, clientId = bridgeClientId) {
+
+        if (!clientId) return Promise.reject(new Error("MCP bridge session is not established."));
 
         return fetch(MCP_BRIDGE_RESULT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, result })
+            credentials: "same-origin",
+            body: JSON.stringify({ id, clientId, result })
+        }).then(response => {
+            if (!response.ok) throw new Error(`MCP bridge result rejected (${response.status}).`);
+            return response.json();
         });
     }
 
@@ -253,6 +279,93 @@
                 reject(new Error(`Renderer snapshot failed: ${e.message}`));
             }
         });
+    }
+
+    /**
+     * Render a Spine skin/animation through the editor's normal thumbnail renderer.
+     * This preserves support for both JSON and binary Spine skeleton assets.
+     */
+    async function cmdSpineSkinImage(args) {
+
+        const packCore = phasereditor2d.pack.core;
+        const packs = await packCore.AssetPackUtils.getAllPacks();
+        let spineAsset = null;
+        let atlasAsset = null;
+
+        for (const assetPack of packs) {
+
+            for (const item of assetPack.getItems()) {
+
+                if (!spineAsset && item instanceof packCore.SpineAssetPackItem && item.getKey() === args.dataKey) {
+                    spineAsset = item;
+                }
+
+                if (!atlasAsset && item instanceof packCore.SpineAtlasAssetPackItem && item.getKey() === args.atlasKey) {
+                    atlasAsset = item;
+                }
+            }
+        }
+
+        if (!spineAsset) {
+            throw new Error(`Spine skeleton "${args.dataKey}" was not found in the asset packs.`);
+        }
+
+        if (!atlasAsset) {
+            throw new Error(`Spine atlas "${args.atlasKey}" was not found in the asset packs.`);
+        }
+
+        await spineAsset.preload();
+
+        const skeleton = spineAsset.buildSkeleton(atlasAsset);
+        if (!skeleton) {
+            throw new Error(`Could not build Spine skeleton "${args.dataKey}" with atlas "${args.atlasKey}".`);
+        }
+
+        const skinExists = skeleton.skins.some(skin => skin.name === args.skinName)
+            || skeleton.defaultSkin?.name === args.skinName;
+        if (!skinExists) {
+            throw new Error(`Spine skin "${args.skinName}" does not exist in skeleton "${args.dataKey}".`);
+        }
+
+        if (!skeleton.animations.some(animation => animation.name === args.animationName)) {
+            throw new Error(`Spine animation "${args.animationName}" does not exist in skeleton "${args.dataKey}".`);
+        }
+
+        const skinItem = new packCore.SpineSkinItem(spineAsset, atlasAsset, args.skinName);
+        const thumbnail = phasereditor2d.scene.ScenePlugin.getInstance()
+            .buildSpineSkinThumbnailImage(skinItem, args.animationName);
+
+        await thumbnail.preload();
+
+        const imageElement = thumbnail.getImageElement();
+        if (!imageElement) {
+            throw new Error("Spine thumbnail renderer returned no image.");
+        }
+
+        const width = Math.max(1, Math.ceil(thumbnail.getWidth()));
+        const height = Math.max(1, Math.ceil(thumbnail.getHeight()));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+            throw new Error("Could not create a 2D canvas context for the Spine thumbnail.");
+        }
+
+        context.drawImage(imageElement, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL("image/png");
+        const comma = dataUrl.indexOf(",");
+        if (comma < 0) {
+            throw new Error("Spine thumbnail renderer returned an invalid PNG data URL.");
+        }
+
+        return {
+            __image: true,
+            data: dataUrl.slice(comma + 1),
+            mimeType: "image/png"
+        };
     }
 
     async function cmdTextureBBox(args) {
@@ -427,6 +540,7 @@
         "ide-save-scene": cmdSaveScene,
         "scene-get-screenshot": cmdSceneScreenshot,
         "assets-get-texture-content-bounding-box": cmdTextureBBox,
+        "assets-get-spine-skin-image": cmdSpineSkinImage,
         "scene-get-editable-tilemap-layer-selection-data": cmdGetTilemapSelectionData
     };
 
@@ -438,7 +552,21 @@
 
         try {
 
-            const es = new EventSource(MCP_BRIDGE_EVENTS);
+            const url = new URL(MCP_BRIDGE_EVENTS, window.location.href);
+            url.searchParams.set("clientType", "legacy");
+            const es = new EventSource(url.pathname + url.search);
+
+            es.addEventListener("connected", ev => {
+                try {
+                    const session = JSON.parse(ev.data);
+                    if (typeof session.clientId !== "string") return;
+                    bridgeClientId = session.clientId;
+                    activateBridgeSession();
+                    console.log("%c[Phaser Editor AI]%c MCP bridge session ready", "color:#ff9d45", "color:inherit");
+                } catch (e) {
+                    console.error("Invalid MCP bridge session event", e);
+                }
+            });
 
             es.addEventListener("command", ev => {
 
@@ -450,23 +578,24 @@
                     return;
                 }
 
+                // A stale SSE connection must never execute or answer commands
+                // owned by a newer editor session.
+                if (!bridgeClientId || cmd.clientId !== bridgeClientId) return;
+
                 const handler = commandHandlers[cmd.tool];
 
                 const promise = handler
-                    ? Promise.resolve()
-                        .then(() => handler(cmd.args || {}))
-                        .catch(e => { throw e; })
+                    ? Promise.resolve().then(() => handler(cmd.args || {}))
                     : Promise.reject(new Error(`The editor client does not implement the command '${cmd.tool}'.`));
 
                 promise
-                    .then(result => postResult(cmd.id, result))
-                    .catch(e => postResult(cmd.id, { __error: String(e.message || e) }));
+                    .then(result => postResult(cmd.id, result, cmd.clientId))
+                    .catch(e => postResult(cmd.id, { __error: String(e.message || e) }, cmd.clientId))
+                    .catch(e => console.error("MCP bridge command result failed", e));
             });
 
             es.addEventListener("files-changed", () => {
 
-                // project files were modified externally (e.g. by an MCP agent);
-                // the workbench re-syncs the file tree on window focus
                 setTimeout(() => {
                     try {
                         window.dispatchEvent(new FocusEvent("focus"));
@@ -477,19 +606,24 @@
             es.addEventListener("error", () => {
 
                 es.close();
-
+                bridgeClientId = null;
+                bridgeActivationPending = false;
                 setTimeout(connectBridge, 5000);
             });
-
-            console.log("%c[Phaser Editor AI]%c MCP bridge connected", "color:#ff9d45", "color:inherit");
 
         } catch (e) {
 
             console.error("MCP bridge connection failed", e);
-
+            bridgeClientId = null;
+            bridgeActivationPending = false;
             setTimeout(connectBridge, 5000);
         }
     }
+
+    window.addEventListener("focus", activateBridgeSession);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") activateBridgeSession();
+    });
 
     // ------------------------------------------------------------------
     // AI panel (chat) + MCP config dialog

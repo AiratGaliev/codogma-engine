@@ -7,7 +7,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
         }
 
         protected getHelp(): string {
-            // tslint:disable-next-line:no-trailing-whitespace
 
             const help = `An array of objects. Like in:
 

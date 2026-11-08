@@ -1,0 +1,1346 @@
+# Техническое задание: Codogma Engine
+
+| Поле | Значение |
+|---|---|
+| Продукт | **Codogma Engine** — Web-first среда разработки и 2D-движок для HTML5-игр |
+| Версия документа | 1.15 |
+| Дата | 01.11.2026 |
+| Статус | Нормативное продуктовое и архитектурное направление; конкретные технические решения проходят проверки |
+| Связанный документ | [Дорожная карта](roadmap.md) |
+
+> **Условные обозначения.** «Обязательно» означает требование к соответствующему этапу. «Кандидат» — технологию или вариант нужно проверить прототипом, прежде чем считать решением. Описания текущей реализации фиксируют исходное состояние, но не обещают наличие будущих функций. Любой прототип и архитектурная схема ниже не считаются реализованной функциональностью.
+
+## 1. Продуктовая цель
+
+Codogma Engine должен развиться в самостоятельный **Web-first 2D Game Engine**: редактор, runtime-API, модель проекта, средства отладки, конвейер ресурсов и сборки, а также платформенные интеграции в одном согласованном рабочем процессе.
+
+Главная UI-цель — **создать самостоятельный SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4**, используя Unity 6.6 как основной UX-reference. Временный UI client и production route topology описаны в [Editor UI migration plan](editor-ui-migration.md) и [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md). Все новые project, scene, asset, script и runtime workflows используют собственные типизированные Codogma contracts. Архитектура Project Model закреплена в [ADR-0007](decisions/ADR-0007-native-codogma-project-model.md).
+
+[Unity 6.6 (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) и [Cocos Creator 4.0 LTS](https://docs.cocos.com/creator/4.0/manual/en/) — два обязательных продуктовых референса нового редактора именно для 2D-игр: Unity — основной UX-reference, Cocos — дополнительный cross-check реальных authoring workflows. Unity 6.6 (6000.6) — выпущенная версия; архив Unity содержит 6000.6.8f1 от 03.11.2026. Конкретные API и platform guarantees проверяются по документации закреплённой версии и фактическому runtime Codogma. **Исходный код [Godot Editor (закреплённый commit)](<https://github.com/godotengine/godot/tree/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor>) используется отдельно как implementation/engineering reference для изучения реализации редакторских подсистем; он не является третьим продуктовым UX-reference, не задаёт feature parity и не становится runtime dependency.** **Цель — сопоставимое качество основных 2D-сценариев и профессиональное ощущение редактора, а не полный feature parity, копирование архитектуры или API.** Codogma остаётся 2D-only (без 2D/3D переключателя), TypeScript-native и Web-first. Подробный обязательный процесс adopt/adapt/reject и правила работы с Colibri закреплены в [стандарте reference нового Editor Host](editor-reference-standard.md).
+
+### 1.1. Приоритет продуктовой ценности
+
+1. **Качество существующего редактора.** Цельный визуальный язык, удобные панели и keyboard workflow, понятные состояния UI, рабочие Scene/Hierarchy/Inspector/Assets, стабильное сохранение, Undo/Redo и отсутствие регрессий в имеющихся инструментах.
+2. **Подтверждённое поведение нативных 2D-возможностей.** Native Project Model, Editor Preview, Build и runtime должны использовать одну модель и давать согласованные результаты; генерация отдельного TypeScript-файла для каждой Scene не является частью authoring/build contract. FX, Box2D, imports и assets проходят адресную browser/runtime acceptance.
+3. **Инженерное качество исходного кода.** Проверяемые границы, TypeScript checks, тесты, контроль зависимостей и последовательное удаление временной Colibri реализации из продуктового пути.
+4. **Связность модели редактора и runtime.** Объекты/компоненты должны переходить в живую игру без нескольких источников истины; новый Project Model/Core вводится по отдельному проверяемому плану.
+5. **Живой запуск и диагностика.** Preview Host, runtime selection/live Inspector, логи и ошибки.
+6. **Конвейер создания и выпуска 2D Web-игры.** Валидация ресурсов, воспроизводимый HTML5 build и платформенные интеграции.
+7. **Дальнейшая расширяемость и desktop shell.** Package ecosystem и Tauri добавляются после подтверждения необходимости и готовности зависимых contracts.
+
+### 1.2. Порядок поставки и границы начального MVP
+
+Работу следует принимать по проверяемым сценариям, а не по числу новых компонентов или перенесённых файлов. Целевая программа UI — независимый SolidJS Editor Host, который реализует необходимые 2D authoring workflows. Временный UI client остаётся отдельным приложением только на период production rollout и ограниченного rollback window. Core, Preview и Build используют единый native Codogma Project Model.
+
+| Gate | Что должно работать | Как подтверждается |
+|---|---|---|
+| **A — SolidJS Editor Host migration** | Новый самостоятельный SolidJS + TypeScript/TSX UI с Tailwind CSS 4; оболочка Workbench, Scene/Hierarchy/Inspector/Assets; единая native Project Model и общие typed services | Отдельный UI host запускается независимо; browser acceptance на native fixtures; save/reopen, Undo/Redo, themes, keyboard workflows, MCP routing и отсутствие регрессий. Production route переключается после соответствующих UI gates |
+| **B — Project Model/Core** | Project/Scene/Node/Transform, стабильные IDs, один пользовательский TypeScript-компонент, единая schema/metadata для Inspector/serialization/runtime, версионированное сохранение и загрузка сцены напрямую из данных без обязательного generated TS-класса на каждый уровень. | Изолированный fixture проходит создание/изменение/save/reopen; запускает сериализованную сцену с явно зарегистрированным TypeScript-компонентом без файла класса сцены; lifecycle, native schema validation и ошибки ссылок покрыты тестами; Core тестируется без UI редактора. |
+| **C — Browser Preview** | Preview Host запускает сцену из Project Model через целевой loader/runtime adapter, связывает runtime entity/component с моделью, выдаёт runtime state и log/error diagnostics. Preview загружает сцену непосредственно из валидированной native Project Model; generated TS-класс на каждую сцену не является обязательным входом Preview. | Повторяемый сценарий edit → save/reopen → play → select live entity → inspect → stop/restart на data-driven fixture без per-scene generated TS class. Preview не требует Tauri и не создаёт второй игровой цикл. |
+| **D — Независимая HTML5-сборка** | Headless build из валидированных сериализованных сцен, зарегистрированных TypeScript-модулей, ресурсов и настроек adapter; per-scene generated TS file не является обязательным входом. | CI/fixture собирает и запускает проект без editor UI/server, проверяет asset/component refs и подтверждает, что editor-only зависимости не попали в game bundle. |
+| **E — Первая платформенная интеграция** | Platform-neutral Services API и mock/local adapter, затем отдельный Yandex Games adapter. | Unit/integration tests и отдельная проверка в официальном тестовом окружении; VK Mini Apps и VK Play принимаются как отдельные targets. |
+
+Каждый gate подтверждается отдельно. Независимые UI и tooling slices можно разрабатывать параллельно; новые project/scene/component/asset workflows используют единую native Codogma Project Model. Если функция зависит от ещё не готового Core/runtime service, зависимую часть нужно выделить, не блокируя независимую работу.
+
+**Не входят в первый migration slice:** переписывание всего UI одним PR; замена Phaser на PixiJS; EVA.js как второй runtime; реализация Data-Oriented ECS внутри обязательного Core или без подтверждённого browser workload; несколько physics backends; обязательная Tauri-упаковка; публичная plugin/npm ecosystem; все платформенные интеграции одновременно. Отдельный optional `@codogma/ecs` и `@codogma/ecs-phaser` зафиксированы как самостоятельное архитектурное направление в ADR-0004, вне обязательного Core migration slice. Выбор SolidJS + Tailwind CSS 4 уже принят как окончательное направление UI. Повторный framework bake-off и отдельный SolidJS PoC не требуются: реализация начинается непосредственно с полноценного Unity-подобного Editor Workbench и продолжается вертикальными feature slices.
+
+P0/P1/P2 в разделе 9.3 задаёт относительный приоритет возможностей 2D-редактора и не означает выполнять весь уровень одним большим спринтом. Практическая очередность и зависимые gates определяются [дорожной картой](roadmap.md).
+
+## 2. Исходное состояние репозитория
+
+Эта спецификация разработана с учётом текущего исходного кода, а не для проекта с нуля.
+
+### 2.1. Что уже существует
+
+| Область | Фактическая база |
+|---|---|
+| Клиент редактора | TypeScript-клиент в `source/editor/`, основанный на открытом клиенте Phaser Editor 2D v3 |
+| Рабочая среда | Colibri workbench, registry расширений, controls и editors описывают существующий legacy-клиент и служат только read-only inventory reference; новый SolidJS Host в `src/editor/` реализует отдельную Workbench shell и native workflows. Legacy-клиент заморожен и не развивается; необходимые workflows проектируются и реализуются заново на native Codogma contracts |
+| Работа с файлами | Существует контракт `IFileStorage` и HTTP-реализация файлового доступа; конкретные методы и текущие ограничения нужно сохранять в capability inventory |
+| Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
+| Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
+| Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
+| AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует tool schemas/calls без второго реестра или альтернативного transport contract. AI Chat service необязателен |
+| CI | `fast-checks` выполняет быстрые build/typecheck, unit/contract/security и server-smoke проверки для обычных PR; все E2E suites (MCP, Playwright/browser и последующие gameplay E2E) запускаются только в promotion workflow начиная с PR `dev → test`, затем на последующих release-promotion PR |
+| TypeScript / lint baseline | В frozen `source/editor/package.json` зафиксирован TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Это inventory-only baseline: не усиливать, не модернизировать и не расширять quality gates в legacy client. Новые Codogma modules и SolidJS Host используют актуальный строгий toolchain по ADR-0002 |
+| Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
+
+Эта база содержит значительное количество Colibri UI и редакторской логики. **Полная замена UI является принятым направлением, но не одномоментной переписью всего движка.** Новый SolidJS Host создаётся как отдельное приложение; `source/editor/` используется исключительно для read-only inventory и временного rollback. Инвентаризация фиксирует существующие пользовательские сценарии и полезные domain/API потребности, но не предполагает изменения, исправления, рефакторинга или переноса legacy-реализации. Все новые workflows создаются в SolidJS Host с native Codogma contracts; Colibri удаляется после cutover и rollback window.
+
+#### Уточнение: фактическая интеграция Phaser 4.2.1
+
+Проверка ветки `dev` и upstream-тега `v4.2.1` (27.10.2026) выявляет важное различие: **исходный код Phaser модульно организован, но текущая интеграция Codogma использует его как вендорный bundle**.
+
+- [`plugin.json`](../source/editor/plugins/phasereditor2d.phaser/plugin.json) подключает production-файл `scripts/phaser.min.js`, а в режиме разработки — `scripts/phaser.js`. Это текущая схема загрузки runtime внутри editor plugin.
+- В [корневом `package.json`](../package.json) и [`source/editor/package.json`](../source/editor/package.json) Phaser не объявлен как npm dependency. Поэтому текущий Phaser runtime не управляется npm dependency graph пользовательского проекта как обычная установленная Codogma-зависимость.
+- Upstream Phaser 4.2.1 имеет модульно организованные исходники и отдельные варианты поставки/сборки, включая [Arcade Physics build](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js) и [конфигурацию distribution build](https://github.com/phaserjs/phaser/blob/v4.2.1/config/webpack.dist.config.js). Это не означает, что нынешняя интеграция Codogma автоматически выбирает или исключает отдельные подсистемы; доступность кастомной сборки надо подтвердить реальным fixture и совместимостью editor-generated code.
+- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts)
+
+Таким образом, корректная характеристика — **«модульные исходники, но монолитный по текущему способу подключения runtime bundle»**, а не утверждение, что Phaser невозможно разделить. Сам факт наличия папок, деклараций или wrapper-пакетов не доказывает, что соответствующий runtime-код исключается из конечной сборки.
+
+### 2.2. Что пока нельзя считать реализованным
+
+Следующие направления описывают целевой продукт, а не подтверждённые функции текущей версии:
+
+- завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, validation/serialization, component schema/registry/world), но не является законченным runtime;
+- data-driven загрузчик сцен из сериализуемой Project Model с разрешением зарегистрированных TypeScript modules, rollback и связью с Phaser adapter (не реализован как завершённый workflow);
+- завершённая object/component runtime-модель Core, интегрированная с Editor Inspector, Project Model loader и базовым Phaser adapter; текущие Core lifecycle tests пока изолированы от UI/runtime. Optional Data-Oriented ECS и его Phaser adapter не реализованы и развиваются отдельными package tasks COD-111/112;
+- синхронизация Inspector с реальными экземплярами компонентов работающей игры;
+- полноценный Game Preview Host с embedded, standalone и внешним browser preview;
+- специализированный runtime debugger и профайлер с измерениями CPU/кадра/ресурсов;
+- проверка ссылок/зависимостей и полноценный production asset/build pipeline;
+- унифицированный API платформенных сервисов Yandex Games, VK Mini Apps и VK Play;
+- Tauri desktop shell и установщики для целевых ОС;
+- стабильный публичный SDK расширений и независимо публикуемые пакеты Codogma.
+
+Наличие редактора сцены, Inspector, физических инструментов или MCP-команд само по себе не доказывает, что все вышеуказанные end-to-end сценарии уже реализованы.
+
+#### Исторический baseline PR #10 (снимок на 27.10.2026)
+
+[PR #10](https://github.com/AiratGaliev/codogma-engine/pull/10) расширяет 2D Editor workflows, FX, physics и local security checks. PR был слит в dev 27.10.2026.
+
+На PR head `3c96dde67eb865a0ee70fdbd5134ab995f846443` CI Fast завершился успешно ([run #40472189614](https://github.com/AiratGaliev/codogma-engine/actions/runs/40472189614)): обе установки зависимостей и `npm audit --audit-level=low`, сборка/typecheck редактора, server smoke и security smoke прошли; audit на этом lockfile сообщил 0 уязвимостей. После слияния в `dev` как `754edaa1f7313409e99c3462a802d5fd430a9a01` отдельный повторный запуск CI именно на merge commit в этом аудите не подтверждён. Успешный PR CI подтверждает только перечисленные проверки на PR head, но не visual/runtime correctness или отсутствие неизвестных уязвимостей.
+
+Остаются неподтверждёнными и должны пройти отдельную приёмку:
+
+- совпадение editor preview и сгенерированного runtime для Circle/Bloom/Gradient/Shine, включая вложенные Container, порядок слоёв, изменение размеров, уничтожение объектов/сцены и очистку обработчиков;
+- фактическая Box2D-симуляция на Phaser 4.2.1: преобразование осей/углов, тела и fixtures, фиксированный шаг, 30/60/120 FPS, shutdown/restart и параллельные миры с разным World Scale;
+- импорт и предпросмотр шрифтов, сжатых текстур и медиа, drag-and-drop больших/вложенных каталогов, обработка частичных ошибок и освобождение временных ресурсов;
+- адресные regression tests для serialization, typed Script modules, Particle Emitter, spritesheet frame lookup, URL-дескрипторов аудио/видео и thumbnail cache.
+
+Security smoke проверяет конкретные локальные сценарии: loopback/Host/Origin, существующие и dangling symlink, выходящий за проект upload, чтение корневого config через symlink и совместимость MCP stdio. Для project-file access PR #17 добавляет descriptor-verified reads: MCP file/text/asset metadata reads используют bytes из проверенного file descriptor, HTTP static/project/editor responses стримятся из проверенного handle, а MCP `project-write-file` работает через проверенный write handle. Linux directory create/delete/rename/enumeration привязаны к открытым descriptors; HTTP `CopyFile` использует verified source handles, временный sibling и anchored rename, symbolic-link entries отклоняются. AI-chat attachments читаются bounded-prefix helper (не более 24 KiB) из проверенного handle. Regression tests проверяют подмену parent symlink перед read/write/delete/rename/mkdir/enumeration и copy source/destination. HTTP request bodies ограничены: `/editor/api` отклоняет JSON выше 32 MiB, `/editor/upload` — multipart выше 128 MiB с HTTP 413; Content-Length проверяется до buffering и фактический streaming size контролируется повторно, malformed JSON возвращает HTTP 400. Dedicated tests проверяют chunked и misdeclared-length inputs без выделения больших payloads. **Открытый security residual:** portable Node API не даёт одинаковой атомарной directory-relative гарантии на всех платформах; non-Linux path-based fallback и сценарий перемещения уже открытого каталога за пределы project root после проверки не имеют доказанной race-free гарантии. `EDITOR_DIR`/`PLUGINS_DIR` — доверенные файлы установки вне пользовательского project-root threat model. Loopback-only exposure сохраняется.
+## 3. Продуктовая область и границы
+
+### 3.1. Входит в целевое направление
+
+- Визуальная разработка 2D-сцен, иерархии объектов, Prefabs и переопределений, компонентов, анимации, тайлмапов и игровых ресурсов.
+- TypeScript как основной язык пользовательской игровой логики.
+- Единая сериализуемая модель проекта и согласованный API редактора/runtime.
+- Runtime adapter для текущего [Phaser 4](https://docs.phaser.io/phaser/getting-started/what-is-phaser) и возможность исследовать [PixiJS](https://pixijs.com/8.x/guides/) как альтернативный rendering adapter без переписывания всей IDE.
+- Встроенный предпросмотр, запуск игры отдельно от редактора и запуск/проверка в обычном браузере.
+- Инспекция живых объектов, диагностические overlay, логи, ошибки, базовая отладка и профилирование.
+- Валидация ресурсов и ссылок, оптимизированные воспроизводимые HTML5-сборки и проверка результата.
+- Адаптеры платформенных сервисов и тестовые реализации для локальной разработки.
+- Desktop-оболочка, если прототип подтвердит ценность и надёжность решения.
+- Документируемые расширения для инструментов, игровых подсистем и платформ.
+
+### 3.2. Не входит без отдельного решения
+
+- Полное копирование функций, API и внутренней архитектуры Unity/Cocos.
+- 3D-runtime, собственный 3D-рендерер и 3D-физика.
+- Одновременная поддержка большого числа игровых runtime «на всякий случай».
+- Собственный renderer, физический движок, bundler, тестовый runner или визуальный редактор каждого вида контента, если зрелое решение закрывает потребность.
+- Разработка всех жанровых систем в ядре: диалоги, квесты, поведение NPC, волны Tower Defense и аналогичные инструменты предпочтительно оформлять как расширения.
+- Одномоментное переписывание всего UI в одном PR или cutover временного UI-клиента до прохождения migration acceptance. Поэтапный production cutover и rollback window регулируются ADR-0005.
+- Публикация всех пакетов в публичный npm registry до стабилизации их контрактов.
+
+## 4. Целевая архитектура и границы ответственности
+
+### 4.1. Логические слои
+
+~~~text
+Editor UI (browser / optional desktop shell)
+└─ Editor UI
+   ├─ Scene Editor, Hierarchy, Inspector, Prefabs, Asset Browser
+   ├─ Animation / Tilemap / UI / Physics tools
+   └─ Runtime Debugger, Profiler, project diagnostics
+        │
+        ▼
+Codogma Project Model + Public TypeScript API
+├─ Project / Scene / Node / Component / Prefab / Asset references
+├─ Schema, serialization, published-version evolution, metadata, undoable operations
+├─ Lifecycle and component/system contracts
+└─ Engine services: input, time, resources, physics, animation, audio
+        │
+        ▼
+Runtime Adapter(s)
+├─ Phaser 4 adapter — current initial implementation target
+└─ Experimental alternative adapter, e.g. PixiJS — only after a PoC
+        │
+        ▼
+Independent HTML5 Game Build
+├─ Game runtime and project dependencies
+├─ Asset/build pipeline
+└─ Platform Services adapters: Yandex Games / VK Mini Apps / VK Play
+~~~
+
+Схема выражает логические границы и направления зависимостей, а не прямое соответствие слоям каталогов. В целевой структуре исходники самостоятельных Codogma packages находятся в `packages/<package-name>/`, а приложение редактора — в `src/editor/`. Не каждый логический слой обязан быть отдельным пакетом: внутренние детали остаются внутри пакета, которому принадлежат. `source/editor/` остаётся фактическим путём текущего frozen rollback client до COD-87/COD-88; он не является target path для новых функций или исправлений.
+
+**Целевой Editor Host:** `src/editor/` — одно SolidJS + TypeScript/TSX SPA на Vite с Tailwind CSS 4. Применяются `vite-plugin-solid`, `jsx: preserve` и `jsxImportSource: solid-js`. SolidJS использует fine-grained reactivity без Virtual DOM: JSX компилируется в DOM-операции, а сигналы/сторы обновляют только зависимые узлы. Компонентная функция не трактуется как React-компонент, повторно вызываемый при каждом изменении состояния; реактивность задаётся Solid-примитивами. Tailwind отвечает за utility styling поверх Codogma design tokens/CSS variables. Phaser остаётся владельцем игрового Canvas/runtime renderer. Панели и редакторские функции — feature modules одного приложения; новый Host не импортирует Colibri и не использует постоянный bridge между UI-фреймворками.
+
+Помимо редакторского интерфейса, проект должен получить headless-интерфейс к тем же Project Model, importer и build API. CLI/CI не зависит от открытого editor UI: он может валидировать проект, проверять dependency graph и выполнять HTML5 build. Это разделение требуется для воспроизводимых сборок и автоматических проверок, а не для дублирования бизнес-логики.
+
+
+**Отдельная плоскость инженерных инструментов и игрового QA.** Build, Preview, Editor MCP и Game QA не являются частью игрового Core и не должны попадать в Release bundle. Они используют общие versioned contracts, но имеют разные обязанности:
+
+- Engine CLI / Project Build API валидирует проект и выполняет воспроизводимую сборку без открытого UI.
+- Preview Host управляет жизненным циклом запущенной игры и предоставляет адрес/идентификатор preview-сессии.
+- Editor MCP управляет авторскими данными и редакторскими операциями.
+- Game Test Bridge предоставляет ограниченный диагностический контракт из Development/Test runtime.
+- Browser Controller управляет браузером и настоящим пользовательским вводом.
+- Game QA MCP оркестрирует Browser Controller, Preview, Game Test Bridge и сценарии приёмки; он не реализует повторно сборщик, игровой цикл или Phaser API.
+
+Game Test Bridge, Browser Controller и Game QA MCP подробно определены в ТЗ §13.4. Эта плоскость может запускаться локально и в CI, но не является обязательной зависимостью Core, обычного игрового проекта или production runtime.
+
+### 4.2. Редактор и системный backend
+
+Редактор — это инструмент разработки: окна, панели, команды, управление проектом, выбор файлов, запуск preview, инструменты отладки и настройки приложения.
+
+- [Tauri 2](https://v2.tauri.app/) — основной кандидат на desktop-оболочку, но окончательный выбор принимается после PoC.
+- Rust/Tauri отвечает за интеграцию с ОС: безопасный файловый доступ, диалоги, управление процессами и операции, для которых это даёт доказанную пользу.
+- Игровая симуляция, component logic, анимация и работа с игровыми объектами не должны делать вызов Rust на каждый кадр или компонент без конкретного обоснования.
+- Игры, экспортируемые для Web, не должны зависеть от Tauri, локального сервера редактора или его процесса.
+- Браузерная версия сохраняется в процессе миграции; если она будет снята с поддержки, это оформляется как отдельное продуктово-архитектурное решение.
+- VS Code и другие редакторы могут получать интеграции в будущем, но они не должны становиться обязательной зависимостью ядра проекта.
+
+Tauri и Electron не выбираются только по размеру дистрибутива. На целевых ОС необходимо проверить WebGL, производительность Game View, задержки Inspector, файловые операции и воспроизводимость поведения. Tauri использует системный WebView, Electron поставляет Chromium; это компромисс между весом и управляемостью браузерного окружения.
+
+#### Переходный режим двух Editor Host
+
+- Временный UI client продолжает открываться
+- Vite proxy пересылает относительные запросы /editor/* к backend на 127.0.0.1:3000, чтобы UI использовал те же POST /editor/api, project-file, upload, MCP HTTP и прочие действующие endpoints без прямого browser-to-backend CORS. Для proxy-origin в backend задаётся точный CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173; wildcard Origin запрещён. Реальная proxy конфигурация должна быть проверена вместе с server/request-origin.mjs.
+- По умолчанию оба UI могут использовать один backend/PROJECT_DIR, но редактировать один проект одновременно нельзя: current API не даёт cross-client lock/optimistic concurrency contract, а selection, undo history и caches принадлежат отдельным browser sessions. Для write acceptance использовать один активный writer либо отдельные fixture copies и backend instances.
+- Текущий server/mcp.mjs рассылает editor SSE commands всем подключённым clients (`bridgeClients` is a Set) и разрешает pending command по первому результату. До реализации session-aware routing shared transport имеет одного Editor session owner; параллельные Host sessions используют отдельные backend/transport instances.
+- Два порта — только development topology. Production cutover выполняется через Node server: SolidJS bundle становится основным `/editor/`, а legacy UI удерживается ограниченное время для rollback. Постоянные два production backend или второй editor API не требуются.
+
+### 4.3. Зависимости должны идти в одном направлении
+
+- Project Model и публичный Engine API не зависят от внутренних классов Colibri, UI-фреймворка, Tauri и конкретной реализации Phaser.
+- Editor UI работает с моделью проекта и контрактами инструментов, а не напрямую создаёт разрозненные экземпляры Phaser в каждом редакторском модуле.
+- Runtime adapters реализуют ограниченный набор стабильных контрактов; специализированные возможности доступны через явные backend-specific extensions.
+- Platform Services и build tools не должны требовать, чтобы игровой код знал детали оболочки редактора.
+- Внешние npm-библиотеки остаются заменяемыми деталями; формат проекта и публичный API Codogma задаются самим проектом.
+
+## 5. Единая модель проекта — обязательный фундамент
+
+Редактор и игра должны понимать общие сущности, но **редакторскую модель сохранения нельзя смешивать с живыми runtime-объектами**.
+
+### 5.1. Проектная модель должна описывать
+
+- проекты, сцены, иерархию Node/Entity и Transform;
+- компоненты и типизированные редактируемые свойства;
+- Prefabs, вложенность, переопределения, ссылки на источник и обновление экземпляров;
+- стабильные идентификаторы объектов и ассетов;
+- зависимости и ссылки на изображения, аудио, шрифты, анимации, tilemaps и скрипты;
+- конфигурацию runtime, поддерживаемые физические backend-ы и параметры сборки;
+- версии форматов, правила валидации и миграции;
+- метаданные, используемые Inspector, сериализацией, кодогенерацией и тестами.
+
+### 5.2. Требования к проектным данным
+
+**Текущая реализационная база:** host-neutral Project/Scene/Prefab contracts v1, Component Schema/Registry/World и deterministic serialization находятся в packages/cge/. Фактические Core guarantees и незакрытые runtime границы приведены в [Core acceptance slice](core-component-acceptance-slice.md). Data-driven Scene Loader, Phaser runtime integration и HTML5 production build остаются отдельными незавершёнными capabilities.
+
+
+- Переименование или перемещение ассета не должно молча разрушать ссылки на него. Система должна обновлять управляемые ссылки или явно показывать ошибку/задачу исправления.
+- Сохранение и повторное открытие сцены не теряет поддерживаемые свойства, иерархию, настройки компонентов и префабные переопределения.
+- При обновлении Prefab правила распространения изменений и конфликтов переопределений должны быть детерминированы и видимы разработчику.
+- Неизвестные данные более новой версии нельзя молча удалять. Редактор должен предупредить пользователя или перейти в безопасный read-only режим.
+- При изменении сериализуемой схемы нужна явная версия и тесты миграции.
+- Валидация одного формата должна использовать общий schema contract в редакторе, build pipeline и тестах. JSON Schema + Ajv — основной кандидат для проверки сериализованных документов; Zod или аналогичный инструмент допустим для внутренних TypeScript API только если он не создаёт дублирующие источники схем.
+- Ссылки, ID и миграции должны быть частью проектного формата, а не набором скрытых эвристик по путям файлов.
+
+### 5.3. Сцена как сериализуемые данные, а не обязательный генерируемый класс
+
+**Versioning policy:** см. [ADR-0007 — Native Codogma Project Model](decisions/ADR-0007-native-codogma-project-model.md). Schema migrations относятся только к реально опубликованным версиям собственного Codogma Project Model.
+
+**Нормативное требование к новому Project Model/Core:** версия сериализованного описания `Scene` является каноническим исходным представлением сцены. Editor UI, живые runtime-объекты, Preview state и сгенерированный исходный код не являются независимыми источниками истины и не должны расходиться между собой.
+
+Сериализованное описание сцены должно хранить как минимум стабильный ID сцены, версию схемы, иерархию Node/Entity, стабильные ID узлов и экземпляров компонентов, Transform, идентификаторы типов компонентов, сериализуемые значения свойств, состояние активности, ссылки на Prefab и управляемые ссылки на ресурсы/скрипты. Точная форма схемы определяется реализационными контрактами, но семантика идентичности, ссылок, миграции и детерминированного round-trip обязательна.
+
+Загрузчик сцены нового Core должен выполнять воспроизводимый, отменяемый до активации pipeline:
+
+1. Прочитать envelope документа и проверить формат/версию схемы. Неизвестную или более новую версию отклонить с диагностикой, не переписывая исходный файл.
+2. Применить только зарегистрированную последовательность миграций к поддерживаемой версии в памяти; не менять файл проекта автоматически только из-за открытия.
+3. Проверить итоговую схему, уникальность и целостность ID, иерархию, Prefab overrides, ссылки на ресурсы и узлы, а также наличие всех зарегистрированных типов компонентов.
+4. Разрешить component modules только через явный registry/module manifest и проверяемый build-time dependency graph. Данные сцены могут ссылаться на зарегистрированные type IDs, но не могут сами задавать произвольный import path, имя исполняемого файла или код; не угадывать класс по имени сцены и не использовать `eval`/непроверенный динамический импорт.
+5. Создать таблицу идентичности узлов и сформировать иерархию Node/Transform; затем создать component instances и применить к ним валидированные сериализованные значения. Ссылки на другие узлы разрешать через таблицу ID после построения идентичностей, а не через имена или порядок обхода файлов.
+6. Выполнить lifecycle/activation только после успешного завершения preflight и разрешения обязательных ссылок. Порядок создания узлов, назначения компонентов и lifecycle callbacks должен быть детерминированным и покрытым тестами.
+7. При фатальной ошибке или отмене не оставлять частично активную сцену: откатить созданные runtime-объекты, освобождать ресурсы и listeners, вернуть структурированную диагностику с путём к документу, ID сцены/узла/экземпляра компонента и проблемным свойством/ссылкой. Операции отмены должны быть безопасны даже во время асинхронной загрузки ресурсов.
+
+Пользовательские TypeScript-компоненты — отдельные переиспользуемые модули с явной регистрацией и типизированной схемой свойств. Один модуль компонента должен назначаться разным узлам и использоваться в разных сценах без копирования игровой логики в код каждого уровня. Публичный контракт компонента не требует наследования от Phaser Scene/GameObject; runtime-specific возможности доступны через adapter/extensions.
+
+Загрузка одного component module в разные узлы создаёт отдельные component instances с независимыми сериализованными значениями и состоянием экземпляра. Ссылка на тип компонента (`componentTypeId`) не является ID его экземпляра. Ссылки между узлами/компонентами должны разрешаться по стабильным IDs и проверяться на отсутствующие цели и недопустимые циклы там, где цикл нарушает контракт.
+
+**Для каждой Scene запрещено создавать обязательный или автоматически сопровождающий её TypeScript-класс/файл (`Scene.ts`, `Level01.ts` и аналоги).** Scene — самостоятельный versioned document. Runtime строит её из сериализованных данных и явно зарегистрированных модулей. Имя Scene не влияет на имена Script assets, классов, exports или Component IDs. Внутренняя генерация build artifacts допустима только как неперсистентный шаг сборки всего проекта; она не создаёт редактируемый per-scene source и не является форматом Scene.
+
+Editor Host, Core, Preview и Build используют один Project Model и один Scene Loader contract. Scene остаётся сериализованным документом; Script является отдельным source asset, а runtime modules разрешаются через явный Project manifest. Production route для нового SolidJS Host и ограниченный UI rollback window регулируются отдельной UI cutover инициативой.
+
+## 6. Публичный TypeScript API и component system
+
+### 6.1. Принцип
+
+Codogma должен давать разработчику удобную компонентную модель, знакомую по Unity/Cocos на уровне концепций, но спроектированную для TypeScript. Пользовательский скрипт не должен быть вынужден наследоваться от конкретного Phaser game object или напрямую использовать Phaser API для обычных сценариев.
+
+Предполагаемые основные концепции:
+
+- Entity/Node — стабильная идентичность и положение в иерархии;
+- Transform — единая модель преобразований;
+- Component — часть поведения или данных, прикреплённая к Node;
+- System — обработка компонентов и игровых правил;
+- Scene — набор объектов и их зависимостей;
+- Component Schema/Metadata — описание типа, редактируемых свойств, ограничений, ссылок и значения по умолчанию;
+- Engine Services — время, ввод, ресурсы, физика, аудио, анимация и события.
+
+Названия и окончательные сигнатуры являются предметом API-design, но единая модель и стабильные гарантии жизненного цикла обязательны.
+
+### 6.2. Жизненный цикл
+
+До стабилизации API необходимо определить и протестировать порядок и семантику инициализации, активации, начала работы, обновления, отключения и уничтожения компонента. Вариант TypeScript API может включать методы наподобие onLoad, onEnable, start, update(dt), lateUpdate(dt), onDisable и onDestroy; список методов нельзя считать окончательным до API review.
+
+Тесты должны подтверждать:
+- какие методы вызываются однократно и при каких условиях;
+- поведение при повторном включении/отключении;
+- порядок обновления компонентов и систем;
+- добавление/удаление компонентов во время update без порчи коллекций;
+- уничтожение и освобождение ресурсов;
+- поведение при pause/resume, смене сцены и повторной загрузке.
+
+### 6.3. Object/component Core и optional Data-Oriented ECS
+
+Базовый `@codogma/cge` предоставляет host-neutral object/component модель для Project Model, Scene/Node/Transform, Component Schema, Inspector, сериализации и lifecycle. Это основной путь для обычных игровых объектов и не обязательная data-oriented модель для каждой игры.
+
+Data-Oriented ECS — отдельная optional runtime capability; Phaser integration также остаётся отдельной optional capability. Они не входят в обязательные dependencies Core или базового Phaser runtime. Пакеты ещё не реализованы и принадлежат отдельным задачам COD-111/112.
+
+Все нормативные требования к ECS — разделение authoring schema и runtime storage, identity mapping, ownership, package/API/lifecycle contract, Phaser adapter, EVA.js reuse, feature IDs/providers, production build exclusion и performance acceptance — определяются только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Этот раздел сохраняет product scope и границу Core, но не дублирует ECS-спецификацию.
+
+### 6.4. Inspector и пользовательские компоненты
+
+- Пользовательские TypeScript-компоненты должны объявлять или предоставлять метаданные редактируемых свойств.
+- Тип компонента должен иметь стабильный идентификатор и явную регистрацию в runtime/build module graph; выбор класса не должен зависеть от имени сцены или соглашения о пути к файлу. Один компонентный модуль может многократно использоваться в разных сценах и узлах.
+- Метаданные схемы должны однозначно различать сохраняемые свойства компонента, editor-only настройки и временное runtime-состояние. Сериализация сохраняет только явно объявленные persisted fields; editor-only и transient runtime fields не должны случайно попадать в проектный файл.
+- Default values и optional properties определяются текущей native Component Schema; невалидные значения получают property-specific validation diagnostics и не приводят к незаметному приведению типов или частичному сохранению.
+- Inspector должен отображать типизированные поля, ограничения/валидацию, значения по умолчанию, ссылки на ресурсы и поддерживаемые ссылки на другие объекты.
+- Одни и те же метаданные должны использоваться редактором, сохранением, валидацией и runtime inspector.
+- Изменение сериализуемого значения из Inspector должно проходить через единый механизм команд/операций, позволяющий реализовать Undo/Redo и предсказуемое сохранение. Редактирование persisted property, editor-only metadata и изменение transient runtime state должны иметь разные явно определённые пути.
+- Редактор не должен требовать генерировать весь игровой код визуально: произвольные TypeScript-модули и пользовательская архитектура проекта остаются первоклассным сценарием.
+- Должен быть предусмотрен безопасный выход на низкоуровневые возможности выбранного runtime через специализированные API расширения.
+
+### 6.5. Cross-platform Input API
+
+- Codogma предоставляет единый Input API для клавиатуры, указателя/мыши и touch screens. Поддержка gamepad может добавляться через capability-based adapter/extension.
+- Система должна различать физический ввод и логические действия игры там, где нужен remapping: bindings задаются в конфигурации проекта, могут быть заменены во время выполнения и проверяются на конфликты/неподдерживаемые устройства.
+- API определяет нормализованные pointer/touch coordinates, конвертацию между экранным, canvas, camera, world, local и UI coordinate space, а также понятное поведение при нескольких камерах/viewport.
+- Обрабатываются pointer capture/release, несколько касаний там, где браузер позволяет, cancel/lost pointer, потеря фокуса/visibility, preventDefault/scroll conflicts и повторное получение фокуса. Застрявшая кнопка/ось ввода после смены вкладки не должна оставаться активной.
+- UI input и gameplay input разделяются правилами routing/priority: взаимодействие с кнопкой/полем ввода не должно случайно запускать действие игрового персонажа под ним.
+- Тесты покрывают mouse, keyboard, touch, UI hit testing, смену вкладки, resize и преобразования координат; браузерные ограничения документируются вместо обещания одинакового поведения во всех окружениях.
+
+### 6.5.1. Input Actions model и Editor authoring
+
+Runtime Input API различает **физические device inputs** и **логические игровые actions**. Game code по возможности подписывается на стабильные action IDs/имена, а не на конкретные клавиши или пути устройств.
+
+- **Action Asset / Project Input Configuration** содержит versioned Action Maps, logical Actions и physical Bindings. Action Map группирует actions по context (например Gameplay или UI) и может включаться/отключаться как целое.
+- **Action** объявляет stable ID, имя, semantic type/value type (Button/Scalar/Vector2 — только при поддержке runtime), описание и применимую policy. Конкретная клавиша/устройство не является частью логической identity action.
+- **Binding** связывает action с физическим control path/device input. Один action может иметь несколько bindings; device groups/control schemes ограничивают набор доступных bindings только для действительно поддерживаемых устройств.
+- **2D composites** позволяют агрегировать directional bindings (например WASD/Arrow Keys) в Vector2 с отдельными positive/negative parts, детерминированным normalization и проверяемой конфликтной семантикой.
+- **Binding diagnostics** выявляют дубли, несовместимые типы, неизвестные/неподдерживаемые device paths, неверные composite parts и конфликты в одновременно активных maps. Overlap между взаимоисключающими contexts не должен считаться конфликтом без учёта activation policy.
+- **Runtime rebinding overrides** пользователя (например, переназначение Jump с Space на другую клавишу) хранятся отдельно от project defaults и tracked Action Asset. Reset возвращает project defaults, не меняя общий project configuration.
+- **Input Actions Editor** в SolidJS Host управляет Action Maps/Actions/Bindings, properties, validation/conflict diagnostics и test/listen mode. Это отдельный authoring workflow; Project Settings предоставляет ссылку/выбор project-wide asset, но не дублирует Action editor. Editor hotkeys принадлежат Editor Preferences, а не game input.
+- Начальный browser/2D scope — keyboard, mouse/pointer и touch. Gamepad или иные device types доступны только после capability-based adapter и проверенной acceptance. VR, sensor-specific и 3D input workflows не добавлять.
+- Test/listen mode — read-only диагностический поток action state; он не запускает gameplay, не создаёт второй input dispatcher и должен завершать listeners/captures при stop, закрытии окна, смене проекта и потере сессии.
+- Исполняемый runtime contract и lifecycle остаются в COD-29. Versioned native schema/IDs/references — в COD-25. SolidJS authoring — COD-98/COD-99. Project Settings/Input entry point — COD-96/COD-97.
+
+**Задачи:** [COD-98 — Input Actions Editor UX/UI](https://linear.app/codogma-engine/issue/COD-98/sproektirovat-input-actions-editor-uxui-dlya-solidjs-host), [COD-99 — Input Actions authoring implementation](https://linear.app/codogma-engine/issue/COD-99/realizovat-input-actions-authoring-workflow-v-solidjs-host).
+
+### 6.6. Scene management и жизненный цикл уровня
+
+- Runtime API должен поддерживать загрузку, активацию, деактивацию и выгрузку сцен с определённым порядком lifecycle callbacks; в целевом Core сцена строится из Project Model и реестра компонентов, а не требует отдельного генерируемого класса уровня.
+- Асинхронная загрузка сообщает прогресс/ошибки, может быть отменена при смене уровня и не оставляет частично созданные сущности или ресурсы после неудачи.
+- Переходы между сценами определяют, какие данные/объекты уничтожаются, какие могут сохраняться и как обрабатываются ссылки между сценами. Постоянные объекты не должны случайно дублироваться при повторной загрузке.
+- Зависимости ресурсов сцены должны быть известны Asset Pipeline; возможно заранее загрузить следующий уровень и освобождать неиспользуемый набор ресурсов после перехода.
+- Экран загрузки/transition и анимации перехода могут реализовываться встроенным минимальным сценарием или расширением; базовый Scene Manager не должен зависеть от конкретного UI framework редактора.
+- Проверки покрывают повторное открытие уровня, отмену загрузки, отсутствующий ассет, повторный вход в сцену, корректное dispose и отсутствие зависших listeners/timers.
+
+- Проверки Scene Manager покрывают повторное открытие уровня, отмену загрузки, отсутствующий ассет, повторный вход в сцену, корректный dispose и отсутствие зависших listeners/timers. Ошибка или отмена на любом этапе loader не должна оставлять частичную иерархию или активированные компоненты.
+
+### 6.7. Time, scheduler и Tween service
+
+- Определить единый источник времени и явный порядок фаз обновления; игровые компоненты, физика, анимация, tweens и события не должны независимо продвигать симуляцию.
+- API должен различать real/unscaled time и game-scaled time для паузы, меню и эффектов; таймеры и scheduled callbacks должны отменяться и очищаться вместе с владельцем.
+- Tween service должен поддерживать целевые свойства, duration, easing curves, delay, repeat/yoyo и последовательности/параллельные группы в рамках выбранного контракта.
+- Pause/resume/time scale/stop и уничтожение объекта должны иметь детерминированное поведение; callbacks не должны срабатывать после dispose их владельца.
+- Поведение scheduler/tween тестируется при frame stalls, смене сцены, pause/resume, низком FPS и повторной активации компонентов.
+
+### 6.8. Сохранения и локальное пользовательское состояние
+
+- Предусмотреть backend-neutral Save/Storage API для пользовательских настроек и игровых сохранений. В Web runtime базовая реализация использует браузерное persistent storage (например, IndexedDB) там, где это подходит; localStorage допустим для небольших простых настроек, а не больших игровых состояний.
+- Формат сохранения должен быть версионирован, валидироваться, поддерживать миграцию и безопасное восстановление после повреждённых/частично записанных данных.
+- API учитывает асинхронность, квоты, недоступность storage, очистку данных браузера, несколько вкладок и ограничения private mode; сбой хранения не должен без объяснения разрушать текущую сессию.
+- Сохранения должны отделяться от секретов и учётных данных. Для платформенного cloud save используются отдельные Platform Services adapters, но контракт локального Save API не должен зависеть от SDK конкретной площадки.
+- Добавить тесты миграции сохранений, повреждённых данных, отсутствующего storage и конкурентной записи.
+
+
+## 7. Runtime adapters и возможная замена Phaser
+
+### 7.1. Phaser — первая реализация, а не обязательный публичный контракт
+
+Текущая интеграция с Phaser 4.2.1 — практический старт. Публичный API Codogma не должен повсеместно раскрывать типы и классы Phaser, если это не специальное расширение.
+
+Не нужно абстрагировать каждый метод и каждую возможность ради абстракции. Общие контракты нужны для стабильных понятий: сцены/объекты, Transform, жизненный цикл компонентов, время, ввод, ресурсы, физика, аудио, анимация и диагностика. Для специализированных функций допускается runtime-specific bridge.
+
+#### Ограничение текущего пути поставки
+
+Runtime Adapter изолирует API и жизненный цикл, но сам по себе **не делает единый Phaser bundle выборочным**. Пока путь загрузки включает полный вендорный runtime, отключение feature в конфигурации может управлять доступностью функции на уровне Codogma, но не является доказательством удаления байтов соответствующей подсистемы из production output.
+
+До заявления о выборочной сборке необходимо сравнить текущий baseline с поддерживаемыми upstream build variants и/или воспроизводимой кастомной сборкой, проверить generated code и runtime-модули (включая внешние модули вроде Box2D), измерить итоговый output и закрепить результат в build fixture/report. Если отдельный модуль не удаётся исключить проверяемо, документация и UI не должны обещать уменьшение bundle только на основании Feature Registry metadata.
+
+### 7.2. PixiJS — экспериментальная альтернатива, не обещанная замена
+
+[PixiJS](https://pixijs.com/8.x/guides/) может быть базой для собственного рендеринга, но сам по себе не заменяет [Phaser](https://docs.phaser.io/phaser/getting-started/what-is-phaser) как game framework. Миграция затрагивает игровые сцены, lifecycle, input, cameras, physics integration, animation, audio, resources, debug and asset pipeline.
+
+До решения о замене Phaser необходимо:
+
+1. Стабилизировать собственную модель проекта и минимальный публичный API.
+2. Создать runtime adapter для существующего Phaser-пути.
+3. Проверить вертикальный срез с пользовательским компонентом, Transform, загрузкой ресурса, вводом, столкновением и анимацией.
+4. Реализовать экспериментальный PixiJS adapter для того же ограниченного сценария.
+5. Сравнить корректность, производительность, объём поддержки, размер сборки и стоимость миграции.
+6. Принять одно из решений: оставить Phaser основным runtime; исследовать PixiJS как альтернативу; либо начать ограниченный переход. Постоянно поддерживать оба runtime только при подтверждённом пользовательском спросе и приемлемой стоимости.
+
+Не считать замену Phaser простым обменом одной зависимости на другую и не начинать её ради брендинга. Необходимо учитывать, что Phaser 4 использует собственную архитектуру рендеринга, а не просто PixiJS под капотом.
+
+
+### 7.3. Физика и сменные physics backends
+
+Codogma предоставляет единый публичный Physics API и слой адаптеров к конкретным физическим реализациям. Сходные понятия должны иметь согласованную семантику, но API не должен скрывать критические различия solver-ов. Наличие общего интерфейса не означает, что каждая функция поддерживается каждым backend.
+
+- Для каждой сцены/physics world явно задаются backend и конфигурация. В рамках одного мира только один solver управляет физическим состоянием тела; запрещено одновременно обновлять один объект через два независимых физических мира.
+- Адаптер описывает фактическую матрицу возможностей: типы тел, силы/импульсы, ограничения/joints, damping, sleeping, continuous collision detection (если доступно), фильтрацию коллизий, collision groups/layers/masks, sensor bodies, query/raycast, события столкновений и debug draw.
+- Inspector показывает только настройки, применимые к выбранному backend; недоступные параметры обозначаются явно, не сериализуются как будто они работают и не теряются молча при смене backend.
+- Общий контракт покрывает создание/уничтожение тела и форм, синхронизацию Transform, фильтрацию и события коллизий, запросы мира и доступные диагностические данные. Расширенные backend-specific возможности доступны через явные расширения.
+- Время симуляции, fixed timestep, накопитель delta, максимальное число substeps и порядок обновления задаются централизованно и тестируются. Если backend сам управляет timestep, интеграция должна исключать двойное продвижение мира и документировать семантику pause/resume.
+- Визуальная форма коллайдера, сериализованная конфигурация и фактическое runtime-тело должны совпадать. Debug overlay показывает формы, центры, collision filters и состояние столкновений в пределах доступных API.
+- **Native Box2D runtime contract:** runtime provider и его exported API закрепляются в package/build manifest; Debug Draw оформляется отдельной capability. Версии runtime и helper modules фиксируются в fixture/build report. Ambient declarations описывают только типы и не доказывают наличие runtime exports в JS bundle.
+- Для TypeScript export тестируется полный generated project с теми же `.js` helpers и matching declarations для импортируемых named exports. `editor typecheck` не доказывает корректность TypeScript-сцены, генерируемой пользователю; `Phaser.Box2D.*` ambient API не заменяет declaration contract `PhaserBox2D.js`.
+- World ID и Body ID — разные идентификаторы; shape creation требует корректный body ID. Не добавлять самостоятельные shape nodes, пока Inspector/schema, parent/body-ID propagation, finite/even coordinate validation, минимум три вершины, convex-hull limits и prefab semantics не приняты end-to-end.
+- `SetWorldScale` и accumulator state могут находиться на уровне модуля внешней библиотеки. Не заявлять поддержку одновременно активных миров с разными scale, пока сценарий не протестирован на зафиксированной версии runtime, включая pause/resume и shutdown/restart.
+- Нужны тесты на группы/маски, body types, столкновения, уничтожение сущностей, переходы scene lifecycle, паузу/возобновление, фиксированный шаг и удаление физических ресурсов.
+- Производительность сравнивается на одинаковой воспроизводимой сцене: число динамических тел, контактов, joints, размер сборки, время инициализации, frame time и поддержка браузеров/WASM. Не объявлять backend быстрее без измерений.
+
+Кандидаты для прототипа: текущие возможности [Phaser Arcade Physics](https://docs.phaser.io/phaser/concepts/physics/arcade), [Matter.js](https://brm.io/matter-js/), [Box2D](https://box2d.org/documentation/) (в том числе WASM) и [Rapier 2D](https://rapier.rs/docs/user_guides/javascript/getting_started_js/). Это не утверждённый список обязательных зависимостей. Выбор делается после сравнения API, качества интеграции в браузер, лицензии, bundle size, диагностики, производительности и стоимости поддержки. Смена backend не должна автоматически означать переписывание Project Model, публичного API или Editor UI.
+
+## 8. Game Preview Host, live debugging и profiler
+
+Это одно из основных отличий Codogma от редактора, который только меняет сериализованную сцену.
+
+### 8.1. Три режима проверки игры
+
+1. **Embedded Game View** — игра в центральной панели редактора; быстрая итерация, проверка сцены, выделение объектов и live inspector.
+2. **Standalone Game Window** — игра в отдельном окне для fullscreen, масштабирования, ввода, производительности и проверки игрового поведения без панелей редактора.
+3. **External Browser Preview** — запуск в обычном браузере для проверки целевого HTML5-поведения, включая сценарии платформенных площадок.
+
+Все режимы должны использовать общий контракт управления preview, насколько это возможно. Game Preview Host следует отделить от Tauri/Electron API: оболочка предоставляет нужный способ запуска, а общий host управляет жизненным циклом, сообщениями и диагностикой.
+
+### 8.2. Управление и обмен сообщениями
+
+Целевой Preview загружает проверенную сцену из Project Model через тот же Core/Runtime Adapter contract, что используется игровым runtime/build, а не зависит только от результата генерации отдельного scene-класса. При запуске создаётся явный согласованный snapshot текущей рабочей модели проекта; он может включать ещё не сохранённые изменения редактора, если это поведение выбрано и обозначено в UI. После старта runtime state производен от этого snapshot. Runtime mutation не записывается обратно в Project Model/файлы автоматически: перенос runtime-значений в авторские данные выполняется только отдельной явной командой с валидацией и undoable semantics.
+
+Контракт preview должен определить команды и события, включая поддерживаемые режимом Play, Pause, Resume, Restart/Stop, изменение размеров viewport, логи и ошибки runtime, а в соответствующих режимах — выбор объекта, данные компонентов и сообщения Inspector. Поддержку Step/Single Frame и изменения time scale нужно включать после определения корректной семантики управления игровым циклом.
+
+Транспорт (iframe/message channel, window bridge, локальный server или иной механизм) выбирается реализацией. Не считать iframe автоматической изоляцией процессора: embedded preview может разделять renderer-процесс с интерфейсом. При проблемах отзывчивости проверить отдельное окно/контекст и измерить эффект.
+
+### 8.3. Live Inspector
+
+- Выбор работающего объекта должен быть связан со стабильным ID объекта/компонента, а не случайной ссылкой на визуальный Sprite.
+- При старте Preview фиксируется Project Model snapshot/ревизия; diagnostics и live selection связаны именно с этой ревизией. Изменения в редакторе после старта не должны незаметно переписывать запущенную сцену, а runtime state не должен считаться изменением project source.
+- При выборе объекта runtime Inspector показывает фактические текущие значения и состояние компонентов, включая поддерживаемые сведения о Transform, физике и AI.
+- Переход из runtime selection к соответствующему объекту в редакторе должен быть доступен там, где связь может быть установлена надёжно.
+- Изменение свойства во время игры допускается только для поддерживаемых полей. Оно должно иметь явную семантику: временное runtime-изменение либо изменение исходных данных; эти действия нельзя смешивать молча.
+- Отсутствие или устаревание связи между моделью проекта и runtime-объектом должно отображаться как диагностическая ситуация. Stop/Restart освобождает все объекты, listeners, timers и runtime resources текущей сессии; повторный старт создаёт новый согласованный snapshot.
+
+### 8.4. Debugger и Profiler
+
+Этапами добавить:
+- логи, ошибки загрузки/компиляции, trace ключевых runtime-событий;
+- просмотр реальной иерархии, компонентов, Transform, состояния и ссылок на ресурсы;
+- overlay физических тел/коллизий и диагностические цвета/слои;
+- frame time и частоты обновления, активные сущности/объекты, данные по resource bundles и объёмам ресурсов;
+- профилирование CPU и памяти в пределах метрик, доступных конкретной платформе, с чётким указанием, какие показатели измерены, а какие оценочные;
+- запись/повтор воспроизводимого диагностического сценария там, где это оправдано.
+
+Браузерные DevTools дополняют, но не заменяют инструменты, понимающие модель проекта и runtime Codogma.
+
+
+## 9. Требования к 2D-редактору
+
+Для каждой существующей подсистемы составляется матрица: «текущая реализация / native Codogma contract / реализовано в SolidJS Host / runtime/build evidence / отсутствует / требует собственной реализации». Новый Host реализуется самостоятельно на SolidJS и использует общие typed Engine services, Project Model и runtime contracts.
+
+### 9.0. Editor Host и правила staged migration
+
+**Product/UX и implementation baseline:** каждая задача, меняющая пользовательский интерфейс или 2D authoring workflow, должна использовать [стандарт reference для 2D Editor Host](editor-reference-standard.md): Unity 6.6 — основной UX-reference, Cocos Creator 4.0 LTS — дополнительный 2D workflow reference, Godot Editor — task-specific implementation reference. Codogma остаётся строго 2D-only. Все data/runtime contracts задаются собственными ADR, typed schemas и native fixtures.
+
+- Целевой UI — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Первый Workbench + Scene slice COD-80 реализован и PR #30 смержен в `dev`; production `/editor/` cutover остаётся в COD-87.
+- `source/editor/` — frozen legacy boundary: только read-only inventory, временный rollback и последующее удаление в COD-88. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и любые модернизации code/manifests/lockfiles/scripts/dependencies. Единственное исключение — минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic; она не допускает регулярной поддержки. Технические cutover/rollback действия выполняются только в необходимом для COD-87 объёме. Все новые UI/authoring workflows создаются в `src/editor/`.
+- Переносить следует только пользовательские UI workflows и сформулированные потребности. Data/domain/runtime contracts проектируются как собственные Codogma contracts; реализация Editor Host должна использовать typed API boundaries и общую Project Model.
+- Backend HTTP/file APIs, MCP registry и независимые Phaser algorithms могут переиспользоваться после технической проверки. Project Model, serialization, Script/Component identity и runtime loading path принадлежат собственным Codogma contracts и проверяются native fixtures.
+- Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
+- Cutover и rollback window выполняются в COD-87; Colibri removal — отдельная COD-88 после cutover, consumer audit, inventory sign-off и license review. Механический перенос source/editor → src/editor отменён (COD-22).
+
+### 9.0.1. Project Settings, Workspace Settings и Editor Preferences
+
+Настройки нового SolidJS Host должны иметь явного владельца данных и scope. Project Settings, локальное workspace state и Editor Preferences — разные категории persistence; одну настройку нельзя сохранять одновременно в нескольких местах без явно заданной precedence policy.
+
+**Scopes и владельцы:**
+
+- **Project Settings** — версия проектной конфигурации, общая для contributors и хранящаяся в Project Model/project configuration. Изменения валидируются текущей Project Settings schema и проходят save/reopen round-trip. Такие настройки должны быть доступны в VCS вместе с проектом.
+- **Workspace Settings** — локальные настройки конкретного проекта на конкретной машине/рабочем месте. Они не коммитятся по умолчанию, не являются частью project model и не входят в release build. Это подходящее место для локального workspace choice, если он отличается от shared project intent; фактический docking/panel layout state остаётся у COD-83.
+- **Editor Preferences** — локальные настройки пользователя, применимые ко всем открываемым им проектам на данной машине: тема, UI scale/density, editor-wide confirmation behavior, keyboard preference и прочие user-scoped options. Они хранятся отдельно от project files и не влияют на game build/runtime.
+
+**Build Profiles и precedence:**
+
+- Build Profiles (COD-95) — project/target build configuration и могут задавать только явно объявленные profile overrides для build-relevant Project Settings. Они не являются User Preferences и не должны перезаписывать общую конфигурацию проекта при выборе профиля.
+- Приоритет конфигурации для build должен быть детерминированным и документированным: explicit CI/CLI overrides → выбранный Build Profile → Project Settings defaults. Workspace Settings и Editor Preferences не участвуют в разрешении игровых настроек при сборке.
+- Если значение имеет per-target override, Settings UI показывает его источник (project default/profile override/CLI override, если доступно) и не создаёт скрытую копию одного и того же поля.
+- Переключение профиля или пользовательской темы не должно менять общий project configuration и не должно оставлять скрытые dirty changes.
+
+**Settings Registry и страницы:**
+
+- Editor Host предоставляет typed Settings Registry/descriptor contract: stable setting/page ID, owning domain, scope, type/schema, default, validation, description/help, availability conditions, storage adapter и schema version. Не использовать свободные JSON paths или произвольные UI fields без владельца и schema.
+- Доменные подсистемы регистрируют свои страницы/sections и validators через публичный contract. Settings UI агрегирует descriptors и вызывает domain service; он не становится новым Project Model и не копирует бизнес-логику Input, Physics, Audio, Asset Import или Build.
+- Стороннее editor extension может добавить свою страницу только через явный, проверенный Extension API/lifecycle и после trust/activation policy. Одной декларативной metadata недостаточно для исполнения кода.
+- Страницы должны показывать только доступные и реализованные settings. Если target/capability не поддерживается, поле скрывается либо отображается как недоступное с причиной; нельзя показывать фиктивный control.
+- Project Settings/Preferences используют общую категорийную навигацию и поиск. При необходимости показываются dirty state, Apply/Revert, Reset to defaults, invalid/unsupported state и источник текущего значения. In-context controls могут ссылаться на то же setting descriptor, а не создавать независимые settings copies.
+- Package Manager (COD-92/94) и Build Profiles (COD-95) остаются самостоятельными workflow. Settings pages не дублируют их registry/dependency state, package install actions или build profile editor. Рабочая раскладка/docking остаётся у COD-83.
+
+**Начальные группы — только по готовности domain contracts:**
+
+- Project: General/project metadata; Input (COD-29); 2D Physics (COD-42); Audio (COD-61); Asset Import defaults (COD-86/COD-59); Localization при наличии поддерживаемых project-level policies; 2D rendering/quality settings при наличии typed contract.
+- User/Workspace: Appearance (theme/scale/density), keymap/shortcuts, scene viewport navigation preferences, restore last workspace, editor-wide confirmations. Не дублировать конкретные per-panel layout values, которые принадлежат COD-83.
+- Build: ссылочная интеграция с Build Profiles COD-95; никакого самостоятельного bundler configuration в Preferences.
+- Package ecosystem: переход к COD-92/94; scoped registries и dependencies не должны дублироваться в общем preferences store.
+
+**Изменения и recovery:**
+
+- Save project settings должен сохранять единый versioned configuration document через Project Model service; partial writes и конкурирующие изменения требуют optimistic version/revision check либо другого явного concurrency contract.
+- Invalid setting value не должна silently replace valid project config. Ошибки показываются по setting ID/category с причиной и safe action; reset должен менять только выбранное значение/категорию.
+- Unknown descriptor/page/schema version от extension даёт diagnostic и не приводит к выполнению произвольного кода.
+- Project switching очищает привязанные editor view models, отменяет или адресует незавершённые операции и загружает settings только для нового project context.
+- Defaults должны быть детерминированы для текущей Project Settings schema. Неподдерживаемая версия или невалидное значение дают структурированную диагностику; изменения не должны применяться частично.
+
+**Задачи:** [COD-96 — Project Settings / Editor Preferences design](https://linear.app/codogma-engine/issue/COD-96/sproektirovat-project-settings-i-editor-preferences-dlya-solidjs-host), [COD-97 — implementation](https://linear.app/codogma-engine/issue/COD-97/realizovat-project-settings-i-editor-preferences-v-solidjs-host), [COD-25 — Project Model](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema), [COD-83 — workspace layout](https://linear.app/codogma-engine/issue/COD-83/razvit-docking-i-workspace-layout-novogo-solidjs-editor-host).
+
+### 9.1. Сцены, компоненты и Prefabs
+
+Целевой качественный уровень включает:
+- иерархию, Transform, камеры, выделение, групповые операции и предсказуемую историю Undo/Redo;
+- пользовательские TypeScript-компоненты, типизированные Inspector-свойства, валидацию и понятные сообщения об ошибках;
+- Prefabs, вложенные Prefabs, переопределения, обновление экземпляров и диагностику конфликтов;
+- управляемые стабильными ID ссылки на ресурсы и объекты;
+- синхронизацию модели проекта и runtime без принудительной генерации всей игровой логики из визуального редактора;
+- запуск сцены из версионированных сериализованных данных и зарегистрированных TypeScript-компонентов; per-scene generated TypeScript source запрещён и не является входом Preview/Build.
+
+### 9.2. Инструменты создания контента
+
+По результатам gap analysis развивать следующие взаимосвязанные инструменты.
+
+**Sprite authoring и предсказуемая отрисовка**
+- Предусмотреть импорт как одиночного изображения и как spritesheet с ручной/автоматической нарезкой; редактирование crop/trim, pivot/anchor, границ и метаданных кадра. Повторный импорт не должен молча сбрасывать ручные корректировки без предупреждения или миграционного правила.
+- Позволить создавать пользовательские render outline и physics collision shapes спрайта, включая автоматическую генерацию исходного контура с ручной корректировкой. Physics shape не должна автоматически считаться совпадающей с видимым alpha outline.
+- Поддержать 9-slicing и tiled draw mode для масштабируемых UI-панелей/окон, а также masks/clipping в пределах возможностей runtime.
+- Ввести явные sorting layers, sorting order/groups и документированный алгоритм depth sorting для 2D-сцен. Для top-down игр должна быть настройка Y-based sorting; равные значения сортируются стабильно, не зависят от случайного порядка создания объектов.
+- Inspector показывает pivot, размеры, texture/sprite source, render layer/order и применённую оптимизацию. Runtime test подтверждает, что sorting, trimming и pivot сохраняются после save/reopen/build.
+
+**Границы ответственности и metadata contract**
+- Asset/frame metadata, slicing, trim/crop/pivot, collision authoring и reimport принадлежат native Asset Library/Sprite authoring workflow (COD-86).
+- Sorting layers/groups, стабильный depth ordering и Y-based sorting принадлежат общему 2D render-order contract (COD-41). Sprite Editor использует этот контракт, но не создаёт параллельную модель sorting.
+- 9-slicing и tiled draw mode остаются authoring-возможностями Scene Editor для соответствующих Phaser GameObjects; они не дублируются как независимый механизм texture metadata.
+- Native schema, coordinate spaces и фактические ограничения runtime adapters описаны в [Sprite asset metadata contract](sprite-asset-metadata.md). Наличие сохранённой polygon/compound geometry не означает её автоматическую поддержку каждым physics backend.
+
+**2D-рендеринг и визуальная диагностика**
+- Обеспечить корректный и измеряемый workflow спрайтов, текстурных атласов, текстовых объектов, масок, Graphics/custom geometry, фильтров и 2D-эффектов, если их поддерживает текущий runtime.
+- Сначала использовать возможности Phaser и его renderer; собственный рендерер или низкоуровневую замену вводить только при подтверждённом архитектурном/производительном пробеле.
+- Встроить доступные метрики: frame time, draw calls/batches, число активных объектов, текстур/атласов и GPU-ресурсов — с обозначением ограничений конкретного browser/runtime backend.
+- Для динамической графической геометрии применять рост буферов по мере реальной потребности и повторное использование ресурсов там, где это подтверждается профилем; избегать крупных безусловных выделений для мелких объектов и циклов частого пересоздания буферов.
+- Где runtime даёт такую информацию, Profiler/Atlas Analyzer показывает rendered vs culled sprites, количество используемых/загруженных атласов, страниц/текстур и процент использования площади атласа; предупреждает о чрезмерно пустых страницах и атласах с одной текстурой без явного обоснования.
+- Для атласов предусмотреть preview упакованного результата, диагностику конфликтующих/повторно включённых спрайтов, управление rotation/tight packing и target-specific variants, если это поддерживает pipeline.
+- Автоматическая batching-оптимизация — предпочтительное поведение по умолчанию. Ручные static batching/merge инструменты добавляются только при измеренном выигрыше, корректной обработке изменений и наличии профайлера, объясняющего компромисс.
+
+**Дополнительные формы и 2D lighting (поздний этап)**
+- После стабилизации обычных спрайтов и Tilemap предусмотреть spline-based SpriteShape-like editor для органических контуров, дорожек и кромок terrain; collision generation и render mesh должны иметь единый источник настроек.
+- Рассмотреть 2D point/area lights, shadow casting/occlusion masks, sprite normal maps и secondary textures для управляемого светотеневого стиля.
+- Custom 2D materials/shaders и post-processing должны подключаться через ограниченный renderer extension API и иметь fallback/diagnostics для неподдерживаемых browser contexts.
+- Эти возможности не требуют создавать копию Unity URP или Cocos render pipeline. Начинать следует с наиболее полезных 2D effects в существующем Phaser renderer, а отдельную render pipeline abstraction проектировать только после вертикального среза и измерений.
+
+**Animation Editor и Animation Controller**
+- Сохранить timeline/keyframes/curves и события анимации, если они доступны в текущей системе.
+- Добавить визуально редактируемый Animation Controller/State Graph для типичных 2D-состояний: Idle, Run, Attack, Hurt, Death и пользовательских состояний.
+- Контроллер должен описывать состояния, переходы, условия, параметры, события и правила начального состояния; проект должен валидироваться на недостижимые состояния, некорректные переходы и отсутствующие клипы.
+- Для направленных/вариативных анимаций предусмотреть blend-параметры/1D-2D blend, если прототип подтверждает ценность для 2D workflow. Не переносить 3D-centric pose graph целиком, если он не нужен.
+- Sprite-sheet animation — базовый workflow. Skeletal animation через Spine/DragonBones и другие форматы оформляется как отдельные adapters/extensions с проверкой лицензий, импортёров и совместимости с export.
+- Рассмотреть визуальный 2D bone rigging/skinning, attachment/slot setup и замену частей спрайта как отдельный P1/P2 authoring extension, если это подтверждено реальными сценариями; поддержка только проигрывания импортированного skeletal clip не должна ошибочно считаться полным rigging editor.
+
+**Tilemap Editor**
+- Поддержать квадратные сетки в базовом workflow; hexagonal/isometric layouts и пользовательские grid transforms добавить как расширение после обеспечения общей tilemap-модели.
+- Поддержать слои, tilesets/palettes, выбор/кисти, заливку, стирание, прямоугольную/шаблонную кисть, повторно используемые brush presets, rule tiles/auto-tiling и custom brush/tile extensions там, где это оправдано.
+- Сохранять tile properties, object layers, animated tiles, collision data и пользовательские метаданные. Коллизии должны соответствовать runtime physics adapter и проверяться debug overlay.
+- Предусмотреть совместимый импорт (и экспорт там, где модель позволяет без потери данных) с [Tiled](https://docs.mapeditor.org/en/latest/manual/introduction/): TMX/TSX и необходимые texture references. При неподдерживаемых свойствах импортёр обязан сообщать о потере/ограничениях, а не silently flatten the map.
+- Большие карты должны поддерживать chunking/culling и измеряемые обновления только изменившихся областей; не перестраивать весь tilemap при каждом изменении одной клетки без необходимости.
+- Tilemap Profiler должен по возможности различать число отображаемых tilemaps/chunks и время rendering, update/rebuild и collision processing. Это помогает отличать проблему рендера от дорогостоящего обновления сетки или коллизий.
+- Изменения тайлмапа должны отражаться в Project Model, сохраняться, участвовать в Undo/Redo и проходить runtime/build acceptance. Авторинг внутри Codogma и импорт внешнего формата должны опираться на одну согласованную модель, а не на две несовместимые копии.
+
+**UI Editor**
+- UI следует моделировать как сериализуемые сущности и компоненты, воспроизводимые одинаково в editor preview и итоговом runtime.
+- Поддержать anchors/constraints, layout-контейнеры (horizontal/vertical/grid), выравнивание, отступы, resize policies, масштабирование относительно базового разрешения, safe areas, вложенность, прокрутку и clipping/masks.
+- Поддержать типичные интерактивные состояния контролов (normal/hover/pressed/disabled/focused там, где применимо), кнопки, переключатели, слайдеры, поля ввода, progress bars и доступное управление текстом.
+- Для UI-графики учитывать 9-slicing/tiled sprites, текстовые атласы/шрифты, outlines/shadows и rich text; при использовании custom fonts явно задавать fallback и поведение при отсутствии символа.
+- Ввод должен корректно маршрутизироваться между игровым UI и игровым миром; keyboard navigation/focus, понятные hit targets и масштабирование текста должны поддерживаться там, где это применимо к типу контента.
+- Обеспечить тесты на разные aspect ratios, разрешения, ориентации и мобильные viewport; элементы не должны случайно выходить за экран или перекрывать safe area.
+- Не смешивать UI-систему редактора со UI runtime игры: панели редактора и элементы игровой сцены используют разные слои, жизненные циклы и зависимости.
+
+**Physics Editor**
+- Визуально редактировать тела/формы, типы тел, материалы, joints при поддержке backend, collision layers/groups/masks и настройки world.
+- Отражать ограничения выбранного backend в Inspector; debug draw должен совпадать с реальной физической симуляцией.
+- Перечень обязательных контрактов и кандидатов на backend зафиксирован в разделе 7.3.
+
+**2D-камера, координатные пространства и редактор сцены**
+- Определить единые правила world/local/screen/canvas/UI coordinates и тестируемые преобразования между ними, включая viewport offset, scale, camera zoom и multiple camera viewports.
+- Камера должна иметь управляемые viewport/background/zoom/rotation в пределах поддерживаемого runtime, а базовый camera workflow — bounds и follow/targeting через API/extension без зависимости от редакторской панели.
+- Sorting layers, cameras и UI canvas должны иметь явную документацию приоритетов и render order; изменение порядка не должно случайно менять hit testing или physics.
+- Scene Editor должен поддерживать grid/snap, gizmos для translate/rotate/scale, local/world transform modes и видимость вспомогательных overlays; destructive changes выполняются через undoable operations.
+- Добавлять camera culling/visibility optimizations только при корректном поведении жизненного цикла и наличии профайлера для проверки реального выигрыша.
+
+**Particles и короткие визуальные эффекты**
+- Предусмотреть 2D particle system с редактированием параметров эмиссии, скорости/направления, lifetime, размера, цвета/прозрачности и, где поддерживается, кривых/градиентов.
+- Preview должен уметь безопасно запускаться, останавливать эмиссию, сбрасывать частицы и повторно запускаться после закрытия/открытия панели; очистка ресурсов и listeners покрывается regression tests.
+- Поддержать повторяемую preview-конфигурацию и объяснимые runtime limits; motion streak/trails и более сложные эффекты могут быть отдельным расширением.
+- Любая particle-функция считается готовой только при совпадении editor preview, сохранённых параметров и собранного runtime.
+
+**Audio workflow**
+- Импортировать и проверять поддерживаемые browser audio formats; различать короткие SFX и длительную музыку/ambience, выбирая preload/streaming по размеру и поведению runtime там, где платформа это позволяет.
+- Предусмотреть AudioSource/AudioClip-like компоненты и API с play/stop/pause/resume, loop, volume, pan/fade и группами/бусами для master/music/SFX/ambience.
+- Поведение аудио при смене вкладки, потере фокуса, mute, закрытии preview и браузерном autoplay policy должно быть явным; запуск аудио после user gesture обрабатывается без необъяснимого отказа.
+- Editor preview позволяет прослушать ресурс и проверить настройки; runtime release должен корректно останавливать/освобождать звук и не оставлять накопленные источники.
+
+**Localization**
+- Предусмотреть опциональную локализацию через устойчивые string keys, locale-specific tables/assets, подстановку параметров и fallback locale.
+- UI/text resources должны хранить ключ локализации отдельно от текущей отображаемой строки. Валидация выявляет отсутствующие ключи, лишние переводы и placeholders с несовпадающими параметрами.
+- Учитывать изменение длины строк, fallback fonts и UTF-8 glyph coverage; RTL/complex text shaping не объявлять поддерживаемыми без проверки конкретного rendering/text backend.
+- Localization service может быть внутренним модулем и со временем вынесен в extension; не делать подключение сервиса обязательным для минимальной игры.
+
+**Статус реализации локализации (COD-62, 28.10.2026):** минимальный опциональный модуль `@codogma/localization` в `packages/localization/` реализует версионированный контракт таблиц (schema version 1: `schemaVersion`/`locale`/`messages` в форме явных записей `{ id, text }`), runtime-сервис с детерминированным fallback (активная локаль → настроенная fallback-локаль → видимый маркер `[[id]]`) и структурированную диагностику с дедупликацией. Валидатор отклоняет некорректный JSON, отсутствующие/неподдерживаемые версии, дублирующиеся ID, некорректные записи и репортит расхождения ключей и несовпадающие placeholders между локалями. Фикстура — `tests/workspace/test-typescript/locale/`; проверки — `npm run test:localization` и `npm run test:localization:acceptance`, обе входят в CI Fast. RTL/complex shaping/ICU-плюрализация не заявляются поддерживаемыми; сериализация сцен и текстовые компоненты редактора этим scope не изменялись. CLI project validation проверяется отдельными unit/integration tests и CI command `npm run test:localization:project`. Browser/game-project import по bare specifier пока не подтверждён: подключение к редакторскому/игровому runtime и текстовым компонентам остаётся отдельным integration follow-up. Фактический контракт, API, правила fallback и ограничения описаны в [docs/localization.md](localization.md).
+
+**Viewport, scaling и display**
+- Настройки проекта должны включать базовое/целевое разрешение, правила fit/fill/letterbox или эквивалентные scaling policies, поведение aspect ratio, fullscreen и ограничение device pixel ratio.
+- Предусмотреть профили/настройки DPR (например, автоматический разумный предел и явные уровни качества), а также режим pixel-art с чётким масштабированием без нежелательного размытия.
+- Отделить startup display config от системных настроек desktop-оболочки; проверять итоговое поведение в целевых браузерах и в самостоятельном preview.
+
+### 9.3. Приоритеты возможностей 2D
+
+Приоритет задаёт порядок работ по подтверждённым gaps в Engine contracts и SolidJS Host. Общие domain/runtime/security fixes выполняются в соответствующем native слое независимо от UI. Все новые пользовательские UI/authoring workflows разрабатываются в `src/editor/`; `source/editor/` frozen и допускает только read-only inventory, необходимые технические cutover/rollback действия и узкую одноразовую security mitigation при подтверждённой критической уязвимости, пока legacy route принимает production traffic. Новый Project Model/Core не является универсальным предусловием для функций, которые могут безопасно использовать собственные contracts.
+
+**P0 — необходимый производственный фундамент**
+- единая физическая абстракция с capability map и как минимум одним полноценно поддерживаемым backend;
+- Input API для mouse/keyboard/touch, корректные преобразования координат и разделение gameplay/UI input;
+- проектные контракты для scenes, lifecycle, time/scheduler и безопасного управления ресурсами;
+- базовый Sprite Editor workflow: spritesheet slicing, pivot/trim, sorting layers/order, collision-shape editing и стабильное сохранение;
+- 2D rendering diagnostics, безопасное управление ресурсами и доказуемые оптимизации на текущем runtime;
+- Asset Pipeline с постоянными asset IDs, импортной метаинформацией, dependency graph, проверкой отсутствующих ссылок и воспроизводимым build;
+- работающий базовый UI Editor с anchors/layout/scaling и проверкой на разных viewport;
+- Animation Controller/state graph для типичных 2D-сценариев с параметрами, условиями и событиями;
+- тесты editor preview ↔ runtime ↔ production build для всех заявленных базовых функций.
+
+**P1 — существенное расширение authoring workflow**
+- Tilemap Editor с Tiled import/export, brush presets, auto-tiling, collision editing и профилированием больших карт; hex/isometric support после основного grid workflow;
+- Particle Editor и стабильный lifecycle preview;
+- Audio workflow с группами/бусами, preview и корректным browser lifecycle;
+- опциональная Localization service и versioned local save/storage API;
+- расширенные importers для Aseprite/PSD как подключаемые инструменты, а также bundles/atlas variants;
+- skeletal animation (например, Spine/DragonBones) как отдельные extensions;
+- build profiles для development/release и target-aware asset/build optimization.
+
+**P2 — продвинутые возможности после измерений и стабилизации API**
+- spline-based 2D shapes/terrain, продвинутое 2D lighting/shadows/normal maps и renderer/post-processing extensions;
+- дополнительные particle modules, trails/motion streaks и расширенные animation blend graphs;
+- дополнительные physics backends или backend-specific features при подтверждённом спросе;
+- advanced accessibility/localization support (например, RTL shaping) только после проверки text/runtime capabilities;
+- ручные оптимизационные инструменты, только если profiler показывает выигрыш, недоступный через auto batching/обычный asset pipeline.
+
+P0/P1/P2 — приоритеты требований, не обещание даты релиза. Если анализ существующего кода подтвердит, что функция уже качественно реализована end-to-end, задача заключается в интеграции, тестировании и документации, а не в переписывании.
+
+
+### 9.4. Иконки редактора и поддержка тем
+
+Для иконок интерфейса редактора использовать набор [Godot Editor Icons](https://github.com/godotengine/godot/tree/c8256a8ecec068340753869e423dd478c84ef167/editor/icons) как согласованный исходный набор. Не смешивать его с другими независимыми icon packs без отдельного решения и обоснования в документации.
+
+- Перед реализацией составить карту используемых команд/идентификаторов иконок и выбрать только те значки, которые нужны общим операциям UI и поддерживаемым возможностям **2D-редактора**. Иконки, предназначенные исключительно для 3D-сцен, 3D-объектов и 3D-инструментов, не переносить; это требование не означает добавления 3D-функций в Codogma.
+- Для светлой и тёмной темы обязательно предусмотреть **раздельные наборы или отдельные theme-specific файлы вариантов** и выбирать нужный вариант по активной теме редактора. Не полагаться на автоматическую CSS-перекраску одного общего файла вместо отдельных light/dark-вариантов.
+- Проверять визуальную различимость значков на реальных фонах светлой/тёмной темы и в применимых состояниях интерфейса (например, disabled, selected и warning). Иконки не должны пропадать, сливаться с фоном или терять смысл из-за перекраски.
+- При адаптации сохранять происхождение каждого заимствованного значка: закреплённую версию/commit upstream, имя исходного файла, соответствующий идентификатор Codogma и описание локальных изменений. Сохранять необходимые upstream copyright и license notices; для указанного snapshot Godot — [MIT License](https://github.com/godotengine/godot/blob/c8256a8ecec068340753869e423dd478c84ef167/LICENSE.txt).
+- Перенос иконок является частью ближайшей программы модернизации UI. Карта IDs, выбранные 2D-иконки и проверка лицензии — обязательные подготовительные шаги внутри реализации; завершением считается внедрённый код, работающие состояния и визуальная приёмка светлой и тёмной тем, а не одна таблица соответствий. Не добавлять новый пакет иконок, если выбранный закреплённый upstream-набор можно интегрировать напрямую.
+
+---
+
+## 10. Asset pipeline, headless tooling и сборка HTML5
+
+Редактор должен не только визуально показывать сцену, но и помогать получить проверяемый production build. Ресурсная система должна быть отдельной от UI редактора и пригодной для вызова из CLI/CI.
+
+### 10.1. Требуемые возможности
+
+- Импорт, reimport и проверка типов/параметров ресурсов с сохранением метаданных импортёра и версии настроек; при изменении исходника или import settings производные данные перестраиваются предсказуемо, а ручные корректировки не сбрасываются молча.
+- Постоянные asset IDs и управляемые ссылки вместо привязки к пути как единственному идентификатору. Перемещение/переименование должно обновлять ссылки либо выдавать диагностическую ошибку.
+- Dependency graph для сцен, Prefabs, компонентов, скриптов, шрифтов, аудио, изображений, атласов, анимаций и Tilemap; обнаружение отсутствующих ссылок, циклов, дубликатов ID и неиспользуемых ресурсов, если это можно доказать безопасно.
+- Кеширование, освобождение ресурсов и определённый lifecycle загрузки/выгрузки. Не допускать бесконечного накопления временных текстур, аудио, buffers, event listeners или preview instances после restart/stop.
+- Bundles/resource groups и lazy loading там, где это полезно для стартового времени и размера загрузки; прогресс загрузки и понятная диагностика ошибок.
+- Создание атласов и обработка изображений/звуков/шрифтов через подходящие внешние инструменты, воспроизводимые в локальной разработке и CI.
+- Поддержать управляемые настройки texture compression и quality profiles по target/browser capabilities; для несовместимого формата нужен подходящий fallback, а не пустая текстура.
+- Генерировать atlas/texture variants разных размеров и форматов при подтверждённой потребности; в build report указывать выбранный вариант, итоговый размер и причины включения ресурса.
+- Отчёт о размере production bundle и отдельных ресурсных группах, обнаружение неожиданных крупных ресурсов и ненужных runtime-зависимостей.
+- Воспроизводимая HTML5-сборка с явным выходным каталогом, исходными картами или эквивалентом диагностики для dev build, понятными ошибками и зафиксированными build settings.
+- Сборка должна запускаться без открытого UI редактора. Команда в headless CLI/CI должна уметь валидировать проект, проверять ресурсные зависимости и собирать игру; диагностический результат не должен зависеть от открытой сцены в редакторе.
+- Канонические входы целевого build — валидированная Project Model, сериализованные сцены, граф явно зарегистрированных TypeScript-компонентов, ссылки на ресурсы, настройки проекта и выбранный runtime adapter. Отдельный генерируемый TypeScript-файл на каждую сцену не требуется; если code generation используется как явная build optimization, это должен быть отдельный шаг build с проверяемым эквивалентным поведением.
+- Итоговая игра работает без editor server, MCP bridge, Tauri и внутренних development fixtures; production bundle содержит только нужные runtime/build outputs.
+- Итоговую сборку можно запускать отдельным browser acceptance smoke test и проверять на целевых платформах.
+- Предусмотреть versioned build profiles как минимум для Development и Release; target-specific settings не должны неявно смешиваться с общими настройками проекта.
+- Development build сохраняет диагностические имена/source maps по возможности и может подключать profiler/debug overlay; Release build исключает editor/MCP/debug-only modules, минимизирует bundle и сообщает о компромиссах оптимизации.
+- Feature/Capability Registry — явный вход для выбора состава сборки: для каждого target build использует включённые в проекте функции и их объявленные feature-dependencies, проверяет конфликты, API compatibility и scopes/targets, формирует воспроизводимый список причин включения модулей. Изоляцию и исключение feature-кода подтверждать fixture/bundle report; не обещать tree-shaking там, где dynamic imports или side effects не позволяют доказать исключение.
+- Для Web отдельно проверяются стартовый download size, время до первого кадра, прогрессивная/отложенная загрузка ресурсов, кеширование и восстановление после сетевой ошибки. Целевые профили учитывают различия desktop/mobile: размер atlas/texture variants, поддерживаемые форматы компрессии, DPR budget и лимиты памяти браузера. Compression/deployment headers (например, gzip/Brotli) должны быть задокументированы как ответственность build output или хостинга.
+- Для target/browser matrix фиксируются необходимые API и fallback-поведение. Нельзя заявлять поддержку WebGL/WebGPU, звукового формата или compressed texture format без реальной проверки.
+- Изменение build profile должно быть воспроизводимым: настройки сериализуются, попадают в отчёт и не зависят от последнего вручную открытого состояния редактора.
+
+#### Обязательный контракт Web Runtime
+
+Web — основная среда исполнения, а не сборочная цель «после Desktop». Ограничения браузера и хоста отражаются в runtime contracts и критериях приёмки:
+
+- До первого production release определить matrix поддерживаемых браузеров/WebView, минимальные версии, устройства и ограничения целевых площадок. «Современный браузер» не является критерием.
+- Runtime имеет единый lifecycle видимости/фокуса и паузы. `visibilitychange`, потеря фокуса, реклама и ручная пауза — отдельные причины состояния; события идемпотентны. После скрытия вкладки нельзя симулировать огромный delta или выполнять неограниченный catch-up; fixed-step backlog/max substeps должны быть определены.
+- WebGL context loss — ожидаемый отказ GPU-ресурсов. Проверить `WEBGL_lose_context` восстановление или управляемый fallback/reload. Восстанавливать GPU-ресурсы из авторских/CPU-side данных; не хранить состояние игры только в GPU handles.
+- Web Audio учитывает autoplay policy: отклонённый `AudioContext.resume()` / `HTMLMediaElement.play()` не ломает gameplay. Нужен понятный user gesture для включения звука.
+- Default target не требует cross-origin isolation, `SharedArrayBuffer` или многопоточности. Threaded profile допустим только после измерения и проверки COOP/COEP/CORP/CORS, SDK, рекламных iframe и хостинга.
+- WebGPU остаётся опциональным renderer/backend. Его нельзя считать baseline для HTML5: использовать feature detection, проверять создание adapter/device, поддерживаемые форматы/limits и `device.lost`, иметь проверенный WebGL 2 fallback либо понятную диагностику на unsupported target. Core, Scene Model и project data не должны зависеть от GPU handles.
+- Следить за статусом WebGPU, WGSL и WebAssembly через официальные реестры стандартов. На 29.10.2026 WebGPU и WGSL имели статус Candidate Recommendation Draft, WebAssembly Core 3.0 также публиковался как Candidate Recommendation Draft. Не блокировать релиз на незавершённый стандарт и не путать WASI/server runtimes с browser APIs.
+- Взаимодействие с parent page/iframe использует versioned message contract, точный `origin`, schema payload, timeout и защиту от повторных команд. `postMessage` с `*` не является безопасным default.
+- Resource budget включает network bytes, decoded images, audio buffers, GPU allocations, temporary copies, atlas pages и cache. Асинхронная загрузка должна поддерживать отмену, deduplication, ограниченный retry, diagnostics и unload.
+- IndexedDB/cache/local save — best-effort storage, если браузер не подтвердил иное. Обрабатывать quota errors, private mode, очистку данных, interrupted writes и несколько вкладок.
+- Production output имеет hosting contract: WASM MIME, content encoding, cache/version strategy, asset base path, CORS/CSP, source maps и diagnostics. Service worker включается после проверки cache invalidation.
+- Сборка TypeScript Script assets разрешает source imports в соответствующие emitted JavaScript modules по явному bundler/TypeScript contract. Нативные Scene и Prefab остаются сериализованными документами: для них не генерируются companion `.ts` файлы или классы. Проверки импорта и emitted output выполняются для Script modules и их зависимостей.
+- Наличие корневого `package.json` само по себе не подтверждает доступность `phaser` или `@phaserjs/editor-scripts-base`. Package-based build должен диагностировать отсутствующие dependency declarations/resolution; автоматически устанавливать зависимости не предполагается.
+- Initial download, time-to-first-frame, first input, memory high-water mark и long tasks измеряются отдельно на desktop и representative low-end mobile. Budget назначается после baseline; CI сохраняет raw/compressed size и build manifest.
+- Release matrix покрывает заявленные desktop/mobile browsers и официальный embedded host каждой площадки. Непроверенный target нельзя объявлять поддерживаемым.
+
+Платформенные основания: [Page Visibility API](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API), [WebGL context loss](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextlost_event), [audio autoplay](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay), [storage quotas](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) и [Godot Web export constraints](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html). См. [architecture risk register](architecture-risk-register.md).
+
+### 10.2. CLI и разделение editor/runtime/build
+
+Headless CLI — самостоятельный интерфейс к тем же Project Model, schema, importer и build APIs, которыми пользуется редактор, а не альтернативная реализация этих правил.
+
+- Основные команды будущего CLI: validate project, inspect dependency graph, import/reimport assets, build HTML5 и produce machine-readable report. Синтаксис команд фиксируется после первого рабочего вертикального среза.
+- CLI не должен импортировать окно/панель редактора только ради project validation или build. По возможности он запускается в CI без GUI и без интерактивных запросов.
+- Валидация и build должны возвращать ненулевой exit code при критических ошибках и конкретные сообщения с путём/ID проблемного объекта или ресурса.
+- Формат отчёта должен поддерживать чтение человеком и автоматическую обработку CI; версии CLI/schema должны быть видимыми.
+- Runtime-зависимости, editor-only зависимости и build-only зависимости разделяются. Например, инструменты обработки изображений и browser-test runner не попадают в runtime игры.
+
+### 10.3. Политика библиотек
+
+Внешние npm-пакеты предпочтительнее самописных аналогов, если они реально подходят, но наличие зрелой библиотеки не отменяет интеграционной работы. Кандидаты ниже не являются уже утверждёнными зависимостями:
+
+- [ESLint](https://eslint.org/docs/latest/use/getting-started/) + [typescript-eslint](https://typescript-eslint.io/getting-started/) — linting, including typed rules for selected code paths;
+- [Prettier](https://prettier.io/docs/install.html) + eslint-config-prettier — deterministic formatting without conflicting lint rules;
+- [Knip](https://knip.dev/) — unused files/exports/types/dependencies/scripts, with careful configuration of dynamic plugin entry points;
+- [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) — architecture boundaries, circular dependencies and invalid runtime/editor/build imports;
+- [TypeScript strict compiler options](https://www.typescriptlang.org/tsconfig/strict) — strong typing; also evaluate [noUncheckedIndexedAccess](https://www.typescriptlang.org/tsconfig/noUncheckedIndexedAccess.html) and [exactOptionalPropertyTypes](https://www.typescriptlang.org/tsconfig/exactOptionalPropertyTypes.html);
+- [TypeDoc](https://typedoc.org/) and [API Extractor](https://api-extractor.com/pages/overview/intro/) — public API docs/reports after an external SDK surface exists;
+- [Vitest](https://vitest.dev/guide/) and [Playwright](https://playwright.dev/docs/intro) — unit/integration and browser acceptance;
+- JSON Schema + [Ajv](https://ajv.js.org/) — schema validation;
+- Vite — кандидат для dev/build pipeline, если он подходит текущей структуре и не дублирует существующую сборку;
+- Vitest и Playwright — unit/integration и browser E2E;
+- sharp и free-tex-packer-core — build-time обработка изображений и атласов;
+- [Tiled](https://docs.mapeditor.org/en/latest/manual/introduction/) — внешний authoring workflow/формат Tilemap;
+- Aseprite CLI — экспорт спрайтов;
+- Monaco/LSP, Rete или XYFlow — только после оценки потребности и совместимости с UI architecture.
+
+Не подключать несколько библиотек одного назначения без обоснования. Все кандидаты проходят проверку лицензии, актуальности, безопасности, TypeScript-типов, browser support, совместимости и размера production bundle.
+
+### 10.4. Анализ модулей Phaser и физический состав production bundle
+
+Текущий Codogma baseline подключает Phaser 4.2.1 через vendored runtime bundle. Это не является выборочной сборкой по использованным возможностям. Build Pipeline должен отдельно анализировать:
+- Codogma package dependencies и их public entry points;
+- выбранные Feature/Capability descriptors и их declared dependency closure;
+- Project Model Scene/Prefab/component-module imports;
+- Phaser/runtime requirements, которые реально нужны generated output;
+- physics backend и внешние runtime-файлы (например, Box2D helpers), если их требует выбранная сцена/adapter;
+- assets, atlas/texture variants, fonts, audio, tilemaps и ресурсы, достижимые из Project Model graph;
+- Editor-only, build-only, MCP, QA и development-only modules, которые обязаны отсутствовать в Release output.
+
+**Phaser 4.2.1 — известные upstream варианты:**
+- `phaser` / `phaser.min` — полная UMD-сборка.
+- `phaser-arcade-physics` / `phaser-arcade-physics.min` — альтернативная UMD-сборка, исключающая Matter.js.
+- `phaser.esm` / `phaser.esm.min` — ESM entry point, но его named exports не доказывают, что внутренние подсистемы Phaser могут быть безопасно удалены текущим consumer bundler. В `package.json` v4.2.1 нет объявленного public `exports` subpath для Arcade-only artifact; нельзя выдумывать import path или считать файл доступным через package export без fixture.
+
+Сравнение Phaser вариантов выполняется на representative generated-game fixtures с одинаковыми сценами, generated APIs и assets. Отчёт включает runtime/API coverage, raw и gzip/Brotli size, JS parse/compile/startup, time-to-first-frame, реальные module inclusions/exclusions и любые внешние файлы, которые должен доставить проект/хостинг. Выбранная стратегия должна быть воспроизводимой и совместимой с Phaser version pin. Если Arcade-only build не покрывает требуемый API или усложняет npm/public exports, сохраняется full bundle с зафиксированным размером — не маскировать ограничение под tree shaking.
+
+**Output-level proof обязательна:** выключенный package/feature отсутствует в final JS chunks и build manifest, а не только отмечен как disabled в UI. Включённый feature показывает цепочку причин: project dependency → provider → feature dependency → entry point → emitted module. Dynamic imports, side effects, runtime plugin registration и reflection-like discovery требуют явных manifests/allowlists; неиспользуемый код исключается только там, где bundler доказывает это безопасно.
+## 11. Platform Services: модульный пакет интеграции Yandex Games и VK Games
+
+Codogma должен предусматривать **единый расширяемый пакет интеграции с игровыми платформами**, организованный по модульному принципу и сопоставимый по назначению с [Unity PluginYG-2](https://github.com/JustPlay-Max/Unity-PluginYG-2). Это архитектурный reference для границ модулей, developer workflow и набора платформенных сервисов, а не требование копировать его реализацию, C#-код или внутреннюю архитектуру Unity.
+
+Цель — предоставить разработчику игры единый способ подключать платформенные возможности, не распределяя вызовы разных SDK по игровому коду. Пакет должен проектироваться с учётом HTML5/TypeScript и официальных API самих платформ. **Это требование ТЗ, а не утверждение, что пакет или его адаптеры уже реализованы.**
+
+### 11.1. Первые целевые платформы
+
+- **Yandex Games** — отдельный адаптер по [официальной документации SDK Яндекс Игр](https://yandex.ru/dev/games/doc/ru/).
+- **VK Games** — отдельный адаптер по [официальной документации VK Games](https://dev.vk.com/ru/games/overview).
+- **Browser/Local Preview** — mock/test adapter для разработки, тестов и демонстрации сценариев без доступного SDK площадки.
+
+Yandex Games и VK Games являются самостоятельными targets с разными SDK, ограничениями, публикационными требованиями и набором возможностей. Нельзя считать их API взаимозаменяемыми. VK Games также нельзя автоматически отождествлять с VK Mini Apps/VK Bridge или VK Play: при необходимости поддержки этих вариантов они описываются и проверяются как отдельные интеграционные targets.
+
+Сведения о методах, обязательных событиях, модерации, платежах и публикации должны сверяться с актуальной официальной документацией выбранной платформы. Unity PluginYG-2 служит ориентиром функционального охвата и модульности, но не источником истины по API Yandex Games или VK Games.
+
+### 11.2. Архитектура пакета
+
+- Общий **Platform Services API** предоставляет согласованные контракты для типичных игровых сценариев, не раскрывая платформенные типы в основном игровом коде.
+- Отдельные adapters реализуют эти контракты для Yandex Games и VK Games и при необходимости предоставляют явно обозначенные платформенно-специфичные расширения.
+- Платформенные функции разбиваются на модули с отдельными зонами ответственности. Предполагаемый охват, если конкретная площадка поддерживает соответствующую возможность:
+  - инициализация SDK, готовность игры, lifecycle геймплея, pause/resume и обработка потери фокуса;
+  - fullscreen и рекламные сценарии, включая rewarded ads;
+  - профиль игрока и авторизация;
+  - сохранение/загрузка игровых данных и поддерживаемое площадкой облачное сохранение;
+  - статистика и лидерборды;
+  - каталог товаров, покупки и связанные операции;
+  - язык, данные окружения, конфигурационные флаги и серверное время;
+  - дополнительные платформенные функции, например отзыв, создание ярлыка, буфер обмена или внешние ссылки — только если они предусмотрены официальным API.
+- Adapter явно сообщает о доступных возможностях. Отсутствующий capability нельзя тихо изображать работающим или подменять непредусмотренным поведением.
+- Подключённый target задаётся конфигурацией проекта/сборки. В production bundle не должны автоматически попадать SDK и код платформ, которые этой игре не нужны.
+- Исходники независимо подключаемых Platform Services и платформенных адаптеров размещаются в соответствующих пакетах внутри `packages/`, когда у них определена самостоятельная ответственность и граница API. Наличие исходников в монорепозитории не означает немедленную публичную публикацию: выпуск в npm выполняется после стабилизации API, проверки зависимостей и подготовки versioning/compatibility policy. Внутренние детали без самостоятельного жизненного цикла остаются модулями соответствующего пакета.
+- Editor integration должна позволять разработчику понять выбранный target, включённые capabilities и ошибки конфигурации. Для локального Preview должен быть предусмотрен mock/test режим; его данные и результаты не должны выдаваться за реальную проверку в кабинете платформы.
+
+### 11.3. Обязательные требования к поведению
+
+- Загрузка и инициализация SDK выполняются в подходящий момент для выбранной площадки. Не загружать ненужный SDK для локального Preview или игры, собранной под другой target.
+- Отсутствие SDK, отказ инициализации или недоступность конкретной функции не должны приводить к необработанному падению базового игрового процесса; приложение получает понятный статус/ошибку.
+- События pause/resume, смена вкладки/фокуса, начало/завершение рекламы и восстановление игрового цикла должны обрабатываться явно, без продолжения симуляции в неподходящем состоянии.
+- Награда rewarded ad выдаётся только по подтверждённому успешному callback/результату адаптера согласно правилам соответствующей площадки. Закрытие, ошибка или прерывание показа не дают награду.
+- Авторизация и действия, требующие пользовательского согласия, вызываются в допустимом пользовательском контексте; пакет не должен самовольно открывать такие диалоги при старте.
+- Сохранение данных, покупки и таблицы лидеров должны учитывать ограничения, ошибки, авторизацию и модель безопасности конкретной платформы. Нельзя предполагать, что клиентское состояние или callback сами по себе являются достаточной защитой от подделки покупок/наград.
+- Мок позволяет тестировать успех, отказ, задержку, отсутствие capability и прерывание сценария. Успешный mock-тест не считается доказательством соответствия реальному SDK или прохождения модерации.
+- В документации для каждой платформы приводятся ссылки на первоисточники, список реализованных capabilities, известные ограничения и порядок тестирования в официальном sandbox/test environment.
+
+#### Дополнительный release gate для Yandex Games
+
+- Использовать актуальный официальный [Yandex Games SDK](https://yandex.ru/dev/games/doc/ru/sdk/sdk-about) и loader; сверяться с [game loading/gameplay events](https://yandex.ru/dev/games/doc/ru/sdk/sdk-game-events) и [requirement 1.19](https://yandex.ru/dev/games/doc/ru/requirements/1/19). Подключить SDK до `YaGames.init()`: в архиве, загружаемом на сервер Яндекса, использовать относительный `<script src="/sdk.js"></script>`; при hosting на собственном домене — `https://sdk.games.s3.yandex.net/sdk.js`. Не скачивать/vendoring SDK; абсолютный SDK URL внутри загруженного игрового архива может приводить к `SERVICE_STORAGE_URL_DETECTED`.
+- Вызывать `ysdk.features.LoadingAPI?.ready()` только когда все игровые ресурсы загружены, UI интерактивен и loading/splash screen убран.
+- Согласовывать `ysdk.features.GameplayAPI?.start()` / `.stop()` с фактическим началом/остановкой gameplay: start level, выход из меню, unpause/возврат из рекламы/в активную вкладку; stop level end, pause/menu, fullscreen/rewarded ads и уход во вкладку background. Состояние pause/resume должно быть идемпотентным; `start()` допустим только если gameplay реально немедленно возобновляется.
+- Во время рекламы приостанавливать симуляцию и звук по контракту host adapter; восстанавливать gameplay только после корректного возврата в активный host. Rewarded-награду выдавать только после подтверждённого успешного результата показа; close, interruption, timeout или error не дают награду.
+- Раздельно тестировать mock/local adapter и официальный test/sandbox environment. Успешный mock и локальный browser smoke не доказывают соответствие SDK или прохождение модерации.
+
+Нормативные первоисточники: [Yandex Games SDK setup](https://yandex.ru/dev/games/doc/ru/sdk/sdk-about), [SDK loading/gameplay events](https://yandex.ru/dev/games/doc/ru/sdk/sdk-game-events), [requirements 1.19](https://yandex.ru/dev/games/doc/ru/requirements/1/19).
+
+### 11.4. Критерии приёмки будущей реализации
+
+- [ ] Зафиксирован общий API-контракт и таблица соответствия «общая capability → поддержка/ограничения Yandex Games → поддержка/ограничения VK Games».
+- [ ] Реализованы и проверены отдельные adapters для обеих целевых платформ; их различия не скрываются фиктивным общим поведением.
+- [ ] Локальный mock/test adapter позволяет разработать и протестировать основной игровой сценарий без реальной площадки.
+- [ ] Есть тесты загрузки/инициализации SDK, lifecycle/pause-resume, отсутствующих capabilities, рекламных результатов, сохранения данных и ошибок, а также других модулей, которые входят в реализованный scope.
+- [ ] В сборке подключаются только выбранный adapter и необходимые ему зависимости.
+- [ ] Для каждой платформы задокументирована отдельная проверка в целевом тестовом окружении; реальные платформенные проверки не заменены результатом unit-тестов.
+- [ ] В редакторе/инструментах разработки есть способ диагностировать target, SDK readiness и недоступные функции без утверждения, что локальная симуляция эквивалентна площадке.
+
+Эти критерии описывают целевой результат. Конкретные модули следует реализовывать последующими небольшими задачами после архитектурного проектирования и проверки официальных API, а не добавлять код интеграции в рамках одного лишь уточнения ТЗ.
+
+## 12. Расширяемость и пакетная структура
+
+Codogma Engine использует **монорепозиторий с исходниками самостоятельных пакетов**, ориентируясь на модульный подход EVA.js, и npm как стандартную инфраструктуру управления зависимостями. Цель — развивать возможности независимо и позволять пользователю устанавливать только необходимые функции, не превращая каждый класс в отдельный пакет.
+
+### Целевая структура исходников
+
+```text
+codogma-engine/
+├── src/
+│   └── editor/                  # Editor Host — приложение редактора
+├── packages/
+│   ├── cge/                     # @codogma/cge — Core / public API
+│   ├── editor-api/              # типизированные контракты Extension API
+│   ├── ecs/                     # @codogma/ecs — optional Data-Oriented ECS runtime
+│   ├── ecs-phaser/              # @codogma/ecs-phaser — optional Phaser bridge for ECS
+│   ├── runtime-phaser/          # адаптер текущего runtime
+│   ├── build-html5/             # HTML5 build tooling
+│   ├── platform-services/       # общие контракты игровых платформ
+│   ├── platform-yandex-games/   # адаптер конкретной платформы
+│   ├── package-manager/         # Node-side Package Manager Service
+│   └── ...                      # другие самостоятельные пакеты
+└── package.json                 # корень репозитория / npm Workspaces
+```
+
+Это **целевая схема, а не перечень уже созданных каталогов или полный утверждённый список пакетов**. Frozen Colibri rollback client физически находится в `source/editor/`; новый SolidJS Editor Host находится в `src/editor/` как самостоятельное приложение. Не выполнять механический перенос старого дерева в `src/editor/`: legacy используется только для read-only inventory и ограниченного rollback до cutover. После приёмки нового Host `source/editor/` и его Colibri-only build/config/assets удаляются отдельным cleanup PR с обновлением server paths, scripts, CI, release archive и документации.
+
+### Правила границ пакетов
+
+- `packages/<name>/` содержит исходный код самостоятельного пакета, его `package.json`, публичные exports, тесты и документацию. Пакеты разрабатываются совместно в одном репозитории, но могут иметь независимые API, версии и циклы выпуска.
+- Каждый пакет предназначен для самостоятельной роли или независимо подключаемой возможности. Не выносить каждый класс и каждую мелкую подсистему в отдельный package; внутренние детали и тесно связанные модули остаются внутри соответствующего пакета.
+- Наличие исходников пакета в монорепозитории не означает немедленную публичную публикацию. Выпуск в npm требует стабилизированного API, совместимости версий, тестов, документации, проверки лицензий и поддерживаемого release process.
+- Названия пакетов отражают ответственность, а не обязательный префикс `plugin-`. Например, `@codogma/cge`, `@codogma/editor-api`, `@codogma/tilemap-tools` и `@codogma/platform-yandex-games` — иллюстративные имена, а не полный утверждённый каталог.
+- Логические области Core, Project Model, Runtime, Runtime Adapters, Editor, Build/CLI, DevTools и Platform Services не обязаны соответствовать один к одному отдельным npm-пакетам. Физическая граница определяется ответственностью, зависимостями и потребностью в независимом подключении.
+- Existing editor extension registration — отдельная UI capability; public Extension API проектируется независимо.
+
+### 12.1. TypeScript-only source policy and engineering toolchain
+
+**Цель:** весь новый first-party Codogma-owned source — production code, tooling и тесты — пишется на TypeScript с сильной статической типизацией и единым автоматическим контролем качества. Статус «код компилируется» недостаточен: архитектурные ошибки, неиспользуемые зависимости и нарушение слоёв должны выявляться до runtime acceptance.
+
+#### Язык и типизация
+
+- **TypeScript — обязательный язык исходного кода всего нового Codogma-owned функционала**: Engine Core, Project Model, runtime/adapters, Editor Host и его feature modules, backend/service logic, MCP packages, CLI/build/devtools и тесты. Новые модели, сервисы, бизнес-логика, утилиты и тестовый код не пишутся на JavaScript (`.js`, `.mjs`, `.cjs`) или JSDoc вместо TS.
+- UI-компоненты с JSX пишутся в `.tsx`; остальной прикладной код, контракты, тесты и helpers — в `.ts`. TypeScript должен проходить проверку в соответствующем package/scope; UI, domain, integration, browser и contract tests остаются типизированными исходниками. Runner выбирается по задаче и поддержке TS (для нового Host — Vitest и Playwright); Vitest не навязывается автоматически всем пакетам.
+- Config files используют TypeScript (`*.config.ts`), когда инструмент поддерживает такой формат нативно. Не добавлять `.js`/`.mjs` конфиги только ради удобства. Декларативные файлы, чей формат задан внешним контрактом, сохраняют исходный формат: `package.json`, `tsconfig.json`, JSON/YAML/TOML manifests и workflows, HTML, CSS, `.pen` и другие data/assets. Эти файлы не являются JavaScript source и не должны искусственно конвертироваться в TS.
+- Для каждого нового TS/TSX scope обязателен отдельный `tsconfig` с полным профилем: `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `noImplicitOverride: true`, `noImplicitReturns: true`, `noFallthroughCasesInSwitch: true`, `forceConsistentCasingInFileNames: true`. Дополнительно включать `noUnusedLocals` и `noUnusedParameters`, если scope позволяет; `allowJs` не включать.
+- Не создавать `.d.mts`/`.d.ts` sidecar declarations для собственных TS-модулей. Допускаются generated declarations и необходимые ambient/external declarations. Generated JS output не считается авторским исходником.
+- Исключения: существующий legacy-код; vendored/upstream sources; generated files; обязательные внешние manifests; минимальные bootstrap/interop entry points, которые реально не поддерживаются выбранным TS toolchain. Каждое новое исключение требует причины, владельца и условия пересмотра; feature/business logic должна оставаться в TS. Существующие `.js`/`.mjs`/`.cjs` не переписываются массово, но новый функционал не реализуется расширением таких файлов: новая логика выносится в TS-модуль, legacy entry point оставляется минимальным адаптером до отдельной миграции.
+- Строгий профиль должен применяться к новым модулям изолированно: несовместимость с legacy-кодом не является основанием отключать strict flags в новом scope.
+- Не использовать any как способ обхода архитектурной границы. Для неизвестных JSON/SDK/plugin inputs использовать unknown, runtime validation и type narrowing. Casts и non-null assertions требуют локального обоснования, если они пересекают границу доверия или скрывают невозможное состояние.
+- Запрещать @ts-ignore в новом коде; редкое @ts-expect-error допустимо только с пояснением проверяемой причины и тестом. При смене schema, платформенного SDK или external data проверять runtime values, не полагаясь только на compile-time types.
+- Включить type-only imports, discriminated unions, exhaustive handling через never и явные типы публичных экспортов/контрактов там, где это повышает устойчивость API. Не создавать дублирующие декларации одной модели в Core, editor и serializer.
+- Для существующего UI client и общего repository tooling применяется отдельный scoped quality baseline:
+
+#### Инструменты, которые нужно оценить и ввести поэтапно
+
+- **ESLint + typescript-eslint** — основной линтер для TypeScript/JavaScript, включая рекомендуемые и type-aware правила там, где это экономически оправдано. Использовать Flat Config для нового scope. TSLint dependency уже удалена из editor manifest, но `source/editor/tslint.json` и `source/editor/lint.sh` ещё существуют; считать их неактивными остатками, а не доступным lint toolchain. Не возвращать TSLint ради новых модулей.
+- **Prettier + eslint-config-prettier** — единый форматтер. ESLint отвечает за ошибки и risky patterns, Prettier — за форматирование; не дублировать спорные stylistic правила. Зафиксировать локальные версии и общий конфиг, подключить format:check в CI. Не форматировать весь существующий source tree автоматически первым PR.
+- **Knip** — анализ неиспользуемых файлов, exports/types, dependencies/devDependencies, binaries и scripts. Настроить корректные entry points для существующего plugin registry, dynamic imports, generated code, command-line tools, test fixtures и editor plugins: динамически загружаемый плагин нельзя удалять только потому, что его import не виден статически. Первый отчёт служит baseline; после исправления конфигурации ошибки вводятся как гейт по новым/изменяемым областям, затем расширяются на репозиторий.
+- **dependency-cruiser** — кандидат для контроля архитектурных границ, циклических импортов и запрещённых зависимостей. Требуемые правила: Core не импортирует editor/desktop UI; runtime game build не импортирует editor/MCP/server/test modules; editor/build-only dependencies не попадают в game runtime; новые запрещённые циклы не появляются. Конкретные правила задаются после фиксации реальной структуры репозитория.
+- **TypeScript compiler / project references** — сохранить tsc -b для существующей сборки там, где это нужно, плюс явная typecheck-команда для нового Core/API. Build success и typecheck должны возвращать ненулевой exit code при ошибке.
+- **Vitest** — кандидат для быстрых unit/integration тестов Core, schemas, serializers, services и adapters. Browser/UI acceptance сохраняет Playwright или подходящий существующий runner. Все E2E suites (Playwright/browser, MCP и будущие gameplay/cross-browser scenarios) запускаются только начиная с promotion PR `dev → test`; на feature/fix PR в `dev` не запускается ни один E2E suite, без исключений по изменённому слою.
+- **TypeDoc** — генерация документации из TSDoc/JSDoc комментариев для публичного SDK после стабилизации входных точек.
+- **API Extractor** — рассмотреть позже, когда появятся публикуемые TypeScript packages и стабильный API surface: API report/rollup declarations помогают замечать непреднамеренные изменения публичных контрактов. Не добавлять его ради внутренних модулей до появления соответствующей задачи.
+- **tsd** или эквивалентный type-test инструмент — рассмотреть для compile-time tests публичных типов, когда API начнёт использоваться внешними проектами.
+
+Введение инструментов должно сопровождаться согласованной конфигурацией и не должно превращаться в коллекцию дублирующих линтеров. Не вводить ESLint stylistic, Prettier и Biome/oxlint одновременно для одной задачи без документированной причины. Не добавлять инструмент только потому, что он популярен: сначала подтвердить пробел и определить владельца конфигурации.
+
+#### Репозиторные команды и зависимости
+
+- Инструменты статического анализа и форматирования регистрируются в devDependencies того workspace/package, чей код они проверяют, а не в production dependencies игры.
+- Фактически существуют отдельные npm roots/lockfiles для root, временного UI client в `source/editor/`, нового `src/editor/` и отдельных mini-services/packages. Новый Host уже создан как самостоятельное приложение; npm Workspaces и объединение lockfiles остаются отдельным инфраструктурным PoC, который должен проверить package scripts, TypeScript references, server routes, CI/cache и release archive.
+- Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
+- Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
+- Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
+
+#### Переход к CI без блокировки текущей разработки
+
+1. Снять baseline: проверить TS configs/scripts, определить новые Codogma-owned code paths, зафиксировать отсутствие TSLint dependency и оценить оставшиеся `tslint.json`/`lint.sh`. Отдельно инвентаризировать legacy type/lint findings.
+2. Добавить конфиги ESLint/Prettier/Knip и TypeScript strict profile для нового Core как отдельную, ограниченную область; не менять поведение runtime.
+3. Сначала запускать Knip/dependency-cruiser в report mode, исправить ошибочные entry points и сохранить baseline; удалять код/зависимости только после ручной проверки.
+4. Добавить typecheck, lint и formatting checks в быстрый CI для новых/изменяемых модулей; затем расширять scope на дополнительные существующие modules по результатам отчётов и оценке стоимости. Базовый fast-checks обязан оставаться быстрым.
+5. Не описывать TSLint как активный gate: его npm dependency отсутствует уже в текущем manifest. После пилота решить судьбу остаточных `tslint.json`/`lint.sh`; расширять ESLint gates на legacy scope только после отчёта, проверки dynamic plugin entry points и оценки стоимости исправлений. Любое исключение содержит ссылку/комментарий, владельца и условие пересмотра.
+
+Acceptance: новый engine module не принимается без strict typecheck, линтера, форматирования и unit tests, соответствующих его слою; новые forbidden dependencies/cycles и неиспользуемые dependencies в охваченном scope блокируют PR. Неописанные и ещё не реализованные scripts не должны указываться как уже существующие в README/CI.
+
+
+Публиковать npm-пакеты можно после стабилизации контрактов. Встроенные модули должны иметь явные зависимости/версии и быть независимыми от конкретной desktop-оболочки. Editor-only, build-only и runtime dependencies обязаны быть разведены.
+
+В перспективе extension API должен иметь документированные точки интеграции для:
+- панели/команды/shortcut и project/preferences settings;
+- custom Inspector property editors и schema validators;
+- asset importer/reimport pipeline, asset database metadata и thumbnails;
+- Scene Editor gizmos/brushes/tools и дополнительных node/component types;
+- debug/profiler panels и runtime overlays;
+- build hooks, target profiles и validation rules;
+- localization tables или специализированных gameplay authoring tools.
+
+Каждая точка интеграции должна иметь версию контракта, явные scopes (editor/runtime/build), проверку зависимостей и тестовый пример.
+
+Для основной функциональности необходимо поддерживать несколько маленьких reference/sample projects (например, top-down, platformer и UI-heavy/mobile) и минимальные project templates. Они должны использовать публичный API, документировать ограничения runtime и регулярно проходить build/preview acceptance; примеры не должны зависеть от скрытых внутренних API или появляться в release bundle пользовательской игры без явного включения. Установка плагина не должна автоматически давать доступ ко всему filesystem или включать его runtime bundle в каждую игру. Поддержка hot reload пользовательских скриптов может быть добавлена после стабилизации component lifecycle; при невозможности безопасно сохранить runtime state допустим корректный restart preview с предупреждением.
+
+### 12.2. Пакетная архитектура и менеджер пакетов на базе npm
+
+**Нормативное направление:** исходники самостоятельных пакетов Codogma развиваются в монорепозитории в стиле EVA.js. npm и npm Workspaces предоставляют стандартный механизм зависимостей и совместной разработки. Unity Package Manager служит ориентиром пользовательского workflow и жизненного цикла пакетов; Codogma не копирует его формат пакетов и не реализует альтернативный npm resolver. Подробные решения фиксируются в [ADR-0003](decisions/ADR-0003-package-architecture-and-management.md).
+
+#### Existing editor MCP tooling package
+
+The current implementation includes a standalone private package
+
+The engine-side catalog includes scene, game-object, plain-object, Prefab, editable-tilemap, Arcade Physics, filter, object-list, asset-pack, Spine, Google Fonts and project-file operations. Spine support includes serializing `SpineGameObject` configuration (skeleton/atlas keys, skin, bounds-provider settings, animation mixes, default mix and time scale) and the `assets-get-spine-skin-image` PNG preview. The preview is rendered inside the active browser editor via SSE; a green headless package test does not constitute visual renderer acceptance.
+
+The adapter preserves the engine's JSON Schemas, compiles each advertised schema with Ajv and validates stdio `tools/call` arguments before forwarding to the single engine-owned HTTP endpoint. The engine remains authoritative for tool definitions, system instructions, editor-state operations and project-file security. The stdio adapter exposes no separate WebSocket or alternate tool-registry contract.
+
+#### Game QA MCP — отдельный companion package
+
+Целевое направление — отдельный пакет **@codogma/game-qa-mcp** (предварительное имя; размещение исходников и публичные exports фиксируются после package inventory). Он дополняет, но не заменяет **@codogma/editor-mcp-server**.
+
+Editor MCP остаётся инструментом авторинга: Project/Scene/Node/Component/Prefab/Asset, Inspector и другие редакторские операции. Game QA MCP отвечает за браузерные тестовые сессии, пользовательский ввод, наблюдение за работающей игрой, выполнение сценариев, assertions и evidence. Не переносить browser automation в Editor MCP и не создавать второй registry редакторских операций.
+
+Game QA MCP — оркестратор, а не второй движок:
+- вызывает штатные Project Validation / Build API и Preview Host;
+- использует engine-owned Game Test Bridge для игровых состояний и событий;
+- использует отдельный Browser Controller для Playwright/CDP и браузерных артефактов;
+- возвращает MCP-клиенту структурированные результаты, а не необработанный поток CDP/Playwright;
+- не компилирует игру самостоятельно, не создаёт Preview-процессы в обход Preview Host и не обращается к внутренним Phaser-объектам напрямую.
+
+Tool schemas и протоколы должны быть versioned, иметь единый taxonomy ошибок и capability discovery. Game QA MCP не дублирует схемы Editor MCP и не должен требовать от AI-агента знания browser selectors, CDP-команд или внутренних runtime implementation details.
+
+#### Core package
+
+- Целевое имя публичного ядра — `@codogma/cge`; его исходный корень в монорепозитории — `packages/cge/`.
+- `@codogma/cge` — Core/public API, а не агрегатор всего продукта. Он не должен автоматически подтягивать Editor UI, desktop shell, MCP, build-only tools, платформенные SDK или optional ECS packages.
+- Optional ECS packages находятся вне Core и базового Phaser runtime; их точные package boundaries, feature providers и статус определены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+- `cge` — внутреннее сокращение Codogma Game Engine и часть имени Core package; это не название каталога, куда требуется помещать все исходники движка.
+- Другие самостоятельные пакеты имеют собственные каталоги в `packages/`. Каталог `src/cge/` не является целевым корнем исходников пакетов.
+- Core не зависит от Editor UI/desktop shell
+
+#### Editor Host и Extension API
+
+- Целевой путь нового SolidJS приложения редактора — src/editor/. Редактор выступает
+- Если внешний Extension API потребуется, его контракты должны быть типизированы, документированы и версионированы; целевой пакет — @codogma/editor-api с исходниками в packages/editor-api/. Extension API остаётся самостоятельным Engine contract и не зависит от внутренней реализации Editor Host.
+- Пакет с UI-функциональностью может явно объявлять editor-extension entry point и регистрировать через публичный API команды, пункты меню, горячие клавиши, панели/views, настройки приложения/проекта, custom Inspector editors, validators, asset importers, gizmos/brushes, profiler views и build hooks.
+- Метаданные пакета должны описывать назначение, поддерживаемые scopes/targets, версию Editor Extension API и явные точки входа. Установка npm-пакета сама по себе не означает автоматического исполнения любого кода: Editor Host обнаруживает и активирует только соответствующие пакеты, явно объявленные в зависимостях и включённые для активного проекта. В начальной модели расширения имеют project scope; глобальная установка editor extensions вне проекта не входит в MVP.
+- Предусмотреть понятные статусы активации, диагностику несовместимости и возможность отключать editor extension без удаления npm-зависимости, если это подтверждается архитектурой lifecycle. Отключение расширения не должно изменять сериализованные игровые данные.
+- Точные поля `codogma` metadata, schema/version, lifecycle hook signatures, activation policy и настройки enabled/disabled остаются предметом отдельной схемы и PoC; примеры в roadmap не являются уже реализованным API.
+
+#### Исходники пакетов, Workspaces и пользовательские проекты
+
+- Целевая структура исходников: `packages/*` для самостоятельных пакетов и `src/editor` для Editor Host. Корневой `package.json` в целевой модели использует npm Workspaces для локальной разработки и связывания этих пакетов; точная конфигурация внедряется после аудита manifests, scripts, lockfiles и успешного PoC.
+- Текущее состояние: в репозитории есть root npm project
+- В пользовательский игровой проект устанавливаются **только прямо выбранные пакеты и их транзитивные зависимости**, а не весь monorepo Codogma. Его manifest и `package-lock.json` принадлежат пользовательскому проекту; `node_modules` — результат установки, а не место разработки и хранения исходников пакетов.
+- Пакеты по назначению могут быть Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter или tooling. Названия не обязаны содержать `plugin-`; смысл пакета задаётся его ответственностью, public exports и проверяемыми engine-specific metadata.
+- Пакет может содержать несколько внутренних модулей и exports; независимое версионирование и подключение не требуют отдельного пакета на каждый компонент или файл.
+- Editor-only, build-only и QA packages и их зависимости не должны попадать в production game bundle. Optional runtime packages включаются только по явному выбору проекта и target; Build pipeline проверяет фактический import graph и конечный bundle по разрешённым scopes/targets, а не только наличие пакета в `node_modules`. Требования к ECS-specific inclusion/exclusion — в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+
+#### npm как источник истины
+
+- npm отвечает за install, SemVer resolution, транзитивное дерево зависимостей, registries, package manifests и `package-lock.json`. Codogma не реализует второй dependency resolver, собственный lockfile для npm dependencies или альтернативный механизм установки.
+- npm Workspaces — механизм локальной разработки пакетов внутри монорепозитория. Они не означают, что все пакеты автоматически становятся dependencies каждого игрового проекта или включаются в его bundle.
+- Стандартный `package.json` сохраняет npm-семантику. Engine-specific metadata размещается в namespaced поле `codogma` и не дублирует список npm dependencies.
+- Public exports и межпакетные контракты должны быть явными; приватные deep imports не используются как стабильный межпакетный API. `peerDependencies` применяются там, где это соответствует контракту host/Core и обычной семантике npm.
+- Для чистой установки и CI используется `npm ci` с согласованными lockfile и конфигурацией. Нестандартные флаги, влияющие на dependency tree, должны быть зафиксированы и документированы.
+
+#### Реестр функций (Feature/Capability Registry)
+
+Реестр функций — слой каталога возможностей движка и инструментария; он дополняет npm package graph, но не заменяет его. **Пакет — единица установки и распространения; feature/capability — логическая функция, которую могут предоставлять один или несколько пакетов.** Один пакет может предоставлять несколько функций, а одна функция может требовать другие функции из того же или другого пакета.
+
+- Реестр объединяет встроенные descriptors движка и descriptors, явно объявленные пакетами в декларативных, проверяемых метаданных `codogma` или связанном с ними descriptor. Обнаружение и валидация descriptors не должны импортировать/исполнять произвольный код пакета только ради перечисления или проверки функций. Код entry point загружается лишь в соответствующем разрешённом lifecycle. Единую схему нужно валидировать; точный формат и место хранения подтверждаются ADR/PoC.
+- Descriptor функции должен предусматривать стабильный ID, название/описание, provider package и entry points, scopes (`editor`, `runtime`, `build`, `platform`), поддерживаемые targets/environments, явные feature dependencies, при необходимости конфликты, required/optional/default policy и сведения, необходимые build pipeline. Effective scopes/targets функции не могут быть шире ограничений provider package. Если один логический feature ID имеет несколько providers, выбор/композиция должны задаваться явным контрактом; неоднозначный выбор provider по умолчанию является диагностируемой ошибкой. Полный schema contract не считается реализованным до принятия PoC и fixture tests.
+- Состояния не взаимозаменяемы: **пакет установлен** через npm; **функция объявлена и доступна** при корректной metadata и совместимых зависимостях; **функция включена в конфигурации проекта**; **функция выбрана для конкретного target/build**; **функция активирована в текущей runtime/editor-сессии**, когда для неё существует такой lifecycle. Наличие одного состояния не должно автоматически включать остальные.
+- Выбор функций хранится в версионируемой конфигурации проекта и при необходимости в target-specific build profiles. Точное поле/файл определяется PoC; пользовательский выбор должен быть воспроизводимым и пригодным для CI, а не зависеть от последнего состояния открытого UI.
+- Реестр проверяет feature dependency closure, несовместимые функции, targets/scopes и version/API compatibility. Feature dependencies не равны npm dependencies: npm остаётся единственным механизмом установки и разрешения package dependencies. Если для выбранной функции нет требуемого package provider, система выдаёт структурированную ошибку и может предложить действие в Package Manager UI, но реестр самостоятельно не устанавливает пакеты и не реализует второй resolver.
+- Build pipeline получает явный набор включённых функций для target, проверяет все обязательные feature dependencies, формирует dependency closure из объявленных entry points, исключает несовместимые и editor-only пути и выдаёт machine-readable build report с выбранными функциями, package/module contributions, причинами включения/исключения и диагностикой. Конкретные ECS feature IDs/providers и их package relationship задаются [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); metadata сама по себе не гарантирует безопасное удаление модулей с side effects или динамической регистрацией.
+- Editor Host, Inspector, project validation, runtime services и CLI/build должны потреблять согласованные descriptors/diagnostics, а не поддерживать независимые дублирующие каталоги capabilities.
+- Curated feature sets (преднастроенные группы функций/пакетов) могут появиться позже как UX-удобство. Они не заменяют реестр и не должны становиться обязательным механизмом разрешения зависимостей для MVP.
+
+#### Package Manager Service
+
+- Package Manager Service — Node-side подсистема с целевыми исходниками в `packages/package-manager/`; она используется локальным server/backend и headless CLI. Браузерный Editor Host обращается к сервису через типизированный HTTP/IPC contract и не запускает npm напрямую, не обходит backend и не получает произвольный доступ к filesystem.
+- Server/backend и CLI используют одну реализацию сервиса и общий типизированный контракт; параллельной логики изменения `package.json` в UI не должно быть. Сервис безопасно вызывает npm CLI с контролируемыми аргументами, ограниченным root активного проекта, управлением процессами/отменой, структурированными результатами и понятной диагностикой.
+- Сервис поддерживает установку, обновление, удаление и просмотр пакетов; проверяет engine/editor API compatibility, metadata и согласованность manifest/lockfile. Ошибки должны давать диагностируемый и тестируемый результат восстановления.
+- Источники базируются на поддерживаемых npm механизмах: registry/scoped registry, local/file, Git и tarball. Поддержку и UX источников вводить поэтапно; credentials не записываются в tracked project configuration.
+- npm installation не является доказательством безопасности. Политика lifecycle scripts, источников, лицензий, известных уязвимостей и provenance должна быть явной. Сам package kind не создаёт sandbox и не ограничивает права кода.
+- Package Manager UI — часть Editor Host, но сам npm resolver и dependency graph остаются ответственностью npm.
+
+#### Package discovery and curated catalogue
+
+Package discovery является read-only частью package management domain и отделяется от установки/разрешения зависимостей.
+
+- Discovery adapter обращается к npm-compatible registry/scoped registries, читает поиск, packument и manifests конкретных версий. Он возвращает типизированные сведения о package ID, версиях/dist-tags, tarball/integrity, standard npm metadata и namespaced Codogma metadata.
+- Данные нужно разделять на package manifest (npm package.json), registry packument/version metadata, project manifest + package-lock.json и optional curated catalogue record. Каталог может добавлять displayName, описание, темы, иконку/media, docs/changelog, maintainer/source links и отдельно проверенную compatibility; без catalogue record валидный npm-пакет всё равно должен быть доступен через registry search.
+- Curated metadata не заменяет package manifest, registry data, npm resolver или Feature Registry. Package identity учитывает registry + package name; одноимённые пакеты из разных registries не объединяются без явной политики.
+- Search/detail/compatibility validation не запускают package code или lifecycle scripts и не изменяют project manifests. Package Manager Service остаётся единственной точкой package install/update/remove и владельцем process lifecycle; npm остаётся единственным resolver и владельцем package-lock.json.
+- OpenUPM используется как implementation/metadata reference для отдельного catalogue record, CI validation и разделения catalogue data от package source. OpenUPM распространяет Unity UPM packages, поэтому не является готовым registry adapter или dependency Codogma. Собственный hosted catalogue/registry не является требованием MVP.
+- Package Manager UI проектируется как отдельное окно SolidJS Host с навигационными контекстами, search/sort/filter, package list, details tabs (overview/versions/dependencies/compatibility/features/changelog/license/source), project actions, registry settings, progress and diagnostics. Asset Browser остаётся отдельным workflow для игровых ресурсов.
+- Установка editor extension не означает её автоматическую активацию. Metadata не создаёт sandbox; extension activation выполняется только отдельным trust/compatibility workflow через Extension API.
+
+Normative detail: [docs/package-management-reference.md](package-management-reference.md). Tasks: COD-51 (metadata contracts), COD-52 (Node-side service), COD-53 (extension lifecycle), COD-60 (registry sources), COD-92 (UX/UI design), COD-93 (discovery/catalogue), COD-94 (Host UI).
+
+#### Что сознательно откладывается
+
+Самостоятельный dependency resolver и lockfile, собственный публичный package registry/catalogue и сложная система подписи не входят в фундамент. **Feature/Capability Registry и интеграция его контрактов с выборочной сборкой относятся к целевой архитектуре**, а не к отложенным curated feature sets. Curated feature sets допустимы позднее как группы рекомендованных функций/пакетов, но не как альтернативный resolver. Публикация пакетов начинается после готовности API, CI, лицензирования, semver/backward-compatibility policy и release process.
+
+**Критерии приёмки архитектурного направления:** `packages/cge` собирается как самостоятельный пакет; clean-install fixture использует только выбранные пакеты и транзитивные зависимости; Editor Host получает editor extension через публичную версионированную точку входа; отсутствует цикл Core → Editor; editor-only/build-only dependencies не попадают в production game bundle; Package Manager Service использует npm как единственный resolver/installer и выдаёт проверяемую диагностику; Feature Registry различает installed/provided/available/enabled/target-included states; fixture проверяет dependency closure, conflicts, unsupported targets и structured diagnostics; build report воспроизводимо показывает включённые функции и исключает editor-only contributions.
+
+## 13. Performance, QA и release gates
+
+### 13.1. Измерения вместо обещаний
+
+Цели «1000 файлов открываются за 3 секунды», «500+ объектов без просадок» и «холодный старт за 2 секунды» не являются подтверждёнными характеристиками. Прежде чем сделать их release gate, надо определить fixture, тестовую машину, методику и baseline текущей версии.
+
+Profiler должен сначала собирать воспроизводимые данные, после чего можно назначать количественные пороги для конкретных поддерживаемых сценариев. Измерять отдельно время до готового UI, frame time p50/p95/p99, main-thread CPU, время gameplay systems, physics, rendering, память/heap high-water, allocations/GC, загрузку ресурсов и startup/teardown editor и preview. Сравнительный workload, методика и acceptance criteria Data-Oriented ECS заданы [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Не делать вывод о преимуществе desktop shell (Tauri/Electron) только по размеру приложения; такой выбор требует отдельного измерения на целевых сценариях.
+
+### 13.2. Обязательные проверки по изменяемому слою
+
+- Editor TypeScript/compiler: root и legacy source/editor сохраняют собственные install/build checks; новый src/editor уже имеет отдельные npm run typecheck, npm run build, npm run test и npm run test:browser, запускаемые через root shortcuts build:editor-host, test:editor-host и test:editor-host:browser. CI job editor-host проверяет новый Host отдельно. npm Workspaces не включены. Core/API packages проходят собственные strict typechecks. Указывать только команды, реально присутствующие в соответствующем manifest.
+- TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
+- Server/MCP: серверный smoke, быстрые package contract/schema tests и security checks. E2E-сценарии для сквозных MCP workflows поддерживаются вместе с соответствующей подсистемой; полный MCP E2E suite выполняется в обязательном promotion gate.
+- Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures; отдельный fixture должен запустить сцену из данных с зарегистрированным пользовательским TypeScript-компонентом **без генерируемого файла класса сцены** и проверить диагностику отсутствующего компонента/ресурса без частично созданной runtime-сцены. Проверить ссылки между узлами, повторное использование typeId при независимых instance IDs/значениях, отмену загрузки и отделение временного runtime state от сохранённых данных.
+- Engine API / ComponentWorld: unit-тесты lifecycle, system ordering, pause/resume, structural changes и disposal; тесты согласованности базового Phaser adapter.
+- Optional ECS runtime и Phaser adapter package tests, browser acceptance и measurement evidence выполняются по каноническим требованиям [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); comparative run фиксируется в PERF-09.
+- Physics: contract tests для body lifecycle, collision filters, fixed timestep, contacts, supported joints, debug geometry и корректного освобождения ресурсов для каждого поддерживаемого backend.
+- 2D rendering/performance: измеримые fixtures для frame time, batching/texture/resource counts в пределах доступной instrumentation; тесты изменения/освобождения Graphics/particle resources и отсутствия ненужных повторных allocation loops. Atlas analysis покрывает rendered/culled sprites, page count и usage; Tilemap metrics отделяют render/update/collision processing.
+- Asset pipeline/CLI: validate/build без GUI, stable asset references, migration/import metadata, dependency graph, deterministic output и корректные exit codes.
+- Editor/runtime integration: полный browser scenario, включающий scene/Prefab, пользовательский компонент, Inspector и play mode.
+- Preview/debugger: управление lifecycle preview, обработка log/error, отсутствие зависших процессов и корректное связывание runtime entity с проектной моделью.
+- Build/platform: тестирование собранной HTML5-игры отдельно от редактора; платформенные adapters проверяются отдельно в mock и целевом окружении.
+- Input/scene/time services: тесты преобразования координат, UI-vs-world event routing, focus loss, scene transition/cancellation, таймеров/tweens и отсутствия callbacks после disposal.
+- Sprite/Tilemap/UI authoring: fixtures на slicing/pivot/custom collision shapes, deterministc render sorting, 9-slicing, brush/Undo/Redo, tilemap chunk metrics и разные viewport/aspect ratios.
+- Audio/storage/localization: browser autoplay/focus behavior, ресурсное освобождение, миграции save data, missing locale keys и fallback behavior.
+- Web production: target browser smoke, startup-size/report validation, source map diagnostics for development builds and assertion that editor-only code is absent from release output. Acceptance также покрывает visibility/focus, blocked audio before user activation, WebGL context loss/restore, interrupted asset load, mobile memory pressure, resize/orientation/DPR, storage quota failure, hosting headers/MIME и embedded host. Desktop Chromium happy-path недостаточен.
+- Desktop: сборка, установка и smoke/acceptance на каждой заявленной ОС.
+
+CI Fast намеренно не выполняет E2E: обычные PR в `dev` ограничены build/typecheck, unit/contract/security и быстрыми smoke-проверками. Все E2E suites (MCP integration, Playwright/browser acceptance и будущие gameplay/cross-browser сценарии) запускаются единым обязательным promotion gate начиная с PR `dev → test` и далее на последующих release-promotion PR.
+
+**Принцип разработки и запуска E2E:** E2E-сценарии и fixtures создаются и развиваются вместе с подсистемами. Когда изменение затрагивает сквозной пользовательский workflow, интеграцию между слоями или существующий E2E-сценарий, соответствующее покрытие добавляется или обновляется в том же topic PR. При этом обычный PR не запускает весь E2E-набор и не обязан проходить полный цикл интеграционной отладки общего набора. Массовый прогон, проверка совместной работы подсистем и системная отладка выполняются на promotion; promotion нельзя принять, пока обязательный E2E gate не прошёл. Это разделяет непрерывное развитие тестового покрытия и стоимость полной интеграционной приёмки.
+
+### 13.3. Правила миграции
+
+- Каждая задача и миграция делаются небольшим PR с одним понятным результатом.
+- Существующее поведение фиксируется тестом/fixture до переноса соответствующего workflow в новый SolidJS Host.
+- UI migration идёт как legacy Colibri Host + new SolidJS Host, но не как embedding SolidJS внутри Colibri; между ними нет долгосрочного UI adapter layer.
+- Для локальной разработки старый и новый Host имеют отдельные origins/ports, а API остаётся на loopback Node backend. Точные Origin allow-lists, Vite proxy, project write ownership и MCP SSE ownership входят в acceptance.
+- На период dual-run один проект не редактируется одновременно обеими UI-сессиями. Для параллельного write acceptance используются отдельные project copies/backend instances.
+- Удаление Colibri начинается только после feature inventory sign-off, browser acceptance нового Host, cutover и подтверждённого rollback window.
+- Новая реализация проходит критерии до удаления старой.
+- Для Scene workflow авторским источником истины является native Scene document.
+- Не держать два источника истины для HP/Transform/состояния компонентов или иных переносимых данных.
+- Не переносить все игровые сущности на новую архитектуру одновременно.
+- Не менять игровой цикл, физические тайминги или семантику без регрессионных тестов.
+- Удаление Colibri, Node-сервера или legacy-модуля — следствие успешной замены, а не самостоятельная цель.
+- Фаза считается завершённой только после всех своих acceptance criteria.
+
+
+
+### 13.4. AI-assisted Game QA и Browser QA MCP
+
+**Цель:** предоставить AI-агенту штатный, воспроизводимый и проверяемый способ тестировать созданную игру в настоящем браузере. Агент должен уметь собрать проект, запустить Preview, управлять игрой, получать состояние игрового мира, проверять ожидаемое поведение, исследовать визуальный результат, диагностировать ошибки и сформировать отчёт — используя документированные инструменты Codogma, а не создавая вспомогательные инфраструктурные скрипты для каждой игры.
+
+Это отдельное архитектурное направление поверх Project Build API, Preview Host и runtime diagnostics. Оно не заменяет unit/integration tests, обычные browser E2E редактора или ручную приёмку на физических устройствах.
+
+#### 13.4.1. Границы и ответственность
+
+Архитектура состоит из четырёх взаимодействующих, но независимо тестируемых частей:
+
+1. **Game Test Bridge (engine-owned).** Контракт наблюдения и ограниченного тестового управления для Development/Test runtime. Источник сведений об игровых сценах, сущностях, компонентах, событиях и доступных runtime-метриках. Это часть инструментируемого runtime/adapter, а не внешний браузерный скрипт.
+2. **Browser Controller.** Управляет браузерными сессиями, вкладками, viewport, клавиатурой, мышью, pointer/touch input, screenshot/video/trace и browser diagnostics. Базовый кандидат для изолированных browser sessions — Playwright. CDP рассматривается как дополнительный transport для attach к уже запущенному Chromium-based браузеру и расширенной диагностики. Точный provider/версии выбираются после технического прототипа и capability/security review.
+3. **Game QA MCP.** Отдельный MCP-пакет (предварительное имя @codogma/game-qa-mcp), предоставляющий высокоуровневые инструменты browser/game testing. Он связывает Preview session, Browser Controller, Game Test Bridge и Scenario Runner. Он не содержит второй реализации Build/Preview и не заменяет Editor MCP.
+4. **Scenario Runner и Evidence Store.** Выполняет версионируемые декларативные игровые сценарии и сохраняет результат, логи и доказательства. Сценарий должен описывать действия и ожидаемые условия, а не содержать одноразовый Node.js/PowerShell/Playwright driver, который агент вынужден создавать вручную.
+
+Зависимости должны идти в одном направлении: Game QA MCP вызывает публичные Engine APIs и Browser Controller; Game Test Bridge реализуется на стороне Engine/runtime adapter; Core не зависит от MCP, Playwright, CDP, Browser Extension или QA package. Preview Host отвечает за запуск и остановку игры. Build API отвечает за сборку. QA-компонент только координирует и проверяет эти операции.
+
+#### 13.4.2. Game Test Bridge: контракт игрового runtime
+
+Game Test Bridge предназначен для Development/Test профилей. Его отсутствие или отключение не должно менять gameplay и не должно препятствовать Release build.
+
+Контракт должен быть независим от Phaser-specific object model. Нельзя возвращать AI-агенту Phaser.GameObjects, внутренние ссылки на Scene/Game, физические объекты backend или произвольные JavaScript-объекты. Используются стабильные идентификаторы и сериализуемые versioned DTO.
+
+Минимальный handshake сессии сообщает:
+- protocol/schema version;
+- engine/runtime adapter version;
+- project revision и build/preview ID;
+- test session ID;
+- выбранные capabilities и причины неподдерживаемых операций;
+- текущее состояние runtime/scene и состояние готовности к тесту.
+
+Минимальная модель наблюдения включает:
+- состояние игровой сессии и активной сцены;
+- стабильные Entity/Node IDs, типы и lifecycle status;
+- Transform и только явно разрешённые диагностические поля компонентов;
+- ссылки на зарегистрированные component types, но не произвольное раскрытие приватных полей;
+- доступные сведения о ресурсах и ошибки их загрузки;
+- поддерживаемые физические/animation/input diagnostics, когда их предоставляет соответствующий adapter;
+- доступные frame-time/FPS и другие метрики с указанием источника, sampling window и ограничений точности.
+
+Bridge должен публиковать typed events с event ID/sequence, timestamp или monotonic time, test session ID и привязкой к стабильным Entity/Scene IDs, когда она существует. Базовые event families: scene lifecycle, entity spawn/destroy, component attach/detach, resource load/fail, animation lifecycle, input observed, collision/contact, pause/resume, scene transition и явные user-defined gameplay events. Конкретная подсистема публикует только те события, семантику которых может гарантировать. Не объявлять универсальные collision/AI events, если их нет в выбранном runtime adapter.
+
+Для игровых механик должна быть предусмотрена возможность объявлять семантические тестовые события (например, coin.collected, quest.completed, damage.applied) через типизированные project-owned instrumentation hooks. Имена событий и payload schema являются частью версии/контракта тестируемого проекта. Тестовый интерфейс не должен подменять настоящие столкновения, ввод или игровую логику.
+
+Наблюдение — read-only по умолчанию. Изменение состояния игры через произвольную запись в Entity/Component запрещено. При необходимости контролируемые test actions регистрируются игрой или тестовым модулем через явно объявленный контракт и доступны только в Test profile. Для проверки пользовательского ввода Browser QA отправляет реальные browser-level keyboard/pointer/touch input через Browser Controller; он не вызывает напрямую методы игрового объекта и не подделывает DOM-события вместо проверки input pipeline.
+
+Bridge должен иметь bounded event buffer, фильтры по типам/Entity ID, cursor-based чтение или подписку, контроль размера payload и backpressure. Потеря событий, переполнение буфера и пропуск sequence должны быть явно диагностированы; агент не должен считать отсутствие события доказательством того, что событие не происходило, если буфер переполнен или подписка стартовала поздно.
+
+Game Test Bridge не поднимает собственный HTTP/WebSocket server, не открывает отдельный порт и не создаёт независимый сетевой endpoint. Preview Host выдаёт Bridge конкретный session-scoped канал связи для соответствующего build/preview/run (например, защищённый MessagePort или другой контролируемый host channel). Канал привязывается к test session, preview/build ID и разрешённому origin; он использует ограниченный по времени capability token/nonce, проверяет источник сообщений и закрывается при Stop, navigation, timeout или завершении QA session. Конкретный transport выбирается на этапе реализации Preview Host, но отдельный listener внутри игровой страницы запрещён.
+
+Допускается тестовый режим детерминизма: фиксированный seed, управляемые часы/fixed-step и стабилизированное начальное состояние — только там, где соответствующий scheduler/runtime contract это гарантирует. Такие проверки должны быть отделены от real-time browser acceptance. Не подменять ими тестирование реального frame lifecycle, focus, audio autoplay или физического ввода.
+
+#### 13.4.3. Browser Controller и управление сессиями
+
+Нужно поддержать два явных режима:
+
+- **Isolated QA session (по умолчанию):** отдельный browser context/profile, чистое состояние cookies/storage, предсказуемые начальные условия и автоматическая очистка после теста. Не использовать личный повседневный профиль браузера.
+- **Attach / interactive session (только по явному выбору):** подключение к уже работающему Chromium-based браузеру, когда это необходимо для наблюдения за текущей локальной игрой или воспроизведения проблемы в пользовательском окружении. Перед attach агент получает список доступных вкладок и должен явно выбрать target; нельзя угадывать «последнюю активную» вкладку или автоматически переключать чужой контекст.
+
+Оба режима должны возвращать session ID, browser/version, выбранную вкладку, URL/origin, viewport, DPR, режим подключения, доступные capabilities и ограничения. Все команды адресуются конкретной сессии/вкладке, а не неявно глобальному активному окну.
+
+Browser Controller должен предоставлять:
+- навигацию только к разрешённому локальному Preview URL/origin по умолчанию;
+- получение состояния страницы и устойчивых DOM/accessibility references для editor/host controls;
+- keyboard, mouse, wheel, pointer и touch actions на уровне браузерного драйвера;
+- ожидания по состоянию, а не произвольные фиксированные sleep там, где возможно наблюдаемое условие;
+- получение скриншотов, видео/trace и базовой информации о viewport;
+- JavaScript console exceptions, console errors, failed requests, HTTP errors и ошибки загрузки документов/ресурсов;
+- browser lifecycle, timeout/cancellation и надёжное закрытие вкладок/context/process.
+
+Каждое browser action проходит обязательный цикл **observe → resolve target → check actionability → execute → verify → recover**. Сначала Controller получает актуальное состояние страницы/viewport/session; затем разрешает target в устойчивую ссылку (TargetRef), привязанную к session и поколению документа, либо запрашивает актуальную игровую область/viewport mapping. Перед действием проверяются однозначность target, принадлежность текущей сессии, connected/visible/enabled state, отсутствие перекрытия и стабильность geometry на протяжении короткого окна наблюдения там, где эти проверки применимы. Для canvas/game-world input используются актуальные viewport/scene transforms и настоящие browser input APIs, а не эвристические CSS selectors. Устаревший TargetRef требует нового observation/resolve; его нельзя слепо повторять.
+
+После выполнения Controller возвращает pre/post observation или структурированный diff и отдельно сообщает dispatched, completed и verified. Если действие не удалось подтвердить, результат остаётся unverified; recovery возвращает актуальное состояние, typed failure и безопасные следующие шаги, а не автоматически повторяет команду. Retry допускается только для явно idempotent действий и после проверки текущего состояния.
+
+Для игровых действий предпочтительны настоящие browser input APIs. DOM dispatchEvent и произвольный evaluate не являются допустимой заменой пользовательского ввода. Нельзя полагаться на пиксельные координаты, если runtime/DOM предоставляет устойчивые refs или координаты можно вычислить по актуальному viewport/scene mapping. Все действия должны сообщать, что было отправлено и что было подтверждено отдельно.
+
+Playwright — основной кандидат для изолированных тестовых контекстов и browser input. CDP — дополнительная возможность подключения/диагностики Chromium, а не требование использовать два независимых браузерных automation stacks одновременно. Поддержка Yandex Browser/Edge/других Chromium-based browsers принимается только после проверки соответствующих версий и capabilities. Firefox/WebKit/реальные мобильные устройства добавляются отдельными target acceptance; mobile emulation не считается доказательством поведения на физическом устройстве.
+
+#### 13.4.4. Декларативные игровые сценарии и MCP tool contract
+
+AI-агент должен запускать высокоуровневые операции через Game QA MCP, не конструируя shell-команды, одноразовые .mjs-файлы, Playwright scripts, CDP message loops или браузерные helper scripts для каждого игрового проекта.
+
+Scenario Runner должен поддерживать версионируемый декларативный формат. Минимальные блоки сценария:
+- metadata: schema version, name, description, tags, target capabilities;
+- setup: build/preview reference, viewport/DPR, locale/timezone при необходимости, random seed, storage/network profile;
+- preconditions: game ready, expected scene, required capabilities/resources;
+- actions: browser navigation/session selection, keyboard/pointer/touch input, wait, screenshot checkpoint, controlled registered test action;
+- waits: typed runtime event, browser/page condition, state predicate с ограниченным timeout;
+- assertions: entity/component observable state, scene/session state, event occurrence/count, resource state, score/progression values, console/network failure policy;
+- teardown: stop game, close QA session, detach subscriptions and flush artifacts.
+
+Scenario format в первой реализации должен быть declarative JSON (или другая schema-first serialization, утверждённая до реализации). Произвольный JavaScript evaluation, произвольный shell execution и неограниченный code injection не входят в MCP Scenario API. Допускаются отдельные project-owned test modules только для сценариев, которые объективно невозможно выразить декларативно; они должны иметь явные entry points, typed contracts, ограниченный lifecycle и не требовать от агента генерировать временную инфраструктуру.
+
+MCP surface группируется по операциям: browser/session lifecycle, open/attach game preview, viewport/input, runtime snapshot/entity/event observation, console/network diagnostics, screenshots/traces, scenario run/cancel/result и report/artifact retrieval. Это ориентир по семействам инструментов, не окончательный список имён; перед фиксацией схем необходимо провести inventory существующих Project/Preview/Runtime APIs.
+
+**Транспорт MCP первой версии:** целевой вариант для `@codogma/game-qa-mcp` — stdio, по принятой в Codogma модели `@codogma/editor-mcp-server`. Сам MCP-процесс не поднимает TCP listener только ради публикации инструментов. Альтернативный сетевой MCP transport возможен лишь после отдельного use-case/security review и явного архитектурного решения. Это не предопределяет внутренний transport Browser Controller и канала Preview Host ↔ Game Test Bridge.
+
+Каждый action возвращает структурированный результат с action/session ID, dispatched/completed/verified state, elapsed time, pre/post observation или diff при необходимости, warnings и typed error. Для неизвестного результата после timeout нельзя автоматически повторять неидемпотентное действие (например, покупку, подтверждение диалога или отправку формы). Retry policy зависит от idempotency и явно отражается в результате.
+
+Ошибки имеют стабильные коды, recoverability и безопасные next-step hints: browser/session unavailable, target origin blocked, game not ready, unsupported capability, stale entity reference, event buffer overflow, action timeout, runtime exception, build failure, assertion failure, artifact unavailable и cleanup failure. Сырые стеки и CDP payload остаются диагностическими данными с ограничением размера; MCP возвращает агенту компактное объяснение и ссылки/ID на подробное evidence.
+
+#### 13.4.5. Evidence, отчётность и воспроизводимость
+
+Каждый запуск сценария формирует машинно-читаемый QA report и связанные артефакты. Отчёт фиксирует:
+- project/revision/commit и schema version;
+- engine, runtime adapter, build и Preview IDs;
+- browser/version, ОС/host, viewport, DPR и режим сессии;
+- scenario ID/version/hash, параметры setup и seed (если используется);
+- шаги, длительность, actions, waits и assertions с expected/actual;
+- session-correlated console errors, runtime exceptions, failed network/resource requests;
+- runtime event sequence, наблюдаемые state snapshots/diffs;
+- итоговый status и точную причину failure/skip/unverified;
+- ссылки/идентификаторы screenshot, video, trace, build report и дополнительных diagnostics.
+
+Доказательства должны быть привязаны к конкретному запуску и шагу, а не собраны из разных browser sessions. Скриншот/видео — визуальное evidence, но не замена runtime assertion; runtime assertion — не доказательство визуального качества. Отчёт обязан различать PASS, FAIL, SKIP и UNVERIFIED. Успешное выполнение команды без подтверждения ожидаемого состояния не считается PASS.
+
+Артефакты сохраняются вне production bundle и имеют явную политику хранения/очистки. Большие видео и трассы не должны автоматически помещаться целиком в контекст MCP: агент получает summary, ссылки/IDs и выбирает нужные кадры/диапазоны. Секреты, cookie values, Authorization headers, пароли, персональные поля и чувствительные query parameters не сохраняются в логах/отчётах; screenshot redaction и ручной review применяются там, где fixture содержит потенциально чувствительные данные.
+
+#### 13.4.6. Безопасность и изоляция
+
+- `@codogma/game-qa-mcp` в первой версии использует stdio и не открывает TCP listener. Loopback-only относится к компонентам, которые действительно предоставляют отдельный сетевой endpoint (например, Browser Controller daemon или локальный orchestration service, если такой процесс потребуется после spike): они bind только к `127.0.0.1`. Не открывать такие endpoints в LAN/public network без отдельной authentication/authorization модели и security acceptance.
+- Game Test Bridge не имеет собственного listener/порта: он доступен только через session-scoped канал, который открыл и авторизовал Preview Host для конкретного build/preview run. Внешний Browser Controller/MCP не может подключаться к Bridge произвольным сетевым запросом или выбирать чужую игровую сессию.
+- Для каждой QA session выдаётся случайный ограниченный по времени capability token; он привязан к конкретному project/build/preview session и разрешённому origin. Запросы проверяют Origin/Host, payload size, timeouts и session ownership. Token не передаётся в общий DOM, URL query string, логи или MCP-ответы и не переиспользуется между сессиями.
+- Изолированные browser contexts не разделяют cookies/storage с пользовательским профилем. Attach mode требует явного действия/настройки пользователя и не должен автоматически экспортировать cookies, localStorage или credentials в MCP context.
+- Allowlist navigation по умолчанию ограничена локальными preview/build origins; внешние адреса требуют отдельной конфигурации и не включаются в первый acceptance scope.
+- Game Test Bridge выключен в Release build и не содержит скрытого remote-control endpoint в production output. Production build acceptance проверяет физическое исключение bridge/debug-only modules, а не только UI-флаг.
+- Тестовые snapshots/events ограничены по размеру и allowlisted fields. Не предоставлять произвольное чтение файлов вне project root и произвольный вызов внутренних engine APIs через QA tools.
+- CDP attach считается высокопривилегированной операцией: его нельзя включать автоматически и нельзя считать безопасным публичным сетевым интерфейсом.
+
+#### 13.4.7. Нефункциональные требования и границы
+
+- Все browser/game sessions имеют владельца, explicit lifecycle, cancellation, deadlines и гарантированный cleanup. Повторный запуск не оставляет процессов, вкладок, listeners, timers, event subscriptions и временных ресурсов.
+- Одновременные сценарии изолированы; если один браузер/context не поддерживает безопасную параллельность, операции сериализуются с явной диагностикой.
+- Snapshot, events, logs, traces и reports ограничены по размеру/частоте. Event flooding или неполные данные должны давать diagnostic, а не ложный PASS.
+- Browser driver capabilities и Test Bridge capabilities объявляются явно. Unsupported capability даёт SKIP/UNVERIFIED с причиной, а не молчаливую эмуляцию.
+- Performance reports включают browser/hardware/renderer context и измеренную методику. Headless SwiftShader/software rendering не является evidence производительности на реальном GPU/mobile device. Desktop emulation не подтверждает mobile performance.
+- Game QA MCP не заменяет unit tests, deterministic runtime tests, ordinary application E2E, visual design review или ручное acceptance на реальных Yandex Games/VK/browser hosts. Он дополняет их игровым browser-level контуром.
+- Тяжёлые browser/gameplay suites не запускаются безусловно на каждом обычном dev/pre-PR CI run. CI должен иметь быстрые contract/unit/security checks, адресные browser smoke для затронутого слоя и отдельный on-demand/release acceptance pipeline для полных игровых сценариев. Реальный workflow/branch gates определяются текущей CI policy.
+- Infrastructure commands (install/start/build/preview/browser/session/scenario/artifact cleanup) являются штатными командами Engine/QA packages и MCP tools. Не требовать от AI-агента писать временные Node.js/PowerShell/bash/Playwright/CDP scripts для выполнения стандартных действий. Project-owned gameplay code и явно принятые project test artifacts остаются частью проекта; они не должны подменять инфраструктуру движка.
+
+#### 13.4.8. Исследовательские reference и reuse policy
+
+Рассматривать следующие проекты как архитектурные reference, но не как обязательные runtime dependencies:
+- [Kimi Browser Extension / WebBridge](https://www.kimi.com/en/products/kimi-browser-extension) — модель локального browser bridge и взаимодействия с реальным браузером. Наличие официального расширения не означает доступность его исходников или право использовать его внутренний протокол как контракт Codogma.
+- [Nimm0ny/kimi-webbridge-mcp](https://github.com/Nimm0ny/kimi-webbridge-mcp) — независимый open-source MCP adapter к Kimi WebBridge; изучить tool profiles, session handling, verification semantics, local-only ограничения и smoke/E2E approach. Это не официальный пакет Moonshot/Kimi и требует upstream WebBridge.
+- [efrg123/kimi-webbridge](https://github.com/efrg123/kimi-webbridge) — публичные architecture/API/implementation planning документы WebBridge v2.0. Использовать как design reference для observe → target → action → verify → recovery, target refs, typed errors, trace and security. README описывает репозиторий как planning/implementation specification; не считать весь план доказанной production-реализацией.
+- [microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp) и [ChromeDevTools/chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) — reference по browser automation, accessibility/browser diagnostics, network, screenshots и performance tooling.
+
+Не копировать реализацию/протоколы и не привязывать Codogma к Kimi extension. Повторное использование кода допустимо только после проверки точной лицензии, зависимостей, зрелости, security boundary, поддерживаемых browser versions и стоимости сопровождения. В первую очередь заимствовать подходы и строить собственные Engine-owned versioned contracts.
+
+#### 13.4.9. Критерии приёмки направления
+
+- [ ] Существуют согласованные versioned contracts для Game Test Bridge, Browser Controller session lifecycle, Game QA MCP и declarative scenario schema.
+- [ ] Game Test Bridge доступен только в Development/Test runtime; Release bundle проверяемо не содержит Test Bridge/debug-only endpoint.
+- [ ] Изолированная QA session поднимает browser context, открывает игру из Preview/Build API, возвращает session metadata и закрывает принадлежащие процессы/context при Stop, timeout и ошибке.
+- [ ] Агент получает runtime readiness, active scene, стабильные Entity IDs и доступные component diagnostics без обращения к Phaser internal objects.
+- [ ] Реальные browser-level keyboard/pointer/touch inputs доходят до игрового Input API; проверка не заменена внутренним прямым вызовом методов игры или синтетическими DOM events.
+- [ ] Typed runtime events можно ждать и проверять с учётом session ID/sequence, cursor, timeout и event-buffer overflow.
+- [ ] Декларативный scenario fixture проходит полный сценарий: build/preview → game ready → movement/jump → collect item → assert score/event → win state → restart → initial state.
+- [ ] Для сценария доступны screenshots и структурированный report с expected/actual, шагами, версиями, runtime/browser errors и точным итоговым статусом.
+- [ ] Негативный fixture доказывает корректную диагностику build failure, game not ready, missing resource, runtime exception, timeout, stale reference и unsupported capability.
+- [ ] Повторный запуск сценария не оставляет процессов, вкладок, event listeners, timers, bridge subscriptions и временных ресурсов.
+- [ ] Один и тот же declarative scenario можно запустить через MCP и CI runner без создания агентом одноразового driver script и без изменения игрового исходника ради инфраструктурного подключения.
+- [ ] Release build не содержит QA bridge, CDP/browser-control endpoints, тестовых секретов и test-only modules; это подтверждается output-level inspection.
+- [ ] CI разделяет быстрые build/typecheck, contract/unit/security checks на обычных PR и полный E2E gate только на promotion PR `dev → test` и последующих release promotions; E2E suites не запускаются на topic PR в `dev` ни по одному path-based исключению.
+- [ ] Browser/device evidence фиксирует фактический browser, version, OS/host, viewport/DPR и renderer context; headless/software-rendered результаты не выдаются за проверку реального устройства.
+- [ ] Документация capability matrix и roadmap обновляется вместе с реализацией; функция не получает статус «реализовано» до выполнения соответствующего runtime/browser acceptance.
+
+
+### 13.5. Editor Logging & Diagnostics
+
+**Статус:** архитектурное требование зафиксировано; единая система логирования ещё не реализована. Детальный contract, reference patterns, текущие ограничения и критерии — в [Editor Logging & Diagnostics](editor-logging-and-diagnostics.md).
+
+Текущие Browser Console, Node.js server logger, `dev.log` и MCP operation responses — отдельные механизмы. Логи browser Editor автоматически не попадают в Node terminal; MCP responses охватывают только результаты tool calls. Они не считаются общей системой диагностики.
+
+UI-independent logging contract используется legacy Editor в переходный период и текущим SolidJS Host; после cutover целевым consumer остаётся SolidJS:
+
+- Engine-owned типизированный logger с уровнями `debug/info/warn/error`, timestamp, channel, subsystem, message, normalized error/stack и ограниченным operation context.
+- Раздельные каналы Editor, Runtime, Build, Server, MCP и extensions; runtime diagnostics привязываются к конкретной Preview/game session.
+- Dockable Console/Output panel: поиск, фильтры по уровню/каналу, повторная группировка, счётчики, timestamp, полный stack/context, навигация к исходнику/связанному объекту, Copy/Export и Open log file.
+- Bounded in-memory store, Browser Console adapter и persistent file/server sink. Browser-to-Node transport должен быть отдельным, same-origin/loopback-only, с проверками Origin/Host, payload/rate limits и redaction; browser console не считается stdout Node.js.
+- Централизованный сбор `window.error` и `unhandledrejection` без подавления стандартного reporting и без дублирования.
+- Ошибки не скрываются пустыми `catch`: ожидаемый fallback документируется; при сбое rollback/recovery обе ошибки логируются, а первичная ошибка остаётся primary cause.
+- Production policy ограничивает debug-вывод, stack traces, retention и потенциально чувствительные данные; повторяющиеся сообщения группируются/ограничиваются.
+
+Логирование не должно зависеть от конкретного UI framework и не должно вводить собственный runtime/game loop.
+
+### Критерии приёмки Editor Logging & Diagnostics
+
+- Все editor subsystems могут писать структурированные записи через общий API; запись видна в Console panel и доступна соответствующим sinks.
+- Необработанные browser errors и rejected Promises попадают в журнал с context/stack и без duplicate flood.
+- Editor, Runtime, Build, Server и MCP можно независимо фильтровать; runtime entries коррелируют с session ID.
+- Recovery failure регистрируется вместе с исходной ошибкой, не подменяя её.
+- Поиск, уровни, repeat collapse, clear, export и открытие log file работают в реальном browser workflow.
+- Browser-to-Node transport безопасно отклоняет foreign-origin/non-loopback requests и превышение лимитов; его отказ не ломает Editor.
+- File retention, redaction, production level policy и отсутствие debug-only logger/transport в неподходящих release targets проверяются тестами.
+
+## 14. Безопасность, лицензии и происхождение кода
+
+- Project file, asset, package manifest и scene data — данные, не доверенный код. Валидация JSON не делает пользовательский TypeScript безопасным: подключённый компонент выполняется с правами контекста загрузки.
+- Editor extensions/npm packages не изолированы только из-за manifest, scope или capability metadata. До реальной sandbox boundary разрешать установку/активацию только из явно выбранного источника; показывать lifecycle scripts, version, provenance, licences и security warnings; не исполнять package ради discovery.
+- Обновление plugin/SDK/runtime не должно молча менять проект. Фиксировать compatibility range, pins/lockfile, миграции данных и rollback path. Несовместимые extension API/schema дают диагностику, а не частичную загрузку.
+- Файловые операции ограничиваются выбранным проектом и явно разрешёнными действиями. Недоверенный проект/плагин не должен автоматически получать доступ ко всему диску.
+- Запуск subprocess, обновление приложения, загрузка ресурсов и работа с секретами должны иметь явную границу доверия и обработку ошибок.
+- Сохранять применимые лицензии и upstream-notices для кода и зависимостей.
+- Удаление Colibri, изменение структуры файлов или ребрендинг не являются достаточным основанием убрать копирайт Arian Fornaris или иные upstream-уведомления.
+- Любое изменение атрибуции допускается после документированного аудита происхождения кода и проверки применимых условий лицензий.
+- Для новых npm-пакетов и заимствуемых фрагментов фиксировать источники и лицензии, проверять транзитивные зависимости перед распространением.
+
+## 15. Архитектурные reference-проекты
+
+Эти проекты предназначены для исследования идей, а не для безусловного копирования кода.
+
+- [Unity 6.6 / 6000.6 2D manual](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d) — последовательность действий в Scene Editor, Inspector, Prefabs, Package Manager, отладка и интегрированный рабочий процесс.
+- Cocos Creator 4.0 User Manual ([official manual](https://docs.cocos.com/creator/4.0/manual/en/)) — version-pinned workflow reference for scenes/assets, scripting, Web publishing, 2D sorting/batching, UI, animation, physics, particles, AssetManager, localization and editor extensions. Its landing page labels 4.0 LTS but also calls Creator 3.x the latest version; validate release availability/API before adopting it. Keep it distinct from the separate `cocos/cocos4` source repository. Use [Creator 3.8 LTS](https://docs.cocos.com/creator/3.8/manual/en/) as a separate established 3.x workflow reference. Focused pages: [asset workflow](https://docs.cocos.com/creator/4.0/manual/en/asset/asset-workflow.html), [TiledMap](https://docs.cocos.com/creator/4.0/manual/en/asset/tiledmap.html), [input events](https://docs.cocos.com/creator/4.0/manual/en/engine/event/event-input.html), [2D sorting](https://docs.cocos.com/creator/4.0/manual/en/engine/rendering/sorting-2d.html), [batching guidelines](https://docs.cocos.com/creator/4.0/manual/en/ui-system/components/engine/ui-batch.html), [UI system](https://docs.cocos.com/creator/4.0/manual/en/2d-object/ui-system/index.html), [scripting](https://docs.cocos.com/creator/4.0/manual/en/scripting/index.html), [web publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-web.html), and [command-line publishing](https://docs.cocos.com/creator/4.0/manual/en/editor/publish/publish-in-command-line.html).
+- Godot Engine — [complete Editor source, pinned commit 95c0fa5fe8a019adc29d074c16b64469b04571f7](<https://github.com/godotengine/godot/tree/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor>), [license](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/LICENSE.txt>). Implementation-reference areas: [Editor shell](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/editor_node.cpp>), [docking](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/docks/editor_dock_manager.cpp>), [Inspector](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/inspector/editor_inspector.cpp>), [2D canvas](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/scene/canvas_item_editor_plugin.cpp>), [TileMap](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/modules/tilemap/editor/tile_map_layer_editor.cpp>), [Animation](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/animation/animation_track_editor.cpp>), [extensions](<https://github.com/godotengine/godot/blob/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor/plugins/editor_plugin.h>). This is a technical source reference only: C++/native UI patterns must be adapted to Codogma's SolidJS/TypeScript/Web architecture; file-level licenses and third-party notices must be checked before code reuse.
+- [Editor Engineering References](editor-engineering-references.md) — каталог полноценных open-source Editor систем и конкретных архитектурных решений Defold, Fyrox, o2, GDevelop, ezEngine, Stride, Doriax и других проектов. Включает исторический CocosBuilder, отличие Cocos2d-x runtime от integrated Editor, pinned revisions, licensing/platform cautions и mapping к COD issues. Использовать для engineering research, не как список runtime dependencies или новых UX targets.
+- Cocos 4 (upstream: [repository](https://github.com/cocos/cocos4), [branch v4.0.0](https://github.com/cocos/cocos4/tree/v4.0.0)) — reference по разделению core/editor/CLI и подсистемам physics backend selector, 2D batching, Animation Graph, Tiled integration, UI layout, particle lifecycle, AssetManager и display/DPR configuration. Во время исследования 26.10.2026 ветка имела prerelease-версию; рассматривать её как источник архитектурных концепций и проверяемого кода, а не как обязательную runtime-зависимость или доказательство стабильности.
+- Cocos 4 reference files: [physics selector](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/physics-2d/framework/physics-selector.ts), [2D batcher](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/renderer/batcher-2d.ts), [UI static batch component](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/2d/components/ui-static-batch.ts), [2D animation graph](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/animation/marionette), [Tiled map](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/tiledmap), [UI](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/ui), [2D particles](https://github.com/cocos/cocos4/tree/v4.0.0/cocos/particle-2d) and [AssetManager](https://github.com/cocos/cocos4/blob/v4.0.0/cocos/asset/asset-manager/asset-manager.ts).
+- Отдельные performance references: [on-demand Graphics GPU buffer allocation](https://github.com/cocos/cocos4/commit/a803406ef1eb0eb0002f98a50fc0758d8ab4045c) и [Web DPR startup configuration](https://github.com/cocos/cocos4/commit/f570c1f02d20431c7583d2a242233df6676a2b70). Эти решения нельзя считать автоматически подходящими Codogma: нужно проверить реальные измерения, браузерные ограничения и доступность требуемых hooks в текущем Phaser runtime.
+- [EVA.js: repository](https://github.com/eva-engine/eva.js), [Game runtime tutorial](https://eva.js.org/docs/tutorials/game/) — GameObject/Component/System, lifecycle, resource/service split and ECS-style customization. Reference only: do not add EVA as a second runtime alongside Phaser by default.
+- [3JSE repository](https://github.com/xirtus/3JSE) — typed project model, editor/runtime integration, profiler, node graphs and AI/automation boundary. It is GPL-3.0 and WebGPU/Three.js-oriented: study design ideas only; do not copy code or introduce its license into Codogma without a separate legal/architecture decision.
+- [Feather Engine repository](https://github.com/feather-game-engine/feather) — exploratory editor/runtime and tooling reference. The project describes itself as early alpha and is C++-oriented; not a runtime candidate for the Web-first architecture.
+- [Gideros official site](https://gideros.rocks/) — 2D editor/tooling and asset workflow reference only; verify current maintenance and licensing before relying on details.
+- [Phaser documentation](https://docs.phaser.io/phaser/getting-started/what-is-phaser), [physics](https://docs.phaser.io/phaser/concepts/physics), [input](https://docs.phaser.io/phaser/concepts/input), [cameras](https://docs.phaser.io/phaser/concepts/cameras), [animations](https://docs.phaser.io/phaser/concepts/animations), [tweens](https://docs.phaser.io/phaser/concepts/tweens), [audio](https://docs.phaser.io/phaser/concepts/audio) — actual initial runtime capabilities and integration limits.
+- [PixiJS 8 documentation](https://pixijs.com/8.x/guides/) — possible rendering adapter reference; PixiJS alone is not a full replacement for Phaser's scene/game framework.
+- [Tauri 2 documentation](https://v2.tauri.app/) — desktop shell, permissions and IPC/security model; use only for editor desktop-shell responsibilities.
+- [Tiled user manual](https://docs.mapeditor.org/en/latest/manual/introduction/) — tilemap formats, isometric/hexagonal layouts, object layers, brushes, tile collisions and custom extensions.
+- Unity 6 / Unity 6.6 User Manual, 6000.6 — [2D overview](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d), [Sprites](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite), [Tilemaps](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/tilemaps), [2D Physics](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics), [2D Physics Core API](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-physics-api), [2D in URP](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/2d-urp), [2D Profiler](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/profiler-2d), [Sprite Atlas workflow](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/atlas/create-sprite-atlas). Использовать как функциональную карту спрайтов, collision shapes, sorting, 9-slicing, tilemap palettes/brushes, profiler и 2D light/post-process workflows, не как требование копировать Unity packages или URP.
+
+Полезные принципы, которые следует применить в Codogma после gap analysis:
+1. Physics API с зарегистрированными backend adapters и явной картой capabilities вместо жёсткого связывания пользовательского кода с конкретным solver.
+2. Автоматическая динамическая batching-оптимизация по умолчанию; ручная оптимизация должна быть обоснована профилем.
+3. Ресурсный менеджер с dependency tracking, bundles, progress, cache/release lifecycle и проверяемыми стабильными ссылками.
+4. Animation Controller/state graph, UI layout/constraints, Tiled interoperability, particle editor с повторно запускаемым preview и явная политика DPR/scaling.
+5. Разделение editor UI и headless CLI/build tooling на общих API, чтобы CI и production build не зависели от открытого UI редактора.
+6. Полноценный sprite authoring workflow: import/slicing/pivot/custom collision geometry, sorting, 9-slicing и atlas inspection.
+7. Различать scene authoring, runtime input/scene/time services и production build profiles; editor feature должна проходить acceptance как минимум в save/reopen, runtime и production output.
+8. Развивать дополнительные capabilities — localization, local save, custom brushes, SpriteShape-like terrain, 2D lighting и advanced accessibility — через явные этапы/extensions, а не бесконтрольное расширение ядра.
+
+### 15.1. Каталог технических ссылок по подсистемам
+
+Подробный каталог документации и API вынесен в [docs/REFERENCE-SOURCES.md](REFERENCE-SOURCES.md), а инженерные reference полноценных редакторов и их конкретных архитектурных решений — в [docs/editor-engineering-references.md](editor-engineering-references.md). Web-first и editor-architecture risks собраны в [architecture risk register](architecture-risk-register.md). Ссылки в каталогах не являются обязательными зависимостями или UX targets.
+
+Использовать каталог вместе с этим ТЗ и [дорожной картой](roadmap.md). Перед выбором зависимости перепроверять текущую версию и лицензию; ссылки являются техническими reference, не утверждённым dependency manifest.
+
+Любой код, пакет или схема, рассматриваемые к повторному использованию, проверяются отдельно по лицензии, зрелости, совместимости, производительности и стоимости поддержки. Предпочтительный способ переноса — заимствовать концепции и проектировать собственные контракты; копировать upstream-код только при конкретной необходимости, с проверкой MIT/зависимых лицензий и сохранением всех требуемых notices.
+
+---
+
+**Ключевой принцип ТЗ:** Codogma должен постепенно перейти от текущей IDE к целостной среде Web-first 2D-разработки, где проектные данные, TypeScript API, игровой runtime, живой Inspector, сборка и платформенные adapters согласованы между собой. Новая архитектура должна проверяться на реальных проектах, а не считаться успешной только потому, что код компилируется.
+
+
+The get-system-instructions tool is part of the MCP compatibility contract. It must document the Codogma-specific workflows and constraints for scene/object editing, plain objects, Tiled versus editable tilemaps, prefabs and nested instances, object lists, supported Phaser 4 filters, Arcade-capable object types and field normalization, assets/Google Fonts, project-file restrictions, and UI-dependent SSE tools. Changes to the tool catalogue must update this guidance and its package assertions in the same change.

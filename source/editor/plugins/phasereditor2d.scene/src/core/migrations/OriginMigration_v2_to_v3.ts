@@ -19,18 +19,36 @@ namespace phasereditor2d.scene.core.migrations {
 
             for (const obj of list) {
 
-                const serializer = new json.Serializer(obj);
+                let serializer: json.Serializer;
 
-                const type = serializer.getType();
+                try {
 
-                if (type === "Text" || type === "BitmapText") {
+                    serializer = new json.Serializer(obj);
 
-                    const origin = {
-                        originX: serializer.read("originX", 0.5),
-                        originY: serializer.read("originY", 0.5),
-                    };
+                } catch (e) {
 
-                    Object.assign(obj, origin);
+                    // A broken prefab reference (deleted/renamed prefab file)
+                    // must not abort the migration of the whole scene: skip
+                    // this object's origin fix-up but keep migrating its
+                    // children. SceneFinder already logged the debug info.
+                    console.warn(`OriginMigration_v2_to_v3: skipping origin fix-up for "${(obj as any).label ?? "?"}": ${(e as Error).message}`);
+
+                    serializer = null as unknown as json.Serializer;
+                }
+
+                if (serializer) {
+
+                    const type = serializer.getType();
+
+                    if (type === "Text" || type === "BitmapText") {
+
+                        const origin = {
+                            originX: serializer.read("originX", 0.5),
+                            originY: serializer.read("originY", 0.5),
+                        };
+
+                        Object.assign(obj, origin);
+                    }
                 }
 
                 if (obj.list) {

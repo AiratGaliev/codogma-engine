@@ -1,6 +1,5 @@
 namespace Phaser.Cameras.Scene2D {
 
-    // tslint:disable-next-line:interface-name
     export interface Camera {
 
         getScreenPoint(worldX: number, worldY: number): Phaser.Math.Vector2;

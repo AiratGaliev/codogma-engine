@@ -10,11 +10,7 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
             const comp = this.createGridElement(parent, 3);
 
-            const label = this.createLabel(comp,
-                "The color transformations are set in user code (filter.colorMatrix).",
-                "The Color Matrix filter transforms the colors with a mathematical matrix. Use filter.colorMatrix.sepia(), grayscale(), brightness(), contrast(), etc.");
-
-            label.style.gridColumn = "1 / span 3";
+            this.createNumberProperty(comp, FXColorMatrixComponent.alpha);
         }
 
         canEdit(obj: any, n: number): boolean {

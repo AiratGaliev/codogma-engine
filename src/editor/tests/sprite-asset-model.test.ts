@@ -1,0 +1,173 @@
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import type { SpriteAssetPackEntry, SpriteAssetPackDocument } from "../src/domain/sprite-asset-model.ts";
+import {
+  describeSpriteAssetFrames,
+  ensureSpriteAssetMetadata,
+  findSpriteAssetEntry,
+  formatAssetPackContent,
+  getSpriteAssetEntries,
+  isAssetPackContent,
+  parseAssetPackContent,
+  reconcileSpriteAssetMetadata,
+  setSpriteAssetEntry,
+  updateSpriteFrameMetadata,
+  validateSpriteCollisionShapes,
+} from "../src/domain/sprite-asset-model.ts";
+
+function defined<T>(value: T | undefined, label: string): T {
+  if (value === undefined) throw new Error(`${label} was not found.`);
+  return value;
+}
+
+
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`Expected item at index ${index}.`);
+  return item;
+}
+
+const imageEntry: SpriteAssetPackEntry = {
+  type: "image",
+  key: "hero",
+  url: "assets/hero.png",
+  customImporterOption: { keep: true },
+};
+const pack: SpriteAssetPackDocument = {
+  section: { files: [imageEntry] },
+  meta: { contentType: "phasereditor2d.pack.core.AssetContentType", app: "Phaser Editor" },
+  vendorRootField: 42,
+};
+
+test("parses Asset Pack JSON and keeps section/root metadata", () => {
+  const parsed = parseAssetPackContent(JSON.stringify(pack));
+  assert.equal(isAssetPackContent(parsed), true);
+  assert.equal(getSpriteAssetEntries(parsed).length, 1);
+  assert.equal(findSpriteAssetEntry(parsed, "hero")?.entry.url, "assets/hero.png");
+  assert.equal(parseAssetPackContent(formatAssetPackContent(parsed)).vendorRootField, 42);
+});
+
+test("describes Image and Spritesheet frame geometry using Phaser frameConfig semantics", () => {
+  const imageFrames = describeSpriteAssetFrames(imageEntry, 64, 32);
+  assert.deepEqual(at(imageFrames, 0), {
+    key: "hero",
+    sourceRect: { x: 0, y: 0, width: 64, height: 32 },
+    sourceSize: { width: 64, height: 32 },
+    trimRect: { x: 0, y: 0, width: 64, height: 32 },
+  });
+
+  const frames = describeSpriteAssetFrames({
+    type: "spritesheet",
+    key: "coin",
+    url: "assets/coin.png",
+    frameConfig: { frameWidth: 16, frameHeight: 16, margin: 2, spacing: 1, startFrame: 1, endFrame: 2 },
+  }, 38, 20);
+  // Phaser counts source frames from zero. With two physical frames,
+  // startFrame=1/endFrame=2 selects only the second source frame, whose
+  // editor-facing frame name is renumbered to zero.
+  assert.deepEqual(frames.map(frame => frame.key), ["0"]);
+  assert.deepEqual(frames.map(frame => frame.sourceRect), [
+    { x: 19, y: 2, width: 16, height: 16 },
+  ]);
+
+  const completeFrames = describeSpriteAssetFrames({
+    type: "spritesheet",
+    key: "coin",
+    url: "assets/coin.png",
+    frameConfig: { frameWidth: 16, frameHeight: 16, margin: 2, spacing: 1 },
+  }, 38, 37);
+  assert.deepEqual(completeFrames.map(frame => frame.key), ["0", "1", "2", "3"]);
+  assert.deepEqual(completeFrames.map(frame => frame.sourceRect), [
+    { x: 2, y: 2, width: 16, height: 16 },
+    { x: 19, y: 2, width: 16, height: 16 },
+    { x: 2, y: 19, width: 16, height: 16 },
+    { x: 19, y: 19, width: 16, height: 16 },
+  ]);
+
+  const onlyFirstFrame = describeSpriteAssetFrames({
+    type: "spritesheet",
+    key: "coin",
+    url: "assets/coin.png",
+    frameConfig: { frameWidth: 16, frameHeight: 16, endFrame: 0 },
+  }, 38, 20);
+  assert.deepEqual(onlyFirstFrame.map(frame => frame.key), ["0"]);
+  assert.deepEqual(at(onlyFirstFrame, 0).sourceRect, { x: 0, y: 0, width: 16, height: 16 });
+});
+
+test("ensures stable IDs/source fingerprints and preserves vendor fields", () => {
+  const descriptors = describeSpriteAssetFrames(imageEntry, 64, 32);
+  const first = ensureSpriteAssetMetadata(imageEntry, { size: 1024, modifiedAt: 100 }, descriptors);
+  const second = ensureSpriteAssetMetadata({ ...imageEntry, codogma: first }, { size: 1024, modifiedAt: 100 }, descriptors);
+  assert.equal(second.assetId, first.assetId);
+  const firstHeroFrame = defined(first.frames.hero, "first hero frame");
+  const secondHeroFrame = defined(second.frames.hero, "second hero frame");
+  assert.equal(secondHeroFrame.id, firstHeroFrame.id);
+  assert.equal(second.source?.signature, first.source?.signature);
+  assert.equal((imageEntry.customImporterOption as { keep: boolean }).keep, true);
+  assert.throws(() => ensureSpriteAssetMetadata({ ...imageEntry, codogma: { schemaVersion: 99 } as never }), /newer than supported/);
+});
+
+test("edits pivot, trim, crop and collision shapes while preserving unknown frame properties", () => {
+  const descriptor = describeSpriteAssetFrames(imageEntry, 64, 32);
+  const metadata = ensureSpriteAssetMetadata(imageEntry, { size: 1024, modifiedAt: 100 }, descriptor);
+  const metadataHero = defined(metadata.frames.hero, "metadata hero frame");
+  const entry = { ...imageEntry, codogma: { ...metadata, frames: {
+    ...metadata.frames,
+    hero: { ...metadataHero, vendorFrameField: "retained" },
+  } } };
+  const edited = updateSpriteFrameMetadata(entry, "hero", {
+    pivot: { x: 0.5, y: 1 },
+    trim: { x: 2, y: 1, width: 60, height: 30 },
+    crop: { x: 4, y: 2, width: 32, height: 16 },
+    collisionShapes: [{ type: "rectangle", x: 1, y: 2, width: 20, height: 10 }],
+  });
+  const editedHero = defined(edited.codogma?.frames.hero, "edited hero frame");
+  assert.equal(editedHero.vendorFrameField, "retained");
+  assert.deepEqual(editedHero.pivot, { x: 0.5, y: 1 });
+  assert.throws(() => updateSpriteFrameMetadata(edited, "hero", { pivot: { x: 2, y: 0.5 } }), /between 0 and 1/);
+  assert.throws(() => updateSpriteFrameMetadata(edited, "hero", { crop: { x: 60, y: 0, width: 10, height: 10 } }), /inside its frame bounds/);
+});
+
+test("validates rectangle, circle and polygon collision geometry without flattening polygons", () => {
+  assert.equal(validateSpriteCollisionShapes([{ type: "circle", x: 10, y: 10, radius: 5 }], 32, 32), null);
+  assert.equal(validateSpriteCollisionShapes([{ type: "polygon", points: [[0, 0], [16, 0], [8, 12]] }], 32, 32), null);
+  assert.match(validateSpriteCollisionShapes([{ type: "circle", x: 2, y: 2, radius: 5 }], 32, 32) ?? "", /circle/);
+  assert.match(validateSpriteCollisionShapes([{ type: "polygon", points: [[0, 0], [1, 1], [2, 2]] }], 32, 32) ?? "", /non-zero area/);
+});
+
+test("reimport preserves compatible frames and archives changed/removed authored metadata", () => {
+  const previous = {
+    ...imageEntry,
+    codogma: ensureSpriteAssetMetadata(imageEntry, { size: 1024, modifiedAt: 100 }, [
+      { key: "0", sourceRect: { x: 0, y: 0, width: 32, height: 32 }, sourceSize: { width: 32, height: 32 }, trimRect: { x: 0, y: 0, width: 32, height: 32 } },
+      { key: "1", sourceRect: { x: 32, y: 0, width: 32, height: 32 }, sourceSize: { width: 32, height: 32 }, trimRect: { x: 0, y: 0, width: 32, height: 32 } },
+    ]),
+  };
+  const previousMetadata = defined(previous.codogma, "previous sprite metadata");
+  const previousFrameZero = defined(previousMetadata.frames["0"], "previous frame 0");
+  const previousFrameOne = defined(previousMetadata.frames["1"], "previous frame 1");
+  previousFrameZero.pivot = { x: 0.5, y: 1 };
+  previousFrameOne.collisionShapes = [{ type: "rectangle", x: 0, y: 0, width: 12, height: 12 }];
+
+  const next = reconcileSpriteAssetMetadata(previous, { ...previous, url: "assets/hero.png" }, { size: 2048, modifiedAt: 200 }, [
+    { key: "0", sourceRect: { x: 0, y: 0, width: 32, height: 32 }, sourceSize: { width: 32, height: 32 }, trimRect: { x: 0, y: 0, width: 32, height: 32 } },
+    { key: "1", sourceRect: { x: 32, y: 0, width: 16, height: 32 }, sourceSize: { width: 16, height: 32 }, trimRect: { x: 0, y: 0, width: 16, height: 32 } },
+  ]);
+  const nextMetadata = defined(next.codogma, "next sprite metadata");
+  const nextFrameZero = defined(nextMetadata.frames["0"], "next frame 0");
+  const nextFrameOne = defined(nextMetadata.frames["1"], "next frame 1");
+  assert.deepEqual(nextFrameZero.pivot, { x: 0.5, y: 1 });
+  assert.equal(nextFrameOne.collisionShapes, undefined);
+  assert.equal(nextMetadata.orphanedFrames.length, 1);
+  assert.equal(nextMetadata.conflicts.length, 1);
+  assert.equal(at(nextMetadata.conflicts, 0).type, "frame-geometry-changed");
+});
+
+test("sets a single Asset Pack item immutably and preserves unrelated sections", () => {
+  const nextEntry = { ...imageEntry, codogma: ensureSpriteAssetMetadata(imageEntry, { size: 10, modifiedAt: 1 }, describeSpriteAssetFrames(imageEntry, 2, 2)) };
+  const next = setSpriteAssetEntry(pack, "hero", nextEntry);
+  assert.notEqual(next, pack);
+  assert.equal(at((next.section as { files: SpriteAssetPackEntry[] }).files, 0).codogma?.assetId, nextEntry.codogma?.assetId);
+  assert.equal(next.vendorRootField, 42);
+  assert.equal(at((pack.section as { files: SpriteAssetPackEntry[] }).files, 0).codogma, undefined);
+});

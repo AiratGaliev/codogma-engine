@@ -92,6 +92,15 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                             }
                         }
 
+                        if (this.isPropertyValueUnchanged(property, value)) {
+
+                            // the value was already committed (for example, by a previous
+                            // change event of the same edit), do not add a duplicated
+                            // no-op operation to the undo stack.
+
+                            return;
+                        }
+
                         this.getEditor().getUndoManager().add(
                             new SimpleOperation(this.getEditor(), this.getSelection(), property, value));
                     }
@@ -116,7 +125,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             return text;
         }
 
-        // tslint:disable-next-line:ban-types
         createFloatField(parent: HTMLElement, property: IProperty<T>) {
 
             const text = this.createIncrementableText(
@@ -178,6 +186,15 @@ namespace phasereditor2d.scene.ui.sceneobjects {
                                 }
                             }
 
+                            if (this.isPropertyValueUnchanged(property, value)) {
+
+                                // the value was already committed (for example, by a previous
+                                // change event of the same edit), do not add a duplicated
+                                // no-op operation to the undo stack.
+
+                                return;
+                            }
+
                             this.getEditor().getUndoManager().add(
                                 new SimpleOperation(this.getEditor(), this.getSelection(), property, value));
                         }
@@ -212,6 +229,13 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             text.addEventListener("change", e => {
 
                 const value = text.value;
+
+                if (this.isPropertyValueUnchanged(property, value)) {
+
+                    // do not add a duplicated no-op operation to the undo stack.
+
+                    return;
+                }
 
                 this.getEditor().getUndoManager().add(
                     new SimpleOperation(this.getEditor(), this.getSelection(), property, value));
@@ -281,13 +305,9 @@ namespace phasereditor2d.scene.ui.sceneobjects {
             const text = colorElement.text;
             const btn = colorElement.btn;
 
-            const currentColor = text.value;
-
             text.addEventListener("preview", e => {
 
                 const value = text.value;
-
-                console.log("preview color", value);
 
                 for (const obj of this.getSelection()) {
 
@@ -543,6 +563,32 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                         return false;
                     }
+                }
+            }
+
+            return true;
+        }
+
+        /**
+         * Checks whether the given value is already the value of the property for
+         * all the selected objects. Used to prevent adding duplicated no-op undo
+         * operations when the same edit is committed more than once (for example,
+         * by a "change" event and a later focus-out event of the same input).
+         */
+        protected isPropertyValueUnchanged(property: IProperty<T>, value: any): boolean {
+
+            const selection = this.getSelection();
+
+            if (selection.length === 0) {
+
+                return false;
+            }
+
+            for (const obj of selection) {
+
+                if (property.getValue(obj) !== value) {
+
+                    return false;
                 }
             }
 

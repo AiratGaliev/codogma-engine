@@ -824,7 +824,6 @@ namespace colibri.ui.ide {
             {
                 const editors = this.getEditors();
 
-                // tslint:disable-next-line:no-shadowed-variable
                 for (const editor of editors) {
 
                     if (editor.getInput() === input) {

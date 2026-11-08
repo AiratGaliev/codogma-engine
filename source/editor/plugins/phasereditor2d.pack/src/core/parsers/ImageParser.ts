@@ -57,7 +57,7 @@ namespace phasereditor2d.pack.core.parsers {
                 fd = new controls.FrameData(0,
                     new controls.Rect(0, 0, img.getWidth(), img.getHeight()),
                     new controls.Rect(0, 0, img.getWidth(), img.getHeight()),
-                    new controls.Point(img.getWidth(), img.getWidth())
+                    new controls.Point(img.getWidth(), img.getHeight())
                 );
 
             } else {

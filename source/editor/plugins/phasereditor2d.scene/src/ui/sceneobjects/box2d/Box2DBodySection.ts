@@ -86,7 +86,9 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 const scene = editor.getScene();
 
-                label.style.display = scene.getSettings().box2dEnabled ? "none" : "block";
+                const settings = scene.getSettings();
+                label.style.display = settings.box2dEnabled || settings.box2dGenerateWorldCode
+                    ? "none" : "block";
             });
         }
 

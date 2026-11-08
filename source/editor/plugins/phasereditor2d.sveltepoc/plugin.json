@@ -1,0 +1,6 @@
+{
+    "id": "phasereditor2d.sveltepoc",
+    "scripts": [
+        "_out/svelte-poc.js"
+    ]
+}

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "acceptance-project",
+  "name": "Acceptance Slice",
+  "scenes": [
+    { "id": "scene-level", "assetId": "asset-scene-level" }
+  ],
+  "assets": [
+    { "id": "asset-scene-level", "path": "scenes/Level.cge-scene.json", "kind": "scene" },
+    { "id": "asset-follow-target-module", "path": "src/FollowTarget.ts", "kind": "script" },
+    { "id": "asset-player-sprite", "path": "assets/player.svg", "kind": "image" }
+  ],
+  "prefabs": [],
+  "componentModules": [
+    {
+      "typeId": "com.codogma.acceptance.follow-target",
+      "moduleAssetId": "asset-follow-target-module",
+      "version": "1.0.0"
+    }
+  ],
+  "runtime": { "adapterId": "phaser", "settings": {} },
+  "unknownPluginData": { "keep": true }
+}

@@ -21,6 +21,7 @@ import fsp from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { parseImageSize } from "./imgsize.mjs"
+import { ensureProjectDirectorySafely, ensureProjectDirectorySafelySync, openSafeProjectFileForWrite, readFileSafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, writeFileSafely, writeNewFileSafely, statProjectFileSafely } from "./path-security.mjs"
 
 let PROJECT_DIR = null
 let log = () => {}
@@ -33,15 +34,62 @@ export function initMcp(options) {
 /** Official asset tools pass `{ texture: { key, frame } }`; accept flat `{ key }` too. */
 function textureKeyOf(args) {
     const key = args.key ?? args.texture?.key
-    if (!key) throw new Error('Missing texture key: pass { "key" } or { "texture": { "key" } }.')
+    if (typeof key !== "string" || key.trim().length === 0) {
+        throw new Error('Missing or invalid texture key: pass a non-empty string as { "key" } or { "texture": { "key" } }.')
+    }
     return key
 }
 
 /* ============================== path helpers ============================== */
 
+function isWithinRealBase(base, target) {
+    const realBase = fs.realpathSync(base)
+    const isInside = candidate => candidate === realBase || candidate.startsWith(realBase + path.sep)
+    let candidate = target
+
+    while (true) {
+        try {
+            // lstat sees the link itself, unlike realpath. A dangling symlink
+            // must fail closed instead of being treated as a missing leaf
+            // under an otherwise trusted parent directory.
+            const linkOrFile = fs.lstatSync(candidate)
+
+            if (linkOrFile.isSymbolicLink()) {
+                return isInside(fs.realpathSync(candidate))
+            }
+
+            return isInside(fs.realpathSync(candidate))
+        } catch (error) {
+            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return false
+
+            // realpath(2) also reports ENOENT for a dangling symlink. Detect
+            // that case before walking up to a parent that may be in-base.
+            try {
+                if (fs.lstatSync(candidate).isSymbolicLink()) return false
+            } catch (lstatError) {
+                if (lstatError.code !== "ENOENT" && lstatError.code !== "ENOTDIR") return false
+            }
+
+            const parent = path.dirname(candidate)
+            if (parent === candidate) return false
+            candidate = parent
+        }
+    }
+}
+
 function safeJoin(base, relPath) {
-    const p = path.resolve(base, "." + path.sep + String(relPath || "").replace(/^[\\/]+/, ""))
+    if (typeof relPath !== "string") return null
+
+    const p = path.resolve(base, "." + path.sep + relPath.replace(/^[\\/]+/, ""))
     if (p !== base && !p.startsWith(base + path.sep)) return null
+
+    // Prevent a project-local symlink from escaping the selected project root.
+    try {
+        if (!isWithinRealBase(base, p)) return null
+    } catch {
+        return null
+    }
+
     return p
 }
 
@@ -59,18 +107,15 @@ function normPath(p) {
 }
 
 function walkFiles(dir, relPrefix, out = []) {
-    let entries
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true })
-    } catch (e) {
-        return out
-    }
+    const entries = readProjectDirectoryEntriesSafelySync(PROJECT_DIR, dir)
+    if (!entries) return out
+
     for (const entry of entries) {
-        if (entry.name.startsWith(".")) continue
+        if (entry.name.startsWith(".") || entry.isSymbolicLink) continue
         const rel = relPrefix ? relPrefix + "/" + entry.name : entry.name
         const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) walkFiles(full, rel, out)
-        else if (entry.isFile()) out.push(rel)
+        if (entry.isDirectory) walkFiles(full, rel, out)
+        else if (entry.isFile) out.push(rel)
     }
     return out
 }
@@ -83,27 +128,35 @@ function sceneFiles() {
 
 function readSceneFile(rel) {
     const full = safeJoin(PROJECT_DIR, rel)
-    if (!full || !fs.existsSync(full)) return null
+    if (!full) return null
     try {
-        return JSON.parse(fs.readFileSync(full, "utf8"))
+        return JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 4 * 1024 * 1024))
     } catch (e) {
         return null
     }
 }
 
-function writeSceneFile(rel, data) {
+function writeSceneFile(rel, data, options = {}) {
     const full = safeJoin(PROJECT_DIR, rel)
     if (!full) throw new Error("invalid scene path: " + rel)
-    fs.mkdirSync(path.dirname(full), { recursive: true })
-    fs.writeFileSync(full, JSON.stringify(data, null, 4), "utf8")
+    if (!ensureProjectDirectorySafelySync(PROJECT_DIR, path.dirname(full))) throw new Error("invalid scene path: " + rel)
+    const serialized = JSON.stringify(data, null, 4)
+    const written = options.exclusive
+        ? writeNewFileSafely(PROJECT_DIR, full, serialized)
+        : writeFileSafely(PROJECT_DIR, full, serialized)
+    if (!written) {
+        throw new Error(options.exclusive
+            ? "scene file already exists or cannot be created safely: " + rel
+            : "invalid scene path: " + rel)
+    }
     notifyFilesChanged()
 }
 
-/** Tell the connected editor(s) that project files changed on disk. */
+/** Tell all connected editor sessions that project files changed on disk. */
 function notifyFilesChanged() {
     const payload = "event: files-changed\ndata: {}\n\n"
-    for (const client of bridgeClients) {
-        try { client.res.write(payload) } catch (e) { bridgeClients.delete(client) }
+    for (const client of bridgeClients.values()) {
+        try { client.res.write(payload) } catch (e) { removeBridgeClient(client.clientId, client) }
     }
 }
 
@@ -163,10 +216,203 @@ function requireScene(args) {
 const OBJECT_TYPES = [
     "Image", "Sprite", "Text", "BitmapText", "Container", "Layer", "TileSprite",
     "NineSlice", "ThreeSlice", "Rectangle", "Ellipse", "Triangle", "Polygon",
-    "ParticleEmitter", "Tilemap", "TilemapLayer", "ScriptNode", "SpineGameObject"
+    "ParticleEmitter", "Tilemap", "TilemapLayer", "ScriptNode", "SpineGameObject", "Video"
 ]
 
 const TEXTURE_TYPES = new Set(["Image", "Sprite", "TileSprite", "NineSlice", "ThreeSlice"])
+
+// Keep the upstream MCP argument names, but serialize them using the names
+// actually consumed by the current Codogma ArcadeComponent implementation.
+const ARCADE_PROPERTY_ALIASES = {
+    "Arcade.active": "ArcadeComponent.active",
+    "body.physicsType": "physicsType",
+    "body.geometry": "bodyGeometry",
+    "body.radius": "radius",
+    "body.allowGravity": "allowGravity",
+    "body.immovable": "immovable",
+    "body.mass": "mass",
+    "body.collideWorldBounds": "collideWorldBounds",
+    "body.angularVelocity": "angularVelocity",
+    "body.angularAcceleration": "angularAcceleration",
+    "body.angularDrag": "angularDrag",
+    "body.maxAngular": "maxAngular",
+    "body.enable": "enable",
+    "body.moves": "moves",
+    "body.maxSpeed": "maxSpeed",
+    "body.useDamping": "useDamping",
+    "body.allowDrag": "allowDrag",
+    "body.onWorldBounds": "onWorldBounds",
+    "body.allowRotation": "allowRotation",
+    "body.pushable": "pushable",
+    "body.overlapX": "overlapX",
+    "body.overlapY": "overlapY",
+    "body.overlapR": "overlapR"
+}
+
+function setSceneObjectProperty(obj, name, value) {
+    obj[ARCADE_PROPERTY_ALIASES[name] ?? name] = value
+}
+
+const ARCADE_CAPABLE_TYPES = new Set([
+    "Image", "Sprite", "BitmapText", "Container", "TileSprite", "NineSlice", "ThreeSlice",
+    "Text", "Rectangle", "Ellipse", "Triangle", "Polygon", "SpineGameObject",
+    "ArcadeImage", "ArcadeSprite"
+])
+
+const TYPE_PROPERTY_KEYS = {
+    Sprite: [
+        "animationPlayMethod", "animationKey", "animationCustomConfig",
+        "animationFrameRate", "animationDelay", "animationRepeat", "animationRepeatDelay",
+        "animationYoyo", "animationShowBeforeDelay", "animationShowOnStart",
+        "animationHideOnComplete", "animationStartFrame", "animationTimeScale"
+    ],
+    TileSprite: ["tilePositionX", "tilePositionY", "tileScaleX", "tileScaleY"],
+    NineSlice: ["leftWidth", "rightWidth", "topHeight", "bottomHeight"],
+    ThreeSlice: ["leftWidth", "rightWidth"],
+    Text: [
+        "fixedWidth", "fixedHeight", "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
+        "baselineX", "baselineY", "wordWrapUseAdvanced"
+    ],
+    BitmapText: ["font", "dropShadowX", "dropShadowY", "dropShadowAlpha", "dropShadowColor"],
+    Ellipse: ["smoothness"],
+    Triangle: ["x1", "y1", "x2", "y2", "x3", "y3"],
+    Polygon: ["points"],
+    Video: ["url", "loop", "mute", "autoplay"],
+    ParticleEmitter: [
+        "configTexture", "configFrame", "blendMode", "colorEase", "tintFill", "duration",
+        "stopAfter", "frequency", "timeScale", "gravityX", "gravityY", "radial",
+        "maxAliveParticles", "maxParticles", "advance", "particleBringToTop", "sortOrderAsc",
+        "sortProperty", "follow", "trackVisible", "previewAdvance", "previewActive", "animationKey",
+        ...["x", "y", "moveToX", "moveToY", "scale", "scaleX", "scaleY", "angle", "rotate",
+            "accelerationX", "accelerationY", "maxVelocityX", "maxVelocityY", "speed", "speedX",
+            "speedY", "delay", "hold", "lifespan", "quantity", "tint", "alpha", "color"]
+            .flatMap(name => ["_type", "_value", "_values", "_start", "_end", "_randomFlag",
+                "_random", "_interpolation", "_ease", "_steps", "_yoyo", "_min", "_max",
+                "_int", "_onEmit", "_onUpdate"].map(suffix => name + suffix))
+    ]
+}
+
+const PARTICLE_EMITTER_PROPERTY_SETS = [
+    "x", "y", "moveToX", "moveToY", "scale", "scaleX", "scaleY", "angle", "rotate",
+    "accelerationX", "accelerationY", "maxVelocityX", "maxVelocityY", "speed", "speedX",
+    "speedY", "delay", "hold", "lifespan", "quantity", "tint", "alpha", "color"
+]
+
+const PARTICLE_EMITTER_SIMPLE_KEYS = [
+    "blendMode", "colorEase", "tintFill", "duration", "stopAfter", "frequency", "timeScale",
+    "gravityX", "gravityY", "radial", "maxAliveParticles", "maxParticles", "advance",
+    "particleBringToTop", "sortOrderAsc", "sortProperty", "follow", "trackVisible", "animationKey"
+]
+
+function setParticleEmitterOperation(target, name, value) {
+    if (value === undefined || value === null) return
+    const prefix = name + "_"
+
+    if (Array.isArray(value)) {
+        target[prefix + "type"] = "Random"
+        target[prefix + "random"] = value
+        return
+    }
+
+    if (typeof value !== "object") {
+        target[prefix + "type"] = "Static"
+        target[prefix + "value"] = value
+        return
+    }
+
+    const type = value.type
+    if (type === "None") return
+
+    if (type === "Static" || Object.hasOwn(value, "value")) {
+        target[prefix + "type"] = "Static"
+        if (value.value !== undefined) target[prefix + "value"] = value.value
+    } else if (type === "Random" || Array.isArray(value.random)) {
+        target[prefix + "type"] = "Random"
+        if (value.random !== undefined) target[prefix + "random"] = value.random
+    } else if (type === "Interpolation" || Object.hasOwn(value, "values")) {
+        target[prefix + "type"] = "Interpolation"
+        if (value.values !== undefined) target[prefix + "values"] = value.values
+        if (value.interpolation !== undefined) target[prefix + "interpolation"] = value.interpolation
+        if (value.ease !== undefined) target[prefix + "ease"] = value.ease
+    } else if (type === "Stepped" || Object.hasOwn(value, "steps")) {
+        target[prefix + "type"] = "Stepped"
+        for (const key of ["steps", "start", "end", "yoyo"]) {
+            if (value[key] !== undefined) target[prefix + key] = value[key]
+        }
+    } else if (type === "MinMax" || Object.hasOwn(value, "min") || Object.hasOwn(value, "max")) {
+        target[prefix + "type"] = "MinMax"
+        for (const key of ["min", "max", "int"]) {
+            if (value[key] !== undefined) target[prefix + key] = value[key]
+        }
+    } else if (type === "StartEndRandom" || Object.hasOwn(value, "start") || Object.hasOwn(value, "end")) {
+        target[prefix + "type"] = "StartEndRandom"
+        for (const key of ["start", "end", "ease", "randomFlag"]) {
+            if (value[key] !== undefined) target[prefix + key] = value[key]
+        }
+        if (value.random !== undefined && value.randomFlag === undefined) {
+            target[prefix + "randomFlag"] = value.random
+        }
+    } else if (type === "CustomUpdate" || Object.hasOwn(value, "onUpdate")) {
+        target[prefix + "type"] = "CustomUpdate"
+        if (value.onEmit !== undefined) target[prefix + "onEmit"] = value.onEmit
+        if (value.onUpdate !== undefined) target[prefix + "onUpdate"] = value.onUpdate
+    } else if (type === "CustomEmit" || Object.hasOwn(value, "onEmit")) {
+        target[prefix + "type"] = "CustomEmit"
+        target[prefix + "onEmit"] = value.onEmit
+    } else {
+        throw new Error(`Unsupported ParticleEmitter operation type for "${name}".`)
+    }
+}
+
+function applyParticleEmitterConfig(target, props) {
+    const config = props.config && typeof props.config === "object" && !Array.isArray(props.config)
+        ? props.config
+        : {}
+
+    const texture = props.texture ?? config.texture
+    if (typeof texture === "string") {
+        target.configTexture = texture
+    } else if (texture && typeof texture === "object" && typeof texture.key === "string") {
+        target.configTexture = texture.key
+        if (texture.frame !== undefined && texture.frame !== null) {
+            target.configFrame = Array.isArray(texture.frame) ? texture.frame : [texture.frame]
+        }
+    }
+    if (typeof config.configTexture === "string") target.configTexture = config.configTexture
+
+    const frame = props.frame ?? config.frame ?? config.configFrame
+    if (frame !== undefined) {
+        target.configFrame = Array.isArray(frame) ? frame : (frame === null ? [] : [frame])
+    }
+
+    const aliases = {
+        _duration: "duration",
+        _stopAfter: "stopAfter",
+        _frequency: "frequency",
+        _timeScale: "timeScale",
+        _maxAliveParticles: "maxAliveParticles",
+        _maxParticles: "maxParticles",
+        _advance: "advance"
+    }
+
+    for (const [key, value] of Object.entries(config)) {
+        if (key === "texture" || key === "frame" || key === "configTexture" || key === "configFrame") continue
+        if (key === "_anim") {
+            if (typeof value === "string") target.animationKey = value
+            else if (Array.isArray(value) && value.length === 1 && typeof value[0] === "string") target.animationKey = value[0]
+            else if (Array.isArray(value) && value.length > 1) {
+                throw new Error("This Codogma Editor build supports one ParticleEmitter animationKey; multiple _anim entries are not supported.")
+            }
+            continue
+        }
+        const name = aliases[key] ?? key
+        if (PARTICLE_EMITTER_PROPERTY_SETS.includes(name)) {
+            setParticleEmitterOperation(target, name, value)
+        } else if (PARTICLE_EMITTER_SIMPLE_KEYS.includes(name) && value !== undefined) {
+            target[name] = value
+        }
+    }
+}
 
 function genLabel(doc, type) {
     const base = type.charAt(0).toLowerCase() + type.slice(1)
@@ -205,12 +451,29 @@ function buildObjectJson(type, props, doc) {
         "strokeThickness", "backgroundColor", "paddingX", "paddingY", "align",
         "wordWrap", "wordWrapWidth", "lineSpacing", "maxLines", "resolution",
         "letterSpacing", "displayWidth", "displayHeight", "width", "height",
-        "radius", "isFilled", "fillColor", "fillAlpha", "strokeColor", "strokeAlpha", "strokeWidth",
+        "radius", "isFilled", "isStroked", "fillColor", "fillAlpha", "strokeColor", "strokeAlpha",
+        "strokeWidth", "lineWidth",
         "list", "scrollFactorX", "scrollFactorY",
-        "dataKey", "atlasKey", "skeleton", "skin", "animation", "boundsProviderType"
+        "dataKey", "atlasKey", "skinName", "bpType", "bpSkin", "bpAnimation", "bpTimeStep",
+        "animationMixes", "defaultMix", "timeScale",
+        "skeleton", "skin", "animation", "boundsProviderType",
+        "fixedWidth", "fixedHeight", "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
+        "baselineX", "baselineY", "wordWrapUseAdvanced",
+        "dropShadowX", "dropShadowY", "dropShadowAlpha", "dropShadowColor",
+        "tilePositionX", "tilePositionY", "tileScaleX", "tileScaleY",
+        "leftWidth", "rightWidth", "topHeight", "bottomHeight",
+        "smoothness", "x1", "y1", "x2", "y2", "x3", "y3", "points",
+        "font", "url", "loop", "mute", "autoplay"
     ]
     for (const k of copyKeys) {
         if (props[k] !== undefined) obj[k] = props[k]
+    }
+    for (const k of TYPE_PROPERTY_KEYS[type] || []) {
+        if (props[k] !== undefined) obj[k] = props[k]
+    }
+
+    if (type === "ParticleEmitter") {
+        applyParticleEmitterConfig(obj, props)
     }
 
     // Spine game object: auto-generate a label from the data key if omitted
@@ -224,15 +487,45 @@ function buildObjectJson(type, props, doc) {
             obj.texture.frame = props.texture.frame
         }
     }
+
+    if (props.hitArea && typeof props.hitArea === "object" && !Array.isArray(props.hitArea)) {
+        const allowedHitAreaKeys = new Set([
+            "shape", "x", "y", "width", "height", "radius", "points", "alphaTolerance"
+        ])
+        for (const [key, value] of Object.entries(props.hitArea)) {
+            if (allowedHitAreaKeys.has(key) && value !== undefined) {
+                obj[`hitArea.${key}`] = value
+            }
+        }
+    }
+
     if (type === "Text" && props.style) {
-        // allow `style: {...}` shorthand as well as flat props
-        for (const [k, v] of Object.entries(props.style)) obj[k] = v
+        // Allow `style: {...}` shorthand as well as flat props, but map
+        // nested style members to the editor's persisted dotted properties.
+        const style = { ...props.style }
+        if (style.shadow && typeof style.shadow === "object" && !Array.isArray(style.shadow)) {
+            for (const [key, value] of Object.entries(style.shadow)) {
+                obj[`shadow.${key}`] = value
+            }
+            delete style.shadow
+        }
+        if (style.padding && typeof style.padding === "object" && !Array.isArray(style.padding)) {
+            for (const key of ["left", "top", "right", "bottom"]) {
+                if (style.padding[key] !== undefined) obj[`padding${key[0].toUpperCase()}${key.slice(1)}`] = style.padding[key]
+            }
+            delete style.padding
+        }
+        for (const [k, v] of Object.entries(style)) obj[k] = v
+    }
+    if (type === "Text" && props.shadow && typeof props.shadow === "object" && !Array.isArray(props.shadow)) {
+        for (const [key, value] of Object.entries(props.shadow)) obj[`shadow.${key}`] = value
     }
 
     // component activation + dotted component properties pass-through
     const componentKeys = [
-        "Arcade.active", "body.physicsType", "body.geometry", "body.radius",
-        "body.width", "body.height", "body.offset.x", "body.offset.y",
+        "Arcade.active", "ArcadeComponent.active",
+        "body.physicsType", "body.geometry", "body.radius", "body.width", "body.height",
+        "body.offset.x", "body.offset.y",
         "body.velocity.x", "body.velocity.y", "body.maxVelocity.x", "body.maxVelocity.y",
         "body.acceleration.x", "body.acceleration.y", "body.drag.x", "body.drag.y",
         "body.bounce.x", "body.bounce.y", "body.gravity.x", "body.gravity.y",
@@ -243,27 +536,48 @@ function buildObjectJson(type, props, doc) {
         "body.onWorldBounds", "body.allowRotation", "body.pushable",
         "body.checkCollision.none", "body.checkCollision.up", "body.checkCollision.down",
         "body.checkCollision.left", "body.checkCollision.right",
-        "ScrollFactorX", "ScrollFactorY"
+        "body.overlapX", "body.overlapY", "body.overlapR",
+        "ScrollFactorX", "ScrollFactorY",
+        "hitArea.shape", "hitArea.x", "hitArea.y", "hitArea.width", "hitArea.height",
+        "hitArea.radius", "hitArea.points", "hitArea.alphaTolerance"
     ]
     for (const k of componentKeys) {
-        if (props[k] !== undefined) obj[k] = props[k]
+        if (props[k] !== undefined) setSceneObjectProperty(obj, k, props[k])
     }
 
-    // arcade shortcut: props.arcade = {...} enables the physics body
+    // arcade shortcut: props.arcade = {...} enables the editor's ArcadeComponent.
     if (props.arcade && typeof props.arcade === "object") {
-        obj["Arcade.active"] = true
+        setSceneObjectProperty(obj, "Arcade.active", true)
         const map = {
             physicsType: "body.physicsType", geometry: "body.geometry", radius: "body.radius",
             width: "body.width", height: "body.height",
             velocityX: "body.velocity.x", velocityY: "body.velocity.y",
+            maxVelocityX: "body.maxVelocity.x", maxVelocityY: "body.maxVelocity.y",
+            accelerationX: "body.acceleration.x", accelerationY: "body.acceleration.y",
+            dragX: "body.drag.x", dragY: "body.drag.y",
             bounceX: "body.bounce.x", bounceY: "body.bounce.y",
             gravityX: "body.gravity.x", gravityY: "body.gravity.y",
+            frictionX: "body.friction.x", frictionY: "body.friction.y",
+            offsetX: "body.offset.x", offsetY: "body.offset.y",
             collideWorldBounds: "body.collideWorldBounds", immovable: "body.immovable",
-            allowGravity: "body.allowGravity", moves: "body.moves", mass: "body.mass"
+            allowGravity: "body.allowGravity", moves: "body.moves", maxSpeed: "body.maxSpeed",
+            mass: "body.mass", enable: "body.enable", useDamping: "body.useDamping",
+            allowDrag: "body.allowDrag", onWorldBounds: "body.onWorldBounds",
+            allowRotation: "body.allowRotation", pushable: "body.pushable",
+            angularVelocity: "body.angularVelocity", angularAcceleration: "body.angularAcceleration",
+            angularDrag: "body.angularDrag", maxAngular: "body.maxAngular",
+            overlapX: "body.overlapX", overlapY: "body.overlapY", overlapR: "body.overlapR",
+            checkCollisionNone: "body.checkCollision.none",
+            checkCollisionUp: "body.checkCollision.up",
+            checkCollisionDown: "body.checkCollision.down",
+            checkCollisionLeft: "body.checkCollision.left",
+            checkCollisionRight: "body.checkCollision.right"
         }
         for (const [k, v] of Object.entries(props.arcade)) {
-            if (map[k]) obj[map[k]] = v
-            else obj["body." + k] = v
+            if (!Object.hasOwn(map, k)) {
+                throw new Error(`Unsupported arcade shortcut property: "${k}".`)
+            }
+            setSceneObjectProperty(obj, map[k], v)
         }
     }
 
@@ -318,7 +632,9 @@ function parseAssetPacks() {
     const packs = []
     for (const rel of findAssetPacks()) {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(PROJECT_DIR, rel), "utf8"))
+            const full = safeJoin(PROJECT_DIR, rel)
+            if (!full) continue
+            const data = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 8 * 1024 * 1024))
             const entries = []
             for (const section of Object.values(data)) {
                 if (section && Array.isArray(section.files)) {
@@ -385,8 +701,7 @@ defTool(
         const rel = path.posix.join(dir, clean + ".scene")
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid folder")
-        if (fs.existsSync(full)) throw new Error(`Scene file already exists: ${rel}`)
-        writeSceneFile(rel, newSceneDoc(clean))
+        writeSceneFile(rel, newSceneDoc(clean), { exclusive: true })
         return text(`Scene file created: ${rel} (sceneKey "${clean}")`)
     }
 )
@@ -866,9 +1181,11 @@ defTool(
             texture: {
                 type: "object",
                 properties: { key: { type: "string" }, frame: { description: "Optional frame." } },
+                required: ["key"],
                 description: "Alternative official shape: { texture: { key, frame } }."
             }
-        }
+        },
+        anyOf: [{ required: ["key"] }, { required: ["texture"] }]
     },
     async (args) => {
         const key = textureKeyOf(args)
@@ -886,8 +1203,8 @@ defTool(
         }
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
-        const buf = fs.readFileSync(full)
+        if (!full) throw new Error(`Texture file not found: ${url}`)
+        const buf = readFileSafely(PROJECT_DIR, full)
         const mime = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".svg": "image/svg+xml" }[path.extname(full).toLowerCase()] || "application/octet-stream"
         return image(buf.toString("base64"), mime)
     }
@@ -1037,9 +1354,8 @@ defTool(
     async ({ path: p }) => {
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
-        if (!full || !fs.existsSync(full) || !fs.statSync(full).isFile()) throw new Error(`File not found: ${rel}`)
-        if (fs.statSync(full).size > 1024 * 512) throw new Error("File too large")
-        return text(fs.readFileSync(full, "utf8"))
+        if (!full) throw new Error("invalid path")
+        return text(readFileSafely(PROJECT_DIR, full, "utf8", 1024 * 512))
     }
 )
 
@@ -1056,8 +1372,15 @@ defTool(
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
         if (rel.toLowerCase().endsWith(".scene")) throw new Error("Use the scene-* tools to modify scene files")
-        await fsp.mkdir(path.dirname(full), { recursive: true })
-        await fsp.writeFile(full, content ?? "", "utf8")
+        if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) throw new Error("invalid path")
+        const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
+        if (!handle) throw new Error("invalid path")
+        try {
+            await handle.truncate(0)
+            await handle.writeFile(content ?? "", "utf8")
+        } finally {
+            await handle.close().catch(() => {})
+        }
         notifyFilesChanged()
         return text(`Written: ${rel} (${Buffer.byteLength(content || "")} bytes)`)
     }
@@ -1071,7 +1394,7 @@ defTool(
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full || full === PROJECT_DIR) throw new Error("invalid path")
-        await fsp.rm(full, { recursive: true, force: true })
+        if (!await removeProjectEntrySafely(PROJECT_DIR, full, { recursive: true, force: true })) throw new Error("invalid path")
         notifyFilesChanged()
         return text(`Deleted: ${rel}`)
     }
@@ -1088,7 +1411,9 @@ defTool(
         const phaserFile = walkFiles(PROJECT_DIR, "").find(f => /(^|\/)(phaser\.js|phaser\.min\.js)$/.test(f))
         if (phaserFile) {
             try {
-                const head = fs.readFileSync(path.join(PROJECT_DIR, phaserFile), "utf8").slice(0, 300)
+                const full = safeJoin(PROJECT_DIR, phaserFile)
+                if (!full) throw new Error("invalid path")
+                const head = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024).slice(0, 300)
                 const m = head.match(/Phaser v([\d.]+)/) || head.match(/version:\s*["']([\d.]+)/)
                 if (m) phaserVersion = m[1]
             } catch (e) { /* ignore */ }
@@ -1112,7 +1437,7 @@ const SYSTEM_INSTRUCTIONS = `You are a game development assistant specialized in
 
 Scenes are JSON files (\`.scene\`) with an \`id\`, \`settings\` (\`sceneKey\`), a \`displayList\` of game objects, and \`plainObjects\`. Each object has a unique \`id\`, a \`type\`, a \`label\` (valid JS identifier, unique in the scene) and flat properties (dotted names allowed for component properties, e.g. \`body.velocity.x\`).
 
-Game object types: Image, Sprite, Text, BitmapText, Container, Layer, TileSprite, NineSlice, Rectangle, Ellipse, Triangle, ParticleEmitter, Tilemap, TilemapLayer, ScriptNode.
+Game object types: Image, Sprite, Text, BitmapText, Container, Layer, TileSprite, NineSlice, ThreeSlice, Rectangle, Ellipse, Triangle, Polygon, ParticleEmitter, Tilemap, TilemapLayer, ScriptNode, SpineGameObject, Video.
 
 Common properties (all optional unless noted):
 
@@ -1132,19 +1457,61 @@ class BlendModeComponent { blendMode: number } // 0 SKIP_CHECK, 1 NORMAL, 2 ADD,
 class TintComponent { tintFill = false; tintTopLeft = "#ffffff"; ... } // hex colors
 class SizeComponent { width: number; height: number }
 class TextObject { text: string; fontFamily = "Courier"; fontSize = "16px"; color = "#fff"; fontStyle?; align?; backgroundColor?; stroke?; strokeThickness?; wordWrapWidth? }
-class Shapes { isFilled = true; fillColor = "#ffffff"; fillAlpha = 1; strokeColor?; strokeWidth? }
+class Shapes { isFilled = true; fillColor = "#ffffff"; fillAlpha = 1; isStroked = false; strokeColor = "#ffffff"; strokeAlpha = 1; lineWidth = 1 }
 class ArcadeBody {
-    // enable arcade physics on the object (shortcut: pass an "arcade" object)
+    // Upstream MCP aliases; the server normalizes them to current editor serialization keys.
     "Arcade.active": true
-    "body.physicsType": 0 | 1     // 0 DYNAMIC_BODY, 1 STATIC_BODY
-    "body.geometry": 0 | 1        // 0 CIRCLE, 1 RECTANGLE
+    "body.physicsType": 0 | 1      // 0 DYNAMIC_BODY, 1 STATIC_BODY -> editor key physicsType
+    "body.geometry": 0 | 1         // 0 CIRCLE, 1 RECTANGLE -> editor key bodyGeometry
+    "body.radius": number; "body.width": number; "body.height": number
+    "body.offset.x": number; "body.offset.y": number
     "body.velocity.x": number; "body.velocity.y": number
+    "body.maxVelocity.x": number; "body.maxVelocity.y": number
+    "body.acceleration.x": number; "body.acceleration.y": number
+    "body.drag.x": number; "body.drag.y": number
     "body.bounce.x": number; "body.bounce.y": number
-    "body.collideWorldBounds": boolean
-    "body.immovable": boolean; "body.allowGravity": boolean
     "body.gravity.x": number; "body.gravity.y": number
+    "body.friction.x": number; "body.friction.y": number
+    "body.allowGravity": boolean; "body.immovable": boolean
+    "body.mass": number; "body.collideWorldBounds": boolean
+    "body.angularVelocity": number; "body.angularAcceleration": number
+    "body.angularDrag": number; "body.maxAngular": number
+    "body.enable": boolean; "body.moves": boolean; "body.maxSpeed": number
+    "body.useDamping": boolean; "body.allowDrag": boolean
+    "body.onWorldBounds": boolean; "body.allowRotation": boolean; "body.pushable": boolean
+    "body.checkCollision.none": boolean; "body.checkCollision.up": boolean
+    "body.checkCollision.down": boolean; "body.checkCollision.left": boolean
+    "body.checkCollision.right": boolean
+    "body.overlapX": number; "body.overlapY": number; "body.overlapR": number
 }
 \`\`\`
+
+## Type-specific object properties
+
+- Sprite: animationPlayMethod (0 none, 1 play, 2 play reverse), animationKey, animationCustomConfig and animationFrameRate, animationDelay, animationRepeat, animationRepeatDelay, animationYoyo, animationShowBeforeDelay, animationShowOnStart, animationHideOnComplete, animationStartFrame and animationTimeScale.
+- TileSprite: tilePositionX, tilePositionY, tileScaleX and tileScaleY.
+- NineSlice: leftWidth, rightWidth, topHeight and bottomHeight. ThreeSlice: leftWidth and rightWidth.
+- BitmapText: font (asset-pack bitmap-font key), fontSize, align (0 left, 1 center, 2 right), letterSpacing, maxWidth, dropShadowX, dropShadowY, dropShadowAlpha and dropShadowColor.
+- Text: fixedWidth, fixedHeight, paddingLeft, paddingTop, paddingRight, paddingBottom, lineSpacing, wordWrapWidth, wordWrapUseAdvanced, maxLines, baselineX and baselineY. Shadow may be passed as an object with offsetX, offsetY, color, stroke, fill and blur; it is serialized to the editor's dotted shadow properties.
+- Hit areas can be configured as a \`hitArea\` object or dotted \`hitArea.shape\` fields. shape is NONE, RECTANGLE, CIRCLE, ELLIPSE, POLYGON or PIXEL_PERFECT. RECTANGLE uses x/y/width/height; CIRCLE uses x/y/radius; ELLIPSE uses x/y/width/height; POLYGON uses points; PIXEL_PERFECT uses alphaTolerance.
+- Shape objects also support isFilled, fillColor, fillAlpha, isStroked, strokeColor, strokeAlpha and lineWidth.
+- Arcade physics is available only on object types whose current editor support installs ArcadeComponent. Use scene-enable-arcade-physics-body / scene-disable-arcade-physics-body rather than setting a component active flag manually. The server accepts upstream Arcade.active/body.* fields and normalizes them to current editor serialization keys. The arcade shortcut is an object containing known body fields such as physicsType, geometry, velocityX, gravityY, allowGravity and collideWorldBounds.
+- Video: url is a video asset key or absolute URL; loop, mute and autoplay are booleans.
+
+### ParticleEmitter configuration
+
+Pass the editor configuration in properties.config. configTexture is the asset-pack texture key and configFrame is an array of frame names/numbers. The properties.texture shorthand accepts a texture key and optional frame.
+
+Operation-valued fields (x, y, moveToX, moveToY, scale, scaleX, scaleY, angle, rotate, accelerationX, accelerationY, maxVelocityX, maxVelocityY, speed, speedX, speedY, delay, hold, lifespan, quantity, tint, alpha and color) accept the upstream discriminated forms:
+- { type: "Static", value: number }
+- { type: "Random", random: number[] }
+- { type: "StartEndRandom", start: number, end: number, randomFlag?: boolean, ease?: string }
+- { type: "Interpolation", values: number[], interpolation?: "linear" | "catmull" | "bezier", ease?: string }
+- { type: "Stepped", steps: number, start: number, end: number, yoyo?: boolean }
+- { type: "MinMax", min: number, max: number, int?: boolean }
+- { type: "None" }
+
+Simple values include gravityX, gravityY, radial, colorEase, tintFill, blendMode, particleBringToTop, sortOrderAsc, sortProperty, follow and trackVisible. Timing values use the upstream aliases _duration, _stopAfter, _frequency, _timeScale, _maxAliveParticles, _maxParticles and _advance. Numeric values and arrays are accepted as Static and Random shorthands. The current Codogma editor model supports one particle animationKey; multiple _anim entries are rejected instead of being silently truncated.
 
 Workflow for creating content:
 1. \`ide-get-all-scenes-in-project\` and \`assets-get-available-textures\` to know what exists.
@@ -1154,6 +1521,17 @@ Workflow for creating content:
 5. Modify game code (\`project-read-file\` + \`project-write-file\`) to register scenes in the game entry (main.ts / game.js: \`game.scene.add("MyScene", MyScene)\`), load the asset pack in a Boot scene, and add gameplay code.
 6. \`ide-open-scene\` to show the result to the user in the editor.
 
+## Spine assets and game objects
+
+Use these tools in order when working with Spine assets:
+1. \`assets-get-available-spine-skeletons\` and \`assets-get-available-spine-atlases\` to discover the exact skeleton and atlas keys.
+2. \`assets-get-spine-skeleton-info\` to inspect skins and animations when the skeleton is JSON. Binary \`.skel\` assets are loaded by the editor runtime; this file parser does not enumerate their metadata.
+3. \`assets-get-spine-skin-image\` to render a PNG preview for an exact \`dataKey\`, \`atlasKey\`, \`skinName\` and \`animationName\`. This tool requires the browser editor page and its SSE MCP bridge to be connected.
+4. Add a scene object with \`scene-add-game-objects\`, type \`SpineGameObject\` and \`properties.dataKey\` / \`properties.atlasKey\`. Optional properties include \`skinName\`, \`bpType\`, \`bpSkin\`, \`bpAnimation\`, \`bpTimeStep\`, \`animationMixes\`, \`defaultMix\` and \`timeScale\`.
+5. Use \`scene-get-scene-data\` to verify the serialized Spine configuration. The editor renderer is required for visual preview.
+
+\`bpType\` is 0 (\`SETUP_TYPE\`) or 1 (\`SKINS_AND_ANIMATION\`). \`bpSkin\` is 0 (\`ALL_SKINS\`) or 1 (\`CURRENT_SKIN\`). \`animationMixes\` is an array of \`[fromAnimation, toAnimation, durationSeconds]\` tuples.
+
 ## Editable tilemaps (v5)
 
 Editable tilemaps are plain objects whose tile data can be painted in the scene editor. Workflow:
@@ -1162,6 +1540,70 @@ Editable tilemaps are plain objects whose tile data can be painted in the scene 
 3. \`scene-add-tileset-to-editable-tilemap\` / \`scene-delete-tileset-from-editable-tilemap\` rebases the layer ids automatically. \`scene-resize-editable-tilemap-layer\` and \`scene-add-editable-tilemap-layer\` manage the layers.
 4. The layer game objects (\`EditableTilemapLayer\`) are regular game objects: move/scale them with scene-update-game-objects.
 5. \`scene-get-editable-tilemap-layer-selection-data\` returns the tile region currently selected in the running editor (requires an editor tab connected to the MCP bridge).
+## Scene editing and object hierarchy
+
+- For scene-scoped tools, provide one scene selector: sceneId, scenePath or sceneKey. sceneId comes from ide-get-all-scenes-in-project or scene-get-scene-data; scenePath is project-relative; sceneKey is the filename without the .scene extension.
+- scene-add-game-objects accepts objects: [{ type, properties }]. Use a type from the list above and a unique JavaScript-identifier label. Read the instructions before using a type-specific configuration you have not used before.
+- scene-update-game-objects accepts objects: [{ id, properties }]. id can be an object id or label; properties should contain only the fields to change. For prefab instances include unlock with every property that the instance is intended to keep editable.
+- scene-delete-game-objects accepts objectIds, each an id or label. scene-clear-scene removes all display-list objects; inspect the scene first and prefer delete for a selected subset.
+- scene-get-scene-data returns displayList, plainObjects, lists and prefabProperties. scene-get-objects-data returns selected objects by ids or labels.
+- scene-move-game-object-in-render-list takes objectIds and move: Up, Down, Top or Bottom. scene-move-game-objects-to-parent takes objectIds and optional parentId; omit parentId to return objects to the scene root. The parent must be a container-like object that supports children.
+- scene-pack-objects-in-container takes objectIds and optional label. It creates a container and repositions its children to produce compact bounds.
+
+## Plain objects and Tiled maps
+
+Plain objects are stored in scene.plainObjects, separately from displayList. Use scene-add-plain-objects, scene-update-plain-objects and scene-delete-plain-objects for this collection; do not send plain objects through scene-add-game-objects.
+- scene-add-plain-objects accepts objects. A Tiled map entry uses type Tilemap and properties containing key (from assets-get-available-tilemaps) plus optional tilesets. A Collider entry uses type Collider and properties object1 and object2; optional fields are overlapOnly, scope, processCallback, collideCallback and callbackContext. Other plain-object records are copied as supplied, with type, id/label and their data.
+- scene-update-plain-objects accepts objects: [{ id, properties }]. scene-delete-plain-objects accepts objectIds. Both tools resolve ids or labels.
+- A Tiled Tilemap is a plain object in this build. Editable Tilemaps are a separate subsystem and use scene-add-editable-tilemap and the dedicated scene-*editable-tilemap-layer tools. TilemapLayer is a display-list object created by the map workflow.
+
+## Prefabs and nested prefab instances
+
+- A prefab is a reusable game-object class stored in a scene file whose sceneType is PREFAB. Create it with ide-create-new-prefab-scene, then immediately add its root object using scene-add-game-objects; the first display-list object becomes the prefab root.
+- ide-get-all-prefabs-in-project lists prefab ids, paths, root object types and inheritance targets. ide-get-prefab-inheritance takes prefabId and returns the chain from that prefab to its root ancestor.
+- Create a prefab instance with properties.prefabId set to the prefab scene id. The instance root type must match the prefab root type. Use prefabProps for declared user-property values.
+- Prefab instance properties are locked by default. Supply unlock as an array of property names the instance may override. Preserve all properties that should remain unlocked when updating an instance; do not replace the unlock array with only the field changed in the current call.
+- scene-get-nested-prefabs-instances takes the id or label of a prefab instance and returns nested instances. Update a nested instance by its own id; do not treat a nested instance as an ordinary child that can be independently deleted.
+- scene-declare-prefab-property requires sceneId of a PREFAB scene, name, type object with id and optional isArray/options, and defValue. Supported type ids are number, string, boolean, color, keycode, expression, option, objectVar, object-ref, constructor, event, texture-config, animation-key, audio-key, asset-key, scene-key, spine-skin-name, spine-animation-name and spine-event. Option properties need options; arrays use type.isArray and may provide defArrayValue. customDefinition=true suppresses generation of a class field.
+- scene-delete-prefab-property takes sceneId and name. Check ide-get-all-prefabs-in-project before changing a prefab and re-read its scene data afterwards.
+
+## Object lists
+
+- scene-add-object-list accepts lists: [{ label, scope?, objectIds? }]. label should be a valid JavaScript identifier. objectIds may contain ids or labels; existing object labels are resolved to ids.
+- scope may be LOCAL, PUBLIC, METHOD, CLASS or NESTED_PREFAB. It controls the generated variable or field scope.
+- scene-update-object-list takes id (or label) and optional label, scope and objectIds. scene-remove-object-list takes listIds (ids or labels). Lists are stored in the scene-level lists collection and can be inspected with scene-get-scene-data.
+
+## Phaser 4 filters
+
+Supported filter types in this build are Glow, Shadow, Pixelate, Blur, Barrel, Displacement, Bokeh, Blend, ObjectMask, TextureMask, Threshold and ColorMatrix.
+- scene-add-game-object-filters accepts objects: [{ type, parentId, internal?, properties? }]. parentId is a game-object id or label. properties contains filter-specific fields. internal=true places the filter in the object's pre-FX list; internal=false places it in the scene/external filter list. If omitted, the default is internal for Image, Sprite, Text, TileSprite, RenderTexture and Video; other parents default to external.
+- scene-update-game-object-filters accepts objects: [{ id, type, properties?, internal? }]. Use the filter id returned by the add call. internal can move the filter between internal and external pipelines.
+- scene-delete-game-object-filters takes filterIds (ids or labels). scene-update-game-object-filter-list takes filterId and internal.
+- Filter properties depend on the selected filter type. Do not invent a generic property set; use the Phaser 4 contract for that filter type and inspect the resulting scene data after applying it.
+
+## Arcade physics
+
+- Enable and disable bodies with scene-enable-arcade-physics-body and scene-disable-arcade-physics-body. Enable takes updates: [{ id }]; disable takes ids. Use ids from scene-get-scene-data.
+- ArcadeComponent is available on Image, Sprite, BitmapText, Container, TileSprite, NineSlice, ThreeSlice, Text, Rectangle, Ellipse, Triangle, Polygon and SpineGameObject, plus legacy ArcadeImage and ArcadeSprite types. Video, Layer, ParticleEmitter, TilemapLayer and ScriptNode do not expose this component; the enable tool rejects unsupported types.
+- scene-enable-arcade-physics-body initializes a missing body as dynamic (physicsType 0) with rectangular geometry (bodyGeometry 1). Use scene-update-game-objects to change body settings afterwards. Upstream argument aliases Arcade.active and body.* are normalized to current editor keys such as ArcadeComponent.active, physicsType, bodyGeometry, radius, allowGravity, enable, moves and the vector fields.
+- The properties.arcade shorthand is accepted on object creation and update. Known fields include physicsType, geometry, radius, width, height, velocityX/Y, maxVelocityX/Y, accelerationX/Y, dragX/Y, bounceX/Y, gravityX/Y, frictionX/Y, offsetX/Y, allowGravity, immovable, collideWorldBounds, moves, maxSpeed, mass, enable, useDamping, allowDrag, onWorldBounds, allowRotation, pushable, angularVelocity, angularAcceleration, angularDrag, maxAngular, overlapX/Y/R and checkCollisionNone/Up/Down/Left/Right. Unknown shortcut fields are rejected.
+- scene-disable-arcade-physics-body removes the component-active flag and serialized body settings. It does not delete the game object.
+
+## Assets, fonts and project files
+
+- assets-get-available-asset-packs lists asset-pack file names and entries. assets-get-available-textures lists keys from asset packs and loose image files. Use the exact asset key returned; atlas and spritesheet textures may also require a frame.
+- assets-get-texture-size accepts key or texture: { key }. assets-get-texture-binary accepts key or texture: { key, frame? } and returns image content. assets-get-texture-content-bounding-box returns non-transparent content bounds and requires the browser editor SSE bridge.
+- assets-get-available-animations lists sprite animation keys. assets-get-available-bitmapfonts and assets-get-bitmapfont-image inspect bitmap fonts. assets-get-spritesheet-image previews spritesheet frame layout.
+- assets-get-available-tilemaps lists Tiled map keys; assets-get-tilemap-data reads layers, tilesets and objects. Use the Spine workflow above for skeleton data and previews.
+- Google Fonts workflow: assets-get-google-font-families accepts optional filter; assets-get-google-font-info takes the exact family name and returns a TTF URL; assets-add-google-font-to-asset-pack takes assetPackFileName, key and family, with optional url. The key must be unique in the asset pack; Text objects then refer to it using fontFamily. The add tool resolves the TTF URL automatically when url is omitted.
+- project-list-files accepts optional project-relative folder and extension. project-read-file takes path and reads UTF-8 text up to 512 KiB. project-write-file takes path and content, creates parent folders and overwrites text files; it refuses .scene files, which must be changed using scene tools. project-delete-file takes path and removes a file or folder recursively.
+- project-compile-info returns detected game entry files, Phaser version and scene files. Inspect it before modifying game bootstrap code; use project-write-file for code/config files, not generated scene JSON.
+- All project paths are relative to the selected project root. Do not prefix the project folder name, use absolute paths or try to escape the project root.
+
+## UI-dependent commands and verification
+
+The following commands require the running browser editor and its SSE MCP bridge: ide-get-active-scene, ide-open-scene, ide-save-scene, scene-get-screenshot, assets-get-texture-content-bounding-box, scene-get-editable-tilemap-layer-selection-data and assets-get-spine-skin-image. Start the engine server, open the project in the editor and wait for the bridge connection before using them. A timeout means the editor-side command did not complete; verify the editor state before retrying.
+File-only tools can work without an active editor tab. Prefer scene-get-scene-data and scene-get-objects-data to verify structural edits; use scene-get-screenshot or the relevant preview tool for visual verification when the editor bridge is available.
 `
 
 /* ===================== prefab & nested prefab tools ======================= */
@@ -1240,9 +1682,9 @@ function resolveTilesetImage(imageKey) {
 
     const full = safeJoin(PROJECT_DIR, url)
 
-    if (!full || !fs.existsSync(full)) throw new Error(`Tileset image file not found: ${url}`)
+    if (!full) throw new Error(`Tileset image file not found: ${url}`)
 
-    const size = parseImageSize(fs.readFileSync(full))
+    const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
 
     if (!size || !size.width || !size.height) throw new Error(`Cannot read the image size of "${imageKey}" (${url}).`)
 
@@ -1969,9 +2411,6 @@ defTool(
     }
 )
 
-notSupported("assets-get-spine-skin-image",
-    "rendering a Spine skin requires the editor UI renderer (open the spine asset in the editor to preview it)")
-
 defTool(
     "ide-create-new-prefab-scene",
     "Create a new prefab scene file (an empty prefab: a reusable game-object class). Add the prefab root object right after with scene-add-game-objects (the first added object becomes the prefab object).",
@@ -1991,10 +2430,9 @@ defTool(
         const rel = path.posix.join(dir, clean + ".scene")
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid folder")
-        if (fs.existsSync(full)) throw new Error(`Prefab file already exists: ${rel}`)
         const doc = newSceneDoc(clean)
         doc.sceneType = "PREFAB"
-        writeSceneFile(rel, doc)
+        writeSceneFile(rel, doc, { exclusive: true })
         return text(`Prefab scene file created: ${rel} (id ${doc.id}). Now add the prefab root object with scene-add-game-objects.`)
     }
 )
@@ -2103,9 +2541,13 @@ defTool(
             const found = findObjects(doc, [u.id], [u.id])
             if (!found.length) throw new Error(`Object not found: ${u.id}`)
             const obj = found[0].obj
-            obj["Arcade.active"] = true
-            if (obj["body.physicsType"] === undefined) obj["body.physicsType"] = 0
-            if (obj["body.geometry"] === undefined) obj["body.geometry"] = 1
+            if (!ARCADE_CAPABLE_TYPES.has(obj.type)) {
+                throw new Error(`Object type "${obj.type}" does not expose an Arcade physics component in this editor build.`)
+            }
+            obj["ArcadeComponent.active"] = true
+            delete obj["Arcade.active"]
+            if (obj.physicsType === undefined) obj.physicsType = 0
+            if (obj.bodyGeometry === undefined) obj.bodyGeometry = 1
             enabled.push({ id: obj.id, label: obj.label })
         }
         writeSceneFile(file, doc)
@@ -2132,11 +2574,15 @@ defTool(
             if (!found.length) throw new Error(`Object not found: ${id}`)
             const obj = found[0].obj
             delete obj["Arcade.active"]
+            delete obj["ArcadeComponent.active"]
             for (const k of Object.keys(obj)) {
                 if (k === "body" || k.startsWith("body.")) delete obj[k]
             }
+            for (const key of Object.values(ARCADE_PROPERTY_ALIASES)) {
+                if (key !== "ArcadeComponent.active") delete obj[key]
+            }
             if (Array.isArray(obj.components)) {
-                obj.components = obj.components.filter(c => c !== "Arcade")
+                obj.components = obj.components.filter(name => name !== "Arcade" && name !== "ArcadeComponent")
                 if (obj.components.length === 0) delete obj.components
             }
             disabled.push({ id: obj.id, label: obj.label })
@@ -2284,7 +2730,6 @@ defTool(
         const prune = (list) => {
             for (const obj of list || []) {
                 if (Array.isArray(obj.list)) {
-                    const before = obj.list.length
                     obj.list = obj.list.filter(fx => {
                         if (ids.has(fx.id) || ids.has(fx.label)) { deleted++; return false }
                         return true
@@ -2529,16 +2974,22 @@ defTool(
         type: "object",
         properties: {
             key: { type: "string", description: "The key of the texture." },
-            texture: { type: "object", properties: { key: { type: "string" } }, description: "Alternative official shape." }
-        }
+            texture: {
+                type: "object",
+                properties: { key: { type: "string" } },
+                required: ["key"],
+                description: "Alternative official shape."
+            }
+        },
+        anyOf: [{ required: ["key"] }, { required: ["texture"] }]
     },
     async (args) => {
         const key = textureKeyOf(args)
         const url = findTextureUrl(key)
         if (!url) throw new Error(`Texture "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Texture file not found: ${url}`)
-        const size = parseImageSize(fs.readFileSync(full))
+        if (!full) throw new Error(`Texture file not found: ${url}`)
+        const size = parseImageSize(readFileSafely(PROJECT_DIR, full))
         if (!size) throw new Error(`Cannot parse image size of ${url}`)
         return text(JSON.stringify({ key, url, ...size }, null, 2))
     }
@@ -2556,9 +3007,9 @@ defTool(
                 const imgUrl = e.textureFilename
                     || e.url.replace(/\.(fnt|xml|json)$/i, ".png")
                 const full = safeJoin(PROJECT_DIR, imgUrl)
-                if (!full || !fs.existsSync(full)) throw new Error(`Bitmap font image not found: ${imgUrl}`)
+                if (!full) throw new Error(`Bitmap font image not found: ${imgUrl}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
-                return image(fs.readFileSync(full).toString("base64"), mime)
+                return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
         }
         throw new Error(`Bitmap font "${key}" not found`)
@@ -2574,9 +3025,9 @@ defTool(
             const e = pack.entries.find(e => e.key === key && e.type === "spritesheet")
             if (e) {
                 const full = safeJoin(PROJECT_DIR, e.url)
-                if (!full || !fs.existsSync(full)) throw new Error(`Spritesheet image not found: ${e.url}`)
+                if (!full) throw new Error(`Spritesheet image not found: ${e.url}`)
                 const mime = path.extname(full).toLowerCase() === ".jpg" ? "image/jpeg" : "image/png"
-                return image(fs.readFileSync(full).toString("base64"), mime)
+                return image(readFileSafely(PROJECT_DIR, full).toString("base64"), mime)
             }
         }
         throw new Error(`Spritesheet "${key}" not found`)
@@ -2634,11 +3085,13 @@ defTool(
         }
         if (!url) throw new Error(`Spine skeleton "${dataKey}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Spine data file not found: ${url}`)
+        if (!full) throw new Error(`Spine data file not found: ${url}`)
+        const fileStat = await statProjectFileSafely(PROJECT_DIR, full)
+        if (!fileStat?.isFile()) throw new Error(`Spine data file not found: ${url}`)
         if (!url.toLowerCase().endsWith(".json")) {
             return text(`Skeleton "${dataKey}" is binary (.skel): parse it in the editor for full info.`)
         }
-        const data = JSON.parse(fs.readFileSync(full, "utf8"))
+        const data = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024))
         const skins = (Array.isArray(data.skins) ? data.skins : [])
             .map(s => typeof s === "string" ? s : s.name).filter(Boolean)
         return text(JSON.stringify({
@@ -2646,6 +3099,22 @@ defTool(
             skins, animations: Object.keys(data.animations || {})
         }, null, 2))
     }
+)
+
+defTool(
+    "assets-get-spine-skin-image",
+    "Get a PNG preview of a Spine skin and animation from the selected skeleton and atlas.",
+    {
+        type: "object",
+        properties: {
+            dataKey: { type: "string", description: "The key of the Spine skeleton asset." },
+            atlasKey: { type: "string", description: "The key of the Spine atlas asset." },
+            skinName: { type: "string", description: "The exact Spine skin name." },
+            animationName: { type: "string", description: "The exact Spine animation name." }
+        },
+        required: ["dataKey", "atlasKey", "skinName", "animationName"]
+    },
+    async (args) => forwardToEditor("assets-get-spine-skin-image", args)
 )
 
 defTool(
@@ -2660,8 +3129,8 @@ defTool(
         }
         if (!url) throw new Error(`Tilemap "${key}" not found`)
         const full = safeJoin(PROJECT_DIR, url)
-        if (!full || !fs.existsSync(full)) throw new Error(`Tilemap file not found: ${url}`)
-        const raw = fs.readFileSync(full, "utf8")
+        if (!full) throw new Error(`Tilemap file not found: ${url}`)
+        const raw = readFileSafely(PROJECT_DIR, full, "utf8", 16 * 1024 * 1024)
         if (url.toLowerCase().endsWith(".json")) {
             const data = JSON.parse(raw)
             return text(JSON.stringify({
@@ -2737,7 +3206,7 @@ defTool(
     async ({ assetPackFileName, key, family, url }) => {
         const rel = normPath(assetPackFileName)
         const full = safeJoin(PROJECT_DIR, rel)
-        if (!full || !fs.existsSync(full)) throw new Error(`Asset pack not found: ${rel}`)
+        if (!full) throw new Error(`Asset pack not found: ${rel}`)
         if (!url) {
             const info = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}`, { headers: { "User-Agent": "" } })
             const css = await info.text()
@@ -2745,12 +3214,14 @@ defTool(
             if (!m) throw new Error(`Could not resolve the TTF URL for family "${family}"`)
             url = m[1]
         }
-        const pack = JSON.parse(fs.readFileSync(full, "utf8"))
+        const pack = JSON.parse(readFileSafely(PROJECT_DIR, full, "utf8", 8 * 1024 * 1024))
         const sectionName = Object.keys(pack).find(k => pack[k] && Array.isArray(pack[k].files)) || "section1"
         pack[sectionName] = pack[sectionName] || { files: [] }
         if (pack[sectionName].files.some(f => f.key === key)) throw new Error(`Key "${key}" already exists in ${rel}`)
         pack[sectionName].files.push({ key, type: "font", url, family })
-        fs.writeFileSync(full, JSON.stringify(pack, null, 4), "utf8")
+        if (!writeFileSafely(PROJECT_DIR, full, JSON.stringify(pack, null, 4))) {
+            throw new Error("invalid asset pack path: " + rel)
+        }
         notifyFilesChanged()
         return text(`Font "${key}" (${family}) added to ${rel}.`)
     }
@@ -2758,29 +3229,109 @@ defTool(
 
 /* =========================== bridge (SSE channel) ========================= */
 
-const bridgeClients = new Set()
+const bridgeClients = new Map()
 const pendingCommands = new Map()
+let activeBridgeClientId = null
+
+const BRIDGE_COMMAND_TIMEOUT_MS = 20000
+
+function selectActiveBridgeClient() {
+    const active = activeBridgeClientId ? bridgeClients.get(activeBridgeClientId) : null
+    if (active) return active
+
+    const clients = [...bridgeClients.values()]
+    const solidClient = clients
+        .filter(client => client.clientType === "solidjs")
+        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]
+    const candidate = solidClient ?? (clients.length === 1 ? clients[0] : null)
+    activeBridgeClientId = candidate?.clientId ?? null
+    return candidate ?? null
+}
+
+function rejectPendingForClient(clientId, reason) {
+    for (const [id, pending] of pendingCommands) {
+        if (pending.clientId !== clientId) continue
+        clearTimeout(pending.timer)
+        pendingCommands.delete(id)
+        pending.reject(new Error(reason))
+    }
+}
+
+function removeBridgeClient(clientId, expectedClient = null) {
+    const client = bridgeClients.get(clientId)
+    if (!client || (expectedClient && client !== expectedClient)) return false
+
+    bridgeClients.delete(clientId)
+    rejectPendingForClient(clientId, "The editor session disconnected before responding to the MCP command.")
+    if (activeBridgeClientId === clientId) activeBridgeClientId = null
+    selectActiveBridgeClient()
+    log(`mcp-bridge: editor disconnected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
+    return true
+}
+
+function activateBridgeClient(clientId) {
+    const client = bridgeClients.get(clientId)
+    if (!client) return false
+    client.lastActiveAt = Date.now()
+    activeBridgeClientId = clientId
+    return true
+}
+
+function bridgeStatus() {
+    const active = selectActiveBridgeClient()
+    return {
+        connected: bridgeClients.size > 0,
+        clients: bridgeClients.size,
+        activeClientId: active?.clientId ?? null,
+        activeClientType: active?.clientType ?? null,
+        sessions: [...bridgeClients.values()].map(client => ({
+            clientId: client.clientId,
+            clientType: client.clientType,
+            connectedAt: client.connectedAt,
+            active: client.clientId === activeBridgeClientId
+        }))
+    }
+}
 
 function bridgeCommand(command) {
     return new Promise((resolve, reject) => {
-        if (bridgeClients.size === 0) {
-            return reject(new Error("Codogma Engine is not connected to the MCP bridge. Open the editor in a browser tab (http://localhost:3000/editor/)."))
+        const client = selectActiveBridgeClient()
+        if (!client) {
+            const hint = bridgeClients.size > 1
+                ? "Several editor sessions are connected but none is active. Focus the editor tab and retry."
+                : "Open the SolidJS Editor Host or legacy editor in a browser tab."
+            return reject(new Error(`Codogma Engine is not connected to an active MCP bridge session. ${hint}`))
         }
+
         const id = crypto.randomUUID()
         const timer = setTimeout(() => {
             pendingCommands.delete(id)
-            reject(new Error(`Editor did not respond to command "${command.tool}" in time (20s).`))
-        }, 20000)
-        pendingCommands.set(id, { resolve, timer, command })
-        const payload = `event: command\ndata: ${JSON.stringify({ id, ...command })}\n\n`
-        for (const client of bridgeClients) {
-            try { client.res.write(payload) } catch (e) { bridgeClients.delete(client) }
+            reject(new Error(`Editor session did not respond to command "${command.tool}" in time (20s).`))
+        }, BRIDGE_COMMAND_TIMEOUT_MS)
+        timer.unref?.()
+
+        pendingCommands.set(id, {
+            resolve,
+            reject,
+            timer,
+            command,
+            clientId: client.clientId
+        })
+        const payload = `event: command\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\n\n`
+        try {
+            client.res.write(payload)
+        } catch (error) {
+            clearTimeout(timer)
+            pendingCommands.delete(id)
+            removeBridgeClient(client.clientId, client)
+            reject(new Error(`Could not send command to editor session: ${error.message}`))
         }
     })
 }
 
 async function forwardToEditor(tool, args) {
     const result = await bridgeCommand({ tool, args })
+    if (result && result.__error) throw new Error(String(result.__error))
     if (result && result.__image) {
         return image(result.data, result.mimeType || "image/png")
     }
@@ -2791,34 +3342,84 @@ export function bridgeClientCount() {
     return bridgeClients.size
 }
 
+export function getBridgeStatus() {
+    return bridgeStatus()
+}
+
 export async function handleBridgeEvents(req, res) {
+    const url = new URL(req.url || "/editor/mcp-bridge/events", "http://127.0.0.1")
+    const clientType = url.searchParams.get("clientType") === "solidjs" ? "solidjs" : "legacy"
+    // Session identity is generated by the server, never accepted from the URL.
+    // This prevents a reconnecting or competing client from choosing another
+    // editor's command-result identity.
+    const clientId = crypto.randomUUID()
+
+    const client = {
+        clientId,
+        clientType,
+        res,
+        connectedAt: new Date().toISOString(),
+        lastActiveAt: Date.now()
+    }
+
     res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*"
+        "X-Accel-Buffering": "no"
     })
-    res.write("event: connected\ndata: {}\n\n")
-    const client = { res }
-    bridgeClients.add(client)
-    log(`mcp-bridge: editor connected (${bridgeClients.size} client(s))`)
+    bridgeClients.set(clientId, client)
+    if (clientType === "solidjs" || !activeBridgeClientId) activateBridgeClient(clientId)
+    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, clientType, active: clientId === activeBridgeClientId })}\n\n`)
+    log(`mcp-bridge: ${clientType} editor connected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
+
     const ping = setInterval(() => {
-        try { res.write(": ping\n\n") } catch (e) { /* noop */ }
+        try {
+            if (!res.write(": ping\n\n")) return
+        } catch (error) {
+            removeBridgeClient(clientId, client)
+        }
     }, 15000)
-    req.on("close", () => {
+    ping.unref?.()
+
+    const disconnect = () => {
         clearInterval(ping)
-        bridgeClients.delete(client)
-        log(`mcp-bridge: editor disconnected (${bridgeClients.size} client(s))`)
-    })
+        removeBridgeClient(clientId, client)
+    }
+    res.on?.("close", disconnect)
+    res.on?.("error", disconnect)
+}
+
+export async function handleBridgeActivate(req, res) {
+    let body
+    try {
+        body = await readBody(req)
+    } catch (error) {
+        return sendJSON(res, { error: `Invalid activation request: ${error.message}` })
+    }
+    if (typeof body.clientId !== "string" || !activateBridgeClient(body.clientId)) {
+        return sendJSON(res, { error: "Editor bridge session is not connected." })
+    }
+    log(`mcp-bridge: active editor session changed to ${body.clientId}`)
+    return sendJSON(res, { ok: true, ...bridgeStatus() })
 }
 
 export async function handleBridgeResult(req, res) {
     const body = await readBody(req)
     const pending = pendingCommands.get(body.id)
     if (!pending) return sendJSON(res, { error: "unknown command id" })
+
+    if (typeof body.clientId !== "string" || body.clientId !== pending.clientId) {
+        return sendJSON(res, { error: "command result belongs to a different editor session" })
+    }
+
     clearTimeout(pending.timer)
     pendingCommands.delete(body.id)
-    pending.resolve(body.result)
+    if (body.result && body.result.__error) {
+        pending.reject(new Error(String(body.result.__error)))
+    } else {
+        pending.resolve(body.result)
+    }
     return sendJSON(res, { ok: true })
 }
 
@@ -2894,11 +3495,30 @@ export async function handleMcpHttpRequest(req, res) {
         return res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "GET not supported (stateless server)" }, id: null }))
     }
     if (req.method === "OPTIONS") {
-        res.writeHead(204, {
-            "Access-Control-Allow-Origin": "*",
+        // This endpoint sits behind the server's loopback/origin guard, so
+        // cross-origin browser use is not a supported scenario. Only echo a
+        // loopback http origin back; never grant a wildcard.
+        let allowOrigin = null
+        const origin = req.headers.origin
+        if (typeof origin === "string") {
+            try {
+                const parsed = new URL(origin)
+                const host = parsed.hostname
+                if (parsed.protocol === "http:"
+                    && (host === "127.0.0.1" || host === "localhost" || host === "::1")) {
+                    allowOrigin = origin
+                }
+            } catch (e) {
+                // keep allowOrigin = null
+            }
+        }
+        const headers = {
             "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id, Authorization"
-        })
+            "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id, Authorization",
+            "Vary": "Origin"
+        }
+        if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin
+        res.writeHead(204, headers)
         return res.end()
     }
     if (req.method !== "POST") {
@@ -3065,18 +3685,56 @@ defTool(
 
 /* =============================== small utils ============================== */
 
+const MAX_MCP_BODY_BYTES = 32 * 1024 * 1024
+
 function readBody(req) {
     return new Promise((resolve, reject) => {
         const chunks = []
-        req.on("data", c => chunks.push(c))
-        req.on("end", () => {
+        let size = 0
+        let settled = false
+
+        const cleanup = () => {
+            req.off("data", onData)
+            req.off("end", onEnd)
+            req.off("error", onError)
+        }
+
+        const onData = chunk => {
+            if (settled) return
+            size += chunk.length
+            if (size > MAX_MCP_BODY_BYTES) {
+                settled = true
+                cleanup()
+                req.resume()
+                const error = new Error("Request body too large")
+                error.statusCode = 413
+                reject(error)
+                return
+            }
+            chunks.push(chunk)
+        }
+
+        const onEnd = () => {
+            if (settled) return
+            settled = true
+            cleanup()
             try {
                 resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"))
-            } catch (e) {
+            } catch {
                 reject(new Error("invalid JSON body"))
             }
-        })
-        req.on("error", reject)
+        }
+
+        const onError = error => {
+            if (settled) return
+            settled = true
+            cleanup()
+            reject(error)
+        }
+
+        req.on("data", onData)
+        req.on("end", onEnd)
+        req.on("error", onError)
     })
 }
 

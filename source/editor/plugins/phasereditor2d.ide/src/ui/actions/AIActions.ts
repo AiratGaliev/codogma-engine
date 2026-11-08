@@ -1,6 +1,5 @@
 namespace phasereditor2d.ide.ui.actions {
 
-    import controls = colibri.ui.controls;
     import commands = colibri.ui.ide.commands;
 
     export const CAT_AI = "phasereditor2d.ide.ui.actions.AICategory";
@@ -27,7 +26,8 @@ namespace phasereditor2d.ide.ui.actions {
                     id: CMD_MCP_SERVER_CONFIG,
                     category: CAT_AI,
                     name: "MCP Server Configuration",
-                    tooltip: "Configure the Codogma Engine MCP server integration with AI clients."
+                    tooltip: "Configure the Codogma Engine MCP server integration with AI clients.",
+                    icon: resources.getIcon(resources.ICON_EXTERNAL_LINK_GODOT)
                 },
                 handler: {
                     testFunc: isNotWelcomeWindowScope,
@@ -89,7 +89,8 @@ namespace phasereditor2d.ide.ui.actions {
                     id: CMD_MCP_MESSAGE_LOG,
                     category: CAT_AI,
                     name: "MCP Message Log",
-                    tooltip: "Shows the recent messages of the MCP bridge."
+                    tooltip: "Shows the recent messages of the MCP bridge.",
+                    icon: resources.getIcon(resources.ICON_MARKER_GODOT)
                 },
                 handler: {
                     testFunc: isNotWelcomeWindowScope,

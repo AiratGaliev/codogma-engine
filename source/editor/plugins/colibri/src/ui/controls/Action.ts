@@ -57,6 +57,13 @@ namespace colibri.ui.controls {
             return this._selected;
         }
 
+        setIcon(icon: IImage) {
+
+            this._icon = icon;
+
+            this.eventActionChanged.fire();
+        }
+
         setSelected(selected: boolean) {
 
             this._selected = selected;

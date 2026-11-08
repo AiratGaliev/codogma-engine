@@ -8,9 +8,12 @@ namespace phasereditor2d.scene.ui {
 
         private _data: core.json.ISceneData;
         private _callback: (element: HTMLImageElement) => void;
+        private _spineAnimationName?: string;
 
-        constructor(data: core.json.ISceneData, callback: (element: HTMLImageElement) => void) {
+        constructor(data: core.json.ISceneData, callback: (element: HTMLImageElement) => void, spineAnimationName?: string) {
             super();
+
+            this._spineAnimationName = spineAnimationName;
 
             if (data.sceneType === core.json.SceneType.PREFAB) {
 
@@ -36,6 +39,25 @@ namespace phasereditor2d.scene.ui {
             await maker.updateSceneLoader(this._data);
 
             maker.createScene(this._data);
+
+            if (this._spineAnimationName) {
+
+                const spineObject = this.getGameObjects()
+                    .find(obj => obj instanceof sceneobjects.SpineObject) as sceneobjects.SpineObject;
+
+                if (!spineObject) {
+                    throw new Error("The requested Spine animation preview does not contain a Spine game object.");
+                }
+
+                const animationExists = spineObject.skeleton.data.animations
+                    .some(animation => animation.name === this._spineAnimationName);
+
+                if (!animationExists) {
+                    throw new Error(`Spine animation "${this._spineAnimationName}" does not exist in the thumbnail skeleton.`);
+                }
+
+                spineObject.animationState.setAnimation(0, this._spineAnimationName, true);
+            }
 
             const children = this.getGameObjects();
 
@@ -218,8 +240,9 @@ namespace phasereditor2d.scene.ui {
         private _data: core.json.ISceneData;
         private _image: controls.ImageWrapper;
         private _promise: Promise<controls.PreloadResult>;
+        private _spineAnimationName?: string;
 
-        constructor(file: io.FilePath | core.json.ISceneData) {
+        constructor(file: io.FilePath | core.json.ISceneData, spineAnimationName?: string) {
 
             if (file instanceof io.FilePath) {
 
@@ -231,6 +254,7 @@ namespace phasereditor2d.scene.ui {
             }
 
             this._image = null;
+            this._spineAnimationName = spineAnimationName;
         }
 
         paint(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, center: boolean): void {
@@ -393,7 +417,7 @@ namespace phasereditor2d.scene.ui {
                     resolve(image);
 
                     scene.destroyGame();
-                });
+                }, this._spineAnimationName);
 
                 game.scene.add("scene", scene, true);
             });

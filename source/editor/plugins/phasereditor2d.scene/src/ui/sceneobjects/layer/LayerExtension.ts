@@ -28,7 +28,6 @@ namespace phasereditor2d.scene.ui.sceneobjects {
 
                 const children = originalObject.getEditorSupport().getObjectChildren();
 
-                // tslint:disable-next-line:prefer-for-of
                 for (let i = 0; i < children.length; i++) {
 
                     const child = children[i];

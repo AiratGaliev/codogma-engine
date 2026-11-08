@@ -2,8 +2,11 @@ namespace colibri.ui.ide.properties {
 
     export abstract class BaseImagePreviewSection<T> extends controls.properties.PropertySection<T> {
 
+        private _imageControl: controls.ImageControl;
+
         static createSectionForm(
-            parent: HTMLElement, section: controls.properties.PropertySection<any>, getImage: () => controls.IImage) {
+            parent: HTMLElement, section: controls.properties.PropertySection<any>,
+            getImage: () => Promise<controls.IImage> | controls.IImage): controls.ImageControl {
 
             parent.classList.add("ImagePreviewFormArea");
 
@@ -18,24 +21,32 @@ namespace colibri.ui.ide.properties {
 
             requestAnimationFrame(() => imgControl.resizeTo());
 
-            section.addUpdater(() => {
+            section.addUpdater(async () => {
 
-                const img = getImage();
+                const img = await getImage();
 
                 imgControl.setImage(img);
 
                 requestAnimationFrame(() => imgControl.resizeTo());
             });
+
+            return imgControl;
         }
 
         createForm(parent: HTMLDivElement) {
 
-            BaseImagePreviewSection.createSectionForm(parent, this, () => this.getSelectedImage());
+            this._imageControl = BaseImagePreviewSection.createSectionForm(parent, this, () => this.getSelectedImage());
         }
 
-        protected abstract getSelectedImage(): controls.IImage;
+        protected getImageControl() {
+
+            return this._imageControl;
+        }
+
+        protected abstract getSelectedImage(): Promise<controls.IImage> | controls.IImage;
 
         canEditNumber(n: number): boolean {
+
             return n === 1;
         }
     }

@@ -74,6 +74,10 @@ namespace phasereditor2d.webContentTypes {
                     {
                         iconName: resources.ICON_FILE_TEXT,
                         contentType: core.CONTENT_TYPE_TEXT
+                    },
+                    {
+                        iconName: resources.ICON_FILE_FONT,
+                        contentType: core.CONTENT_TYPE_FONT
                     }
                 ]));
         }

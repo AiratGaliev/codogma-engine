@@ -135,7 +135,6 @@ namespace phasereditor2d.pack.core {
 
             const letters = xml.getElementsByTagName('char');
 
-            // tslint:disable-next-line:prefer-for-of
             for (let i = 0; i < letters.length; i++) {
 
                 const node = letters[i];

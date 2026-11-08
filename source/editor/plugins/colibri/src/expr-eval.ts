@@ -5,12 +5,10 @@ namespace exprEval {
     | ((...args: Value[]) => Value)
     | { [propertyName: string]: Value };
 
-  // tslint:disable-next-line:interface-name
   export interface Values {
     [propertyName: string]: Value;
   }
 
-  // tslint:disable-next-line:interface-name
   export interface ParserOptions {
     allowMemberAccess?: boolean;
     operators?: {
@@ -74,7 +72,6 @@ namespace exprEval {
     static evaluate(expression: string, values?: Value): number;
   }
 
-  // tslint:disable-next-line:interface-name
   export interface Expression {
     simplify(values?: Value): Expression;
     evaluate(values?: Value): any;

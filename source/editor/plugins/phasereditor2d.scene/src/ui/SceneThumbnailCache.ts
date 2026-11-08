@@ -5,8 +5,6 @@ namespace phasereditor2d.scene.ui {
     import controls = colibri.ui.controls;
     import core = colibri.core;
 
-    const localForage = window["localforage"] as LocalForage;
-
     export class SceneThumbnailCache extends ThumbnailCache<core.io.FilePath> {
 
         static _instance: SceneThumbnailCache;
@@ -25,7 +23,7 @@ namespace phasereditor2d.scene.ui {
             super("phasereditor2d.scene.ui.SceneThumbnailCache");
         }
 
-        createObjectImage(obj: core.io.FilePath): SceneThumbnailImage {
+        createObjectImage(obj: core.io.FilePath): controls.IImage {
 
             return new SceneThumbnailImage(obj);
         }

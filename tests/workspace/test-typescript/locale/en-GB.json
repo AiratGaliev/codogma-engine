@@ -1,0 +1,10 @@
+{
+    "schemaVersion": 1,
+    "locale": "en-GB",
+    "messages": [
+        {
+            "id": "menu.play",
+            "text": "Play"
+        }
+    ]
+}

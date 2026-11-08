@@ -15,6 +15,13 @@ namespace phasereditor2d.pack.ui.properties {
             sections.push(new pack.ui.properties.AnimationPreviewSection(page));
             sections.push(new pack.ui.properties.BitmapFontPreviewSection(page));
             sections.push(new pack.ui.properties.ManyBitmapFontPreviewSection(page));
+            sections.push(new pack.ui.properties.SpritesheetPreviewSection(page));
+            // shortcut: texture preview requires compressed texture runtime not in Phaser 4.2.1
+            sections.push(new pack.ui.properties.TexturePreviewSection(page));
+            sections.push(new pack.ui.properties.TextureAtlasPreviewSection(page));
+            sections.push(new pack.ui.properties.TextureMultiAtlasPreviewSection(page));
+            sections.push(new pack.ui.properties.AudioPreviewSection(page));
+            sections.push(new pack.ui.properties.VideoPreviewSection(page));
             sections.push(new pack.ui.properties.TilemapTiledSection(page));
 
             const provider = new files.ui.views.FilePropertySectionProvider();

@@ -1,0 +1,14 @@
+{
+    "name": "sveltepoc-build",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Build toolchain for the phasereditor2d.sveltepoc PoC plugin (Svelte 5 + esbuild). Not part of the editor runtime; the compiled bundle is committed.",
+    "type": "module",
+    "scripts": {
+        "build": "node build.mjs"
+    },
+    "devDependencies": {
+        "esbuild": "^0.25.0",
+        "svelte": "^5.57.3"
+    }
+}

@@ -1,6 +1,207 @@
 # Change Log
 
+## Unreleased (2026-11-01 — TypeScript-only source policy)
+
+### Engineering standards
+
+* Standardized all new Codogma-owned production modules, backend/service logic, tooling and tests on TypeScript; UI containing JSX uses TSX.
+* Required TypeScript config files wherever tooling supports them natively, while retaining native declarative formats such as JSON/YAML, HTML, CSS and `.pen` sources.
+* Made the full strict TypeScript compiler profile mandatory for each new TS/TSX scope, disabled JavaScript in the Editor Host tsconfig and aligned ADR-0002, ADR-0005, the technical specification, migration docs, README and agent instructions.
+* Explicitly preserved existing legacy JS/MJS, generated and vendored files from automatic mass migration; new feature logic must not be added to JavaScript files.
+
+## Unreleased (2026-11-01 — TypeScript-only Editor Host and Vitest)
+
+### Editor Host
+
+* Converted all five new Host domain models from JavaScript modules plus `.d.mts` sidecars to typed TypeScript implementations.
+* Migrated the Host's unit/integration tests to TypeScript and Vitest; converted Playwright acceptance specs, config and isolated backend fixture launcher to TypeScript.
+* Removed JavaScript support from the Host TypeScript scope, included unit and browser test sources in typecheck, and separated Vitest and Playwright test discovery.
+* Kept the Node backend, legacy Colibri client and repository-level JavaScript smoke/security tooling outside the Host migration boundary.
+
+### Verification
+
+* [CI Fast #478](https://github.com/AiratGaliev/codogma-engine/actions/runs/41338597813) — **success** on HEAD `5345dc2c10c6cf7665dc527b8ee6b37afd0d9478`; both `editor-host` and `fast-checks` jobs passed. The Host install step ran `npm ci --no-audit --no-fund` from the committed lockfile.
+* SolidJS Host full ADR-0002 strict typecheck + Vite production build — **success**.
+* Vitest — **6 test files, 36 tests passed, 0 failed**.
+* Chromium Playwright acceptance — **9 passed**.
+* `fast-checks` — **success**, including root/editor build, regression suite, server/security smoke, mini-service security, localization and MCP package checks.
+* Committed `src/editor/package-lock.json` and switched the Editor Host CI install to `npm ci --no-audit --no-fund`; setup-node caching now keys off the lockfile and the generated-lockfile artifact upload was removed.
+
+## Unreleased (2026-11-01 — Sprite asset authoring and reimport)
+
+### Editor
+
+* Added versioned, serialized Codogma metadata for image and frame assets, with stable asset/frame IDs, source/import fingerprints, schema migration and preservation of unknown compatible fields.
+* Added per-frame Inspector editing for normalized pivot, frame-local trim/crop rectangles and validated rectangle/circle/polygon collision shapes. The Inspector covers image-frame containers, including atlas frames.
+* Added source reimport for Image and Spritesheet entries. Compatible frame metadata is preserved; changed/removed frame geometry is archived and reported as conflicts; failures restore original Asset Pack data. Batch image import now rolls back partial entries on failure.
+* Connected authored pivot/crop/trim to placed Scene objects and generated Phaser code. A single rectangle or circle can initialize a Phaser Arcade Body; polygon and compound metadata remain persisted but are not misrepresented as supported Arcade fixtures.
+* Retained existing Scene Editor NineSlice and TileSprite tools; sorting layers/groups continue under the shared render-order contract in COD-41.
+* Added contextual `console.error` reporting when Asset Pack recovery after a failed reimport also fails; the original reimport error remains the primary propagated error.
+
+### Tests
+
+* Added metadata migration/serialization, source reimport reconciliation/rollback, batch-import atomicity, frame-geometry validation, TextureComponent crop/trim and Arcade rectangle/circle mapping tests.
+* Added focused regressions for existing NineSlice slice-edge and TileSprite repeat-position/scale Inspector properties.
+
+### Documentation
+
+* Documented the sprite metadata schema, coordinate spaces, reimport reconciliation, runtime adapter boundaries and separate browser acceptance in `docs/sprite-asset-metadata.md`.
+* Added [Editor Logging & Diagnostics](docs/editor-logging-and-diagnostics.md) as a planned architecture direction, with requirements based on Unity 6, Godot 4 and Cocos Creator references; updated the technical specification, roadmap and capability matrix. The general logger and Console panel are not implemented by this PR.
+
+
+## Unreleased (2026-10-30 — filesystem security documentation reconciliation)
+
+### Documentation
+
+* Reconciled README, roadmap and capability matrix with the descriptor-backed implementation already integrated in `dev`: verified file reads/content writes, Linux descriptor-anchored directory mutations/copy/listing and their adversarial symlink-swap tests.
+* Clarified that non-Linux pathname-based mutation fallback and moving an already-open directory outside the project root remain unaccepted race boundaries; cross-platform acceptance stays in CODQA-7.
+
+## Unreleased (2026-10-29 — mini-service network hardening)
+
+### Security
+
+* The standalone MCP bridge now validates loopback `Host` headers for HTTP and WebSocket
+  upgrades, refuses non-loopback bind addresses, and uses bounded HTTP header/request timers.
+* AI Chat now fails closed when configured to bind outside loopback, normalizes IPv6 Host
+  headers correctly, and uses bounded HTTP header/request timers.
+* Added negative regression coverage for foreign HTTP/WebSocket Host headers and attempted
+  external binds. Remote service access remains unsupported without an authenticated tunnel.
+
+## Unreleased (2026-10-29 — descriptor-verified project file access)
+
+### Security
+
+* Added descriptor-verified project file reads. MCP file/text/asset metadata reads now consume bytes from an opened descriptor validated against the project root; HTTP project/editor static responses stream from a validated file handle instead of reopening a pathname.
+* Routed MCP `project-write-file` through the existing validated write-handle primitive rather than `fsp.writeFile(path)`.
+* Added Linux descriptor-anchored helpers for project directory creation, deletion and rename; wired the HTTP project API and MCP project-file tools to use them. Added deterministic parent-symlink-swap regressions for delete, rename and directory creation.
+* Added descriptor-verified one-level directory enumeration for the HTTP project file tree and MCP project file listing; Linux reads metadata through the verified `/proc/self/fd` directory handle and skips symlink entries.
+* Added deterministic regression tests that swap a parent directory for an outside symlink immediately before open and assert that neither read nor write exposes/modifies the outside file.
+* Replaced HTTP `CopyFile`'s path-based recursive `fsp.cp()` with descriptor-aware recursive copying: source files use verified handles without following final symlinks, destination files are staged in a temporary sibling and committed with an anchored rename on Linux, and symbolic-link entries are rejected. Tests cover file/tree copies and source/destination parent-symlink swaps.
+* Bounded AI-chat attachment ingestion to a 24 KiB prefix read from a verified handle rather than loading the full file before truncation. Static project/editor files and `/archive/<name>` content are streamed from validated descriptors; directory index lookup uses verified directory enumeration rather than path-based `stat`/`existsSync`.
+* HTTP `CreateFolder` reads final directory metadata with descriptor-backed `fstat`. MCP Scene/Prefab create operations use exclusive, descriptor-anchored creation and cannot overwrite a file that appears after an earlier existence check.
+* MCP project reads no longer use a separate pathname-based `existsSync` before the verified read; Spine JSON metadata uses descriptor-backed file metadata lookup. Added symlink/outside-root and non-overwrite regression tests.
+* This is partial hardening, not a claim that TOCTOU is fully resolved. Non-Linux path-based fallback and races where an opened directory is moved outside after verification still lack a proven cross-platform guarantee and acceptance. Trusted installation metadata (`EDITOR_DIR`/`PLUGINS_DIR`) remains outside the user-project threat boundary.
+
+## Unreleased (2026-10-29 — Particle Emitter codegen regressions)
+
+### Tests
+
+* Added focused tests in `tests/editor-codegen.test.mjs` for Particle Emitter code generation: unset texture uses Phaser's `__DEFAULT` key, configured frames survive code generation, explicit texture keys remain intact, and clearing frames removes stale `frame` config.
+* Added lifecycle regression tests against the real `colibri.ui.controls.Controls.createImageFromBlob()` owner: blob URLs are revoked on both successful image load and decode error. Added recoverability tests for actual `ThumbnailCache` behavior when IndexedDB reads or writes reject: a fresh preview remains available, and optional persistence failures do not fail the preview. Added direct `AudioPreviewSection` tests for string, string-array and `{ type, url }` descriptor paths, including malformed entries.
+
+---
+
+## Unreleased (2026-10-29 — scoped TypeScript quality pilot)
+
+### Tooling
+
+* Added a quality-pilot surface for the already-strict `packages/localization` module:
+  scoped TypeScript/Node ESLint coverage, a package-local Prettier profile, and `typecheck` / `lint` / `format:check` / existing Node unit-test scripts.
+* Added report-only Knip and dependency-cruiser configuration with explicit package entry points, shared-tool exclusions and non-blocking severities. Knip has no unused findings in the accepted CI report; dependency-cruiser reports no violations for the 8-module/15-dependency package graph. Existing Node `node:test` coverage remains; no new test framework or duplicate toolchain dependencies are added to the package lockfile.
+* Normalized the complete package-owned TypeScript source, Node tests and CLI with Prettier. `format:check` now runs read-only over the full source/test/CLI/config scope.
+* CI Fast runs clean installs, package quality checks and reports before existing localization diagnostics/runtime acceptance. Strict/lint/format gates remain scoped to this package and are not enabled across the legacy editor tree.
+
+## Unreleased (dev; обновлять при каждом принятом изменении)
+
+Unreleased work tracked here: editor reliability, FX and Box2D codegen/runtime follow-ups, Svelte PoC, MCP robustness and regression suites. The heading is not evidence that browser/runtime acceptance is complete; see the explicit open gates below.
+
+### Box2D / code generation
+
+* Fix: prefab body generation selects the world ID according to the consuming scene's configured mode. Exposed world-generation/debug settings in Inspector, declares the generated `worldId` property and imports `PhaserDebugDraw` from the separate helper file. Incomplete standalone B2Body/B2Shape nodes are deferred until their Inspector/schema/body-ID/prefab/runtime contracts are complete. Browser/runtime acceptance remains a separate gate.
+
+### Editor
+
+* Fix: pack SpriteSheet frame layout now matches the Phaser runtime exactly —
+  row/column fit formula, margin/spacing handling, window frame naming
+  (sequential, not absolute), `endFrame: 0` no longer misread as "unbounded";
+  frame rects never exceed the image bounds (952361e).
+* Fix: color values in both conventions (editor `#hex` strings and Phaser
+  numeric colors from external tools/prefabs) are normalized everywhere.
+  Previously a numeric tint silently became 0 (black) AND was persisted into
+  the scene JSON, re-throwing on every reload
+  ("this.color.replace is not a function"); shape/FX colors were dropped to
+  their defaults (258cbe0).
+* Fix: FX render helpers (Circle background/ring, Gradient object) no longer
+  leak into the editor object model — scenes with Circle/Gradient FX opened
+  empty with an error alert and `[object Object]` outline rows before
+  (258cbe0).
+* Fix: Undo/redo reliability, Enter commit in Inspector fields, scene data
+  migrations and update command (86b9baa). The file API now validates the opened
+  descriptor before truncating/writing existing content (62c5ac6). This narrows
+  the write-path race, but does **not** close every filesystem TOCTOU: folder
+  creation and path-based rename/copy/move/delete still need race-resistant
+  treatment and explicit concurrency tests.
+* Feat: Godot editor icons integrated with light/dark variants (249227e).
+* Feat: limited Svelte 5 PoC plugin (`phasereditor2d.sveltepoc`) with live and
+  mock bridges, isolated build toolchain and ADR-0004 decision record; the
+  workbench stays colibri-based (21bda49).
+
+### Server / MCP
+
+* Extracted `readRequestBuffer()` into `server/request-body.mjs` and added unit tests for exact-limit chunked bodies, streaming 413 after the cap, misdeclared Content-Length, early declared oversize rejection, stream errors, invalid limits, aborted requests and premature close before HTTP message completion. Aborted/incomplete streams now reject and remove their listeners rather than leaving an awaiter pending. This exercises stream-enforcement logic using small buffers instead of large CI payloads.
+* Security: reject declared JSON API bodies above 32 MiB and multipart uploads above 128 MiB before buffering their contents; keep the streaming cap for chunked/misdeclared bodies and return HTTP 413 consistently. Malformed JSON is reported as HTTP 400.
+* Fix: MCP launcher probes the official-package bridge and falls back to the
+  built-in stdio server when the bridge is served by another process or has
+  no connected editor — external MCP hosts keep working in any deployment
+  (1e7f9d4).
+* Extended MCP e2e: JSON Schema validity of all 66 tools under the forced Zod
+  4.6.7 override, malformed-argument rejection without killing the server,
+  and post-failure liveness (1e7f9d4).
+* Strengthened MCP schema acceptance with recursive validation of nested JSON Schema keywords and optional fields in both the built-in tools and the official Zod 4.6.7 bridge; the live E2E also checks nested optional object-list fields and validates the standard `tools/call` content array shape.
+* Fix: reverse-proxy Host allow-list and Origin guard for gateways that
+  rewrite headers (0545a29, fb03067); guarded `/archive/` snapshot route
+  (1094f1c).
+
+* Added the private first-party TypeScript package `@codogma/editor-mcp-server` under `packages/editor-mcp-server/`. It exposes the Engine-owned MCP registry over stdio via loopback `POST /editor/mcp`; the main launcher prefers this package and retains the dependency-free stdio fallback. npm publication remains deferred.
+* Added contract coverage for the 59 upstream Phaser MCP tool names, unique names, Ajv compilation of the Engine-owned JSON Schemas, nested/alternative argument validation and image content blocks. Spine skin PNG preview uses the active editor/SSE thumbnail renderer; live browser acceptance remains separate (CODQA-8).
+
+### Tests
+
+* `tests/editor-color-values.test.mjs` — 11 regression tests for color
+  normalization, tint round-trips, FX wrapper color parsing and helper-object
+  marking (258cbe0).
+* `tests/editor-data-preview.test.mjs` — 21 tests locking audio/video URL
+  forms, spritesheet margin/spacing parity, JS/TS printer undefined handling,
+  JSON semantics and thumbnail cache safety (952361e).
+* `tests/editor-codegen.test.mjs` — migrations, Serializer and code printer
+  regressions (9f95063).
+* Security smoke: loopback/Host/Origin guard, `/archive/`, symlink
+  containment, official MCP/Zod compatibility.
+
 ## Codogma Engine 1.0
+
+### Unreleased (COD-62 / COD-64)
+
+- Acceptance imports `@codogma/localization` through the public package entry point.
+- Added CI execution and automated CLI tests for project localization diagnostics, including structured file-system errors.
+- Applied position-aware BCP 47 subset validation to parsing, service initialization, locale switching and project validation; malformed region/variant/extension forms are rejected, and invalid initial locales no longer depend on table insertion order.
+- Added `LOC_FILE_ERROR` to the diagnostic contract and corrected documentation for placeholder mismatch severity and unverified browser integration.
+
+* Adds optional localization support: `@codogma/localization` in `packages/localization/`
+  with a versioned localization tables contract (schema version 1: `schemaVersion`,
+  `locale`, explicit `messages: [{ id, text }]` entries), a runtime service with key
+  lookup, named parameter substitution and deterministic fallback
+  (active locale → configured fallback locale → visible `[[id]]` marker), and
+  structured `LocalizationDiagnostic` reporting with deduplication.
+* Adds a localization validator that rejects broken JSON, missing/unsupported schema
+  versions, invalid entries/ids/texts and duplicate message ids, and reports
+  missing/extra keys and mismatched placeholders between locales
+  (`validateLocalizationProject`).
+* Adds the fixture locale tables `tests/workspace/test-typescript/locale/`
+  (`en-US`, `ru-RU`, sparse `en-GB` for the fallback path) and the acceptance check
+  `tests/localization-acceptance.mjs` that loads them through the play-mode HTTP route
+  and exercises the compiled runtime service.
+* Adds root scripts `test:localization` and `test:localization:acceptance`, and wires
+  both into CI Fast as extra steps (install/audit/build/test of the new package).
+* Documents the implemented contract, fallback rules, validation semantics and known
+  limitations (RTL/complex shaping/ICU not claimed) in `docs/localization.md`, and
+  updates the technical specification, capability matrix and roadmap (COD-62).
+* Review fixes: a fallback locale registered later via `registerTable` becomes active
+  (previously stayed disabled), duplicate table registration warns
+  (`LOC_DUPLICATE_REGISTRATION`) and keeps the first table, placeholder validation skips
+  keys missing in the reference locale (no spurious blocking error), parse errors no
+  longer misuse the `messageId` field, and runtime placeholder-mismatch wording matches
+  the actual behavior.
 
 First release under the Codogma Engine name. Rebranded from Phaser Editor 2D (open-source v3 client fork) with version 1.0 (`source/editor/product.json`).
 

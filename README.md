@@ -1,240 +1,639 @@
 # Codogma Engine
 
-**Codogma Engine** is a web-based IDE to develop HTML5 games. The games are powered by the popular [Phaser](https://phaser.io) framework (Phaser **4.2.1**).
+**Codogma Engine is an independent, actively evolving project for building 2D HTML5 games.** The goal is to grow it into a coherent engine with its own architecture, runtime workflow, visual editor, project model and developer tools.
 
-> Codogma Engine is an open-source fork of the [Phaser Editor 2D v3](https://github.com/PhaserEditor2D/PhaserEditor2D-v3) client (MIT, by Arian Fornaris) with a full local server implementation, Phaser 4.2.1 support and the v5 feature set. The original product is not part of the Phaser project — [phaser.io](https://phaser.io).
+The current implementation provides a browser-based authoring environment, a local Node.js server, Phaser 4.2.1 integration, scene/code-generation tools and MCP-based automation. Some parts are established editor functionality; the broader engine architecture is still evolving. This README describes verified behaviour and known limits without treating planned capabilities as already implemented.
 
-![Codogma Engine screenshot](https://github.com/PhaserEditor2D/PhaserEditor2D-v3/raw/master/screens/preview.png "Codogma Engine preview")
+- **Product:** Codogma Engine
+- **Current product version:** 1.0 (see <code>source/editor/product.json</code>)
+- **Current game framework/runtime integration:** Phaser 4.2.1
+- **License:** MIT — see [LICENSE](LICENSE)
+- **Build notes:** [BUILD.md](BUILD.md)
 
-* Version: **1.0** (see `source/editor/product.json`)
-* License: **MIT**
+## Project direction
 
-### Main features
+Codogma Engine is a standalone 2D Web-first engine with its own native Project Model, TypeScript Component system, runtime and SolidJS Editor Host. The temporary UI client under `source/editor/` is frozen and retained only as a read-only inventory/temporary rollback artifact until production `/editor/` cutover (COD-87), the bounded rollback window and physical removal (COD-88). All new UI and authoring workflows belong to `src/editor/`; Core/runtime/build/services use native Codogma contracts. The frozen legacy boundary prohibits feature work, ordinary bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance and modernization of legacy code, manifests, lockfiles, scripts or dependencies. The only exception is a minimal, one-time security mitigation for a confirmed critical vulnerability while the legacy route is still receiving production traffic; it must be strictly necessary to mitigate that vulnerability and must not become ongoing support. Cutover/rollback work is limited to the technical actions required by COD-87. See [ADR-0007](docs/decisions/ADR-0007-native-codogma-project-model.md), [Editor UI migration plan](docs/editor-ui-migration.md), [ADR-0005](docs/decisions/ADR-0005-solidjs-editor-host.md) and [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md) (sole normative source for optional Data-Oriented ECS).
 
-* The IDE runs in the browser. It has a small Node.js backend (`server/server.mjs`, zero npm dependencies) that can be run in the cloud or locally.
+Development priorities:
 
-* It is lightweight and is focused on visual tools: Scene Editor, Asset Pack Editor, Animations Editor, User Components Editor, Code Mirror code editors.
+- Keep the editor, project files, runtime integration and tools working as one development workflow.
+- Evolve engine-specific APIs and architecture deliberately, rather than adding features solely to match another product.
+- Preserve working functionality while improving maintainability, tests and developer documentation.
+- Clearly distinguish implemented behaviour, known limitations and future work.
 
-* Friendly for collaborators: it is coded in TypeScript and provides an extensible plugin framework.
+**Source-language standard:** all new first-party functionality and tests are authored in TypeScript (`.ts`); UI components that contain JSX use `.tsx`. Tool configurations use TypeScript when supported natively; declarative formats such as `package.json`, `tsconfig.json`, GitHub Actions YAML, HTML, CSS and `.pen` remain in their native formats. New strict scopes use the full compiler profile and do not add JavaScript feature logic. Existing JavaScript/MJS sources, generated files and vendored sources remain outside a new strict scope unless that scope explicitly includes them; see [ADR-0002](docs/decisions/ADR-0002-typescript-toolchain.md) for the exact boundary.
 
-* It follows the Phaser standards and API. Extra plugins or runtimes are not required.
+This direction does **not** mean every planned engine subsystem already exists. Check the implementation and tests before relying on a capability or describing it as complete.
 
-### Documentation
+## AI-assisted development
 
-The editor is based on the Phaser Editor 2D v3 client, which is [fully documented](https://docs.codogma.com) — most documentation applies as-is.
+Start every coding session with [AGENTS.md](AGENTS.md), including a new chat with no previous conversation context. It explains the project bootstrap, architecture guardrails and which installed skill to load for each kind of task. The curated, version-controlled skill snapshots live under `.agents/skills/`; their upstreams, scope, limitations and update process are recorded in [docs/agent-skills.md](docs/agent-skills.md). The source/hash manifest is [skills-lock.json](skills-lock.json). Read only the skills relevant to the current task, then verify their recommendations against the technical specification, pinned dependencies and actual code.
 
-### Build and run
+Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL loss/recovery, iframe host contracts, resource/memory budgets, storage failures and mobile/embedded-host acceptance are explicit requirements. See [the architecture risk register](docs/architecture-risk-register.md).
 
-See [BUILD.md](BUILD.md).
+## Current capabilities
 
-### Licensing
+| Area | Available today |
+|---|---|
+| Browser-based IDE | The Node.js server currently serves the temporary UI client at <code>/editor/</code>. The independent SolidJS Host runs in parallel from <code>src/editor/</code> on Vite; production route cutover is not complete. |
+| Scene authoring | The SolidJS Host provides the initial Phaser-backed Scene Canvas, selection and Transform interactions. The complete native Project/Scene save/reopen workflow and data-driven Preview are being integrated through the Project Model and Scene Loader. |
+| Project assets | Native Asset Library, Sprite metadata, import and reimport workflows are being implemented for the SolidJS Host in [COD-86](https://linear.app/codogma-engine/issue/COD-86/sozdat-native-asset-library-i-realizovat-sprite-authoring-v-solidjs). See [Sprite asset metadata](docs/sprite-asset-metadata.md) for the target metadata contract. |
+| Animation and components | The Host has basic animation clip/frame operations and initial Component surfaces. Full Timeline/tracks/keyframes/curves/events belong to COD-84; native Script Asset + manifest-backed User Components belong to COD-91 (using Core contracts COD-26/COD-27); native Prefab overrides remain in COD-8. |
+| Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
+| Core and ECS | `@codogma/cge` currently provides the initial host-neutral Project Model and object/component `ComponentWorld` foundation. Optional Data-Oriented ECS and its Phaser adapter are **not implemented**; their architecture and acceptance source is [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), with implementation owned by COD-111/112. |
+| HTML5 build optimization | The current Phaser delivery uses a vendored full Phaser 4.2.1 bundle. A verified selective Phaser build, physical feature pruning and complete Feature/Capability Registry are **not yet implemented**. Upstream Arcade-only UMD and custom/ESM paths must be compared on reproducible generated-game fixtures before making bundle-size or tree-shaking claims. |
+| Scene effects and objects | SolidJS Host implements Circle/Bloom/Gradient/Shine Inspector controls and Phaser-backed preview. Persisted Project Model integration and Preview/Build runtime parity remain separate capabilities; independent UX/reference review is tracked by CODQA-19. |
+| Spine authoring and preview | A complete native SolidJS Host authoring/preview workflow is not yet implemented. See COD-90, session-aware routing COD-85 and browser/runtime acceptance CODQA-20 (live MCP checks also CODQA-8). |
+| Audio groups and particle preview | Native SolidJS authoring/preview controls are not yet implemented. See COD-61 and CODQA-13. |
+| Editable tilemaps | Native Tilemap authoring is not yet implemented in SolidJS Host. See COD-40 and CODQA-14. |
+| Physics authoring | Native Arcade/Box2D authoring and runtime integration are being developed in COD-42; live Box2D runtime acceptance remains in CODQA-1. Standalone B2Body/B2Shape nodes are not currently supported. |
+| MCP integration | Private TypeScript package <code>@codogma/editor-mcp-server</code> exposes the engine-owned registry over stdio and forwards requests to <code>POST /editor/mcp</code>. The live Editor SSE bridge requires session-aware routing (COD-85) before all Host sessions can use it concurrently. |
+| AI Chat | Optional separate backend under <code>mini-services/ai-chat</code>; it is not required to start the editor itself. |
 
-The code in this repository is under the MIT license (see [LICENSE](LICENSE)). Codogma Engine is based on the open-source Phaser Editor 2D v3 client by Arian Fornaris; the original Phaser Editor products remain (c) Arian Fornaris. Codogma Engine modifications and additions are (c) Airat Galiev.
+This table is a practical overview, not a guarantee that every feature has identical behaviour in every runtime. Tools that open a scene in the live editor or capture a screenshot require the editor UI to be running and connected. Some generated game code can also require runtime modules that are not included in the core Phaser bundle. Verify the relevant feature and runtime dependencies before shipping a game.
 
-## What is included in this deployment
+## Quick start
 
-* **`server/server.mjs`** — a dependency-free Node.js implementation of the IDE server protocol
-  (the official server binary is closed-source and only distributed from
-  `updates.phasereditor2d.com`). It serves the editor UI at `/editor/`, the REST file API
-  (`POST /editor/api`), project files (`/editor/project/…`), the play mode (`/editor/external/…`)
-  and uploads (`/editor/upload`).
+### Requirements
 
-* **Phaser 4.2.1 runtime & types** — `source/editor/plugins/phasereditor2d.phaser` bundles the
-  Phaser 4.2.1 dist (`scripts/phaser.js` / `phaser.min.js`) and the Phaser 4.2.1 TypeScript
-  definitions (`src/phaser/phaser.ts`, `src/phaser/matter.ts`), so the Scene Editor previews and
-  compiles games against Phaser 4.
+- Node.js 22 (the version used by CI).
+- npm, included with Node.js.
+- A modern browser.
+- Git to clone the repository.
 
-* **Phaser 4 API adaptations** in the `phasereditor2d.scene` plugin:
-  - FX controllers were migrated from `Phaser.FX.*` (v3) to `Phaser.Filters.*` (v4):
-    the Glow / Shadow scene objects now create filters via
-    `gameObject.enableFilters().filters.internal/external`.
-  - The generated user code targets the Phaser 4 FilterList API.
-  - `Phaser.Geom.Point` usages were migrated to `Phaser.Math.Vector2` (the `Point` class was
-    removed in Phaser 4).
-  - The docs database (`phasereditor2d.resources/_res/...`) includes the Phaser 4 `Filters.*`
-    documentation entries.
+### Install and run
 
-* **Modernized UI themes** — refreshed dark / light palettes, cleaner buttons, tabs, menus,
-  scrollbars and dialogs, and a modern system font stack.
+Clone the repository and install both root and editor dependencies:
 
-* **MCP Server (AI agents integration) — the GENUINE official package** — reuses
-  [`@phaserjs/editor-mcp-server`](https://github.com/phaserjs/editor-mcp-server)
-  (the official Phaser Editor v5 MCP server, installed as an npm dependency) on top of a
-  v5-compatible **MCP bridge port** implemented by the local server:
+~~~bash
+git clone https://github.com/AiratGaliev/codogma-engine.git
+cd codogma-engine
 
-  - **Official stdio server (recommended)** — `npm run mcp` spawns the real
-    `@phaserjs/editor-mcp-server` (tool schemas, descriptions and prompts come from
-    upstream, so the tool set stays in sync with the official editor) and connects it
-    with the running editor through `POST http://127.0.0.1:1902 {tool, args}`:
-    ```json
-    {
-      "mcpServers": {
-        "phaser-editor": {
-          "command": "npx",
-          "args": ["@phaserjs/editor-mcp-server"],
-          "env": { "phaser-editor-mcp-port": "1902" }
-        }
+npm ci
+
+cd source/editor
+npm ci
+npm run build
+cd ../..
+
+npm start
+~~~
+
+This default command currently serves the **temporary UI client** at `http://127.0.0.1:3000/editor/`; it does not start the SolidJS Host. Run the SolidJS Host independently; see [Run the new SolidJS Editor Host](#run-the-new-solidjs-editor-host-parallel-migration-mode) below.
+
+Open **http://127.0.0.1:3000/editor/**.
+
+The server should respond at that address, and product metadata should be available at [http://localhost:3000/editor/product.json](http://localhost:3000/editor/product.json).
+
+**Security boundary:** the main editor server (`server/server.mjs`) and its built-in MCP bridge bind to IPv4 loopback (`127.0.0.1`) and are intended for trusted local development, not direct public-network exposure. Host/Origin, request-size and common path/symlink escapes are checked. Project-file reads and content-file writes use opened file handles that are validated against the selected project root. On Linux, project directory creation, deletion, rename, one-level enumeration, exclusive MCP scene/Prefab creation and copy use operations anchored to already-open directory descriptors; symlink entries are rejected or skipped, and regression tests exercise parent-symlink swaps. This is **not** a portable race-free filesystem guarantee: non-Linux mutation fallbacks still use pathname operations after containment/identity rechecks, and a directory already opened and verified can still be moved outside the project root before a descriptor-anchored operation completes. Keep the server loopback-only and do not treat the entire filesystem API as race-proof; cross-platform guarantees remain subject to the acceptance tracked in [CODQA-7](https://linear.app/codogma-engine/issue/CODQA-7/provesti-cross-platform-acceptance-fajlovoj-bezopasnosti). The optional standalone services under `mini-services/` are separate processes and do **not** inherit the main server's guard. Both currently default to loopback and implement Host/Origin validation and request limits, but host binding can be overridden by environment variables and neither is an authenticated public API. Keep them local; do not bind them to a public interface or expose them through a multi-user proxy without separate authentication/authorization design and service-level security tests.
+
+**Running behind a reverse proxy:** a local proxy that publishes the editor (a sandbox preview, a tunnel, a container port-mapping) connects from loopback but forwards the public `Host` header, which the guard above rejects by default. Prefer an explicit comma-separated `CODOGMA_ALLOWED_HOSTS` allow-list. `npm run dev:proxy` is a convenience for a trusted development tunnel, not a production-safe security profile: it sets wildcard Host/Origin allowances unless overridden. Loopback binding protects the local server socket from direct remote connections; it does **not** protect users from malicious requests sent through a proxy that is already exposed to the network.
+
+**Gateways that rewrite the `Host` header:** some platforms serve the page from one domain while the local gateway forwards an internal `Host` name the browser never sees, so the browser `Origin` can never equal `Host` and every API call would get a 403. Set <code>CODOGMA_ALLOWED_ORIGINS</code> to the narrowest trusted browser-origin allow-list that works (exact origins first; scheme-locked subdomain wildcards only when required). Setting it to `*` disables the effective Origin allow-list and accepts requests from any browser origin; this is **not** protected by a claim that same-origin checks still block cross-site requests. Never use a wildcard Origin on a public or multi-user proxy. Prefer, for example, <code>CODOGMA_ALLOWED_ORIGINS='https://editor.example.com' CODOGMA_ALLOWED_HOSTS='editor.example.com' npm start</code> in a trusted private environment, and keep the server bound to loopback.
+
+### Run the new SolidJS Editor Host (parallel migration mode)
+
+The new Host runs independently from the temporary UI client.
+
+**Terminal 1 — existing backend:**
+
+Bash:
+
+```bash
+CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173 npm start
+```
+
+PowerShell:
+
+```powershell
+$env:CODOGMA_ALLOWED_ORIGINS = "http://127.0.0.1:5173"
+npm start
+```
+
+**Terminal 2 — SolidJS Host:**
+
+```bash
+npm --prefix src/editor ci
+npm run dev:editor-host
+```
+
+Open **http://127.0.0.1:5173/**. The Vite server binds to IPv4 loopback, uses strict port 5173 and proxies only the existing `/editor/*` backend routes to port 3000. The exact Origin allow-list is required because the proxy rewrites the backend Host header; do not replace it with a wildcard.
+
+The first Host slice provides a Phaser-backed Scene Canvas, object selection, Move/Rotate/Scale gestures, Hierarchy and Inspector/Transform synchronization, and an initial Game View iframe. This describes the implemented UI surface; complete native Project Model persistence, Scene Loader and Preview lifecycle are separate implementation stages. The frozen legacy client remains available only for the existing route and bounded rollback arrangement until COD-87/COD-88.
+
+Root shortcuts:
+
+```bash
+npm run dev:editor-host
+npm run build:editor-host
+npm run test:editor-host
+npm run test:editor-host:browser
+```
+
+Browser acceptance uses a temporary copy of `tests/workspace/test-typescript`; it never points the test backend at a developer's project. Until the new Host gains session-aware MCP routing and a cross-client write/version contract, use only one UI to write to a given project directory at a time.
+
+### Select a game project
+
+By default, the server opens the test project in <code>tests/workspace/test-typescript</code>. This is useful for local development and CI, but it is not intended to be your own game project. Point <code>PROJECT_DIR</code> at the directory you want to edit.
+
+Bash:
+
+~~~bash
+PROJECT_DIR=/absolute/path/to/my-game npm start
+~~~
+
+PowerShell:
+
+~~~powershell
+$env:PROJECT_DIR = "C:\path\to\my-game"
+npm start
+~~~
+
+The server uses these defaults unless overridden:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| <code>PORT</code> | <code>3000</code> | HTTP port for the editor server. |
+| <code>PROJECT_DIR</code> | <code>tests/workspace/test-typescript</code> | Game project files served and edited by the IDE. |
+| <code>EDITOR_DIR</code> | <code>source/editor</code> | Editor client directory served by the server. |
+| <code>DEV_MODE</code> | Unset / disabled | Set to <code>1</code> to load plugin development scripts where available. |
+| <code>CODOGMA_MCP_URL</code> | <code>http://127.0.0.1:3000/editor/mcp</code> | Loopback HTTP MCP endpoint used by <code>@codogma/editor-mcp-server</code>; only the exact local endpoint path is accepted. |
+| <code>AI_CHAT_SERVICE</code> | <code>http://127.0.0.1:3031</code> | URL of the optional AI Chat backend. |
+
+Use a project directory you control. Avoid pointing the development server at a directory containing private files that should not be accessible to the editor or its tools.
+
+## Repository layout
+
+| Path | Responsibility |
+|---|---|
+| <code>server/server.mjs</code> | Local HTTP server, current Editor/project APIs, file operations, play-mode serving, AI Chat endpoint and engine-owned MCP HTTP endpoint. |
+| <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package; startup fails with an actionable error if the package is missing or has not been built. |
+| <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
+| <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and the MCP HTTP/stdio security boundary. |
+| <code>source/editor/</code> | Frozen legacy Colibri UI client: read-only inventory and temporary rollback artifact only; removed after the SolidJS production cutover and rollback window (COD-88). No ongoing maintenance or modernization. |
+| <code>src/editor/</code> | Independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons and domain/browser tests. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
+| <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
+| <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
+| <code>tests/workspace/test-typescript/</code> | Default fixture project for development and CI. |
+| <code>.github/workflows/ci.yml</code> | Fast pull-request checks and branch-route validation. |
+| <code>.github/workflows/e2e.yml</code> | Full E2E gate (MCP integration + SolidJS Host Playwright browser acceptance) for promotion PRs to <code>test</code> and <code>main</code>. |
+| <code>.github/workflows/release.yml</code> | Build, smoke-test and ZIP artifact workflow for <code>main</code>. |
+| <code>BUILD.md</code> | Additional build notes. |
+| <code>.github/pull_request_template.md</code> | Pull Request description and acceptance checklist. |
+
+**Optional runtime packages:** ECS remains an approved but not yet implemented optional workstream, owned by COD-111/112. Current status is tracked in the [capability matrix](docs/capability-matrix.md); the sole normative architecture and acceptance source is [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+
+**Package source layout:** the first standalone tooling package follows the ТЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root/editor/local package boundaries and lockfiles remain separate. The SolidJS Editor Host is an independent application under `src/editor/`; it is not a mechanical move of `source/editor/`. The temporary UI client remains on its current route until production cutover is accepted, then its source and UI-only assets/dependencies are physically removed under COD-88. npm Workspaces, Feature/Capability Registry and a public/versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
+
+**SolidJS frontend model:** the new Host uses JSX/TSX and fine-grained reactivity. Solid compiles JSX into DOM operations and updates nodes that depend on changed signals/stores; it does not use Virtual DOM reconciliation. Its JSX is familiar to React developers, but its component execution and reactive-state model are different: components are not re-rendered as React function components on each state update. Use Solid primitives such as `createSignal`, `createMemo`, `createStore`, `createEffect` and `onCleanup`, and the `vite-plugin-solid` integration rather than copying React Hooks patterns.
+
+## Daily development commands
+
+Run these commands from the repository root unless noted otherwise.
+
+| Command | Purpose |
+|---|---|
+| <code>npm start</code> | Start the local editor server. |
+| <code>npm run dev</code> | Start the server and pipe its output to <code>dev.log</code> (requires a shell with <code>tee</code>). |
+| <code>npm run dev:proxy</code> | Like <code>npm run dev</code>, but accept any `Host` header from loopback peers (<code>CODOGMA_ALLOWED_HOSTS=*</code>) and any browser `Origin` (<code>CODOGMA_ALLOWED_ORIGINS=*</code>, overridable) for publishing behind a trusted local reverse proxy. |
+| <code>npm run build</code> | Build/type-check the editor client through TypeScript project references. |
+| <code>npm run watch</code> | Run the editor TypeScript compiler in watch mode. Start the server separately if you need to use the editor. |
+| <code>npm run mcp</code> | Start the Codogma stdio MCP package through the launcher (when package dependencies are installed and built); the editor server must be running. |
+
+| <code>npm run build:mcp</code> | Build the standalone MCP package TypeScript sources. |
+| <code>npm run test:mcp-package</code> | Run isolated stdio/HTTP bridge contract tests for the package. |
+| <code>npm run build:editor-host</code> | Typecheck and production-build the independent SolidJS Host in <code>src/editor/</code>. |
+| <code>npm run test:editor-host</code> | Run SolidJS Host domain tests. |
+| <code>npm run test:editor-host:browser</code> | Run Chromium browser acceptance for the implemented Host slice. |
+| <code>npm run test:e2e</code> | Run the engine MCP integration test driver. Start the editor server first. |
+| <code>npm run test:all</code> | Run the complete local test collection, including MCP E2E. This is not the routine feature-PR gate; automated E2E gating starts at promotion (<code>dev → test</code>). Install dependencies in each package first and start the editor server for MCP E2E. |
+
+For a typical local code change:
+
+1. Use the SolidJS Host for all new authoring and native Project Model work. The temporary UI client remains available only during the bounded rollout/rollback period.
+2. Make the change in the SolidJS Host or shared native domain/runtime subsystem.
+3. For root/server changes,
+4. For MCP work, run the package contract tests and relevant security tests. Full MCP and browser E2E suites are not run on topic-branch PRs; their CI gate starts only on <code>dev → test</code> promotion.
+5. For UI, generated-code or runtime changes, add/update scoped automated regression coverage and the relevant browser-test source/fixtures in the topic PR. Do not run formal manual/browser/runtime acceptance after each Engineering issue and do not block the COD issue or the next dev task on that acceptance. Queue it in CODQA and execute it against the integrated `test` branch only after the relevant changes for the candidate have arrived there.
+
+### MCP integration tests
+
+The standard test command checks MCP initialization and tool registration (including the upstream Spine skin-image tool), queries scenes, creates a temporary scene, adds objects, exercises prefab/asset tools and verifies that a texture size can be read. The package contract suite also compares the full upstream tool-name set, compiles every real engine JSON Schema and checks nested/alternative argument validation plus image-content forwarding. The generated test scene is removed during cleanup. The Spine image renderer itself remains a browser/SSE acceptance path, not part of the default headless E2E.
+
+Terminal 1:
+
+~~~bash
+npm start
+~~~
+
+Terminal 2:
+
+~~~bash
+npm run test:e2e
+~~~
+
+By default, these checks exercise server-side MCP capabilities. Optional checks that open a scene and request a screenshot require a running and connected editor UI and can be enabled with <code>MCP_E2E_WITH_EDITOR=1</code>. The default CI job does not enable this UI-specific mode.
+
+## Architecture and integration boundaries
+
+The current implementation has three main runtime areas:
+
+1. **SolidJS Editor Host** — the independent application under <code>src/editor/</code> and target for new UI/authoring workflows.
+2. **Temporary UI client** — a separate browser application under <code>source/editor/</code>, removed after production cutover and the bounded rollback window.
+3. **Local server** — <code>server/server.mjs</code> exposes current Editor/project/file APIs, play-mode serving and the engine-owned HTTP MCP endpoint.
+4. **Game project/runtime** — the editable project is selected by <code>PROJECT_DIR</code>. The target Codogma workflow loads native Scene data and registered Script/Component modules. Runtime dependencies must match the native project/build contract.
+
+The server also integrates with the optional AI Chat backend. That backend is a separate service and can be run independently.
+
+### Transitional dual-editor development
+
+During the UI cutover window, the two independent UIs run as separate browser applications. Their coexistence is only a deployment/rollback arrangement:
+
+| UI host | Development address | Role |
+|---|---|---|
+| Temporary UI client | `http://127.0.0.1:3000/editor/` | Frozen legacy client; read-only inventory and rollback only |
+| New SolidJS Editor Host | `http://127.0.0.1:5173/` | Independent Vite dev server; all new UI development and authoring workflows |
+
+The intended development topology is **two UI hosts, one backend API**. The Vite server proxies the existing `/editor/*` project/API routes to the Node.js server on port 3000; browser code should call relative proxied paths rather than making direct cross-origin requests to the backend. The Node server supports an exact Origin allow-list: configure only `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173` for the Vite origin. Do not use `*`, do not bind either development server to a public interface, and keep the backend's loopback and Host protections enabled. The Vite port is not the Node server's `PORT` variable.
+
+Both clients may be open for visual comparison, but **do not edit the same project from both clients at the same time**. They maintain independent in-browser state, selection, undo histories and caches; the current project-file API does not provide a cross-client editing lock or conflict-resolution protocol. Use one writer at a time, or separate fixture/project copies and independent backend instances for write acceptance.
+
+The current Editor SSE transport broadcasts commands to connected clients and accepts the first matching result. Until session-aware routing is implemented in [COD-85](https://linear.app/codogma-engine/issue/COD-85/realizovat-session-aware-mcp-sse-routing-dlya-neskolkih-editor-host), only one Editor session may own the shared SSE connection. Concurrent Host sessions require isolated backend/transport instances. This restriction is separate from HTTP MCP tools that do not need a live editor session.
+
+The two-port arrangement is a development setup, not a permanent production requirement. The legacy client is not an active development target: it is frozen for read-only inventory and temporary rollback only. At cutover, the built SolidJS UI is served by the existing local backend under the normal editor URL; the temporary UI route is retained only for a bounded rollback window and removed after acceptance. Full details and gates are in the [migration plan](docs/editor-ui-migration.md).
+
+### HTTP endpoints
+
+The local server exposes editor routes including:
+
+- <code>/editor/</code> — editor UI;
+- <code>/editor/product.json</code> — product metadata used by the editor;
+- <code>POST /editor/api</code> — editor project/file API;
+- <code>/editor/project/...</code> — project file access used by editor components;
+- <code>/editor/external/...</code> — project files for play mode;
+- <code>/editor/upload</code> — uploads;
+- <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint;
+- <code>/archive/</code> and <code>/archive/&lt;filename&gt;</code> — development-only download of a prepared full-project snapshot (see below).
+
+
+### Full-project development snapshots
+
+The <code>/archive/</code> endpoint is a development hand-off mechanism for retrieving an archive of the current project snapshot. It is separate from the Release workflow's <code>codogma-engine-release</code> artifact: this endpoint serves a prepared full-project archive from the repository root, including the files captured by the development snapshot process.
+
+- <code>GET /archive/</code> selects the most recently modified matching archive in the repository root and responds with a redirect to its download URL.
+- <code>GET /archive/&lt;filename&gt;</code> downloads a specific snapshot by name. <code>HEAD</code> is supported for metadata checks without downloading the body.
+- Accepted filenames match <code>codogma-engine-&lt;snapshot-id&gt;.zip</code> or <code>codogma-engine-&lt;snapshot-id&gt;.tar.gz</code>, where the snapshot ID contains only letters, digits, <code>+</code>, <code>.</code>, <code>_</code> and <code>-</code>. The endpoint does not build an archive itself; the snapshot must already exist as a regular file in the repository root.
+- If no matching snapshot exists, <code>/archive/</code> responds with <code>404</code>. An invalid filename is rejected; unsupported HTTP methods return <code>405</code>.
+
+**Access boundary:** snapshots may contain the complete source tree, development fixtures and documentation, so treat this as a trusted development endpoint, not a public artifact distribution service. The server binds to loopback and the route goes through the same Host/Origin guard as other HTTP routes. If access is provided through a reverse proxy, allow only the required trusted hosts and browser origins; do not expose this endpoint to an untrusted network or use wildcard proxy allow-lists in shared/public environments. Do not commit generated snapshots to the repository.
+
+## MCP and AI tooling
+
+Repository-wide instructions for coding agents are in [AGENTS.md](AGENTS.md). The curated third-party skills used during engine development, their upstream sources, limitations and update procedure are documented in [docs/agent-skills.md](docs/agent-skills.md). The source/hash manifest is [skills-lock.json](skills-lock.json); the selected skill snapshots live under `.agents/skills/` and are committed with the project.
+
+Codogma now owns a private TypeScript MCP stdio package at
+<code>packages/editor-mcp-server/</code>. Its npm package name is
+<code>@codogma/editor-mcp-server</code>. The adapter uses the official MCP TypeScript SDK,
+but it does not define a second copy of the editor tools: it fetches the actual JSON
+Schemas from the engine and forwards tool calls to <code>POST /editor/mcp</code>.
+The registry, instructions, validation and execution remain owned by
+<code>server/mcp.mjs</code>.
+
+The package is private while its API and release process are being validated. It is
+not published to npm yet. The <code>npx</code> configuration below is the target form
+after a future publication, not a currently installable public package.
+
+### Local development
+
+Start the editor server:
+
+~~~bash
+npm start
+~~~
+
+In another terminal, install and build the package dependencies:
+
+~~~bash
+npm --prefix packages/editor-mcp-server ci
+~~~
+
+Configure the MCP host to launch the package-backed launcher from this checkout
+(use an absolute path):
+
+~~~json
+{
+  "mcpServers": {
+    "codogma-engine": {
+      "command": "node",
+      "args": ["/absolute/path/to/codogma-engine/server/mcp-launcher.mjs"],
+      "env": {
+        "CODOGMA_MCP_URL": "http://127.0.0.1:3000/editor/mcp"
       }
     }
-    ```
-  - **Bridge port 1902** — `server/server.mjs` listens on it and implements the official
-    bridge contract (`{tool, args}` in, MCP content array out) against the **full official
-    tool set**: IDE tools (scenes, prefabs, prefab inheritance, nested prefabs, prefab
-    user properties), scene tools (game objects, plain objects incl. `Collider`/`Tilemap`,
-    render order, containers, **Phaser 4 filters** — Glow/Shadow/Blur/…, arcade physics
-    enable/disable, object lists), asset tools (textures, sizes, bounding boxes,
-    bitmap fonts, spritesheets, spine, tilemaps, **Google Fonts**) and
-    `get-system-instructions`. Tools that need the running editor UI (open scene, active
-    scene, screenshots) are forwarded to the editor page over an SSE bridge
-    (`/editor/mcp-bridge/events`), exactly like the official server does with the
-    desktop application. When agents modify project files, the editor re-syncs its
-    file tree automatically (files-changed push).
-  - **Built-in fallback servers** (zero-dependency, no npm install needed):
-    `POST /editor/mcp` (Streamable HTTP JSON-RPC) and `node server/mcp-stdio.mjs` —
-    same tool implementations plus project file utilities and Google Fonts tools.
-  - **MCP Server Configuration dialog** in the editor toolbar (`MCP` button): shows the
-    official package config, the HTTP endpoint, the bridge status and the tools list.
-  - The Spine skin rendering preview is the only tool area with reduced fidelity in this build
-    (this build is based on the v3 open-source client); everything else is fully functional,
-    including the v5 **editable tilemap** tools (`scene-add-editable-tilemap`,
-    `scene-add-tileset-to-editable-tilemap`, `scene-delete-tileset-from-editable-tilemap`,
-    `scene-add-editable-tilemap-layer`, `scene-resize-editable-tilemap-layer`,
-    `scene-write-editable-tilemap-layer-data`, `scene-fill-editable-tilemap-layer-data`,
-    `scene-get-editable-tilemap-layer-selection-data`).
+  }
+}
+~~~
 
-* **AI Chat (v5-style feature)** — the `AI` toolbar button opens an assistant
-  that plans and executes game content creation through the same MCP tools (create scenes,
-  add objects with arcade physics, take screenshots to verify, open scenes in the
-  editor). The LLM backend runs in `mini-services/ai-chat` (port 3031,
-  `npm run dev`), the agent loop lives in `server/server.mjs` (`POST /editor/ai-chat`).
+The launcher starts <code>packages/editor-mcp-server/dist/cli.js</code> when the
+package and its dependencies are installed. Otherwise it explicitly falls back
+to the dependency-free <code>server/mcp-stdio.mjs</code> implementation.
 
-## v5 feature parity
+After a future npm publication, the intended direct configuration will be:
 
-The editor client (version **1.0**, see `source/editor/product.json`) was extended to match the
-official [Phaser Editor v5](https://docs.phaser.io/phaser-editor/) functionality (based on the
-official v5.0.0 changelog and documentation):
+~~~json
+{
+  "mcpServers": {
+    "codogma-engine": {
+      "command": "npx",
+      "args": ["-y", "@codogma/editor-mcp-server"],
+      "env": {
+        "CODOGMA_MCP_URL": "http://127.0.0.1:3000/editor/mcp"
+      }
+    }
+  }
+}
+~~~
 
-* **All 24 Phaser 4 Filters as scene objects** (`Phaser.Filters.*` via
-  `filters.internal/external`): Glow, Shadow, Barrel, Blend, Blocky, Blur, Bokeh, ColorMatrix,
-  CombineColorMatrix, Displacement, GradientMap, ImageLight, Key, NormalTools, ObjectMask,
-  PanoramaBlur, ParallelFilters, Pixelate, Quantize, Sampler, TextureMask, Threshold, Vignette,
-  Wipe — each with Inspector sections (Internal/External list switch), Outline integration,
-  serialization and compiler code generation (`addShadow(...)`, `addBlur(...)` …).
-  The *Shader Effects* dialog lists them all.
+The stdio adapter loads the tool list when its process starts. Restart the MCP process
+after changing the engine or its tool registry. Project/file operations are executed by
+the engine server. Tools that need the active scene, screenshots or other live editor
+state also require the editor page to be open and its SSE bridge connected.
 
-* **New user property types**: `Array`, `JSON` (textarea + validation),
-  `Game Object Reference`, `Spine Event`, `Spine Slot Name`.
+### Optional AI Chat service
 
-* **New user property parameters**: *Editor Only* (kept out of the compiled output) and
-  *Deprecated* (hidden in the Inspector view).
+The AI Chat backend is located in <code>mini-services/ai-chat/</code> and listens on port <code>3031</code> by default when started with its development command.
 
-* **New commands**: *Expand All* (`E`, every viewer), *Toggle Editor Render* (`H` — hide an
-  object from the scene editor rendering without affecting the game), *Set Editor Render to All*,
-  *Unbox Prefab Instance* (inline a prefab instance into plain objects), *Find Duplicated
-  Objects in Scene* (debug command), plus an Outline gutter icon to toggle the editor render.
-
-* **New game objects**: `Video` (url/loop/mute/autoplay + loader support) and
-  `ParticleEmitter` (texture/frame/animation, speed, angle, gravity, lifespan, scale, alpha,
-  quantity, frequency, duration — full config code generation `this.add.particles(x, y, key, {...})`).
-
-* **Rectangle Rounded** property (rounded corners), **Blend Mode** section for every
-  game object (all 27 Phaser 4 blend modes).
-
-* **Scene compiler user sections**: `/* START-USER-INTERFACES */` (declare custom TS interfaces,
-  preserved between compilations) and `/* START-USER-CLASS-MODIFIERS */` (e.g. `abstract`),
-  mirroring the official v5 compiler sections.
-
-* **AI main menu** (`AI`) with *MCP Server Configuration…* (auto-configures `.mcp.json` for
-  Cursor / VS Code / Claude Desktop), bridge enable toggle and the MCP message log;
-  the editor connects to the MCP bridge over WebSocket (`mini-services/phaser-editor-mcp`,
-  the standalone variant of the editor-side bridge).
-
-* **Editable Tilemap subsystem** (the flagship v5 feature): create an *Editable Tilemap*
-  from the Blocks view (creation wizard: label, columns, rows, tile size), add *tilesets*
-  from the project's image/spritesheet assets (with Tiled global-id rebasing when tilesets
-  are added/removed/edited), add *tilemap layers* (each layer is a selectable game object),
-  and paint with the **Tilemap Palette** (tileset canvas with zoom/pan, rectangular brush
-  selection) using the official tool set: *Stamp*, *Eraser* (Shift+click = bucket erase),
-  *Bucket Fill*, *Rectangle Fill* and *Rectangular Selection* (Delete clears, Ctrl+C/Ctrl+X
-  captures the region as a brush). Every stroke is one undoable operation. The layer is
-  highlighted with an orange border + tile grid in the *edit tilemap* mode. The scene
-  compiler embeds the map as Tiled-format JSON into the tilemap cache and generates the
-  standard Phaser API code:
-  ```ts
-  this.cache.tilemap.add("levelMap_<id>", { format: 1, data: { /* Tiled JSON */ } });
-  const levelMap = this.add.tilemap("levelMap_<id>");
-  levelMap.addTilesetImage("dino");
-  const mainLayer = levelMap.createLayer("mainLayer", ["dino"], 0, 0)!;
-  ```
-  All 8 official MCP tools mutate editable tilemaps in scene files server-side.
-
-* **Box2D physics support**: a *Box2D Physics* scene-settings section (enable, gravity X/Y,
-  allowSleep, debugDraw) and a *Box2D Body* component for the game objects (body type
-  static/kinematic/dynamic, density, friction, restitution, linear/angular damping,
-  gravity scale, fixedRotation, bullet, allowSleep, box/circle shape with size override),
-  with an outline/body tool, serialization and compiler code generation
-  (`new Phaser.Box2D.World(this, {gravity…})`, `box2dWorld.createBody({…})`,
-  `box2dBody.createFixture(new Phaser.Box2D.Box(w, h), {…})`). The Phaser Box2D runtime
-  ships as a separate Phaser module (it is not part of the bundled `phaser.js` dist);
-  add it to your game to run the generated code. Minimal `Phaser.Box2D` ambient types
-  are included so scenes compile.
-
-* **Compressed Textures UI**: an Inspector section for image/spritesheet asset pack items
-  to declare per-format variants (WEBP, AVIF, KTX2, PVR, DDS) with file browse + clear
-  controls; variants round-trip through the `.assetPack` JSON (only when set) and count
-  as used files for the ignore-file set. The loader keeps emitting the standard image URL
-  (variants are metadata for export pipelines).
-
-* **Start page**: a welcome dialog on project open (once per session, "Show on launch"
-  preference) with quick actions (New Scene, New Asset Pack, Open File…, Settings…,
-  Documentation) and the 8 most recently modified scene/pack/code files; also available
-  via the *Start Page…* menu command.
-
-* **Settings dialog**: unified categories — Appearance (theme + UI font size),
-  Scene Editor (snap/grid defaults), AI & MCP (bridge host/port/enabled, shared with the
-  MCP bridge preferences) and Updates (current version + *Check now*).
-
-* **Go-To dialog** (`Ctrl+Alt+P`): fuzzy quick-open over all project files and asset
-  pack entries; Enter opens the file in its editor.
-
-* **AI chat scene-file attachments**: the AI Chat panel gains a `+` button to attach
-  project files (multi-select tree dialog, max 8); attachments are sent with the message
-  (`POST /editor/ai-chat {attachments: […]}`), the server reads them (path-traversal
-  guarded, 24 KB per file / 96 KB total caps, binary skipped) and prepends a structured
-  context block to the LLM prompt.
-
-* **Check for Updates**: Help-cluster command comparing the product version (`1.0`) with
-  the local update source — the editor server's `/editor/product.json` (5 s timeout,
-  fully graceful offline).
-
-Still not implemented from the official v5 (documented gaps): *Spine skin rendering
-fidelity* in some preview cells, and the *desktop-only* features (auto-update binaries,
-telemetry), which do not apply to a web deployment.
-
-#### Run
-
-```bash
-npm run dev                                  # editor server at http://localhost:3000/editor/
-cd mini-services/ai-chat && npm run dev      # optional: AI Chat backend on port 3031
-```
-
-Environment variables: `PORT` (default `3000`), `PROJECT_DIR`
-(default `tests/workspace/test-typescript`), `EDITOR_DIR` (default `source/editor`),
-`DEV_MODE=1` (loads the dev scripts of the plugins).
-
-#### Build the client
-
-```bash
-cd source/editor
+~~~bash
+cd mini-services/ai-chat
 npm install
-npm run build        # compiles all plugins with the TypeScript project references
+npm run dev
+~~~
+
+The editor server forwards its AI Chat endpoint to the URL configured by <code>AI_CHAT_SERVICE</code>. This service is optional; it is not required for the editor server, scene editing or the standard MCP integration tests. Follow the backend's own setup requirements for its model/provider integration.
+
+## CI and release workflow
+
+CI Fast is the routine development gate. **No E2E suite is run on topic-branch PRs into <code>dev</code>. All automated E2E suites start only at the <code>dev → test</code> promotion PR and continue on later release-promotion PRs. There are no path-based or per-subsystem E2E exceptions.
+
+| Workflow / job | Trigger | Main checks |
+|---|---|---|
+| **CI Fast** — <code>fast-checks</code> | PR targeting <code>dev</code>, <code>test</code> or <code>main</code>; manual dispatch | Markdown-only PRs run changed-document checks (final newline, LF, fenced blocks and newly added relative links) and skip npm installation/build/runtime tests. PRs with non-Markdown changes run the full fast code checks. Dependency audits run only for package scopes whose manifest/lockfile changed (or when <code>.npmrc</code> changes); manual dispatch audits every scope. |
+| **E2E** — <code>mcp-integration</code> | Promotion PR <code>dev → test</code>, then <code>test → main</code> or allowed emergency <code>hotfix/* → main</code> | Runs the complete existing E2E gate: SolidJS Host Playwright browser acceptance and MCP stdio integration through <code>POST /editor/mcp</code>. No manual dispatch or feature-PR E2E run. |
+| **Release Codogma Engine** — <code>release-archive</code> | Push to <code>main</code>; manual dispatch | Builds the client and MCP package, smoke-tests the server and uploads a ZIP artifact named <code>codogma-engine-release</code>. |
+
+The release workflow uploads a GitHub Actions artifact; it does not automatically publish a GitHub Release. The archive contains the server, editor client and selected root metadata/documentation. Check <code>.github/workflows/release.yml</code> before assuming an optional service or development fixture is included in the package.
+
+### Required status checks
+
+Branch Rulesets require these exact status names:
+
+| Target branch | Required checks |
+|---|---|
+| <code>dev</code> | <code>fast-checks</code> |
+| <code>test</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
+| <code>main</code> | <code>fast-checks</code>, <code>mcp-integration</code> |
+
+A successful build, unit/contract test or security smoke test does not guarantee that every UI workflow, generated game or browser-rendering path works. The full automated E2E suite is intentionally deferred until the promotion PR <code>dev → test</code> (and subsequent release promotions); do not add E2E execution to routine feature/fix PRs into <code>dev</code>.
+
+This defers the **full-suite run**, not the development of E2E coverage. When a change affects a cross-layer user workflow or an existing E2E scenario, add or update its scenario, fixture, assertions and cleanup alongside the subsystem change in the same topic PR. The routine PR gate remains fast; the mandatory full-suite run and system-level integration debugging happen on promotion. A small engineering task must not be forced to repair or rerun the entire aggregate suite. The remaining runtime and security follow-ups for the Scene Editor, Box2D, Asset Pack and project-file containment are tracked in [the roadmap](docs/roadmap.md). FX generated-game parity is verified on the CODQA-19 fixture; independent visual/reference review remains open.
+
+## Branches, Pull Requests and Mandatory Development Rules
+
+The branch flow is part of the project workflow, not a convention to bypass when a change is inconvenient. Treat these rules as mandatory for contributors and agents working in the repository.
+
+For the required Linear issue-state lifecycle (`Todo`, `In Progress`, `In Review`, `Done`), follow [Engineering and Linear Workflow Rules](docs/engineering-workflow.md). COD statuses describe Engineering delivery: `In Review` means code review/required CI checks are pending; `Done` means implementation criteria, scoped automated tests and CI Fast passed, and the reviewed PR is merged into `dev`. Functional/manual/browser/runtime acceptance belongs to separate top-level CODQA issues and is not a prerequisite for closing or advancing Engineering work.
+### Linear teams and issue ownership
+
+Linear work is split by responsibility across two teams in the shared **Codogma Engine** project:
+
+| Team | Issue identifiers | Owns |
+|---|---|---|
+| **Codogma-engine (COD)** | **COD-N** | Engineering delivery: implementation, fixes, architecture, automated tests and CI/tooling. |
+| **Codogma QA (CODQA)** | **CODQA-N** | Functional acceptance of editor/game workflows and release-candidate acceptance. |
+
+Create Engineering issues in COD and QA/acceptance issues in CODQA. **Never create CODQA issues as children/sub-issues of Engineering issues.** Keep each QA task as a top-level issue on QA Kanban and link it to relevant COD implementation scope only with the neutral `relatedTo` relation; do not use `blocks`/`blockedBy` across the teams. A defect discovered during QA becomes a separate Engineering/Bug issue in COD; do not move implementation work into the QA team.
+
+Both teams belong to the same [Codogma Engine Linear project](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63), whose lead team remains COD. Use the [Development Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/development-kanban-4db756f5f1c6) for engineering work and [QA Kanban](https://linear.app/codogma-engine/project/codogma-engine-1a4353b33f63/view/qa-kanban-918c848c9880) for QA work. Detailed ownership, Work type labels, acceptance evidence and state semantics are defined in [docs/engineering-workflow.md](docs/engineering-workflow.md). Team landing guides: [COD](https://linear.app/codogma-engine/document/codogma-engine-cod-team-home-and-working-agreement-c2f17d6e0e98) and [CODQA](https://linear.app/codogma-engine/document/codogma-qa-codqa-team-home-and-acceptance-guide-aac02e93222c).
+
+### Permanent branches
+
+| Branch | Purpose | What may be merged into it |
+|---|---|---|
+| `dev` | Daily integration branch | Topic branches through a PR; an explicitly justified hotfix integration when needed |
+| `test` | Acceptance branch for a release candidate | Only `dev` through a PR |
+| `main` | Stable branch and source of release archives | Only `test` or an emergency `hotfix/*` branch through a PR |
+
+The intended promotion route is **`topic branch → dev → test → main`**. Do not skip a stage for ordinary development work.
+
+### Non-negotiable rules
+
+1. **Never push changes directly to `dev`, `test` or `main`.** Create a branch and open a PR, including for documentation-only changes. The active GitHub Rulesets require PRs and passing status checks, block branch deletion and non-fast-forward updates, and do not allow bypassing the rules.
+2. **Never send routine feature or bug-fix branches directly to `test` or `main`.** Do not open `dev → main` or `test → dev` PRs. A routine release candidate must flow through `dev → test → main`.
+3. **Start ordinary work from the latest `dev`.** Do not create a new feature branch from a stale local branch, an unrelated topic branch or `test`/`main`.
+4. **Keep each PR focused on one coherent task.** Avoid unrelated refactors, speculative cleanup and unfinished partial work in the same PR. Split independently reviewable work into separate topic branches.
+5. **Do not promote a partial release candidate.** A `dev → test` PR means the changes proposed for that candidate are implemented, integrated and ready for acceptance—not that development needs to pause or that the entire long-term engine vision must be finished. Keep unfinished work in topic branches and merge it into `dev` when it is ready.
+6. **Do not bypass a failing check.** Do not disable a workflow, rename or remove a required status, weaken a test, or change the PR target solely to make a red check disappear. Fix the cause and rerun the checks, or document a genuine infrastructure failure and rerun the affected workflow.
+7. **Update tests and documentation with the change.** If behaviour, an API, generated code, a project format, setup, or a developer workflow changes, update the corresponding tests and documentation in the same PR. Never describe an unimplemented capability as complete.
+8. **Report evidence honestly.** List the commands run and their results. Explicitly call out checks not run and known limitations; do not mark skipped checks as passed.
+9. **Do not keep long-lived branches without a clear reason.** Keep topic branches aligned with the current integration work and remove them after they are no longer needed, subject to repository permissions and team coordination.
+
+### Creating a normal topic branch
+
+Start from an up-to-date `dev` and ensure your working tree is clean:
+
+~~~bash
+git status --short
+git switch dev
+git pull --ff-only origin dev
+git switch -c feat/<short-name>
+~~~
+
+Use a short, descriptive branch name and one of these prefixes:
+
+| Prefix | Use |
+|---|---|
+| `feat/*` or `feature/*` | New user-facing or engine functionality |
+| `fix/*` | Normal bug fix |
+| `refactor/*` | Internal restructuring without intended behaviour change |
+| `test/*` | Test coverage or test infrastructure |
+| `docs/*` | Documentation-only changes |
+| `chore/*` | Maintenance and tooling |
+| `hotfix/*` | Emergency fix for a release-blocking problem; not a substitute for an ordinary `fix/*` |
+
+Do not use branch names such as `work`, `changes` or `update` that do not communicate the change type. If a branch already contains changes based on an old `dev`, update it deliberately before opening the PR; do not silently change its base to another permanent branch.
+
+### Allowed PR routes
+
+| PR source → target | Status | Rule |
+|---|---|---|
+| `feat/*`, `feature/*`, `fix/*`, `refactor/*`, `test/*`, `docs/*`, `chore/*` → `dev` | Standard | Use for normal development; keep the PR scoped and ready to merge |
+| `dev → test` | Promotion | Only a complete, internally consistent acceptance candidate |
+| `test → main` | Release | Only after acceptance checks pass and the candidate is ready to become the stable version |
+| `hotfix/* → main` | Emergency exception | Only for a release-blocking defect that cannot wait for the normal promotion route; explain the urgency and test impact in the PR |
+| `hotfix/* → dev` | Exceptional integration | The routing workflow currently accepts this, but it is not the standard development route. Explain why a hotfix must be integrated this way |
+
+A hotfix merged directly into `main` must subsequently be integrated back into `dev` through a PR, unless the fix is already present there. Include the backport plan in the hotfix PR. Do not use an emergency route for ordinary feature work.
+
+### Promotion gates
+
+Before opening **`dev → test`**, verify all of the following:
+
+- Every change intended for this candidate is merged into `dev`; there are no known release-blocking defects in the candidate.
+- The editor build and server smoke checks pass.
+- The MCP integration check is expected to run on this PR and must pass.
+- The full automated E2E gate passes on the promotion candidate. **Formal manual/browser/runtime acceptance is not a prerequisite to opening this PR or to continuing Engineering work.** After the `dev → test` PR is merged, CODQA executes applicable functional acceptance against the integrated `test` SHA and records evidence on QA Kanban. The default MCP integration suite is not a substitute for UI acceptance testing.
+- Relevant tests, setup notes and user/developer documentation are updated.
+- The PR description states the candidate scope, acceptance evidence, and any known limitations.
+
+Before opening **`test → main`**, confirm the candidate has been accepted on `test`, required checks pass, no known release-blocking issue remains, and the release notes/documentation accurately describe the shipped behaviour. Do not merge a release candidate just because the branch has accumulated changes or because a release is desired.
+
+If a promotion gate fails, stop the promotion. Fix the issue in the appropriate topic branch, merge the fix to `dev`, and create a fresh promotion PR when the candidate is ready. Do not use a partial `dev → test` PR as a way to deploy incomplete work.
+
+### Local checks before a PR
+
+For implementation changes, run commands from the repository root. Root, editor, localization and standalone MCP package dependencies are installed separately (there are no npm Workspaces yet). A Markdown-only PR does not require dependency installation or a game/editor build: CI runs the changed-document checks directly.
+
+~~~bash
+npm ci
+cd source/editor
+npm ci
+cd ../..
+cd packages/localization
+npm ci
+cd ../..
+cd packages/editor-mcp-server
+npm ci
+cd ../..
+npm run build
+npm run test:security
+npm run test:mcp-package
+~~~
+
+Run `npm audit --audit-level=low` in the affected package scope when its `package.json`, `package-lock.json` or applicable `.npmrc` changes. CI Fast applies the same scope selection; manual workflow dispatch runs every configured audit.
+
+Для запуска SolidJS Editor Host (`src/editor/`) выполните из корня репозитория:
+
+```bash
+npm ci --prefix src/editor
+npm run dev:editor-host
 ```
 
-### Credits
+`npm ci` обновляет локальную ссылку `file:../../packages/cge`. Команда `dev:editor-host`
+сначала собирает Core, затем одновременно запускает Node backend и Vite Host.
+Откройте `http://127.0.0.1:5173/` (порт берётся из `VITE_PORT`); backend API
+обслуживается на порту `PORT` из корневого `.env` (по умолчанию `3000`).
+Нажатие Ctrl+C останавливает оба процесса. Отдельно устанавливать зависимости
+`packages/cge` для обычной разработки Host не требуется.
 
-* **Phaser Editor 2D v3** (the base of this fork) — developed by
-  [Arian Fornaris](https://twitter.com/boniatillo_com), MIT license:
-  [github.com/PhaserEditor2D/PhaserEditor2D-v3](https://github.com/PhaserEditor2D/PhaserEditor2D-v3).
-* **Phaser** — Copyright (c) Phaser Studio: [phaser.io](https://phaser.io).
-* **MCP integration** — reuses the official
-  [@phaserjs/editor-mcp-server](https://github.com/phaserjs/editor-mcp-server) package as-is.
+Then run checks relevant to the change. The full automated E2E suites are not part of a topic PR into <code>dev</code>; they start at the promotion PR <code>dev → test</code>:
+
+| Change type | Required local acceptance |
+|---|---|
+| Documentation-only (`*.md`, `*.mdx`, `*.rst`) | No npm install/build is required. CI checks changed Markdown line endings, fenced blocks and newly added relative links. Run `git diff --check` locally when reviewing the patch. |
+| Code/build changes | Run `npm run build` before requesting merge; CI runs it as well |
+| Dependencies | Run `npm audit --audit-level=low` in every affected package scope. CI audits scopes whose manifest/lockfile changed, or all scopes when `.npmrc` changes; manual dispatch runs all audits. |
+| Server, bridge or MCP tools | Run `npm run test:security` and the isolated MCP package contract tests. The full MCP E2E suite runs only in promotion CI from `dev → test`. |
+| Editor UI, scene authoring, generated code or play mode | Run the relevant scoped typecheck/build/unit/domain/contract regression checks and update browser-test sources/fixtures when the workflow changes. Do not require formal manual/browser/runtime acceptance on each topic PR; CODQA performs it against an integrated `test` candidate. |
+| Localization package, locale tables, fallback or project diagnostics | Run `npm run test:localization`, `npm run test:localization:project` and `npm run test:localization:acceptance`; verify project diagnostics on representative locale tables |
+| Release candidate (`dev → test`) | Require the complete automated promotion E2E gate (MCP + Host browser suite). After merge to `test`, run the applicable CODQA browser/runtime/manual checks on the exact integrated SHA. |
+| Release candidate (`test → main`) | Require the complete promotion E2E gate and completed Release acceptance/evidence for the candidate SHA. |
+
+The optional UI-specific MCP checks can be enabled with `MCP_E2E_WITH_EDITOR=1` (PowerShell: `$env:MCP_E2E_WITH_EDITOR = "1"` before running `npm run test:e2e`). They require the editor UI to be running and connected. The default CI E2E job does **not** enable that mode.
+
+### Line endings and generated files
+
+The repository uses `.gitattributes` to keep ordinary source, configuration, documentation and SVG files on LF line endings across operating systems. Do not use a repository-wide `git add --renormalize .` as a routine cleanup: a line-ending migration must be reviewed and committed separately.
+
+`source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts` is generated Phaser TypeScript declaration output. Its current upstream-generated blob contains non-standard mixed carriage-return bytes, so Git deliberately does not apply end-of-line conversion to that one file and EditorConfig leaves its line-ending policy unset. It is also excluded from formatting. **Do not open and save it with automatic line-ending conversion, run a formatter on it, or hand-edit it.** Change the generator/input instead, regenerate the declarations, and review that generated output separately.
+
+When reviewing a diff that may contain line-ending noise, compare with `git diff --ignore-space-at-eol` to identify whether meaningful code changes remain. This is a diagnostic aid, not a substitute for checking the actual generated output.
+
+### Pull Request description checklist
+
+Every PR must describe:
+
+- **Goal:** the problem being solved and why the change is needed.
+- **Scope:** the main implementation changes and any intentionally excluded work.
+- **Checks:** exact commands or manual checks completed, with results.
+- **Gaps:** checks not run, environmental constraints, risks and known limitations.
+- **Documentation:** what was updated, or why no documentation change is needed.
+- **Routing:** why this source and target branch are correct; for promotions, the candidate scope and acceptance evidence; for hotfixes, the urgency and backport plan.
+
+Use the repository's [Pull Request template](.github/pull_request_template.md).
+
+### CI status checks and merge requirements
+
+The required GitHub Actions status names are:
+
+| PR target | Required status checks |
+|---|---|
+| `dev` | `fast-checks` |
+| `test` | `fast-checks`, `mcp-integration` |
+| `main` | `fast-checks`, `mcp-integration` |
+
+`fast-checks` validates branch routing, build/typecheck, unit/contract regression and security checks, server smoke tests, localization package tests and project diagnostics. It may run on ordinary topic PRs into `dev`, but it never installs Chromium or executes Playwright/MCP E2E. The required `mcp-integration` job runs only on promotion PRs: first `dev → test`, then `test → main` (and the documented emergency hotfix route). It executes both the SolidJS Host browser E2E suite and `npm run test:e2e`; the required status name stays `mcp-integration` so existing branch rules remain valid.
+
+The active Rulesets require PRs and successful checks, but **currently do not require reviewer approval**. That is a repository setting, not permission to bypass the PR, test, documentation or promotion rules in this section.
+
+## Troubleshooting
+
+### The editor page does not open
+
+- Confirm the server process is running and read its terminal output.
+- Open the configured URL, normally <code>http://localhost:3000/editor/</code>.
+- Check whether another process is using <code>PORT</code>; choose another free port if necessary.
+
+### The editor reports missing files or shows the wrong project
+
+Check <code>PROJECT_DIR</code>. If it is unset, the server uses the test fixture at <code>tests/workspace/test-typescript</code>. Use an absolute path to select your game project.
+
+### Changes to editor TypeScript are not visible
+
+Run <code>npm run build</code> from the repository root or <code>npm run watch</code> while developing. Confirm the server is serving the expected <code>EDITOR_DIR</code>.
+
+### MCP tools cannot connect
+
+- Start the Codogma Engine HTTP server before starting an MCP client.
+- Confirm that <code>CODOGMA_MCP_URL</code> points to the exact loopback endpoint <code>http://127.0.0.1:3000/editor/mcp</code> (adjust the port when the engine HTTP server uses a non-default port).
+- For active-scene, screenshot, tile-selection and Spine image-preview tools, open the editor page and wait for the SSE MCP bridge connection.
+
+### MCP E2E fails
+
+Start the server first, then run <code>npm run test:e2e</code>. Inspect the first MCP error in the terminal output and verify that root dependencies are installed. The standard test uses the fixture project unless <code>PROJECT_DIR</code> is overridden.
+
+## Documentation and contribution notes
+
+- [Build guide](BUILD.md)
+- [Editor documentation](https://docs.codogma.com)
+- [Technical specification (RU)](docs/technical-specification.md)
+- [Roadmap (RU)](docs/roadmap.md)
+- [Technical reference catalog (RU)](docs/REFERENCE-SOURCES.md)
+- [Capability matrix (RU)](docs/capability-matrix.md)
+- [Dependency and capability matrix (RU)](docs/dependency-capability-matrix.md)
+- [Code quality baseline (RU)](docs/code-quality-baseline.md)
+- [Performance baseline protocol (RU)](docs/performance-baseline.md)
+- [Core architecture ADR (RU)](docs/decisions/ADR-0001-core-architecture.md)
+- [TypeScript toolchain ADR (RU)](docs/decisions/ADR-0002-typescript-toolchain.md)
+- [Package architecture and npm-based Package Manager ADR (RU)](docs/decisions/ADR-0003-package-architecture-and-management.md)
+- [Optional Data-Oriented ECS and runtime performance ADR (RU)](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md)
+- [CI Fast workflow](.github/workflows/ci.yml)
+- [MCP E2E workflow](.github/workflows/e2e.yml)
+- [Release workflow](.github/workflows/release.yml)
+
+When changing architecture, project formats, compiler output, runtime integration or public editor/server APIs, update the relevant documentation and tests in the same PR. Prefer documenting stable contracts and verified behaviour; track broad engine goals and unfinished subsystems in the project's development plan rather than claiming them as implemented here.
+
+## Origins and licensing
+
+The current editor client includes code derived from the open-source Phaser Editor 2D v3 client. Its origin is relevant to attribution and license compliance, but it does not define Codogma's product direction. Preserve the copyright and license notices in [LICENSE](LICENSE).
+
+Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integration. Phaser and other third-party components remain subject to their own licenses and terms; review those terms when distributing the engine or a game built with it.
+
+
+MCP scene-object serialization tests cover typed properties
+
+MCP object serialization coverage also checks Shape stroke fields
+
+Arcade MCP tools validate supported physics properties
+
+
+The engine-owned get-system-instructions response documents the current scene and tool workflows: object hierarchy, plain objects and Tiled maps, editable tilemaps, prefabs and nested instances, object lists, Phaser 4 filters, Arcade physics, assets and Google Fonts, project-file operations, and UI/SSE requirements for visual tools. Package tests assert that these workflow sections remain present.

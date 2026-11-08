@@ -111,6 +111,24 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
             }
 
             {
+                // Import File Extension
+
+                const checkbox = this.createCheckbox(comp, this.createLabel(comp,
+                    "Add .js to module imports",
+                    "Use .js specifiers for emitted JavaScript modules, including TypeScript component sources."));
+
+                checkbox.addEventListener("change", () => {
+                    this.getEditor().runOperation(model => {
+                        model.importFileExtension = checkbox.checked;
+                    });
+                });
+
+                this.addUpdater(() => {
+                    checkbox.checked = this.getSelectionFirstElement().importFileExtension;
+                });
+            }
+
+            {
                 // Insert Spaces
 
                 const checkbox = this.createCheckbox(comp, this.createLabel(comp, "Insert Spaces", "Use spaces for indentation."));

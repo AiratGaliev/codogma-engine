@@ -62,6 +62,7 @@ namespace colibri.ui.controls {
             if (action.getIcon()) {
 
                 const iconControl = new controls.IconControl(action.getIcon());
+                btnElement["__iconControl"] = iconControl;
                 btnElement.appendChild(iconControl.getCanvas());
             }
 
@@ -119,6 +120,13 @@ namespace colibri.ui.controls {
             const textElement = btn["__text"] as HTMLElement;
 
             textElement.innerText = action.getText();
+
+            const iconControl = btn["__iconControl"] as controls.IconControl;
+
+            if (iconControl && iconControl.getIcon() !== action.getIcon()) {
+
+                iconControl.setIcon(action.getIcon());
+            }
 
             if (action.isSelected()) {
 

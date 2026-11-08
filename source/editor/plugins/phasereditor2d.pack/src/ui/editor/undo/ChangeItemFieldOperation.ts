@@ -25,7 +25,6 @@ namespace phasereditor2d.pack.ui.editor.undo {
 
             this._oldValueList = items.map(item => json.getDataValue(item.getData(), fieldKey));
 
-            // tslint:disable-next-line:prefer-for-of
             for (let i = 0; i < items.length; i++) {
                 this._newValueList.push(newValue);
             }

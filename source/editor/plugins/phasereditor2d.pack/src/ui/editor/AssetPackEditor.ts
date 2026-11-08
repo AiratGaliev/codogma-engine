@@ -398,31 +398,71 @@ namespace phasereditor2d.pack.ui.editor {
         async importData_async(importData: IImportData) {
 
             const before = undo.AssetPackEditorOperation.takeSnapshot(this);
+            let items: core.AssetPackItem[] = [];
 
-            const items = await importData.importer.autoImport(this._pack, importData.files);
+            try {
+                items = await importData.importer.autoImport(this._pack, importData.files);
 
-            const finder = new pack.core.PackFinder(this._pack);
+                const finder = new pack.core.PackFinder(this._pack);
 
-            for (const item of items) {
+                for (const item of items) {
+                    await item.preload();
+                    await item.build(finder);
+                }
 
-                await item.preload();
+                this._viewer.repaint();
+                await this.refreshBlocks();
+                this._viewer.setSelection(items);
+                this._viewer.reveal(...items);
+                this.setDirty(true);
 
-                await item.build(finder);
+                const after = undo.AssetPackEditorOperation.takeSnapshot(this);
+                this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
+            } catch (error) {
+                // Не оставляем частично построенные entries, если финальная сборка импорта завершилась ошибкой.
+                for (const item of items) {
+                    this._pack.deleteItem(item);
+                    item.resetCache();
+                }
+
+                this._viewer.repaint();
+
+                try {
+                    await this.refreshBlocks();
+                } catch (refreshError) {
+                    console.error("Не удалось обновить Asset Pack после отката импорта.", refreshError);
+                }
+
+                throw error;
+            }
+        }
+
+        async reimportItem_async(item: core.AssetPackItem) {
+
+            if (!item || !this._pack.getItems().includes(item)) {
+                throw new Error("The selected Asset Pack item is no longer available.");
             }
 
-            this._viewer.repaint();
+            const importer = importers.Importers.getImporter(item.getType());
 
-            this.setDirty(true);
+            if (!importer || !(item instanceof core.ImageFrameContainerAssetPackItem)) {
+                throw new Error("No compatible image importer is available for this asset.");
+            }
 
-            await this.refreshBlocks();
+            const before = undo.AssetPackEditorOperation.takeSnapshot(this);
 
-            this._viewer.setSelection(items);
-
-            this._viewer.reveal(...items);
+            await importer.reimportItem(this._pack, item);
 
             const after = undo.AssetPackEditorOperation.takeSnapshot(this);
-
             this.getUndoManager().add(new undo.AssetPackEditorOperation(this, before, after));
+
+            // Reimport уже изменил project model: она должна оставаться dirty
+            // даже если обновление preview/blocks завершится ошибкой.
+            this.setDirty(true);
+            this._viewer.repaint();
+            await this.refreshBlocks();
+            this._viewer.setSelection([item]);
+            this._viewer.reveal(item);
         }
 
         async refreshBlocks() {

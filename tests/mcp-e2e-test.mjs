@@ -1,5 +1,5 @@
 /**
- * Проверка MCP stdio через официальный @phaserjs/editor-mcp-server и мост Codogma Engine.
+ * Проверка MCP stdio через @codogma/editor-mcp-server и HTTP MCP endpoint Codogma Engine.
  *
  * По умолчанию проверяются протокол и инструменты, работающие на стороне сервера.
  * Для проверки скриншотов и открытия сцены нужен подключённый браузер редактора:
@@ -9,6 +9,7 @@ import assert from "node:assert/strict"
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import { spawn } from "node:child_process"
+import { assertToolInputSchema } from "./mcp-schema-contract.mjs"
 
 const cmd = process.argv[2] || "node"
 const args = process.argv.slice(3)
@@ -36,7 +37,7 @@ child.stdout.on("data", (chunk) => {
                 pending.delete(msg.id)
             }
         } catch {
-            // Официальный MCP-сервер может писать диагностические строки в stdout.
+            // Игнорируем не-JSON строки: MCP diagnostics должны идти в stderr.
         }
     }
 })
@@ -82,11 +83,19 @@ async function callTool(name, args) {
     if (response.error) throw new Error(`${name}: ${response.error.message}`)
 
     const result = response.result
-    const output = (result?.content || [])
+    if (!result) throw new Error(`${name}: пустой ответ MCP-сервера`)
+    assert.ok(Array.isArray(result.content), `${name}: tools/call result.content должен быть массивом`)
+    for (const [index, item] of result.content.entries()) {
+        assert.ok(item && typeof item === "object" && typeof item.type === "string",
+            `${name}: content[${index}] должен иметь строковый type`)
+        if (item.type === "text") {
+            assert.ok(typeof item.text === "string", `${name}: content[${index}].text должен быть строкой`)
+        }
+    }
+    const output = result.content
         .map((item) => item.type === "text" ? item.text : `[${item.type}]`)
         .join("\n")
 
-    if (!result) throw new Error(`${name}: пустой ответ MCP-сервера`)
     if (result.isError) throw new Error(`${name}: ${output}`)
     return output
 }
@@ -110,12 +119,65 @@ async function main() {
         "ide-create-new-scene",
         "scene-add-game-objects",
         "ide-get-all-prefabs-in-project",
-        "assets-get-texture-size"
+        "assets-get-texture-size",
+        "assets-get-spine-skin-image"
     ]
     for (const name of requiredTools) {
         assert.ok(toolNames.includes(name), `В MCP не найден обязательный инструмент: ${name}`)
     }
     console.log(`\n== tools/list == ${toolNames.length} tools`)
+
+    // --- engine JSON Schema / stdio adapter contract ---
+    // Package contract tests compile every real registry schema with Ajv and
+    // exercise nested, alternative and required argument validation. Here we
+    // check the live MCP surface and content-array responses on the real engine.
+    console.log("\n== tool input schemas (JSON Schema) ==")
+    let nestedSchemaCount = 0
+    let optionalFieldCount = 0
+    for (const tool of list.result.tools) {
+        const stats = assertToolInputSchema(tool.name, tool.inputSchema)
+        nestedSchemaCount += stats.nestedSchemaCount
+        optionalFieldCount += stats.optionalFieldCount
+    }
+    assert.ok(nestedSchemaCount > 0, "official MCP schemas must include nested properties")
+    assert.ok(optionalFieldCount > 0, "official MCP schemas must include optional fields")
+    console.log(`${list.result.tools.length} tools: recursive input schemas valid with Zod 4, ${nestedSchemaCount} nested fields and ${optionalFieldCount} optional fields checked`)
+
+    console.log("\n== validation rejects malformed arguments without killing the server ==")
+    // 1) неверный тип значения (Zod invalid_type)
+    const badType = await request("tools/call", {
+        name: "assets-get-texture-size",
+        arguments: { texture: { key: 12345 } }
+    })
+    assert.ok(badType.error || badType.result?.isError,
+        "невалидные аргументы (число вместо string) должны отклоняться, а не выполняться")
+    // 2) полностью отсутствующие аргументы
+    const missing = await request("tools/call", {
+        name: "assets-get-texture-size",
+        arguments: {}
+    })
+    const missingOutput = (missing.result?.content || [])
+        .filter((item) => item.type === "text")
+        .map((item) => item.text || "")
+        .join("\n")
+    assert.ok(
+        missing.error
+            || missing.result?.isError
+            || /missing(?: or invalid)? texture key/i.test(missingOutput),
+        "пустые аргументы должны явно отклоняться: ожидается протокольная ошибка либо текстовая ошибка валидации bridge"
+    )
+    // 3) неизвестный инструмент
+    const unknown = await request("tools/call", {
+        name: "definitely-not-a-real-tool",
+        arguments: {}
+    })
+    assert.ok(unknown.error || unknown.result?.isError,
+        "неизвестный инструмент должен возвращать ошибку")
+    console.log("невалидные вызовы отклонены (3/3), сервер остался работоспособен")
+    // сервер обязан остаться работоспособным после неудачных вызовов
+    const stillAlive = JSON.parse(await callTool("ide-get-all-scenes-in-project", {}))
+    assert.ok(Array.isArray(stillAlive.scenes),
+        "после ошибок валидации сервер должен продолжать отвечать корректно")
 
     console.log("\n== ide-get-all-scenes-in-project ==")
     const initialScenes = JSON.parse(await callTool("ide-get-all-scenes-in-project", {}))
@@ -138,6 +200,14 @@ async function main() {
             { type: "Text", properties: { label: "score", text: "Codogma CI passed", x: 250, y: 60, color: "#ff9d45" } }
         ]
     })
+
+    console.log("\n== optional nested object fields (Zod 4 compatibility) ==")
+    const objectList = JSON.parse(await callTool("scene-add-object-list", {
+        sceneId: scene.id,
+        lists: [{ label: `E2E-optional-list-${process.pid}` }]
+    }))
+    assert.ok(Array.isArray(objectList.added) && objectList.added.length === 1,
+        "scene-add-object-list must accept nested items while omitting optional scope/objectIds")
 
     console.log("\n== ide-get-all-prefabs-in-project ==")
     await callTool("ide-get-all-prefabs-in-project", {})

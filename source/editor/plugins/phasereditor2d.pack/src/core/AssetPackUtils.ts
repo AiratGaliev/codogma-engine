@@ -41,7 +41,7 @@ namespace phasereditor2d.pack.core {
 
                 const pack = await AssetPack.createFromFile(file);
 
-                if (pack) {
+                if (pack && pack.isVisible()) {
 
                     packs.push(pack);
                 }
@@ -55,10 +55,16 @@ namespace phasereditor2d.pack.core {
             const packFolder = packOrFolder instanceof AssetPack ? packOrFolder.getFile().getParent() : packOrFolder;
 
             const root = ide.FileUtils.getPublicRoot(packFolder);
-            const rootPath = root.getFullName();
-            const filePath = file.getFullName();
+            const rootPath = root.getFullName().replace(/\\/g, "/").replace(/\/+$/, "");
+            const filePath = file.getFullName().replace(/\\/g, "/");
 
-            if (filePath.startsWith(rootPath)) {
+            // Check a path-segment boundary, not just a string prefix:
+            // /publicity is not contained by /public.
+            if (filePath === rootPath) {
+                return "";
+            }
+
+            if (filePath.startsWith(rootPath + "/")) {
 
                 return filePath.substring(rootPath.length + 1);
             }

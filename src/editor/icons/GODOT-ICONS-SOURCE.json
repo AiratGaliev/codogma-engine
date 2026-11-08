@@ -1,0 +1,386 @@
+{
+  "repository": "https://github.com/godotengine/godot",
+  "sourceFolder": "editor/icons",
+  "ref": "master",
+  "commit": "95c0fa5fe8a019adc29d074c16b64469b04571f7",
+  "license": "MIT",
+  "licenseFile": "GODOT-ICONS-LICENSE.txt",
+  "selection": "2D authoring, scene objects, common editor commands and 2D resource types; 3D-only icons intentionally excluded.",
+  "penImport": {
+    "script": "scripts/import-godot-svg-icons-to-pen.mjs",
+    "representation": "Official SVG geometry is imported into native editable Pencil path nodes. Each icon frame stores its source SVG path, pinned revision and license in metadata.",
+    "metadataType": "godot-svg-source",
+    "note": "Pencil does not accept SVG URLs as image fills; use the importer to refresh native paths from the linked source SVGs."
+  },
+  "files": [
+    {
+      "source": "ToolSelect.svg",
+      "target": "tool-select.svg"
+    },
+    {
+      "source": "ToolPan.svg",
+      "target": "tool-pan.svg"
+    },
+    {
+      "source": "ToolAddNode.svg",
+      "target": "tool-add-node.svg"
+    },
+    {
+      "source": "ToolMove.svg",
+      "target": "tool-move.svg"
+    },
+    {
+      "source": "ToolRotate.svg",
+      "target": "tool-rotate.svg"
+    },
+    {
+      "source": "ToolScale.svg",
+      "target": "tool-scale.svg"
+    },
+    {
+      "source": "Grid.svg",
+      "target": "grid.svg"
+    },
+    {
+      "source": "SnapGrid.svg",
+      "target": "snap-grid.svg"
+    },
+    {
+      "source": "ViewportZoom.svg",
+      "target": "viewport-zoom.svg"
+    },
+    {
+      "source": "Play.svg",
+      "target": "play.svg"
+    },
+    {
+      "source": "Pause.svg",
+      "target": "pause.svg"
+    },
+    {
+      "source": "Stop.svg",
+      "target": "stop.svg"
+    },
+    {
+      "source": "PlayScene.svg",
+      "target": "play-scene.svg"
+    },
+    {
+      "source": "MainPlay.svg",
+      "target": "main-play.svg"
+    },
+    {
+      "source": "UndoRedo.svg",
+      "target": "undo-redo.svg"
+    },
+    {
+      "source": "ActionCopy.svg",
+      "target": "action-copy.svg"
+    },
+    {
+      "source": "ActionCut.svg",
+      "target": "action-cut.svg"
+    },
+    {
+      "source": "ActionPaste.svg",
+      "target": "action-paste.svg"
+    },
+    {
+      "source": "Add.svg",
+      "target": "add.svg"
+    },
+    {
+      "source": "Remove.svg",
+      "target": "remove.svg"
+    },
+    {
+      "source": "Reload.svg",
+      "target": "reload.svg"
+    },
+    {
+      "source": "Search.svg",
+      "target": "search.svg"
+    },
+    {
+      "source": "Folder.svg",
+      "target": "folder.svg"
+    },
+    {
+      "source": "File.svg",
+      "target": "file.svg"
+    },
+    {
+      "source": "PackedScene.svg",
+      "target": "packed-scene.svg"
+    },
+    {
+      "source": "Script.svg",
+      "target": "script.svg"
+    },
+    {
+      "source": "EditorInspector.svg",
+      "target": "editor-inspector.svg"
+    },
+    {
+      "source": "EditorResourcePicker.svg",
+      "target": "editor-resource-picker.svg"
+    },
+    {
+      "source": "EditorFileDialog.svg",
+      "target": "editor-file-dialog.svg"
+    },
+    {
+      "source": "EditorScriptPicker.svg",
+      "target": "editor-script-picker.svg"
+    },
+    {
+      "source": "GuiVisibilityVisible.svg",
+      "target": "gui-visibility-visible.svg"
+    },
+    {
+      "source": "GuiVisibilityHidden.svg",
+      "target": "gui-visibility-hidden.svg"
+    },
+    {
+      "source": "GuiTreeArrowRight.svg",
+      "target": "gui-tree-arrow-right.svg"
+    },
+    {
+      "source": "GuiTreeArrowDown.svg",
+      "target": "gui-tree-arrow-down.svg"
+    },
+    {
+      "source": "Lock.svg",
+      "target": "lock.svg"
+    },
+    {
+      "source": "Unlock.svg",
+      "target": "unlock.svg"
+    },
+    {
+      "source": "ErrorWarning.svg",
+      "target": "error-warning.svg"
+    },
+    {
+      "source": "StatusError.svg",
+      "target": "status-error.svg"
+    },
+    {
+      "source": "StatusWarning.svg",
+      "target": "status-warning.svg"
+    },
+    {
+      "source": "NodeWarning.svg",
+      "target": "node-warning.svg"
+    },
+    {
+      "source": "HelpSearch.svg",
+      "target": "help-search.svg"
+    },
+    {
+      "source": "Save.svg",
+      "target": "save.svg"
+    },
+    {
+      "source": "CloseScene.svg",
+      "target": "close-scene.svg"
+    },
+    {
+      "source": "Node2D.svg",
+      "target": "node-2d.svg"
+    },
+    {
+      "source": "Sprite2D.svg",
+      "target": "sprite-2d.svg"
+    },
+    {
+      "source": "AnimatedSprite2D.svg",
+      "target": "animated-sprite-2d.svg"
+    },
+    {
+      "source": "Camera2D.svg",
+      "target": "camera-2d.svg"
+    },
+    {
+      "source": "Area2D.svg",
+      "target": "area-2d.svg"
+    },
+    {
+      "source": "StaticBody2D.svg",
+      "target": "static-body-2d.svg"
+    },
+    {
+      "source": "RigidBody2D.svg",
+      "target": "rigid-body-2d.svg"
+    },
+    {
+      "source": "CharacterBody2D.svg",
+      "target": "character-body-2d.svg"
+    },
+    {
+      "source": "PhysicsBody2D.svg",
+      "target": "physics-body-2d.svg"
+    },
+    {
+      "source": "CollisionShape2D.svg",
+      "target": "collision-shape-2d.svg"
+    },
+    {
+      "source": "CollisionPolygon2D.svg",
+      "target": "collision-polygon-2d.svg"
+    },
+    {
+      "source": "AnimationPlayer.svg",
+      "target": "animation-player.svg"
+    },
+    {
+      "source": "Animation.svg",
+      "target": "animation.svg"
+    },
+    {
+      "source": "SpriteFrames.svg",
+      "target": "sprite-frames.svg"
+    },
+    {
+      "source": "GPUParticles2D.svg",
+      "target": "particles-2d.svg"
+    },
+    {
+      "source": "CPUParticles2D.svg",
+      "target": "cpu-particles-2d.svg"
+    },
+    {
+      "source": "AudioStreamPlayer2D.svg",
+      "target": "audio-stream-2d.svg"
+    },
+    {
+      "source": "AudioListener2D.svg",
+      "target": "audio-listener-2d.svg"
+    },
+    {
+      "source": "Path2D.svg",
+      "target": "path-2d.svg"
+    },
+    {
+      "source": "Curve2D.svg",
+      "target": "curve-2d.svg"
+    },
+    {
+      "source": "Bone2D.svg",
+      "target": "bone-2d.svg"
+    },
+    {
+      "source": "Skeleton2D.svg",
+      "target": "skeleton-2d.svg"
+    },
+    {
+      "source": "Marker2D.svg",
+      "target": "marker.svg"
+    },
+    {
+      "source": "Line2D.svg",
+      "target": "line-2d.svg"
+    },
+    {
+      "source": "Polygon2D.svg",
+      "target": "polygon-2d.svg"
+    },
+    {
+      "source": "TerrainPath.svg",
+      "target": "terrain-path.svg"
+    },
+    {
+      "source": "OneWayTile.svg",
+      "target": "one-way-tile.svg"
+    },
+    {
+      "source": "GridContainer.svg",
+      "target": "grid-container.svg"
+    },
+    {
+      "source": "Control.svg",
+      "target": "control.svg"
+    },
+    {
+      "source": "Container.svg",
+      "target": "container.svg"
+    },
+    {
+      "source": "BoxContainer.svg",
+      "target": "box-container.svg"
+    },
+    {
+      "source": "Button.svg",
+      "target": "button.svg"
+    },
+    {
+      "source": "Label.svg",
+      "target": "label.svg"
+    },
+    {
+      "source": "TextureRect.svg",
+      "target": "texture-rect.svg"
+    },
+    {
+      "source": "Anchor.svg",
+      "target": "anchor.svg"
+    },
+    {
+      "source": "EditorControlAnchor.svg",
+      "target": "editor-control-anchor.svg"
+    },
+    {
+      "source": "StyleBoxGrid.svg",
+      "target": "style-box-grid.svg"
+    },
+    {
+      "source": "Texture2D.svg",
+      "target": "texture-2d.svg"
+    },
+    {
+      "source": "ImageTexture.svg",
+      "target": "image-texture.svg"
+    },
+    {
+      "source": "AtlasTexture.svg",
+      "target": "atlas-texture.svg"
+    },
+    {
+      "source": "FontFile.svg",
+      "target": "font-file.svg"
+    },
+    {
+      "source": "TextFile.svg",
+      "target": "text-file.svg"
+    },
+    {
+      "source": "FileTree.svg",
+      "target": "file-tree.svg"
+    },
+    {
+      "source": "ExternalLink.svg",
+      "target": "external-link.svg"
+    },
+    {
+      "source": "Timer.svg",
+      "target": "timer.svg"
+    },
+    {
+      "source": "VisibleOnScreenNotifier2D.svg",
+      "target": "visibility-notifier-2d.svg"
+    },
+    {
+      "source": "ParticleProcessMaterial.svg",
+      "target": "particle-material.svg"
+    }
+  ],
+  "designTokens": {
+    "source": "design-system/tokens.json",
+    "generator": "scripts/generate-godot-light-icons.mjs",
+    "contrastTargets": {
+      "nonText": 3,
+      "normalText": 4.5
+    },
+    "lightThemePolicy": "Light icon colours use semantic role tokens with per-role contrast-safe variants. Particle material swatches retain project-data colours."
+  }
+}

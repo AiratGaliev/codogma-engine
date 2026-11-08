@@ -44,9 +44,10 @@ namespace phasereditor2d.scene.ui {
 
                                 const imgElement = controls.Controls.createImageFromBlob(blob);
 
-                                await new Promise((resolver, reject) => {
+                                await new Promise<void>((resolve, reject) => {
 
-                                    imgElement.addEventListener("load", () => resolver(undefined));
+                                    imgElement.addEventListener("load", () => resolve(), { once: true });
+                                    imgElement.addEventListener("error", () => reject(new Error("Unable to load cached thumbnail")), { once: true });
                                 });
 
                                 return new controls.ImageWrapper(imgElement);
@@ -61,22 +62,32 @@ namespace phasereditor2d.scene.ui {
 
                 const image = this.createObjectImage(file);
 
-                await image.preload();
+                const preloadResult = await image.preload();
+                const element = (image as any).getImageElement?.();
 
-                const element = image.getImageElement();
+                // Do not persist blank/error thumbnails (for example, a video
+                // whose codec is unsupported) as a valid cache entry.
+                if (preloadResult === controls.PreloadResult.RESOURCES_LOADED && element) {
 
-                if (element) {
+                    try {
 
-                    const newBlob = await controls.Controls.createBlobFromImage(element);
+                        // Both blob creation and IndexedDB persistence are optional:
+                        // an image that rendered successfully must still be shown
+                        // if canvas export or cache storage fails.
+                        const newBlob = await controls.Controls.createBlobFromImage(element);
+                        await db.setItem(imageKey, newBlob);
+                        await db.setItem(hashKey, currentHash);
 
-                    db.setItem(imageKey, newBlob);
-                    db.setItem(hashKey, currentHash);
+                    } catch (error) {
+
+                        console.warn("Unable to persist thumbnail cache:", error);
+                    }
                 }
 
-                return Promise.resolve(image);
+                return image;
             });
         }
 
-        abstract createObjectImage(obj: TObject): SceneThumbnailImage;
+        abstract createObjectImage(obj: TObject): controls.IImage;
     }
 }

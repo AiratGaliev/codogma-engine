@@ -2,6 +2,7 @@ namespace phasereditor2d.scene.core.code {
 
     import io = colibri.core.io;
     import ISceneGameObject = ui.sceneobjects.ISceneGameObject;
+    import ideCode = phasereditor2d.ide.core.code;
 
     export class SceneCodeDOMBuilder {
 
@@ -113,7 +114,10 @@ namespace phasereditor2d.scene.core.code {
 
                 if (superCls.startsWith("Phaser.")) {
 
-                    unit.addImport("Phaser", "phaser", true);
+                    if (ideCode.projectHasRootPackageJson()) {
+
+                        unit.addImport("Phaser", "phaser", true);
+                    }
 
                 } else {
 
@@ -121,7 +125,7 @@ namespace phasereditor2d.scene.core.code {
 
                     if (superClsFile) {
 
-                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, superClsFile);
+                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, superClsFile, this._scene.getSettings().importFileExtension);
 
                         unit.addImport(superCls, importPath, asDefault);
                     }
@@ -167,6 +171,33 @@ namespace phasereditor2d.scene.core.code {
                     this.buildPrefabPropertiesFields(fields);
                 }
 
+                if (!this._isPrefabScene && settings.box2dGenerateWorldCode
+                    && !fields.some(field => field.getName() === "worldId")) {
+
+                    const worldIdField = new FieldDeclCodeDOM(
+                        "worldId", 'ReturnType<typeof CreateWorld>["worldId"]');
+                    worldIdField.setAllowUndefined(true);
+                    fields.push(worldIdField);
+                }
+
+                if (!this._isPrefabScene && settings.box2dGenerateWorldCode
+                    && settings.box2dSceneGenerateDebugCode) {
+
+                    if (!fields.some(field => field.getName() === "debugGraphics")) {
+
+                        const debugGraphics = new FieldDeclCodeDOM("debugGraphics", "Phaser.GameObjects.Graphics");
+                        debugGraphics.setAllowUndefined(true);
+                        fields.push(debugGraphics);
+                    }
+
+                    if (!fields.some(field => field.getName() === "debugDraw")) {
+
+                        const debugDraw = new FieldDeclCodeDOM("debugDraw", "PhaserDebugDraw");
+                        debugDraw.setAllowUndefined(true);
+                        fields.push(debugDraw);
+                    }
+                }
+
                 clsDecl.getBody().push(...methods);
                 clsDecl.getBody().push(...fields);
 
@@ -210,13 +241,16 @@ namespace phasereditor2d.scene.core.code {
 
                 if (type.startsWith("Phaser.")) {
 
-                    this._unit.addImport("Phaser", "phaser", true);
+                    if (ideCode.projectHasRootPackageJson()) {
+
+                        this._unit.addImport("Phaser", "phaser", true);
+                    }
 
                 } else if (this._fileNameMap.has(type)) {
 
                     const importFile = this._fileNameMap.get(type);
 
-                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, importFile);
+                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, importFile, this._scene.getSettings().importFileExtension);
 
                     this._unit.addImport(type, importPath, asDefault);
                 }
@@ -534,6 +568,8 @@ namespace phasereditor2d.scene.core.code {
 
             this.addFieldInitCode(body);
 
+            this.buildBox2DWorldUpdateCode(body);
+
             body.push(new RawCodeDOM(""));
             body.push(new RawCodeDOM(`this.events.emit("scene-awake");`));
 
@@ -544,23 +580,147 @@ namespace phasereditor2d.scene.core.code {
 
             const settings = this._scene.getSettings();
 
-            if (this._scene.isPrefabSceneType() || !settings.box2dEnabled) {
+            const generateWorld = settings.box2dGenerateWorldCode || settings.box2dEnabled;
+
+            if (settings.box2dSceneGenerateDebugCode && !settings.box2dGenerateWorldCode) {
+                throw new Error("Box2D debug drawing requires the 'Generate Box2D world code' setting.");
+            }
+
+            if (this._scene.isPrefabSceneType() || !generateWorld) {
 
                 return;
             }
 
-            const worldDom = new MethodCallCodeDOM("World", "Phaser.Box2D");
+            for (const name of ["SetWorldScale", "CreateWorld", "b2DefaultWorldDef", "b2Vec2"]) {
 
-            worldDom.setConstructor(true);
-            worldDom.setDeclareReturnToVar(true);
-            worldDom.setReturnToVar("box2dWorld");
-            worldDom.arg("this");
-            worldDom.arg(`{ gravity: { x: ${settings.box2dGravityX}, y: ${settings.box2dGravityY} }, `
-                + `allowSleep: ${settings.box2dAllowSleep}, debugDraw: ${settings.box2dDebugDraw} }`);
+                ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
+            }
 
-            body.push(new RawCodeDOM(""));
-            body.push(new RawCodeDOM("// box2d world"));
-            body.push(worldDom);
+            // Debug drawing uses the separately imported PhaserDebugDraw.js helper,
+            // and is only valid when the scene owns its generated world ID.
+
+            // the editor Y points down, the Box2D world Y points up
+            const gravityY = -settings.box2dGravityY;
+
+            body.push(
+                new RawCodeDOM(""),
+                new RawCodeDOM("// box2d world creation"),
+                new RawCodeDOM(`SetWorldScale(${this.getBox2DWorldScale()});`));
+
+            if (settings.box2dGenerateWorldCode) {
+
+                body.push(
+                    new RawCodeDOM(`const world = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
+                        + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
+                        + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
+                    new RawCodeDOM(`this.worldId = world.worldId;`));
+
+                if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
+
+                    ui.sceneobjects.Box2DBodyComponent.addBox2DImport(
+                        this._unit, "PhaserDebugDraw", this._sceneFile, "PhaserDebugDraw.js");
+                    ui.sceneobjects.Box2DBodyComponent.addBox2DImport(
+                        this._unit, "b2World_Draw", this._sceneFile);
+
+                    body.push(
+                        new RawCodeDOM(`this.debugGraphics = this.add.graphics();`),
+                        new RawCodeDOM(`this.debugDraw = new PhaserDebugDraw(this.debugGraphics, this.game.scale.width, this.game.scale.height, ${this.getBox2DWorldScale()});`));
+                }
+
+            } else {
+
+                body.push(
+                    new RawCodeDOM(`const box2dWorld = CreateWorld({ worldDef: { ...b2DefaultWorldDef(), `
+                        + `gravity: new b2Vec2(${settings.box2dGravityX}, ${gravityY})`
+                        + `${settings.box2dAllowSleep ? "" : ", enableSleep: false"} } });`),
+                    new RawCodeDOM(`const box2dWorldId = box2dWorld.worldId;`));
+            }
+        }
+
+        private getBox2DWorldScale(): number {
+
+            const scale = this._scene.getSettings().box2dWorld_scale;
+
+            return typeof scale === "number" && Number.isFinite(scale) && scale > 0
+                ? scale
+                : 30;
+        }
+
+        /**
+         * Use a scene-local accumulator and the low-level fixed-step API:
+         * Phaser supplies delta in milliseconds, while Box2D uses seconds.
+         * Keeping the accumulator local avoids coupling concurrent worlds through
+         * the helper library's module-level WorldStep accumulator.
+         *
+         * Register an event handler instead of shadowing a user-defined update()
+         * method, then remove it and destroy the world on scene shutdown.
+         */
+        private buildBox2DWorldUpdateCode(body: CodeDOM[]) {
+
+            const settings = this._scene.getSettings();
+
+            const generateWorld = settings.box2dGenerateWorldCode || settings.box2dEnabled;
+
+            if (this._scene.isPrefabSceneType() || !generateWorld) {
+
+                return;
+            }
+
+            const names = ["b2World_Step", "UpdateWorldSprites", "ClearWorldSprites", "b2DestroyWorld"];
+
+            if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
+
+                names.push("b2World_Draw");
+            }
+
+            for (const name of names) {
+
+                ui.sceneobjects.Box2DBodyComponent.addBox2DImport(this._unit, name, this._sceneFile);
+            }
+
+            const updateArgs = settings.compilerOutputLanguage === "TYPE_SCRIPT"
+                ? "(_time: number, delta: number)"
+                : "(_time, delta)";
+
+            const worldVar = ui.sceneobjects.Box2DBodyComponent.getWorldIdExpression(
+                settings.box2dGenerateWorldCode, false);
+
+            const updateBody = [
+                new RawCodeDOM(""),
+                new RawCodeDOM("// box2d world update and cleanup"),
+                new RawCodeDOM("let box2dAccumulator = 0;"),
+                new RawCodeDOM("const box2dFixedTimeStep = 1 / 60;"),
+                new RawCodeDOM("const box2dSubStepCount = 4;"),
+                new RawCodeDOM(`const updateBox2DWorld = ${updateArgs} => {`),
+                new RawCodeDOM("    box2dAccumulator = Math.min(box2dAccumulator + Math.max(0, delta) / 1000, box2dFixedTimeStep * 3);"),
+                new RawCodeDOM("    let box2dSteps = 0;"),
+                new RawCodeDOM("    while (box2dAccumulator >= box2dFixedTimeStep && box2dSteps < 3) {"),
+                new RawCodeDOM(`        b2World_Step(${worldVar}, box2dFixedTimeStep, box2dSubStepCount);`),
+                new RawCodeDOM("        box2dAccumulator -= box2dFixedTimeStep;"),
+                new RawCodeDOM("        box2dSteps++;"),
+                new RawCodeDOM("    }"),
+                new RawCodeDOM(`    SetWorldScale(${this.getBox2DWorldScale()});`),
+                new RawCodeDOM(`    UpdateWorldSprites(${worldVar});`)
+            ];
+
+            if (settings.box2dGenerateWorldCode && settings.box2dSceneGenerateDebugCode) {
+
+                updateBody.push(
+                    new RawCodeDOM("    this.debugGraphics.clear();"),
+                    new RawCodeDOM(`    b2World_Draw(${worldVar}, this.debugDraw);`)
+                );
+            }
+
+            updateBody.push(
+                new RawCodeDOM("};"),
+                new RawCodeDOM(`this.events.on("update", updateBox2DWorld);`),
+                new RawCodeDOM(`this.events.once("shutdown", () => {`),
+                new RawCodeDOM(`    this.events.off("update", updateBox2DWorld);`),
+                new RawCodeDOM(`    ClearWorldSprites(${worldVar});`),
+                new RawCodeDOM(`    b2DestroyWorld(${worldVar});`),
+                new RawCodeDOM("});"));
+
+            body.push(...updateBody);
         }
 
         private addCreateAllPlainObjectCode(firstStatements: CodeDOM[], lazyStatements: CodeDOM[]) {
@@ -808,7 +968,7 @@ namespace phasereditor2d.scene.core.code {
                         prefabSerializer
                     });
 
-                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, objES.getPrefabFile());
+                    const { importPath, asDefault } = code.getImportPath(this._sceneFile, objES.getPrefabFile(), this._scene.getSettings().importFileExtension);
 
                     this._unit.addImport(clsName, importPath, asDefault);
 
@@ -840,7 +1000,7 @@ namespace phasereditor2d.scene.core.code {
 
                     if (clsFile) {
 
-                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, clsFile);
+                        const { importPath, asDefault } = code.getImportPath(this._sceneFile, clsFile, this._scene.getSettings().importFileExtension);
 
                         this._unit.addImport(clsName, importPath, asDefault);
                     }
@@ -852,6 +1012,21 @@ namespace phasereditor2d.scene.core.code {
             }
 
             const varname = formatToValidVarName(objES.getLabel());
+
+            if (obj instanceof ui.sceneobjects.FXColorMatrix
+                || obj instanceof ui.sceneobjects.FXGradient
+                || obj instanceof ui.sceneobjects.FXCircle) {
+
+                createObjectMethodCall.setDeclareReturnToVar(true);
+                createObjectMethodCall.setReturnToVar(varname);
+
+                if (obj instanceof ui.sceneobjects.FXCircle) {
+
+                    // AddMaskShape returns an array of masks, not a single Mask.
+                    // Keep the result so the generated resize handler can replace it.
+                    createObjectMethodCall.setExplicitType("Phaser.Filters.Mask[]");
+                }
+            }
 
             createMethodDecl.getBody().push(createObjectMethodCall);
 
@@ -886,6 +1061,103 @@ namespace phasereditor2d.scene.core.code {
             lazyStatements.push(...result.lazyStatements);
 
             createMethodDecl.getBody().push(...result.statements);
+
+
+            if (obj instanceof ui.sceneobjects.FXCircle && parentVarName) {
+
+                const circle = obj as ui.sceneobjects.FXCircle;
+                const sceneExpr = this._scene.isPrefabSceneType() ? "scene" : "this";
+                const parent = parentVarName;
+                const backgroundName = varname + "Background";
+                const ringName = varname + "Ring";
+                const syncName = varname + "CircleSync";
+                const widthExpr = parent + ".width ?? " + parent + ".displayWidth ?? 128";
+                const heightExpr = parent + ".height ?? " + parent + ".displayHeight ?? 128";
+                const scale = Math.max(0.01, circle.scale);
+                const thickness = Math.max(0.01, circle.thickness);
+                const feather = Math.max(0, circle.feather);
+                // qualified call (no import alias): the compiled alias would read
+                // ui.sceneobjects eagerly at file load, before the ui namespace exists
+                const backgroundColor = "0x" + ui.sceneobjects.colorValueToHexString(circle.backgroundColor, "#ff0000").replace("#", "");
+                const ringColor = "0x" + ui.sceneobjects.colorValueToHexString(circle.color, "#ff33b2").replace("#", "");
+                const syncCode = [
+                    "const " + backgroundName + " = " + sceneExpr + ".add.rectangle(" + parent + ".x ?? 0, " + parent + ".y ?? 0, " + widthExpr + ", " + heightExpr + ", " + backgroundColor + ", 0.4);",
+                    "const " + ringName + " = " + sceneExpr + ".add.graphics();",
+                    "let lastWidth = Math.max(1, " + widthExpr + ");",
+                    "let lastHeight = Math.max(1, " + heightExpr + ");",
+                    "const " + syncName + " = () => {",
+                    "    if (!" + parent + ".active) { " + backgroundName + ".setVisible(false); " + ringName + ".setVisible(false); return; }",
+                    "    const width = Math.max(1, " + widthExpr + ");",
+                    "    const height = Math.max(1, " + heightExpr + ");",
+                    "    if (width !== lastWidth || height !== lastHeight) {",
+                    "        const previousMask = " + varname + "[0];",
+                    "        if (previousMask && " + parent + ".filters?.internal) { " + parent + ".filters.internal.remove(previousMask); }",
+                    "        " + varname + "[0] = Phaser.Actions.AddMaskShape(" + parent + ", { shape: \"circle\", aspectRatio: 1, useInternal: true, region: new Phaser.Geom.Rectangle(width * (1 - " + scale + ") / 2, height * (1 - " + scale + ") / 2, width * " + scale + ", height * " + scale + "), blurRadius: " + feather + " * Math.max(width, height), blurSteps: 4, blurQuality: 1, scaleMode: 0, padding: 0 })[0];",
+                    "        lastWidth = width;",
+                    "        lastHeight = height;",
+                    "    }",
+                    "    " + backgroundName + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
+                    "    " + backgroundName + ".setSize(width, height);",
+                    "    " + backgroundName + ".setOrigin(" + parent + ".originX ?? 0.5, " + parent + ".originY ?? 0.5);",
+                    "    " + backgroundName + ".setRotation(" + parent + ".rotation ?? 0);",
+                    "    " + backgroundName + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
+                    "    " + backgroundName + ".setAlpha((" + parent + ".alpha ?? 1) * 0.4);",
+                    "    " + backgroundName + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + backgroundName + ".setDepth((" + parent + ".depth ?? 0) - 0.001);",
+                    "    " + backgroundName + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
+                    "    " + ringName + ".clear();",
+                    "    " + ringName + ".lineStyle(" + thickness + ", " + ringColor + ", 1);",
+                    "    " + ringName + ".strokeEllipse(-(" + parent + ".originX ?? 0.5) * width + (width - width * " + scale + ") / 2, -(" + parent + ".originY ?? 0.5) * height + (height - height * " + scale + ") / 2, width * " + scale + ", height * " + scale + ");",
+                    "    " + ringName + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
+                    "    " + ringName + ".setRotation(" + parent + ".rotation ?? 0);",
+                    "    " + ringName + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
+                    "    " + ringName + ".setAlpha(" + parent + ".alpha ?? 1);",
+                    "    " + ringName + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + ringName + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
+                    "    " + ringName + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
+                    "    if (" + parent + ".parentContainer) {",
+                    "        const container = " + parent + ".parentContainer;",
+                    "        if (" + backgroundName + ".parentContainer !== container) { container.addAt(" + backgroundName + ", Math.max(0, container.getIndex(" + parent + "))); }",
+                    "        if (" + ringName + ".parentContainer !== container) { container.addAt(" + ringName + ", container.getIndex(" + parent + ") + 1); }",
+                    "    }",
+                    "};",
+                    sceneExpr + ".events.on('update', " + syncName + ");",
+                    syncName + "();",
+                    backgroundName + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
+                    ringName + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
+                    parent + ".once('destroy', () => { " + sceneExpr + ".events.off('update', " + syncName + "); " + backgroundName + ".destroy(); " + ringName + ".destroy(); });"
+                ].join("\n");
+
+                createMethodDecl.getBody().push(new RawCodeDOM(syncCode));
+            }
+
+            if (obj instanceof ui.sceneobjects.FXGradient && parentVarName) {
+
+                const sceneExpr = this._scene.isPrefabSceneType() ? "scene" : "this";
+                const parent = parentVarName;
+                const syncName = varname + "Sync";
+                const syncCode = [
+                    "const " + syncName + " = () => {",
+                    "    if (!" + parent + ".active) { " + varname + ".setVisible(false); return; }",
+                    "    " + varname + ".setPosition(" + parent + ".x ?? 0, " + parent + ".y ?? 0);",
+                    "    " + varname + ".setSize(Math.max(1, " + parent + ".width ?? " + parent + ".displayWidth ?? 128), Math.max(1, " + parent + ".height ?? " + parent + ".displayHeight ?? 128));",
+                    "    " + varname + ".setOrigin(" + parent + ".originX ?? 0.5, " + parent + ".originY ?? 0.5);",
+                    "    " + varname + ".setRotation(" + parent + ".rotation ?? 0);",
+                    "    " + varname + ".setScale(" + parent + ".scaleX ?? 1, " + parent + ".scaleY ?? 1);",
+                    "    " + varname + ".setAlpha(" + parent + ".alpha ?? 1);",
+                    "    " + varname + ".setVisible(" + parent + ".visible ?? true);",
+                    "    " + varname + ".setScrollFactor(" + parent + ".scrollFactorX ?? 1, " + parent + ".scrollFactorY ?? 1);",
+                    "    " + varname + ".setDepth((" + parent + ".depth ?? 0) + 0.001);",
+                    "};",
+                    "if (" + parent + ".parentContainer && " + varname + ".parentContainer !== " + parent + ".parentContainer) { const container = " + parent + ".parentContainer; container.addAt(" + varname + ", Math.max(0, container.getIndex(" + parent + ") + 1)); }",
+                    sceneExpr + ".events.on('update', " + syncName + ");",
+                    syncName + "();",
+                    varname + ".once('destroy', () => " + sceneExpr + ".events.off('update', " + syncName + "));",
+                    parent + ".once('destroy', () => { " + sceneExpr + ".events.off('update', " + syncName + "); " + varname + ".destroy(); });"
+                ].join("\n");
+
+                createMethodDecl.getBody().push(new RawCodeDOM(syncCode));
+            }
 
             // the script nodes are not added to the parent this way
             if (objParent && objES.isDisplayObject()) {

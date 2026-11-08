@@ -8,6 +8,7 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
         outputLang?: ide.core.code.SourceLang,
         exportClass?: boolean,
         autoImport?: boolean,
+        importFileExtension?: boolean,
         insertSpaces?: boolean,
         tabSize?: number,
         meta: {
@@ -26,6 +27,7 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
         public tabSize: number;
         public exportClass: boolean;
         public autoImport: boolean;
+        public importFileExtension: boolean;
 
         constructor() {
 
@@ -36,6 +38,7 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
             this.tabSize = 4;
             this.exportClass = false;
             this.autoImport = false;
+            this.importFileExtension = false;
         }
 
         toJSON(): IUserComponentsModelData {
@@ -55,6 +58,7 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
             write(data, "tabSize", this.tabSize, 4);
             write(data, "exportClass", this.exportClass, false);
             write(data, "autoImport", this.autoImport, false);
+            write(data, "importFileExtension", this.importFileExtension, false);
 
             return data;
         }
@@ -67,6 +71,7 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
             this.tabSize = read(data, "tabSize", 4);
             this.exportClass = read(data, "exportClass", false);
             this.autoImport = read(data, "autoImport", false);
+            this.importFileExtension = read(data, "importFileExtension", false);
 
             this._components = data.components.map(
                 userCompData => {

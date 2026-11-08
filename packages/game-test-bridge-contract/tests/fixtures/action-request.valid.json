@@ -1,0 +1,1 @@
+{"kind":"game-test-bridge.action-request","requestId":"request-101","testSessionId":"session-42","actionId":"session.reset","actionVersion":"1.0.0","input":{"fixtureId":"level-one"}}

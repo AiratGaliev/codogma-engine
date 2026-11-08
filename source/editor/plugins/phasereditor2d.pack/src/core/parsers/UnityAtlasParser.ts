@@ -50,7 +50,6 @@ namespace phasereditor2d.pack.core.parsers {
             // const pivot = { x: 0, y: 0 };
             // const border = { x: 0, y: 0, z: 0, w: 0 };
 
-            // tslint:disable-next-line:prefer-for-of
             for (let i = 0; i < data.length; i++) {
 
                 const results = data[i].match(lineRegExp);

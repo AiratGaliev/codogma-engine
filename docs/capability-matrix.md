@@ -1,0 +1,130 @@
+# Матрица возможностей Codogma Engine
+
+**Baseline:** аудит dev на 05.11.2026. Новый Host evidence — COD-80 / PR #30, смерженный в dev 01.11.2026. CI Fast #453 — историческое automated evidence, не browser/runtime acceptance.  
+**Метод:** статический аудит repository structure/source, manifests, docs и CI; не заменяет функциональную или browser/runtime acceptance.  
+**Product/UX + implementation-reference baseline:** новые Editor UI/authoring workflows сверяются с Unity 6.6 (основной UX-reference) и Cocos Creator 4.0 LTS (дополнительный 2D workflow reference); Godot Editor используется как task-specific implementation source, не как UX benchmark или критерий feature parity. См. [стандарт reference для 2D Editor Host](editor-reference-standard.md). Матрица описывает строго 2D scope.
+
+## Как читать статус
+
+- **Есть в исходниках** — соответствующие модули или сценарии обнаружены; это не утверждение о полном end-to-end качестве.
+- **Частично** — часть workflow реализована, но отсутствует интеграция, контракт или покрытие основных сценариев.
+- **Не подтверждено** — статическая реализация видна, но нет достаточных runtime/browser tests.
+- **Не реализовано** — законченная подсистема не обнаружена в текущем baseline.
+- **Отложено** — сознательно не входит в текущий delivery slice.
+
+## Текущие возможности и пробелы
+
+| Подсистема | Состояние по исходникам | Evidence / область проверки | Автоматическое покрытие и ограничения | Приоритет |
+|---|---|---|---|---|
+| Editor Host / dual-run | Node server пока обслуживает существующий frozen UI client по /editor/; самостоятельный SolidJS Host запускается на Vite 5173 через общий backend. Production cutover не выполнен | source/editor/ — read-only inventory и временный rollback artifact, без ongoing support; src/editor/ — самостоятельное SolidJS приложение с отдельным package/lockfile; backend/file APIs общие | COD-80 CI Fast #453: Host typecheck/build, 36 domain tests, 9 Chromium tests, fast-checks success. Single-writer policy действует; session-aware MCP SSE routing остаётся отдельной задачей COD-85 | **UI cutover pending** |
+| SolidJS Editor Host / Workbench | **Первый Workbench + Scene vertical slice COD-80 реализован:** Vite proxy, Dark/Light/Compact design, Hierarchy, Scene Canvas, Game View iframe, Inspector/Transform, Project/Animation/Components/Console surfaces, panel visibility, themes, responsive/persisted layout и Undo/Redo | src/editor/ app/package, Phaser viewport, typed API service, domain models, design tokens, SVG icons, domain/browser tests | CI Fast #453 подтвердил typecheck/build, 36 domain tests, 9 Chromium acceptance и fast-checks. Ограничения: dock zones Left/Right/Bottom, без arbitrary floating/free-split tree; Animation пока поддерживает базовые clip/frame operations | **Workbench implemented; workflows continue** |
+| Scene authoring / persistence | Native Project Model v1 contracts определены; полный Editor create/edit/save/reopen workflow и data-driven runtime loader требуют завершения интеграции | src/editor/ Scene authoring surface; packages/cge/src/project-model/; native fixture packages/cge/tests/fixtures/acceptance-project/ | COD-103 реализует SceneDocument hydration; COD-28/COD-30/COD-35 — runtime/Preview/Build integration; CODQA-18 принимает integrated Host | **Native Scene workflow in progress** |
+| Script / Component authoring | Начальные Source/Components surfaces есть; native Script Asset, manifest registration, stable Definition identity и project-wide diagnostics в работе | src/editor/ Source view; packages/cge/src/components/component-schema.ts; native Project Model module contracts | COD-91 owns authoring; COD-26/COD-27 own runtime/schema contracts; CODQA-21 accepts integrated workflow | **In progress** |
+| Prefabs / Undo-Redo | Core Prefab model/serialization и базовые editor operations присутствуют; полный nested workflow/propagation/overrides не завершён | Project Model v1 and native Scene/Prefab fixtures | Нужны regression tests для nesting, update/override conflicts, Undo/Redo и save/reopen | **Partial** |
+| Asset Library / Sprite authoring | Native asset/metadata/reimport workflow разрабатывается для SolidJS Host; source formats проходят через Codogma-owned importers | src/editor/ Asset Library domain/UI; docs/sprite-asset-metadata.md; native asset fixtures | COD-86 owns authoring/import integration; CODQA-10 accepts integrated workflow; browser/codec/GPU matrix требует отдельного evidence | **In progress** |
+| Sprite / image / video / audio preview | Native Asset/Frame metadata, trim/crop/pivot и collision properties определены; runtime preview coverage частичная | Native asset metadata/domain models and Phaser runtime adapter | Polygon/compound collision mapping и media resource lifecycle требуют targeted browser/runtime evidence; CODQA-10 принимает Sprite workflow | **Partial** |
+| Sorting groups / 9-slice / tiled draw | Phaser display-list grouping, NineSlice и TileSprite — текущие runtime/authoring capabilities; расширенная sorting semantics отдельная | Native Scene/Node and Phaser rendering contracts | Sorting Layers, independent sortingOrder и Y-based sorting принадлежат COD-41; visual runtime parity требует browser evidence | **Existing capabilities; extended sorting pending** |
+| Animation | Host поддерживает базовые Phaser JSON clip/frame operations; timeline/tracks/keyframes/curves/events отсутствуют | src/editor/ animation model and UI | COD-84 owns Timeline workflow; CODQA-4 accepts Host/runtime | **Partial** |
+| Spine authoring/preview | Полный SolidJS authoring/preview workflow не реализован | Target src/editor/; engine-owned asset and MCP services | COD-90 owns Host integration; COD-85 session routing; CODQA-20 browser/runtime and CODQA-8 live MCP acceptance | **Not implemented in Host** |
+| Tilemap | Базовые runtime/editor structures существуют; полный авторский workflow кистей, layers, chunks и import/export не подтверждён | Native Scene/Asset contracts and Phaser/Tiled integration | Требуется acceptance brush/layout/chunk operations, import/export и save/reopen | **Workflow pending** |
+| Arcade Physics | Phaser Arcade runtime и authoring capabilities доступны; согласованность Editor settings и native runtime требует integrated verification | Physics component/data contracts and Phaser adapter | Декларации и Inspector UI не заменяют фактический запуск и проверку collision behavior | **Runtime acceptance pending** |
+| Box2D authoring/runtime | Native Physics/Component model и runtime integration — целевое направление; browser simulation, multi-world isolation, fixed-step behavior и cleanup не подтверждены | Codogma Component/Scene contracts, Phaser runtime adapter and physics helpers | COD-42 owns native Physics contract; CODQA-1 accepts live simulation on native fixtures | **Engineering/runtime acceptance pending** |
+| FX Circle/Bloom/Gradient/Shine | SolidJS Host имеет Inspector controls и Phaser-backed preview; native Scene persistence и Preview/Build parity требуют интеграции | src/editor/ FX model/Inspector/preview; native SceneDocument and runtime graph | Нужны integrated runtime checks для parent-alpha, lifecycle и save/reopen; COD-89 implementation, CODQA-19 acceptance | **Host authoring implemented; runtime acceptance pending** |
+| TypeScript Script module build | Scene остаётся сериализованным документом; TypeScript compilation относится к зарегистрированным Script/Component modules | Script Asset, explicit Project module manifest, resolver and Build graph | COD-91 authors Script modules; COD-103/COD-28/COD-35 connect resolution to runtime and independent Build | **Native Script Build in progress** |
+| Data-driven Scene Loader | Native Project/Scene/Prefab v1 contracts, stable IDs/references, deterministic serialization and ComponentRegistry/World foundation exist | packages/cge/src/project-model/; packages/cge/src/components/; native Core fixtures | COD-103 hydrates native SceneDocument through explicit module registry, rollback and unload; COD-28/30/35 deliver runtime/Preview/Build | **Persistence foundation; loader pending** |
+| Phaser integration | Phaser 4.2.1 подключён vendored bundle | scripts/phaser.js, scripts/phaser.min.js, runtime integration surfaces | Runtime artifact provenance and selective build variants require independent verification; TypeScript declarations do not supply runtime | **P0 — runtime/build evidence** |
+| Local server / project file API | Descriptor-verified reads/content writes and Linux descriptor-anchored mutations integrated; cross-platform acceptance pending | server/server.mjs, server/path-security.mjs, server/mcp.mjs, tests/path-security.test.mjs | Linux tests cover adversarial parent-symlink swaps across read/write/delete/rename/mkdir/enumeration/CopyFile. Non-Linux fallback and moved-open-directory race still need acceptance | **P0 — cross-platform security acceptance** |
+| Editor Logging & Diagnostics | Browser console, Node logger and development log are separate; Host has a basic Console surface | server/server.mjs, src/editor/ Console surface, docs/editor-logging-and-diagnostics.md | Engine-owned EditorLogger, browser error capture, browser→Node transport, Preview session correlation and sinks are not implemented | **P1 — native logging contract** |
+| MCP | Engine-owned HTTP registry and first-party TypeScript stdio adapter are implemented; live Editor SSE routing needs session ownership | server/mcp.mjs, POST /editor/mcp, server/mcp-stdio.mjs, server/mcp-launcher.mjs, packages/editor-mcp-server/ | Package tests validate 59 tool schemas/names, Ajv arguments and error handling. Security: loopback-only, no redirects, bounded size/time; no remote auth | **P0 — session-aware routing / live acceptance** |
+| Game Test Bridge | Contract package is present; integrated runtime workflow remains incomplete | Versioned contract package and Test Bridge interfaces | Handshake, stable-ID snapshots, typed event stream, bounded diagnostics and Release exclusion require end-to-end evidence | **P1 after Preview/Runtime contracts** |
+| Browser Controller | Not yet an integrated Codogma capability | Playwright/isolated contexts and CDP are candidates | Session manager, isolated contexts, verified input, console/network/evidence lifecycle absent | **P1 — provider/security spike** |
+| Game QA MCP / Scenario Runner | No complete gameplay QA workflow | Declarative scenario schema and Evidence/Report contract | Task-level browser/game tools, scenario runner and PASS/FAIL/SKIP/UNVERIFIED report still needed | **P1 after Preview/Build/Test Bridge** |
+| Optional AI Chat | Separate loopback-only service exists | mini-services/ai-chat/index.mjs | Host/Origin guards, body/message limits, rate limits and request/LLM timeouts are covered by tests/mini-services-security-test.mjs | **P0 — preserve local-only boundary** |
+| Native Project Model / Codogma Core | @codogma/cge contains Project/Scene/Prefab v1 schemas, stable-ID/reference validation, deterministic serialization and ComponentRegistry/World foundation; complete Scene loader/runtime integration remains open | packages/cge/; packages/cge/tests/project-model.test.ts; Core acceptance slice | Remaining native work: Scene loader/module resolution, Phaser adapter, Prefab runtime behavior, Preview and standalone Build. Package tests alone do not establish production readiness | **Native persisted contracts implemented; end-to-end Core partial** |
+| Runtime adapter / public API independent of Phaser | Not implemented as stable public runtime contract | ADRs and Core contracts describe target boundary | Needs compile/runtime fixture; public types must not expose Phaser objects as Core API | **P1 — next dependent architecture stage** |
+| Game Preview Host / live Inspector | Partial play/editor flows exist; target subsystem incomplete | server/server.mjs and editor workflows; target requirements in technical spec | Start/stop/restart lifecycle, runtime messaging and live selection contract still needed | **P1 after Core/runtime contracts** |
+| Headless HTML5 Build / feature selection | Not implemented as a verified production pipeline | Current root npm run build compiles the Editor client | No reproducible game build proof without Editor UI/server, asset reference validation or Editor-only exclusion | **P1 after native runtime contracts** |
+| Build Profiles / Build Settings UI | COD-35 defines Dev/Release profiles and target matrix; dedicated Host authoring surface absent | Versioned Project build configuration distinct from local Editor preferences | **Editor workflow gap**; COD-95 |
+| Project Settings / Editor Preferences UI | New Host has no separate settings pages/scope ownership/persistence workflow | Project settings are shared/versioned; workspace/user preferences stay local | **Editor workflow gap**; COD-96 → COD-97 |
+| Input Actions authoring UI | Requirements describe logical actions and physical bindings; visual action-map/binding editor absent | Versioned maps/actions/bindings, device capability diagnostics, 2D composites and runtime rebinding overrides | **Editor workflow gap**; COD-98 → COD-99 |
+| Platform Services (Yandex Games / VK) | Not implemented as one package contract | Technical specification, section 11 | SDK, mocks, lifecycle, ads/payments/auth/leaderboards are separate platform scenarios | **P1 after Core and base Build** |
+| npm Workspaces / Feature Registry / Package Manager / Extension API | Not implemented | ADR-0003 and package architecture | Requires separate PoC, safety policy, package/feature tests and race-resistant file operations | **P1/P2 after stable Core contracts** |
+| Localization tables / fallback | Optional packages/localization/ module, v1 contract, runtime service, validator, fixtures, CLI and automated tests exist | packages/localization/; tests/workspace/test-typescript/locale/; tests/localization-acceptance.mjs | 76 node:test tests and server→play-mode HTTP→compiled service acceptance are in CI Fast; Editor diagnostics panel and RTL/complex shaping are not claimed | **P1 — optional capability** |
+| Tauri / desktop shell | Not implemented | Planned direction | Does not block browser-first workflow; PoC only for specific risks | **P2** |
+| Strict TS + lint/format/dead-code/architecture checks | Scoped toolchain pilot merged; targeted gates active | Localization package, root ESLint/Prettier, Knip/dependency-cruiser configs and CI Fast | New/changed Codogma-owned scope has checks; report-only tools need review before becoming blocking gates | **P0 — maintain scoped checks** |
+
+## Приоритеты из матрицы
+
+1. **P0 — independent acceptance of first SolidJS Host slice on integrated candidate:** COD-80 / PR #30 is integrated; CODQA-18 checks candidate in test. PR/CI success alone does not prove production cutover.
+2. **P0 — runtime/security acceptance:** native Box2D/FX/Scene/Script/Asset Preview and cross-platform filesystem security need independent evidence. Preserve loopback/local-only security boundaries.
+3. **P1 — staged UI rollout:** COD-82 coordinates the remaining user-facing workflows, MCP routing and the UI cutover plan. New workflows are implemented in SolidJS Host.
+4. **P1 — specialized authoring workflows:** Docking (COD-83), Asset/Sprite (COD-86), Prefab (COD-8), User Components/TypeScript (COD-91), camera/coordinates/sorting (COD-41), 2D UI authoring (COD-43), Tilemap (COD-40), Physics (COD-42), Animation (COD-84), Spine (COD-90), Audio/Particles (COD-61), Atlas analyzer (COD-55) and importer extensions (COD-59). FX authoring UI is implemented; native runtime parity remains CODQA-19.
+5. **P1 — Preview/Diagnostics/MCP:** Preview Host, live Inspector, EngineLogger and session-aware MCP SSE (COD-85); COD-80 Game View iframe is not a complete Preview Host.
+6. **P1 — independent functional acceptance:** CODQA-18 accepts the first Host slice; CODQA-10/11/12/13/14/16 and CODQA-4 accept their respective native workflows.
+7. **P1 — UI cutover/cleanup:** COD-87 moves the production /editor/ route to SolidJS with a bounded UI rollback window; COD-88 removes the old UI client after cutover.
+8. **Separate engine streams:** Project Model/Core, HTML5 Build, Platform Services, Game QA MCP, Package Manager and Tauri follow their own dependencies and acceptance.
+
+## Реестр native Editor Host workflows
+
+| Workflow | Native contract | SolidJS Host status | Owner / acceptance |
+|---|---|---|---|
+| Workbench + Scene basic | Project Model v1, Editor state and Scene authoring services | **Implemented as first slice; integrated acceptance pending** | COD-80; CODQA-18 |
+| Docking/workspace | Workspace state, panel lifecycle and layout schema | **Partial** — Bottom Dock/home slots/tab reorder | COD-83 |
+| Prefab | Project Model v1 Prefab documents, stable references and overrides | **Partial model/operations; full workflow missing** | COD-8; CODQA-11 |
+| User Components / TS authoring | Script Asset, module manifest, Component Definition/Instance | **In progress** | COD-91; CODQA-21 |
+| Asset Library / Sprite | Codogma Asset/Frame metadata, importer and reimport contracts | **In progress** | COD-86; CODQA-10 |
+| Camera/coordinates/sorting | Engine coordinate/render-order contract | **Not implemented as authoring workflow** | COD-41 |
+| 2D UI authoring | Runtime/text/9-slice/layout semantics | **Not implemented as complete workflow** | COD-43; CODQA-12 |
+| Animation | Phaser JSON clip/frame basics in Host | **Partial** — no full timeline/tracks/curves/events | COD-84; CODQA-4 |
+| Tilemap | Native Scene/Asset and Tiled import contracts | **Not implemented as complete workflow** | COD-40; CODQA-14 |
+| Physics/Box2D | Native Physics/Component and runtime adapter contracts | **Not accepted as integrated Host workflow** | COD-42; CODQA-1 |
+| FX authoring | SolidJS Host Inspector, typed FX model and Phaser-backed Preview | **Implemented; native runtime acceptance pending** | COD-89; CODQA-19 |
+| Spine authoring/preview | Native Spine Asset/Preview workflow | **Not implemented in Host** | COD-90; CODQA-20 |
+| Audio groups / Particle Preview | Native audio/particle runtime contracts | **Not implemented in Host** | COD-61; CODQA-13 |
+| Preview/live Inspector | Project Model snapshot, runtime identity, Preview lifecycle | **Partial; no shared Preview Host contract** | COD-30/31/32/47/58; CODQA-16 |
+| Diagnostics/Console | Engine-owned logging/session diagnostics | **Console surface only; no general EditorLogger** | COD-47; docs/editor-logging-and-diagnostics.md |
+| Live Editor MCP bridge | HTTP tool registry, stdio adapter and session-owned SSE routing | **Blocked pending session-aware routing** | COD-85; CODQA-8 |
+| Production /editor/ | SolidJS production route and bounded UI rollback | **Not cut over** | COD-87; COD-88 |
+
+
+## Core Runtime, ECS и Build capabilities — архитектурная ревизия 05.11.2026
+
+Эта секция отделяет существующие Core contracts от утверждённых, но ещё не реализованных optional capabilities. Наличие ADR/Linear task не означает наличие package или runtime implementation.
+
+| Capability | Current implementation / evidence | Target architecture | Status / owner |
+|---|---|---|---|
+| Host-neutral object/component Core | `packages/cge`: versioned Project/Scene/Prefab schema, Component Schema/Registry, ComponentWorld, explicit external tick, lifecycle/structural mutations/disposal; COD-26 и PR #43 harden lifecycle | Базовый API для обычных Node/Components, Inspector, validation и authoring; без Phaser dependency и собственного game loop | **Foundation implemented; end-to-end Core partial** — COD-26, COD-27, COD-105 |
+| Data-Oriented ECS storage | Нет `packages/ecs`, нет archetype/sparse-set runtime и browser comparative fixture | Optional `@codogma/ecs`; нормативный package contract — ADR-0004 | **Designed / not implemented** — ADR-0004, COD-111 Todo |
+| ECS ↔ Phaser adapter | Нет `packages/ecs-phaser` | Optional `@codogma/ecs-phaser`; integration contract — ADR-0004 | **Planned / not implemented** — ADR-0004, COD-112 Backlog |
+| ECS authoring / persisted data mapping | Component Schema v1 существует; ECS storage integration не реализована | Mapping contract определяется ADR-0004 | **Not implemented** — COD-111/112 и последующие Editor integration tasks |
+| Performance comparison | Core synthetic Node no-op benchmark exists; no target browser/gameplay ECS comparison or CPU decomposition | Protocol and acceptance criteria — ADR-0004; measurement record — PERF-09 | **Protocol extended; measurements outstanding** — COD-21, COD-48, COD-111 |
+| Feature Registry | Design/task contracts exist; no fully accepted end-to-end registry / package-provided descriptors | ECS-specific feature IDs/providers — ADR-0004; generic registry — COD-34/COD-51 | **Planned** — COD-34, COD-51 |
+| HTML5 Build Analyzer | Current Phaser integration uses vendored full Phaser 4.2.1 bundle; no verified Phaser feature pruning output | Analyze project/package/import/asset graph, Phaser variant/API coverage, Editor/build/QA exclusions; output reproducible inclusion/exclusion and size report | **Planned; actual Phaser pruning unverified** — COD-33, COD-35, COD-54 |
+| Phaser 4.2.1 build variants | Vendored `scripts/phaser(.min).js`; upstream tag contains full UMD and Arcade-only UMD (without Matter.js); package does not declare Arcade-only export subpath | Compare official UMD artifact and reproducible custom/ESM route only through a pinned fixture; ESM named exports do not imply internal tree-shaking | **Inventory known; selection not accepted** — COD-35 |
+
+### Интерпретация ECS status
+
+Эта матрица отражает состояние исходников и evidence на указанном baseline, а не заменяет архитектурную спецификацию. Package/API boundaries, dependency and feature rules, data mapping, integration, production exclusion и performance acceptance Data-Oriented ECS определяются только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+
+## Ограничения аудита и следующая актуализация
+
+- Полный построчный review всех 1 298 TypeScript-файлов не выполнялся: в репозитории около 1 480 tracked files, из них приблизительно 1 350 в `source/editor/`; основной объём — унаследованный editor client.
+- Детально проверялись документы/CI/manifests, текущие серверные файловые и MCP-потоки, security smoke, PR #10 и ключевые участки code generation/FX/Box2D/asset preview по заявленным изменениям.
+- Для каждой строки со статусом «не подтверждено» обновлять состояние только после привязанного regression test, runtime fixture либо документированной browser acceptance. Не переводить её в «реализовано» по наличию UI, деклараций TypeScript или успешной компиляции.
+- Матрица — живой документ: изменения возможностей должны обновлять evidence, acceptance checks и соответствующие пункты `docs/roadmap.md`.
+
+
+## Workspace UX audit — 2026-11-03
+
+В SolidJS Host исправлены независимые состояния видимости Bottom views (Project, Animation, Components, Console), collapse пустой Bottom zone, default placement Console в Bottom tab group и outside-pointer dismissal Main menu/Add Object menu. Для этих операций добавлены domain/browser tests COD-83; browser acceptance должна быть выполнена отдельно на promotion candidate.
+
+Оставшиеся docking gaps по отношению к Unity/Cocos/VS Code/Godot/JetBrains:
+- **Generic panel-to-zone contract:** в текущей модели только Hierarchy/Inspector могут менять DockZone; Project/Animation/Components/Console остаются Bottom views.
+- **Center/editor group:** Scene/Game не входят в общий Dock group, поэтому перенос tool views в центральную tab group невозможен.
+- **Split tree:** нет горизонтального/вертикального разветвления одной зоны на несколько групп с независимыми active tabs.
+- **Panel context actions:** отсутствуют Move To, Reset Location, Close Others, Close All, Maximize Group и keyboard Move Focused View.
+- **Named workspace layouts:** доступен только Reset to Default, а не сохранение/переключение профилей (например Default/Animation/Asset Authoring).
+- **Auto-hide/floating windows:** не реализованы; floating windows не являются требованием текущего browser-host slice, пока не доказан отдельный multi-window lifecycle.
+- **Overflow/scroll navigation:** при большом количестве panel tabs нужен явный overflow affordance, а не только горизонтальное сжатие.
+
+Целевое решение для следующих slices — generic dock node/group model с центральной Scene/Game group как специальным view container, пользовательскими зонами `Left/Right/Bottom/Center`, split orientation/ratios и стабильными panel IDs. Не добавлять пустой Center rectangle без tab/group semantics. Floating windows и auto-hide оставить отдельными решениями после появления обоснованного workflow.

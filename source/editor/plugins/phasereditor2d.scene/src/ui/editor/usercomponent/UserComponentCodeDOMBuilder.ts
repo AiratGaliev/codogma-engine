@@ -1,6 +1,7 @@
 namespace phasereditor2d.scene.ui.editor.usercomponent {
 
     import code = core.code;
+    import ideCode = phasereditor2d.ide.core.code;
     import io = colibri.core.io;
 
     export class UserComponentCodeDOMBuilder {
@@ -148,15 +149,26 @@ namespace phasereditor2d.scene.ui.editor.usercomponent {
 
                 if (type.startsWith("Phaser.")) {
 
-                    this._unitDom.addImport("Phaser", "phaser", true);
+                    if (ideCode.projectHasRootPackageJson()) {
+
+                        this._unitDom.addImport("Phaser", "phaser", true);
+                    }
 
                 } else if (this._typeFileMap.has(type)) {
 
                     const importFile = this._typeFileMap.get(type);
 
-                    const { importPath, asDefault } = code.getImportPath(this._modelFile, importFile);
+                    const { importPath, asDefault } = code.getImportPath(this._modelFile, importFile, this._model.importFileExtension);
 
                     this._unitDom.addImport(type, importPath, asDefault);
+
+                } else if (type === "UserComponent") {
+
+                    // official v5 base class from @phaserjs/editor-scripts-base
+                    if (ideCode.projectHasRootPackageJson()) {
+
+                        this._unitDom.addImport("UserComponent", "@phaserjs/editor-scripts-base", false);
+                    }
                 }
             }
         }
