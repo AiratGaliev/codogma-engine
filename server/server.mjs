@@ -35,6 +35,7 @@ const PORT = Number(process.env.PORT || 3000)
 const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "packages", "cge", "tests", "fixtures", "acceptance-project"))
 const MAX_API_BODY_BYTES = 32 * 1024 * 1024
 const EDITOR_HOST_DIR = path.resolve(process.env.EDITOR_HOST_DIR || path.join(ROOT, "src", "editor", "dist"))
+const EDITOR_ICONS_DIR = path.resolve(ROOT, "src", "editor", "icons")
 
 const MIME = {
     ".html": "text/html; charset=utf-8",
@@ -787,6 +788,23 @@ const server = http.createServer(async (req, res) => {
                 return
             }
             return await handleProjectOperation(req, res)
+        }
+
+        // SVG assets used by the native Editor Host workbench.
+        if (rest.startsWith("icons/")) {
+            const relativeIconPath = rest.slice("icons/".length).split("?")[0]
+            if (!/^(dark|light)\/godot\/[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/.test(relativeIconPath)) {
+                res.writeHead(404, { "Content-Type": "text/plain" })
+                res.end("Not Found")
+                return
+            }
+            const full = safeJoin(EDITOR_ICONS_DIR, relativeIconPath)
+            if (!full) {
+                res.writeHead(403)
+                res.end("Forbidden")
+                return
+            }
+            return serveFile(req, res, full, "public, max-age=3600", EDITOR_ICONS_DIR)
         }
 
         // project files (editor views)
