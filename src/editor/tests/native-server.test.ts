@@ -98,6 +98,11 @@ test("Node server serves the native Editor Host, Project Model and runtime asset
         assert.match(assetResponse.headers.get("cache-control") ?? "", /immutable/)
         assert.ok((await assetResponse.text()).length > 1000)
 
+        const iconResponse = await fetch(`${server.origin}/editor/icons/dark/godot/folder.svg`)
+        assert.equal(iconResponse.status, 200)
+        assert.match(iconResponse.headers.get("content-type") ?? "", /image\/svg\+xml/)
+        assert.match(await iconResponse.text(), /<svg\b/)
+
         const projectResponse = await fetch(`${server.origin}/editor/project/project.json`)
         assert.equal(projectResponse.status, 200)
         const projectDocument = await projectResponse.json()
