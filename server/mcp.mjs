@@ -119,9 +119,11 @@ function walkFiles(dir, relPrefix, out = []) {
 
 /** Notify connected editor sessions that project files changed on disk. */
 function notifyFilesChanged() {
-    const payload = "event: files-changed\ndata: {}\n\n"
-    for (const client of bridgeClients.values()) {
-        try { client.res.write(payload) } catch (error) { removeBridgeClient(client.clientId, client) }
+    if (!bridgeClient) return
+    try {
+        bridgeClient.res.write("event: files-changed\\ndata: {}\\n\\n")
+    } catch (error) {
+        removeBridgeClient(bridgeClient)
     }
 }
 
@@ -745,21 +747,10 @@ export function getBridgeToolsList() {
 
 /* =========================== bridge (SSE channel) ========================= */
 
-const bridgeClients = new Map()
+let bridgeClient = null
 const pendingCommands = new Map()
-let activeBridgeClientId = null
 
 const BRIDGE_COMMAND_TIMEOUT_MS = 20000
-
-function selectActiveBridgeClient() {
-    const active = activeBridgeClientId ? bridgeClients.get(activeBridgeClientId) : null
-    if (active) return active
-
-    const candidate = [...bridgeClients.values()]
-        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0] ?? null
-    activeBridgeClientId = candidate?.clientId ?? null
-    return candidate
-}
 
 function rejectPendingForClient(clientId, reason) {
     for (const [id, pending] of pendingCommands) {
@@ -770,51 +761,27 @@ function rejectPendingForClient(clientId, reason) {
     }
 }
 
-function removeBridgeClient(clientId, expectedClient = null) {
-    const client = bridgeClients.get(clientId)
+function removeBridgeClient(expectedClient = null) {
+    const client = bridgeClient
     if (!client || (expectedClient && client !== expectedClient)) return false
 
-    bridgeClients.delete(clientId)
-    rejectPendingForClient(clientId, "The editor session disconnected before responding to the MCP command.")
-    if (activeBridgeClientId === clientId) activeBridgeClientId = null
-    selectActiveBridgeClient()
-    log(`mcp-bridge: editor disconnected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
+    bridgeClient = null
+    rejectPendingForClient(client.clientId, "The Editor Host session disconnected before responding to the MCP command.")
+    log("mcp-bridge: Editor Host disconnected")
     return true
-}
-
-function activateBridgeClient(clientId) {
-    const client = bridgeClients.get(clientId)
-    if (!client) return false
-    client.lastActiveAt = Date.now()
-    activeBridgeClientId = clientId
-    return true
-}
-
-function bridgeStatus() {
-    const active = selectActiveBridgeClient()
-    return {
-        connected: bridgeClients.size > 0,
-        clients: bridgeClients.size,
-        activeClientId: active?.clientId ?? null,
-        sessions: [...bridgeClients.values()].map(client => ({
-            clientId: client.clientId,
-            connectedAt: client.connectedAt,
-            active: client.clientId === activeBridgeClientId
-        }))
-    }
 }
 
 function bridgeCommand(command) {
     return new Promise((resolve, reject) => {
-        const client = selectActiveBridgeClient()
+        const client = bridgeClient
         if (!client) {
-            return reject(new Error("Native Codogma MCP commands require a connected Editor Host session. Open the project in the Editor Host and retry."))
+            return reject(new Error("Native Codogma MCP commands require a connected Editor Host session. Open the Codogma Editor and retry."))
         }
 
         const id = crypto.randomUUID()
         const timer = setTimeout(() => {
             pendingCommands.delete(id)
-            reject(new Error(`Editor session did not respond to command "${command.tool}" in time (20s).`))
+            reject(new Error(`Editor Host did not respond to command "${command.tool}" in time (20s).`))
         }, BRIDGE_COMMAND_TIMEOUT_MS)
         timer.unref?.()
 
@@ -825,14 +792,14 @@ function bridgeCommand(command) {
             command,
             clientId: client.clientId
         })
-        const payload = `event: command\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\n\n`
+        const payload = `event: command\\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\\n\\n`
         try {
             client.res.write(payload)
         } catch (error) {
             clearTimeout(timer)
             pendingCommands.delete(id)
-            removeBridgeClient(client.clientId, client)
-            reject(new Error(`Could not send command to editor session: ${error.message}`))
+            removeBridgeClient(client)
+            reject(new Error(`Could not send command to Editor Host: ${error.message}`))
         }
     })
 }
@@ -846,20 +813,20 @@ async function forwardToEditor(tool, args) {
     return text(typeof result === "string" ? result : JSON.stringify(result, null, 2))
 }
 
-export function getBridgeStatus() {
-    return bridgeStatus()
-}
-
 export async function handleBridgeEvents(req, res) {
-    // Session identity is generated by the server, never accepted from the URL.
-    const clientId = crypto.randomUUID()
+    // A single Editor Host owns the MCP bridge. A reconnect replaces the
+    // previous transport and invalidates every command bound to that session.
+    if (bridgeClient) {
+        const previous = bridgeClient
+        removeBridgeClient(previous)
+        previous.res.end()
+    }
 
     const client = {
-        clientId,
-        res,
-        connectedAt: new Date().toISOString(),
-        lastActiveAt: Date.now()
+        clientId: crypto.randomUUID(),
+        res
     }
+    bridgeClient = client
 
     res.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -867,40 +834,24 @@ export async function handleBridgeEvents(req, res) {
         Connection: "keep-alive",
         "X-Accel-Buffering": "no"
     })
-    bridgeClients.set(clientId, client)
-    activateBridgeClient(clientId)
-    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, active: clientId === activeBridgeClientId })}\n\n`)
-    log(`mcp-bridge: editor connected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
+    res.write(`event: connected\\ndata: ${JSON.stringify({ clientId: client.clientId })}\\n\\n`)
+    log("mcp-bridge: Editor Host connected")
 
     const ping = setInterval(() => {
         try {
-            if (!res.write(": ping\n\n")) return
+            if (!res.write(": ping\\n\\n")) return
         } catch (error) {
-            removeBridgeClient(clientId, client)
+            removeBridgeClient(client)
         }
     }, 15000)
     ping.unref?.()
 
     const disconnect = () => {
         clearInterval(ping)
-        removeBridgeClient(clientId, client)
+        removeBridgeClient(client)
     }
     res.on?.("close", disconnect)
     res.on?.("error", disconnect)
-}
-
-export async function handleBridgeActivate(req, res) {
-    let body
-    try {
-        body = await readBody(req)
-    } catch (error) {
-        return sendJSON(res, { error: `Invalid activation request: ${error.message}` })
-    }
-    if (typeof body.clientId !== "string" || !activateBridgeClient(body.clientId)) {
-        return sendJSON(res, { error: "Editor bridge session is not connected." })
-    }
-    log(`mcp-bridge: active editor session changed to ${body.clientId}`)
-    return sendJSON(res, { ok: true, ...bridgeStatus() })
 }
 
 export async function handleBridgeResult(req, res) {
