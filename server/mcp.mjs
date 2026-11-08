@@ -825,7 +825,7 @@ function bridgeCommand(command) {
             command,
             clientId: client.clientId
         })
-        const payload = `event: command\\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\\n\\n`
+        const payload = `event: command\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\n\n`
         try {
             client.res.write(payload)
         } catch (error) {
@@ -868,13 +868,13 @@ export async function handleBridgeEvents(req, res) {
         "X-Accel-Buffering": "no"
     })
     bridgeClients.set(clientId, client)
-    if (!activeBridgeClientId) activateBridgeClient(clientId)
-    res.write(`event: connected\\ndata: ${JSON.stringify({ clientId, active: clientId === activeBridgeClientId })}\\n\\n`)
+    activateBridgeClient(clientId)
+    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, active: clientId === activeBridgeClientId })}\n\n`)
     log(`mcp-bridge: editor connected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
 
     const ping = setInterval(() => {
         try {
-            if (!res.write(": ping\\n\\n")) return
+            if (!res.write(": ping\n\n")) return
         } catch (error) {
             removeBridgeClient(clientId, client)
         }
