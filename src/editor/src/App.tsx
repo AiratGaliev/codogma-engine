@@ -8,7 +8,7 @@ import {
   onMount,
 } from "solid-js";
 import designTokens from "../design-system/tokens.json";
-import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue } from "@codogma/cge";
+import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue, NodeDocument } from "@codogma/cge";
 import { NativeComponentInspector } from "./components/NativeComponentInspector.tsx";
 import { parseComponentSchemaSource } from "./domain/component-schema-source.js";
 import {
@@ -725,12 +725,20 @@ function App() {
   let scriptCheckSequence = 0;
 
   function createNativeComponentContext(document: EditorDocument, project: import("@codogma/cge").ProjectDocumentV1) {
-    const entries = getSceneNodeEntries(document, prefabCatalog().map((item) => item.document));
+    const roots = isPrefabDocument(document) ? [document.root] : document.rootNodes;
+    const nodeIds = new Set<string>();
+    const collectNodeIds = (node: NodeDocument): void => {
+      nodeIds.add(node.id);
+      node.children.forEach(collectNodeIds);
+    };
+    roots.forEach(collectNodeIds);
+    const entries = getSceneNodeEntries(document, prefabCatalog().map((item) => item.document))
+      .filter((entry) => nodeIds.has(entry.id));
     return {
       project,
       schemas: componentSchemas(),
       assets: new Map(project.assets.map((asset) => [asset.id, asset])),
-      nodeIds: new Set(entries.map((entry) => entry.id)),
+      nodeIds,
       nodeKinds: new Map(entries.map((entry) => [entry.id, entry.type])),
     };
   }
@@ -3060,6 +3068,7 @@ function App() {
     if (!selected || !current || !project) return [];
     const modules = new Map(project.componentModules.map((module) => [module.typeId, module]));
     const context = createNativeComponentContext(current, project);
+    const nodeOptions = sceneObjects().filter((entry) => context.nodeIds?.has(entry.id));
     return selected.node.components.flatMap((instance) => {
       const module = modules.get(instance.typeId);
       if (!module) return [];
@@ -3077,6 +3086,7 @@ function App() {
         asset,
         schema,
         schemaDiagnostics,
+        nodeOptions,
         diagnostics: [...validation.diagnostics, ...editDiagnostics],
       }];
     });
@@ -3862,7 +3872,7 @@ function App() {
                               schema={entry.schema!}
                               properties={entry.instance.properties}
                               assets={projectDocument()?.assets ?? []}
-                              nodes={sceneObjects()}
+                              nodes={entry.nodeOptions}
                               ownerNodeId={selectedObject()?.id ?? ""}
                               diagnostics={entry.diagnostics}
                               drafts={componentDrafts()}
