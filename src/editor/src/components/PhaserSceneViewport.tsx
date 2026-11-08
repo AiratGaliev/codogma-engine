@@ -11,7 +11,7 @@ import {
 } from "../domain/scene-model.ts";
 import {
   readProjectFile,
-  type ProjectEntry,
+  type ProjectTreeEntry,
 } from "../services/editor-api";
 import { getEnabledNativeNodeEffects, type FxObject } from "../domain/fx-model.ts";
 import type { NodeDocument, PrefabDocumentV1, ProjectDocumentV1 } from "@codogma/cge";
@@ -178,7 +178,7 @@ interface Props {
   scene: EditorDocument | null;
   scenePath: string | null;
   selectedId: string | null;
-  projectTree: ProjectEntry | null;
+  projectTree: ProjectTreeEntry | null;
   projectDocument: ProjectDocumentV1 | null;
   prefabs: PrefabDocumentV1[];
   theme: "dark" | "light";
@@ -229,19 +229,17 @@ function normalizeProjectPath(value: string): string | null {
 }
 
 function flattenFiles(
-  root: ProjectEntry | null,
-  prefix = "",
-): Array<{ path: string; entry: ProjectEntry }> {
-  const result: Array<{ path: string; entry: ProjectEntry }> = [];
+  root: ProjectTreeEntry | null,
+): Array<{ path: string; entry: ProjectTreeEntry }> {
+  const result: Array<{ path: string; entry: ProjectTreeEntry }> = [];
   for (const child of root?.children ?? []) {
-    const path = prefix ? `${prefix}/${child.name}` : child.name;
-    result.push({ path, entry: child });
-    if (!child.isFile) result.push(...flattenFiles(child, path));
+    result.push({ path: child.relativePath, entry: child });
+    if (child.kind === "directory") result.push(...flattenFiles(child));
   }
   return result;
 }
 
-async function discoverPhaserScript(root: ProjectEntry | null): Promise<string> {
+async function discoverPhaserScript(root: ProjectTreeEntry | null): Promise<string> {
   try {
     const html = await readProjectFile("index.html");
     const scriptSources = [...html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi)]
@@ -289,7 +287,7 @@ function collectImageAssets(value: unknown, result: ImageAsset[], depth = 0): vo
   }
 }
 
-async function discoverImageAssets(root: ProjectEntry | null): Promise<ImageAsset[]> {
+async function discoverImageAssets(root: ProjectTreeEntry | null): Promise<ImageAsset[]> {
   const packFiles = flattenFiles(root).filter(({ path }) =>
     /(^|\/)asset-pack\.json$/i.test(path),
   );
@@ -350,7 +348,7 @@ function PhaserSceneViewport(props: Props) {
   let sceneReady = false;
   let selectionFrame: PhaserGameObject | undefined;
   let activeScenePath: string | null | undefined;
-  let activeProjectTree: ProjectEntry | null | undefined;
+  let activeProjectTree: ProjectTreeEntry | null | undefined;
   let phaserApi: PhaserNamespace | undefined;
   let webGlRenderer = false;
   let canvasFxWarningShown = false;
