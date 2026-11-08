@@ -37,7 +37,7 @@ jobs:
 
           if [[ "$EVENT_NAME" != "pull_request" ]]; then
             echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
-            for scope in root editor ai_chat localization mcp_package cge; do
+            for scope in root host ai_chat localization mcp_package cge; do
               echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
             done
             echo "Manual run: full code checks and all dependency audits are enabled."
@@ -47,7 +47,7 @@ jobs:
           if ! changed_file_list="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::Не удалось определить diff PR; безопасный режим — полный набор проверок и все dependency audits."
             echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
-            for scope in root editor ai_chat localization mcp_package cge; do
+            for scope in root host ai_chat localization mcp_package cge; do
               echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
             done
             exit 0
@@ -109,7 +109,7 @@ jobs:
           }
 
           emit_audit_scope root package-lock.json
-          emit_audit_scope editor source/editor/package.json source/editor/package-lock.json
+          emit_audit_scope host src/editor/package.json src/editor/package-lock.json
           emit_audit_scope ai_chat mini-services/ai-chat/package.json mini-services/ai-chat/package-lock.json
           emit_audit_scope localization packages/localization/package.json packages/localization/package-lock.json
           emit_audit_scope mcp_package packages/editor-mcp-server/package.json packages/editor-mcp-server/package-lock.json
@@ -122,7 +122,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            source/editor/package-lock.json
+            src/editor/package-lock.json
             packages/localization/package-lock.json
             packages/editor-mcp-server/package-lock.json
             packages/cge/package-lock.json
@@ -187,19 +187,10 @@ jobs:
         if: steps.scope.outputs.audit_root == 'true'
         run: npm audit --audit-level=low
 
-      - name: Install locked dependencies (editor client)
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm ci
-        working-directory: source/editor
-
-      - name: Audit editor dependencies
-        if: steps.scope.outputs.audit_editor == 'true'
+      - name: Audit Editor Host dependencies
+        if: steps.scope.outputs.audit_host == 'true'
         run: npm audit --audit-level=low
-        working-directory: source/editor
-
-      - name: Build editor client (typecheck)
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm run build
+        working-directory: src/editor
 
       - name: Unit regression tests (editor, serialization, security and icons)
         if: steps.scope.outputs.run_code_checks == 'true'
@@ -210,11 +201,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PORT=3100 PROJECT_DIR=tests/workspace/test-typescript node server/server.mjs &
+          PORT=3100 node server/server.mjs &
           SRV=$!
           sleep 3
-          curl -sf http://localhost:3100/editor/product.json | tee /dev/stderr | grep -q "Codogma Engine"
-          curl -sf -o /dev/null http://127.0.0.1:3100/editor/
+          curl -sf http://localhost:3100/editor/mcp-bridge-status | tee /dev/stderr | grep -q '"connected"'
+          curl -sf -o /dev/null http://127.0.0.1:3100/editor/mcp-bridge-status
           kill $SRV
 
       - name: Security smoke tests (local access, symlinks, MCP compatibility)
