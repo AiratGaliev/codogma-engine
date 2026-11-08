@@ -116,8 +116,7 @@ test("Node server serves the native Editor Host, Project Model and runtime asset
         assert.equal(bridgeResponse.status, 200)
         const bridge = await bridgeResponse.json()
         assert.equal(bridge.connected, false)
-        assert.equal(bridge.clients, 0)
-        assert.deepEqual(bridge.sessions, [])
+        assert.equal(bridge.clientId, null)
     } finally {
         await server.stop()
     }
