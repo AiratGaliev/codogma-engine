@@ -40,10 +40,13 @@ export async function parseComponentSchemaSource(
   const ts = await import("typescript");
   const scriptKind = fileName.toLowerCase().endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind);
-  if (sourceFile.parseDiagnostics.length > 0) {
+  const parseDiagnostics = (sourceFile as import("typescript").SourceFile & {
+    parseDiagnostics: readonly import("typescript").Diagnostic[];
+  }).parseDiagnostics;
+  if (parseDiagnostics.length > 0) {
     return {
       valid: false,
-      diagnostics: sourceFile.parseDiagnostics.map((item) => schemaDiagnostic(
+      diagnostics: parseDiagnostics.map((item) => schemaDiagnostic(
         ts.flattenDiagnosticMessageText(item.messageText, "\n"),
         fileName,
       )),

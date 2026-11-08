@@ -7,7 +7,6 @@ import {
   type NodeReferenceKind,
   type CoreDiagnostic,
   type JsonObject,
-  type JsonValue,
   type NodeDocument,
   type ProjectDocumentV1,
   type ValidationResult,

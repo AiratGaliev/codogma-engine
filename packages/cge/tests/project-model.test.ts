@@ -354,6 +354,7 @@ test("rejects unknown Scene, Node, Transform and Component fields without closin
   assert.equal(result.value, undefined);
   assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
     "rootNodes[0].components[0].customComponentMetadata",
+    "rootNodes[0].components[0].properties.pluginProperty",
     "rootNodes[0].editorMetadata",
     "rootNodes[0].transform.legacyPivot",
     "scene.extensionMetadata",
