@@ -83,12 +83,12 @@ import {
   type FxType,
 } from "./domain/fx-model.ts";
 import {
-  getProjectFiles,
+  getProjectDirectorySnapshot,
   readProjectFile,
   writeProjectFile,
-  deleteProjectFiles,
-  createProjectFolder,
-  type ProjectEntry,
+  deleteProjectEntries,
+  createProjectDirectory,
+  type ProjectTreeEntry,
 } from "./services/editor-api";
 import {
   checkTypeScriptSource,
@@ -188,7 +188,7 @@ function Icon(props: {
 }
 
 function ProjectTreeNode(props: {
-  node: ProjectEntry;
+  node: ProjectTreeEntry;
   path: string;
   theme: Theme;
   selectedPath: string;
@@ -198,7 +198,7 @@ function ProjectTreeNode(props: {
   const [expanded, setExpanded] = createSignal(
     props.path.length === 0 || props.path === "scenes" || props.path === "assets",
   );
-  const isDirectory = () => !props.node.isFile;
+  const isDirectory = () => props.node.kind === "directory";
   const iconName = () => {
     if (isDirectory()) return expanded() ? "folder" : "folder";
     const extension = props.node.name.toLowerCase().split(".").pop();
@@ -224,7 +224,7 @@ function ProjectTreeNode(props: {
           else props.onSelect(props.path, true);
         }}
         onDblClick={() => {
-          if (props.node.isFile) props.onSelect(props.path, true);
+          if (props.node.kind === "file") props.onSelect(props.path, true);
         }}
         title={props.path}
       >
@@ -233,7 +233,7 @@ function ProjectTreeNode(props: {
         </span>
         <Icon theme={props.theme} name={iconName()} size={14} />
         <span class="tree-label">{props.node.name}</span>
-        <Show when={props.node.isFile && (props.node.name.toLowerCase().endsWith(".cge-scene.json") || props.node.name.toLowerCase().endsWith(".cge-prefab.json"))}>
+        <Show when={props.node.kind === "file" && (props.node.name.toLowerCase().endsWith(".cge-scene.json") || props.node.name.toLowerCase().endsWith(".cge-prefab.json"))}>
           <span class="file-kind">{props.node.name.toLowerCase().endsWith(".cge-prefab.json") ? "PREFAB" : "SCENE"}</span>
         </Show>
       </button>
@@ -241,9 +241,7 @@ function ProjectTreeNode(props: {
         <div class="file-tree-children">
           <For each={props.node.children ?? []}>
             {(child) => {
-              const childPath = props.path
-                ? `${props.path}/${child.name}`
-                : child.name;
+              const childPath = child.relativePath;
               return (
                 <ProjectTreeNode
                   node={child}
@@ -261,19 +259,16 @@ function ProjectTreeNode(props: {
   );
 }
 
-function flattenProjectFiles(
-  node: ProjectEntry,
-  prefix = "",
-): Array<{ path: string; entry: ProjectEntry }> {
-  const result: Array<{ path: string; entry: ProjectEntry }> = [];
+function flattenProjectEntries(
+  node: ProjectTreeEntry,
+): Array<{ path: string; entry: ProjectTreeEntry }> {
+  const result: Array<{ path: string; entry: ProjectTreeEntry }> = [];
   for (const child of node.children ?? []) {
-    const path = prefix ? `${prefix}/${child.name}` : child.name;
-    result.push({ path, entry: child });
-    if (!child.isFile) result.push(...flattenProjectFiles(child, path));
+    result.push({ path: child.relativePath, entry: child });
+    if (child.kind === "directory") result.push(...flattenProjectEntries(child));
   }
   return result;
 }
-
 function PanelHeader(props: {
   title: string;
   icon: string;
@@ -369,7 +364,7 @@ function App() {
     return stored === "light" ? "light" : "dark";
   })());
   const [projectName, setProjectName] = createSignal("Project");
-  const [projectTree, setProjectTree] = createSignal<ProjectEntry | null>(null);
+  const [projectTree, setProjectTree] = createSignal<ProjectTreeEntry | null>(null);
   const [projectDocument, setProjectDocument] = createSignal<import("@codogma/cge").ProjectDocumentV1 | null>(null);
   const [savedProjectContent, setSavedProjectContent] = createSignal("");
   const [projectSaving, setProjectSaving] = createSignal(false);
@@ -537,7 +532,7 @@ function App() {
     const root = projectTree();
     const query = projectSearch().trim().toLowerCase();
     if (!root || !query) return [];
-    return flattenProjectFiles(root).filter(({ path }) =>
+    return flattenProjectEntries(root).filter(({ path }) =>
       path.toLowerCase().includes(query),
     );
   });
@@ -793,18 +788,18 @@ function App() {
     setLoading(true);
     setLoadError("");
     try {
-      const result = await getProjectFiles();
-      setProjectTree(result.rootFile);
-      setProjectName(result.rootFile.name);
+      const result = await getProjectDirectorySnapshot();
+      setProjectTree(result.root);
+      setProjectName(result.root.name);
       const manifestContent = await readProjectFile(PROJECT_MANIFEST_PATH);
       const project = parseNativeProjectDocument(manifestContent);
       setProjectDocument(project);
       setSavedProjectContent(serializeNativeProjectDocument(project));
 
-      const files = flattenProjectFiles(result.rootFile);
-      const availableProjectPaths = new Set(files.filter(({ entry }) => entry.isFile).map(({ path }) => path));
+      const files = flattenProjectEntries(result.root);
+      const availableProjectPaths = new Set(files.filter(({ entry }) => entry.kind === "file").map(({ path }) => path));
       const animationAssets: Array<{ key: string; url: string; type: string }> = [];
-      const assetPackFiles = files.filter(({ path, entry }) => entry.isFile && path.toLowerCase().endsWith("asset-pack.json"));
+      const assetPackFiles = files.filter(({ path, entry }) => entry.kind === "file" && path.toLowerCase().endsWith("asset-pack.json"));
       for (const packFile of assetPackFiles) {
         try {
           const pack = JSON.parse(await readProjectFile(packFile.path)) as Record<string, unknown>;
@@ -842,7 +837,7 @@ function App() {
       const sceneAsset = resolveSceneAsset(project, firstScene.id);
       const opened = await loadScene(sceneAsset.path);
       if (!opened) throw new Error(`The registered Scene "${sceneAsset.path}" could not be opened.`);
-      log("info", `Native Project loaded · ${result.projectNumberOfFiles} files and folders`);
+      log("info", `Native Project loaded · ${result.entryCount} files and folders`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setLoadError(message);
@@ -899,17 +894,17 @@ function App() {
   }
 
   async function refreshProjectTree() {
-    const result = await getProjectFiles();
-    setProjectTree(result.rootFile);
+    const result = await getProjectDirectorySnapshot();
+    setProjectTree(result.root);
   }
 
   async function ensureProjectFolder(relativePath: string) {
     const root = projectTree();
     if (!root) throw new Error("The project tree is not loaded.");
-    const existing = flattenProjectFiles(root).find((item) => item.path === relativePath);
-    if (existing && !existing.entry.isFile) return;
-    if (existing?.entry.isFile) throw new Error(`A file already exists at "${relativePath}".`);
-    await createProjectFolder(relativePath);
+    const existing = flattenProjectEntries(root).find((item) => item.path === relativePath);
+    if (existing && !existing.entry.kind === "file") return;
+    if (existing?.entry.kind === "file") throw new Error(`A file already exists at "${relativePath}".`);
+    await createProjectDirectory(relativePath);
     await refreshProjectTree();
   }
 
@@ -1184,7 +1179,7 @@ function App() {
   function assertNewProjectFilePath(path: string) {
     const root = projectTree();
     if (!root) throw new Error("The project tree is not loaded.");
-    const existing = flattenProjectFiles(root).find((item) => item.path.toLowerCase() === path.toLowerCase());
+    const existing = flattenProjectEntries(root).find((item) => item.path.toLowerCase() === path.toLowerCase());
     if (existing) throw new Error(`A project item already exists at "${path}".`);
   }
 
@@ -1254,7 +1249,7 @@ function App() {
       try {
         await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
       } catch (error) {
-        try { await deleteProjectFiles([path]); }
+        try { await deleteProjectEntries([path]); }
         catch (rollbackError) {
           throw new Error(`Project manifest update failed and the newly written Prefab could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
         }
@@ -2421,9 +2416,9 @@ function App() {
 
   async function refreshProjectTreeFromBridge() {
     try {
-      const result = await getProjectFiles();
-      setProjectTree(result.rootFile);
-      setProjectName(result.rootFile.name);
+      const result = await getProjectDirectorySnapshot();
+      setProjectTree(result.root);
+      setProjectName(result.root.name);
       log("info", "Project files changed outside the active editor document; Project tree refreshed.");
     } catch (error) {
       log("warning", `Could not refresh the Project tree after an MCP file change: ${error instanceof Error ? error.message : String(error)}`);
@@ -2530,7 +2525,7 @@ function App() {
       try {
         await writeProjectFile(PROJECT_MANIFEST_PATH, manifestContent);
       } catch (error) {
-        try { await deleteProjectFiles([path]); }
+        try { await deleteProjectEntries([path]); }
         catch (rollbackError) {
           throw new Error(`Project manifest update failed and the new Scene could not be rolled back: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
         }
@@ -3866,7 +3861,7 @@ function App() {
                                 void openProjectFile(file.path);
                               }}
                             >
-                              <Icon theme={theme()} name={file.entry.isFile ? "file" : "folder"} size={13} />
+                              <Icon theme={theme()} name={file.entry.kind === "file" ? "file" : "folder"} size={13} />
                               <span class="tree-label">{file.path}</span>
                             </button>
                           )}
