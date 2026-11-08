@@ -1090,9 +1090,8 @@ function parseToolCalls(text) {
 
 /*
  * AI Chat project-file attachments. Paths are project-relative (without the
- * leading project folder name). The frozen Colibri client may attach its
- * unpublished .scene/.components documents only in legacy UI mode; the
- * SolidJS Host must never load those internal formats into the AI context.
+ * leading project folder name). Unpublished internal .scene/.components
+ * documents are not part of the native Project Model and are never attached.
  */
 function normalizeAttachmentPath(rawPath) {
 
@@ -1122,8 +1121,7 @@ function attachmentFence(relPath) {
 
     if (ext === ".ts" || ext === ".tsx") return "ts"
     if (ext === ".js" || ext === ".mjs" || ext === ".cjs") return "js"
-    if (ext === ".json" || ext === ".scene" || ext === ".prefab"
-        || ext === ".assetpack" || ext === ".components") return "json"
+    if (ext === ".json" || ext === ".prefab" || ext === ".assetpack") return "json"
     if (ext === ".md") return "markdown"
     if (ext === ".html" || ext === ".htm") return "html"
     if (ext === ".css") return "css"
@@ -1235,8 +1233,8 @@ async function handleAiChat(req, res) {
                     continue
                 }
 
-                if (EDITOR_UI === "solidjs" && /\.(?:scene|components)$/i.test(att.rel)) {
-                    log(`ai-chat: attachment rejected (legacy document format is unavailable in SolidJS Host mode): ${att.rel}`)
+                if (/\.(?:scene|components)$/i.test(att.rel)) {
+                    log(`ai-chat: attachment rejected (unsupported internal document format): ${att.rel}`)
                     continue
                 }
 
