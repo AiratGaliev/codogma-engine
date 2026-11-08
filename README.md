@@ -137,7 +137,7 @@ $env:PROJECT_DIR = "C:\path\to\my-game"
 npm start
 ~~~
 
-The server uses these defaults unless overridden:
+The server uses these defaults unless overridden. `PROJECT_DIR` must point to the root of a native Codogma Project Model v1 directory containing `project.json`; the Editor Host development launcher checks this before starting Vite so a legacy workspace cannot fail later as a browser 404:
 
 | Variable | Default | Purpose |
 |---|---|---|

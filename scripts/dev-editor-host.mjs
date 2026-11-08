@@ -6,6 +6,17 @@ import "dotenv/config";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const hostDir = resolve(rootDir, "src", "editor");
+const defaultProjectDirectory = resolve(rootDir, "packages", "cge", "tests", "fixtures", "acceptance-project");
+const projectDirectory = resolve(rootDir, process.env.PROJECT_DIR || defaultProjectDirectory);
+const projectManifest = resolve(projectDirectory, "project.json");
+
+if (!existsSync(projectManifest)) {
+  console.error("[dev] The selected PROJECT_DIR is not a native Codogma Project Model v1 directory.");
+  console.error("[dev] Missing manifest: " + projectManifest);
+  console.error("[dev] Set PROJECT_DIR to a directory containing project.json, or unset PROJECT_DIR to use:");
+  console.error("[dev] " + defaultProjectDirectory);
+  process.exit(1);
+}
 const coreCompiler = resolve(hostDir, "node_modules", "typescript", "bin", "tsc");
 const viteCli = resolve(hostDir, "node_modules", "vite", "bin", "vite.js");
 
