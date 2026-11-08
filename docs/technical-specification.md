@@ -16,13 +16,13 @@ Codogma Engine должен развиться в самостоятельный
 
 Главная UI-цель — **создать самостоятельный SolidJS + TypeScript/TSX Editor Host с Tailwind CSS 4**, используя Unity 6.6 как основной UX-reference. Временный UI client и production route topology описаны в [Editor UI migration plan](editor-ui-migration.md) и [ADR-0005](decisions/ADR-0005-solidjs-editor-host.md). Все новые project, scene, asset, script и runtime workflows используют собственные типизированные Codogma contracts. Архитектура Project Model закреплена в [ADR-0007](decisions/ADR-0007-native-codogma-project-model.md).
 
-[Unity 6.6 (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) и [Cocos Creator 4.0 LTS](https://docs.cocos.com/creator/4.0/manual/en/) — два обязательных продуктовых референса нового редактора именно для 2D-игр: Unity — основной UX-reference, Cocos — дополнительный cross-check реальных authoring workflows. Unity 6.6 (6000.6) — выпущенная версия; архив Unity содержит 6000.6.8f1 от 03.11.2026. Конкретные API и platform guarantees проверяются по документации закреплённой версии и фактическому runtime Codogma. **Исходный код [Godot Editor (закреплённый commit)](<https://github.com/godotengine/godot/tree/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor>) используется отдельно как implementation/engineering reference для изучения реализации редакторских подсистем; он не является третьим продуктовым UX-reference, не задаёт feature parity и не становится runtime dependency.** **Цель — сопоставимое качество основных 2D-сценариев и профессиональное ощущение редактора, а не полный feature parity, копирование архитектуры или API.** Codogma остаётся 2D-only (без 2D/3D переключателя), TypeScript-native и Web-first. Подробный обязательный процесс adopt/adapt/reject и правила работы с Colibri закреплены в [стандарте reference нового Editor Host](editor-reference-standard.md).
+[Unity 6.6 (6000.6)](https://docs.unity3d.com/6000.6/Documentation/Manual/2DFeature.html) и [Cocos Creator 4.0 LTS](https://docs.cocos.com/creator/4.0/manual/en/) — два обязательных продуктовых референса нового редактора именно для 2D-игр: Unity — основной UX-reference, Cocos — дополнительный cross-check реальных authoring workflows. Unity 6.6 (6000.6) — выпущенная версия; архив Unity содержит 6000.6.8f1 от 03.11.2026. Конкретные API и platform guarantees проверяются по документации закреплённой версии и фактическому runtime Codogma. **Исходный код [Godot Editor (закреплённый commit)](<https://github.com/godotengine/godot/tree/95c0fa5fe8a019adc29d074c16b64469b04571f7/editor>) используется отдельно как implementation/engineering reference для изучения реализации редакторских подсистем; он не является третьим продуктовым UX-reference, не задаёт feature parity и не становится runtime dependency.** **Цель — сопоставимое качество основных 2D-сценариев и профессиональное ощущение редактора, а не полный feature parity, копирование архитектуры или API.** Codogma остаётся 2D-only (без 2D/3D переключателя), TypeScript-native и Web-first. Подробный обязательный процесс adopt/adapt/reject для продуктовых и инженерных reference закреплён в [стандарте reference нового Editor Host](editor-reference-standard.md).
 
 ### 1.1. Приоритет продуктовой ценности
 
 1. **Качество существующего редактора.** Цельный визуальный язык, удобные панели и keyboard workflow, понятные состояния UI, рабочие Scene/Hierarchy/Inspector/Assets, стабильное сохранение, Undo/Redo и отсутствие регрессий в имеющихся инструментах.
 2. **Подтверждённое поведение нативных 2D-возможностей.** Native Project Model, Editor Preview, Build и runtime должны использовать одну модель и давать согласованные результаты; генерация отдельного TypeScript-файла для каждой Scene не является частью authoring/build contract. FX, Box2D, imports и assets проходят адресную browser/runtime acceptance.
-3. **Инженерное качество исходного кода.** Проверяемые границы, TypeScript checks, тесты, контроль зависимостей и последовательное удаление временной Colibri реализации из продуктового пути.
+3. **Инженерное качество исходного кода.** Проверяемые границы, TypeScript checks, тесты, контроль зависимостей и единая native-реализация редактора.
 4. **Связность модели редактора и runtime.** Объекты/компоненты должны переходить в живую игру без нескольких источников истины; новый Project Model/Core вводится по отдельному проверяемому плану.
 5. **Живой запуск и диагностика.** Preview Host, runtime selection/live Inspector, логи и ошибки.
 6. **Конвейер создания и выпуска 2D Web-игры.** Валидация ресурсов, воспроизводимый HTML5 build и платформенные интеграции.
@@ -30,7 +30,7 @@ Codogma Engine должен развиться в самостоятельный
 
 ### 1.2. Порядок поставки и границы начального MVP
 
-Работу следует принимать по проверяемым сценариям, а не по числу новых компонентов или перенесённых файлов. Целевая программа UI — независимый SolidJS Editor Host, который реализует необходимые 2D authoring workflows. Временный UI client остаётся отдельным приложением только на период production rollout и ограниченного rollback window. Core, Preview и Build используют единый native Codogma Project Model.
+Работу следует принимать по проверяемым сценариям, а не по числу компонентов или файлов. Единственный Editor Host — самостоятельное SolidJS-приложение; Core, Preview, Build и MCP используют единый native Codogma Project Model.
 
 | Gate | Что должно работать | Как подтверждается |
 |---|---|---|
@@ -54,29 +54,22 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 
 | Область | Фактическая база |
 |---|---|
-| Клиент редактора | TypeScript-клиент в `source/editor/`, основанный на открытом клиенте Phaser Editor 2D v3 |
-| Рабочая среда | Colibri workbench, registry расширений, controls и editors описывают существующий legacy-клиент и служат только read-only inventory reference; новый SolidJS Host в `src/editor/` реализует отдельную Workbench shell и native workflows. Legacy-клиент заморожен и не развивается; необходимые workflows проектируются и реализуются заново на native Codogma contracts |
-| Работа с файлами | Существует контракт `IFileStorage` и HTTP-реализация файлового доступа; конкретные методы и текущие ограничения нужно сохранять в capability inventory |
-| Плагины редактора | Подсистемы вынесены в плагины `phasereditor2d.*`, включая Scene Editor, Inspector, Assets/Pack, Animations и другие существующие инструменты |
-| Сервер | `server/server.mjs` реализует локальный HTTP-сервер, API редактора/проекта, выдачу файлов для play mode и MCP bridge |
-| Runtime | Вендорная интеграция Phaser 4.2.1 в плагине редактора, TypeScript declarations и адаптации редактора/генератора; текущая точка подключения использует bundle, а не Feature Registry для выбора подсистем |
-| AI/MCP | Есть server-owned MCP tool registry и HTTP endpoint `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует tool schemas/calls без второго реестра или альтернативного transport contract. AI Chat service необязателен |
-| CI | `fast-checks` выполняет быстрые build/typecheck, unit/contract/security и server-smoke проверки для обычных PR; все E2E suites (MCP, Playwright/browser и последующие gameplay E2E) запускаются только в promotion workflow начиная с PR `dev → test`, затем на последующих release-promotion PR |
-| TypeScript / lint baseline | В frozen `source/editor/package.json` зафиксирован TypeScript 5.3.3; `build` использует TypeScript project references (`tsc -b`). TSLint dependency удалена в PR #10, но `tslint.json` и `lint.sh` остались без активного package/CI gate. Это inventory-only baseline: не усиливать, не модернизировать и не расширять quality gates в legacy client. Новые Codogma modules и SolidJS Host используют актуальный строгий toolchain по ADR-0002 |
+| Клиент редактора | Native SolidJS + TypeScript/TSX приложение в `src/editor/`, Vite 8 и Tailwind CSS 4 |
+| Рабочая среда | Workbench, Scene/Game View, Hierarchy, Inspector, Project/Assets и команды реализуются как feature modules одного Editor Host |
+| Работа с файлами | `server/server.mjs` предоставляет loopback HTTP API для операций с файлами и native project documents; доступ ограничен выбранным `PROJECT_DIR` |
+| Расширения | Внутренние feature modules принадлежат Editor Host; публичный/versioned Extension API является отдельным будущим решением и не предполагается готовым |
+| Сервер | `server/server.mjs` обслуживает production build Host, native project/runtime files, AI Chat и engine-owned MCP HTTP endpoint |
+| Runtime | Phaser 4.2.1 — выбранный HTML5 runtime target. Native Project Model/Core не зависят от Phaser; data-driven Scene Loader, runtime adapter и Preview/Build pipeline имеют отдельные implementation stages |
+| AI/MCP | Engine-owned MCP registry и `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует engine schemas/calls. AI Chat service необязателен |
+| CI | `fast-checks` выполняет build/typecheck, unit/contract/security и server-smoke проверки; MCP и Playwright E2E выполняются на promotion workflow начиная с PR `dev → test`, затем на release-promotion PR |
+| TypeScript / lint baseline | Native Host, Core и first-party TypeScript packages используют строгие проверки, зафиксированные в ADR-0002; актуальные install/build/test команды выполняются CI |
 | Release | Workflow на `main` собирает ZIP GitHub Actions artifact. Это пока не Tauri-установщик и не автоматическая публикация GitHub Release |
 
-Эта база содержит значительное количество Colibri UI и редакторской логики. **Полная замена UI является принятым направлением, но не одномоментной переписью всего движка.** Новый SolidJS Host создаётся как отдельное приложение; `source/editor/` используется исключительно для read-only inventory и временного rollback. Инвентаризация фиксирует существующие пользовательские сценарии и полезные domain/API потребности, но не предполагает изменения, исправления, рефакторинга или переноса legacy-реализации. Все новые workflows создаются в SolidJS Host с native Codogma contracts; Colibri удаляется после cutover и rollback window.
+Native Editor Host — самостоятельное приложение. Его пользовательские сценарии, модели и services используют собственные Codogma contracts; UI, Core, server и MCP не разделяют параллельные модели данных. Все новые workflows разрабатываются внутри native architecture и подтверждаются regression/acceptance tests.
 
-#### Уточнение: фактическая интеграция Phaser 4.2.1
+#### Phaser runtime target
 
-Проверка ветки `dev` и upstream-тега `v4.2.1` (27.10.2026) выявляет важное различие: **исходный код Phaser модульно организован, но текущая интеграция Codogma использует его как вендорный bundle**.
-
-- [`plugin.json`](../source/editor/plugins/phasereditor2d.phaser/plugin.json) подключает production-файл `scripts/phaser.min.js`, а в режиме разработки — `scripts/phaser.js`. Это текущая схема загрузки runtime внутри editor plugin.
-- В [корневом `package.json`](../package.json) и [`source/editor/package.json`](../source/editor/package.json) Phaser не объявлен как npm dependency. Поэтому текущий Phaser runtime не управляется npm dependency graph пользовательского проекта как обычная установленная Codogma-зависимость.
-- Upstream Phaser 4.2.1 имеет модульно организованные исходники и отдельные варианты поставки/сборки, включая [Arcade Physics build](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js) и [конфигурацию distribution build](https://github.com/phaserjs/phaser/blob/v4.2.1/config/webpack.dist.config.js). Это не означает, что нынешняя интеграция Codogma автоматически выбирает или исключает отдельные подсистемы; доступность кастомной сборки надо подтвердить реальным fixture и совместимостью editor-generated code.
-- [`phaser.ts`](../source/editor/plugins/phasereditor2d.phaser/src/phaser/phaser.ts)
-
-Таким образом, корректная характеристика — **«модульные исходники, но монолитный по текущему способу подключения runtime bundle»**, а не утверждение, что Phaser невозможно разделить. Сам факт наличия папок, деклараций или wrapper-пакетов не доказывает, что соответствующий runtime-код исключается из конечной сборки.
+Phaser 4.2.1 выбран как HTML5 runtime target. Native Project Model, Core и Editor Host не должны зависеть от UI-платформы или plugin internals: связь с Phaser реализуется отдельным runtime adapter и проверяется на воспроизводимых project fixtures. Upstream Phaser предоставляет модульные исходники и отдельные варианты distribution build, включая [Arcade Physics build](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js) и [конфигурацию distribution build](https://github.com/phaserjs/phaser/blob/v4.2.1/config/webpack.dist.config.js). Наличие модульной структуры само по себе не доказывает selective bundling или удаление неиспользуемых подсистем; размер, startup и runtime behavior проверяются на реальных generated-game fixtures.
 
 ### 2.2. Что пока нельзя считать реализованным
 
@@ -131,7 +124,7 @@ Security smoke проверяет конкретные локальные сце
 - Одновременная поддержка большого числа игровых runtime «на всякий случай».
 - Собственный renderer, физический движок, bundler, тестовый runner или визуальный редактор каждого вида контента, если зрелое решение закрывает потребность.
 - Разработка всех жанровых систем в ядре: диалоги, квесты, поведение NPC, волны Tower Defense и аналогичные инструменты предпочтительно оформлять как расширения.
-- Одномоментное переписывание всего UI в одном PR или cutover временного UI-клиента до прохождения migration acceptance. Поэтапный production cutover и rollback window регулируются ADR-0005.
+- Одномоментное переписывание всех подсистем в одном PR; Editor Host, Core, runtime и tools развиваются отдельными проверяемыми вертикальными срезами.
 - Публикация всех пакетов в публичный npm registry до стабилизации их контрактов.
 
 ## 4. Целевая архитектура и границы ответственности
@@ -164,9 +157,9 @@ Independent HTML5 Game Build
 └─ Platform Services adapters: Yandex Games / VK Mini Apps / VK Play
 ~~~
 
-Схема выражает логические границы и направления зависимостей, а не прямое соответствие слоям каталогов. В целевой структуре исходники самостоятельных Codogma packages находятся в `packages/<package-name>/`, а приложение редактора — в `src/editor/`. Не каждый логический слой обязан быть отдельным пакетом: внутренние детали остаются внутри пакета, которому принадлежат. `source/editor/` остаётся фактическим путём текущего frozen rollback client до COD-87/COD-88; он не является target path для новых функций или исправлений.
+Схема выражает логические границы и направления зависимостей, а не прямое соответствие слоям каталогов. Исходники самостоятельных Codogma packages находятся в `packages/<package-name>/`, а единственное приложение редактора — в `src/editor/`. Не каждый логический слой обязан быть отдельным пакетом: внутренние детали остаются внутри пакета, которому принадлежат.
 
-**Целевой Editor Host:** `src/editor/` — одно SolidJS + TypeScript/TSX SPA на Vite с Tailwind CSS 4. Применяются `vite-plugin-solid`, `jsx: preserve` и `jsxImportSource: solid-js`. SolidJS использует fine-grained reactivity без Virtual DOM: JSX компилируется в DOM-операции, а сигналы/сторы обновляют только зависимые узлы. Компонентная функция не трактуется как React-компонент, повторно вызываемый при каждом изменении состояния; реактивность задаётся Solid-примитивами. Tailwind отвечает за utility styling поверх Codogma design tokens/CSS variables. Phaser остаётся владельцем игрового Canvas/runtime renderer. Панели и редакторские функции — feature modules одного приложения; новый Host не импортирует Colibri и не использует постоянный bridge между UI-фреймворками.
+**Editor Host:** `src/editor/` — единственное SolidJS + TypeScript/TSX SPA на Vite с Tailwind CSS 4. Применяются `vite-plugin-solid`, `jsx: preserve` и `jsxImportSource: solid-js`. SolidJS использует fine-grained reactivity без Virtual DOM: JSX компилируется в DOM-операции, а сигналы/сторы обновляют только зависимые узлы. Компонентная функция не трактуется как React-компонент, повторно вызываемый при каждом изменении состояния; реактивность задаётся Solid-примитивами. Tailwind отвечает за utility styling поверх Codogma design tokens/CSS variables. Phaser подключается только через отдельные runtime contracts; панели и редакторские функции остаются feature modules одного приложения.
 
 Помимо редакторского интерфейса, проект должен получить headless-интерфейс к тем же Project Model, importer и build API. CLI/CI не зависит от открытого editor UI: он может валидировать проект, проверять dependency graph и выполнять HTML5 build. Это разделение требуется для воспроизводимых сборок и автоматических проверок, а не для дублирования бизнес-логики.
 
@@ -195,17 +188,17 @@ Game Test Bridge, Browser Controller и Game QA MCP подробно опред�
 
 Tauri и Electron не выбираются только по размеру дистрибутива. На целевых ОС необходимо проверить WebGL, производительность Game View, задержки Inspector, файловые операции и воспроизводимость поведения. Tauri использует системный WebView, Electron поставляет Chromium; это компромисс между весом и управляемостью браузерного окружения.
 
-#### Переходный режим двух Editor Host
+#### Editor Host и системный backend
 
-- Временный UI client продолжает открываться
-- Vite proxy пересылает относительные запросы /editor/* к backend на 127.0.0.1:3000, чтобы UI использовал те же POST /editor/api, project-file, upload, MCP HTTP и прочие действующие endpoints без прямого browser-to-backend CORS. Для proxy-origin в backend задаётся точный CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173; wildcard Origin запрещён. Реальная proxy конфигурация должна быть проверена вместе с server/request-origin.mjs.
-- По умолчанию оба UI могут использовать один backend/PROJECT_DIR, но редактировать один проект одновременно нельзя: current API не даёт cross-client lock/optimistic concurrency contract, а selection, undo history и caches принадлежат отдельным browser sessions. Для write acceptance использовать один активный writer либо отдельные fixture copies и backend instances.
-- Native MCP bridge маршрутизирует command только в одну активную SolidJS Host session и принимает response только от client session, получившей этот command; native tools завершаются ошибкой, если подключена только frozen legacy session. Это ещё не полный multi-Host contract: tests для concurrent sessions, reconnect, stale sessions, cancellation/timeouts и project write ownership остаются в COD-85. Параллельная write acceptance до завершения этой задачи выполняется на изолированных project/backend instances.
-- Два порта — только development topology. Production cutover выполняется через Node server: SolidJS bundle становится основным `/editor/`, а legacy UI удерживается ограниченное время для rollback. Постоянные два production backend или второй editor API не требуются.
+- Built Host обслуживается Node server под `/editor/`; в development Vite работает на `127.0.0.1:5173` и проксирует API к backend на `127.0.0.1:3000`.
+- Для proxy-origin backend получает точный `CODOGMA_ALLOWED_ORIGINS=http://127.0.0.1:5173`; wildcard Origin запрещён. Реальная proxy конфигурация проверяется вместе с `server/request-origin.mjs`.
+- Каждое открытое окно Host получает отдельный MCP session ID. Команда направляется активной сессии, а результат принимается только от сессии, получившей команду.
+- Multi-Host routing, reconnect, stale-session handling, cancellation/timeouts и shared project write ownership остаются COD-85. До их acceptance параллельная запись в один project directory не поддерживается; для write acceptance использовать изолированные fixture/backend instances.
+- Production и development используют один и тот же Editor Host; отличается только способ доставки frontend bundle.
 
 ### 4.3. Зависимости должны идти в одном направлении
 
-- Project Model и публичный Engine API не зависят от внутренних классов Colibri, UI-фреймворка, Tauri и конкретной реализации Phaser.
+- Project Model и публичный Engine API не зависят от UI-фреймворка, Tauri и конкретной реализации Phaser.
 - Editor UI работает с моделью проекта и контрактами инструментов, а не напрямую создаёт разрозненные экземпляры Phaser в каждом редакторском модуле.
 - Runtime adapters реализуют ограниченный набор стабильных контрактов; специализированные возможности доступны через явные backend-specific extensions.
 - Platform Services и build tools не должны требовать, чтобы игровой код знал детали оболочки редактора.
@@ -263,7 +256,7 @@ Tauri и Electron не выбираются только по размеру д�
 
 **Для каждой Scene запрещено создавать обязательный или автоматически сопровождающий её TypeScript-класс/файл (`Scene.ts`, `Level01.ts` и аналоги).** Scene — самостоятельный versioned document. Runtime строит её из сериализованных данных и явно зарегистрированных модулей. Имя Scene не влияет на имена Script assets, классов, exports или Component IDs. Внутренняя генерация build artifacts допустима только как неперсистентный шаг сборки всего проекта; она не создаёт редактируемый per-scene source и не является форматом Scene.
 
-Editor Host, Core, Preview и Build используют один Project Model и один Scene Loader contract. Scene остаётся сериализованным документом; Script является отдельным source asset, а runtime modules разрешаются через явный Project manifest. Production route для нового SolidJS Host и ограниченный UI rollback window регулируются отдельной UI cutover инициативой.
+Editor Host, Core, Preview и Build используют один Project Model и один Scene Loader contract. Scene остаётся сериализованным документом; Script является отдельным source asset, а runtime modules разрешаются через явный Project manifest.
 
 ## 6. Публичный TypeScript API и component system
 
@@ -468,8 +461,8 @@ Codogma предоставляет единый публичный Physics API �
 
 **Product/UX и implementation baseline:** каждая задача, меняющая пользовательский интерфейс или 2D authoring workflow, должна использовать [стандарт reference для 2D Editor Host](editor-reference-standard.md): Unity 6.6 — основной UX-reference, Cocos Creator 4.0 LTS — дополнительный 2D workflow reference, Godot Editor — task-specific implementation reference. Codogma остаётся строго 2D-only. Все data/runtime contracts задаются собственными ADR, typed schemas и native fixtures.
 
-- Целевой UI — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Первый Workbench + Scene slice COD-80 реализован и PR #30 смержен в `dev`; production `/editor/` cutover остаётся в COD-87.
-- `source/editor/` — frozen legacy boundary: только read-only inventory, временный rollback и последующее удаление в COD-88. Запрещены feature work, обычные bug fixes, refactoring, dependency upgrades, performance work, compatibility maintenance и любые модернизации code/manifests/lockfiles/scripts/dependencies. Единственное исключение — минимальная одноразовая security mitigation подтверждённой критической уязвимости, пока legacy route принимает production traffic; она не допускает регулярной поддержки. Технические cutover/rollback действия выполняются только в необходимом для COD-87 объёме. Все новые UI/authoring workflows создаются в `src/editor/`.
+- Editor Host — самостоятельное SolidJS + TypeScript/TSX приложение в `src/editor/`, с Tailwind CSS 4, отдельным package root и lockfile. Workbench + Scene slice COD-80 реализован; текущая работа развивается только в native Host.
+- Server, project-file services и MCP работают с native Project Model v1 и адресуют только Editor Host sessions. Все новые UI/authoring workflows реализуются на native contracts.
 - Переносить следует только пользовательские UI workflows и сформулированные потребности. Data/domain/runtime contracts проектируются как собственные Codogma contracts; реализация Editor Host должна использовать typed API boundaries и общую Project Model.
 - Backend HTTP/file APIs, MCP registry и независимые Phaser algorithms могут переиспользоваться после технической проверки. Project Model, serialization, Script/Component identity и runtime loading path принадлежат собственным Codogma contracts и проверяются native fixtures.
 - Migration inventory ведётся в [capability matrix](capability-matrix.md), общий owner — COD-82. Для каждой capability отдельно фиксируются legacy reference, reusable contract, Host implementation status, automated tests, browser/runtime acceptance и evidence SHA.
@@ -912,11 +905,11 @@ codogma-engine/
 
 #### Переход к CI без блокировки текущей разработки
 
-1. Снять baseline: проверить TS configs/scripts, определить новые Codogma-owned code paths, зафиксировать отсутствие TSLint dependency и оценить оставшиеся `tslint.json`/`lint.sh`. Отдельно инвентаризировать legacy type/lint findings.
+1. Снять baseline текущих TypeScript configs/scripts, ESLint/Prettier/Knip и dependency boundaries для root, Editor Host и native packages.
 2. Добавить конфиги ESLint/Prettier/Knip и TypeScript strict profile для нового Core как отдельную, ограниченную область; не менять поведение runtime.
 3. Сначала запускать Knip/dependency-cruiser в report mode, исправить ошибочные entry points и сохранить baseline; удалять код/зависимости только после ручной проверки.
 4. Добавить typecheck, lint и formatting checks в быстрый CI для новых/изменяемых модулей; затем расширять scope на дополнительные существующие modules по результатам отчётов и оценке стоимости. Базовый fast-checks обязан оставаться быстрым.
-5. Не описывать TSLint как активный gate: его npm dependency отсутствует уже в текущем manifest. После пилота решить судьбу остаточных `tslint.json`/`lint.sh`; расширять ESLint gates на legacy scope только после отчёта, проверки dynamic plugin entry points и оценки стоимости исправлений. Любое исключение содержит ссылку/комментарий, владельца и условие пересмотра.
+5. Не вводить незапускаемые lint/typecheck scripts в CI. Исключения из строгих проверок документируются с конкретной причиной, владельцем и условием пересмотра.
 
 Acceptance: новый engine module не принимается без strict typecheck, линтера, форматирования и unit tests, соответствующих его слою; новые forbidden dependencies/cycles и неиспользуемые dependencies в охваченном scope блокируют PR. Неописанные и ещё не реализованные scripts не должны указываться как уже существующие в README/CI.
 
@@ -944,7 +937,7 @@ Acceptance: новый engine module не принимается без strict t
 
 The current implementation includes a standalone private package
 
-The native engine registry exposes Project Model v1 Scene/Node hierarchy operations (list/open/create/save/read/create/update/delete/reparent), Prefab list/read/create/instantiate, registered Component attach/detach/enabled state, native FX add/update/remove and active Scene screenshots. It also preserves external asset/file inspection for Phaser Asset Packs, texture/spritesheet/bitmap-font data, Phaser animation JSON, Tiled tilemap metadata, Spine skeleton/atlas metadata and Google Fonts. It does not publish internal Phaser Editor game-object/plain-object/tilemap/physics/filter/object-list mutation tools, does not serialize a legacy SpineGameObject payload, and does not expose a Spine skin PNG renderer without a native SolidJS Host handler. Spine authoring/preview remains COD-90 and CODQA-20.
+The native engine registry exposes Project Model v1 Scene/Node hierarchy operations (list/open/create/save/read/create/update/delete/reparent), Prefab list/read/create/instantiate, registered Component attach/detach/enabled state, native FX add/update/remove and active Scene screenshots. External asset inspection covers Phaser Asset Packs, texture/spritesheet/bitmap-font data, Phaser animation JSON, Tiled tilemap metadata, Spine skeleton/atlas metadata and Google Fonts. Spine authoring/preview and skin rendering remain separately tracked capabilities in COD-90 and CODQA-20.
 
 The adapter preserves the engine's JSON Schemas, compiles each advertised schema with Ajv and validates stdio `tools/call` arguments before forwarding to the single engine-owned HTTP endpoint. The engine remains authoritative for tool definitions, system instructions, editor-state operations and project-file security. The stdio adapter exposes no separate WebSocket or alternate tool-registry contract.
 
@@ -1050,7 +1043,7 @@ Profiler должен сначала собирать воспроизводим
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
-- Editor TypeScript/compiler: root и legacy source/editor сохраняют собственные install/build checks; новый src/editor уже имеет отдельные npm run typecheck, npm run build, npm run test и npm run test:browser, запускаемые через root shortcuts build:editor-host, test:editor-host и test:editor-host:browser. CI job editor-host проверяет новый Host отдельно. npm Workspaces не включены. Core/API packages проходят собственные strict typechecks. Указывать только команды, реально присутствующие в соответствующем manifest.
+- Editor TypeScript/compiler: native Host в `src/editor/` имеет отдельные `npm run typecheck`, `npm run build`, `npm run test` и `npm run test:browser`; root shortcuts — `build:editor-host`, `test:editor-host` и `test:editor-host:browser`. CI job `editor-host` проверяет Host отдельно. npm Workspaces не включены. Core/API packages проходят собственные strict typechecks.
 - TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
 - Server/MCP: серверный smoke, быстрые package contract/schema tests и security checks. E2E-сценарии для сквозных MCP workflows поддерживаются вместе с соответствующей подсистемой; полный MCP E2E suite выполняется в обязательном promotion gate.
 - Project Model/serialization: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures; отдельный fixture должен запустить сцену из данных с зарегистрированным пользовательским TypeScript-компонентом **без генерируемого файла класса сцены** и проверить диагностику отсутствующего компонента/ресурса без частично созданной runtime-сцены. Проверить ссылки между узлами, повторное использование typeId при независимых instance IDs/значениях, отмену загрузки и отделение временного runtime state от сохранённых данных.
@@ -1072,21 +1065,18 @@ CI Fast намеренно не выполняет E2E: обычные PR в `de
 
 **Принцип разработки и запуска E2E:** E2E-сценарии и fixtures создаются и развиваются вместе с подсистемами. Когда изменение затрагивает сквозной пользовательский workflow, интеграцию между слоями или существующий E2E-сценарий, соответствующее покрытие добавляется или обновляется в том же topic PR. При этом обычный PR не запускает весь E2E-набор и не обязан проходить полный цикл интеграционной отладки общего набора. Массовый прогон, проверка совместной работы подсистем и системная отладка выполняются на promotion; promotion нельзя принять, пока обязательный E2E gate не прошёл. Это разделяет непрерывное развитие тестового покрытия и стоимость полной интеграционной приёмки.
 
-### 13.3. Правила миграции
+### 13.3. Правила реализации и развития Editor Host
 
-- Каждая задача и миграция делаются небольшим PR с одним понятным результатом.
-- Существующее поведение фиксируется тестом/fixture до переноса соответствующего workflow в новый SolidJS Host.
-- UI migration идёт как legacy Colibri Host + new SolidJS Host, но не как embedding SolidJS внутри Colibri; между ними нет долгосрочного UI adapter layer.
-- Для локальной разработки старый и новый Host имеют отдельные origins/ports, а API остаётся на loopback Node backend. Точные Origin allow-lists, Vite proxy, project write ownership и MCP SSE ownership входят в acceptance.
-- На период dual-run один проект не редактируется одновременно обеими UI-сессиями. Для параллельного write acceptance используются отдельные project copies/backend instances.
-- Удаление Colibri начинается только после feature inventory sign-off, browser acceptance нового Host, cutover и подтверждённого rollback window.
-- Новая реализация проходит критерии до удаления старой.
+- Каждая задача делается небольшим PR с одним проверяемым результатом.
+- Существующие пользовательские сценарии и новый функциональный контракт покрываются regression tests в том же PR.
+- Все авторские workflows используют один Editor Host, один native Project Model и одну session-aware MCP bridge.
+- Для локальной разработки Vite проксирует API к loopback Node backend; точные Origin allow-lists, project write ownership и MCP SSE ownership входят в acceptance.
+- Каждое окно Host получает отдельный session ID. До завершения multi-Host write contract одна project directory должна иметь только одного активного writer; параллельные write tests используют отдельные project/backend instances.
 - Для Scene workflow авторским источником истины является native Scene document.
-- Не держать два источника истины для HP/Transform/состояния компонентов или иных переносимых данных.
-- Не переносить все игровые сущности на новую архитектуру одновременно.
+- Не держать два источника истины для Transform/состояния компонентов или иных authoring data.
+- Не переносить все игровые подсистемы на новую архитектуру одновременно.
 - Не менять игровой цикл, физические тайминги или семантику без регрессионных тестов.
-- Удаление Colibri, Node-сервера или legacy-модуля — следствие успешной замены, а не самостоятельная цель.
-- Фаза считается завершённой только после всех своих acceptance criteria.
+- Фаза считается завершённой только после выполнения всех своих acceptance criteria.
 
 
 
@@ -1265,7 +1255,7 @@ MCP surface группируется по операциям: browser/session li
 
 Текущие Browser Console, Node.js server logger, `dev.log` и MCP operation responses — отдельные механизмы. Логи browser Editor автоматически не попадают в Node terminal; MCP responses охватывают только результаты tool calls. Они не считаются общей системой диагностики.
 
-UI-independent logging contract используется legacy Editor в переходный период и текущим SolidJS Host; после cutover целевым consumer остаётся SolidJS:
+UI-independent logging contract используется Editor Host и engine services; реализация не зависит от UI framework:
 
 - Engine-owned типизированный logger с уровнями `debug/info/warn/error`, timestamp, channel, subsystem, message, normalized error/stack и ограниченным operation context.
 - Раздельные каналы Editor, Runtime, Build, Server, MCP и extensions; runtime diagnostics привязываются к конкретной Preview/game session.
@@ -1295,7 +1285,7 @@ UI-independent logging contract используется legacy Editor в пер
 - Файловые операции ограничиваются выбранным проектом и явно разрешёнными действиями. Недоверенный проект/плагин не должен автоматически получать доступ ко всему диску.
 - Запуск subprocess, обновление приложения, загрузка ресурсов и работа с секретами должны иметь явную границу доверия и обработку ошибок.
 - Сохранять применимые лицензии и upstream-notices для кода и зависимостей.
-- Удаление Colibri, изменение структуры файлов или ребрендинг не являются достаточным основанием убрать копирайт Arian Fornaris или иные upstream-уведомления.
+- Изменение структуры файлов или ребрендинг не являются достаточным основанием убрать копирайты и upstream-уведомления.
 - Любое изменение атрибуции допускается после документированного аудита происхождения кода и проверки применимых условий лицензий.
 - Для новых npm-пакетов и заимствуемых фрагментов фиксировать источники и лицензии, проверять транзитивные зависимости перед распространением.
 
@@ -1343,4 +1333,4 @@ UI-independent logging contract используется legacy Editor в пер
 **Ключевой принцип ТЗ:** Codogma должен постепенно перейти от текущей IDE к целостной среде Web-first 2D-разработки, где проектные данные, TypeScript API, игровой runtime, живой Inspector, сборка и платформенные adapters согласованы между собой. Новая архитектура должна проверяться на реальных проектах, а не считаться успешной только потому, что код компилируется.
 
 
-The get-system-instructions tool is part of the native Editor MCP contract. It must document the Project Model v1 workflows and constraints for Scene/Node hierarchy, native Prefab references/instances, registered Component modules and instances, native FX components, external Asset Pack/animation/Tiled/Spine metadata inspection, Google Fonts, project-file restrictions and SolidJS Host requirements for live operations. It must explicitly prohibit internal .scene/.components readers/writers, Phaser Editor object payloads and fallback routing to the frozen legacy client. Changes to the native tool catalogue must update this guidance and its package assertions in the same change.
+The get-system-instructions tool is part of the native Editor MCP contract. It documents the supported Project Model v1 workflows for Scene/Node hierarchy, Prefab references/instances, registered Component modules/instances, native FX components, external Asset Pack/animation/Tiled/Spine metadata inspection, Google Fonts and project-file operations. Live editor operations require an active Editor Host session. Changes to the native tool catalogue update these instructions and package contract tests in the same change.
