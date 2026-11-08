@@ -5,7 +5,6 @@
   "description": "Codogma Engine — native 2D HTML5 game engine with a SolidJS Editor Host and Phaser 4.2.1 runtime integration",
   "scripts": {
     "dev": "node server/server.mjs 2>&1 | tee dev.log",
-    "dev:proxy": "CODOGMA_ALLOWED_HOSTS='*' CODOGMA_ALLOWED_ORIGINS=\"${CODOGMA_ALLOWED_ORIGINS:-*}\" node server/server.mjs 2>&1 | tee dev.log",
     "start": "node server/server.mjs",
     "mcp": "node server/mcp-launcher.mjs",
     "build": "npm run build:editor-host",
