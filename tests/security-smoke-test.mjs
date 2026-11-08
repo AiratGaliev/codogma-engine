@@ -146,8 +146,8 @@ async function main() {
     await fs.mkdir(outsideDir, { recursive: true })
     await fs.writeFile(path.join(outsideDir, "secret.txt"), "outside-project-secret", "utf8")
     await fs.writeFile(path.join(outsideDir, "project-config.json"), JSON.stringify({ outsideSecret: "outside-project-config-secret" }), "utf8")
-    await fs.writeFile(path.join(projectDir, "legacy.scene"), JSON.stringify({ legacySceneMarker: "legacy-scene-must-not-enter-solidjs-context" }), "utf8")
-    await fs.writeFile(path.join(projectDir, "legacy.components"), JSON.stringify({ legacyComponentMarker: "legacy-components-must-not-enter-solidjs-context" }), "utf8")
+    await fs.writeFile(path.join(projectDir, "unsupported.scene"), JSON.stringify({ unsupportedSceneMarker: "unsupported-scene-must-not-enter-ai-context" }), "utf8")
+    await fs.writeFile(path.join(projectDir, "unsupported.components"), JSON.stringify({ unsupportedComponentMarker: "unsupported-components-must-not-enter-ai-context" }), "utf8")
     await fs.writeFile(path.join(projectDir, "Level.cge-scene.json"), JSON.stringify({ nativeSceneMarker: "native-scene-attachment-is-allowed" }), "utf8")
     await fs.writeFile(path.join(projectDir, "asset-pack.json"), JSON.stringify({ assetPackMarker: "external-asset-pack-attachment-is-allowed" }), "utf8")
     const aiChatService = await startMockAiChatService()
@@ -201,7 +201,7 @@ async function main() {
             headers: { host, "content-type": "application/json" },
             body: JSON.stringify({
                 messages: [{ role: "user", content: "Inspect these project files." }],
-                attachments: ["legacy.scene", "legacy.components", "Level.cge-scene.json", "asset-pack.json"]
+                attachments: ["unsupported.scene", "unsupported.components", "Level.cge-scene.json", "asset-pack.json"]
             })
         })
         assert.equal(solidJsChat.status, 200, "AI Chat must continue to work in SolidJS Host mode")
@@ -209,13 +209,13 @@ async function main() {
         assert.deepEqual(
             solidJsChatBody.attachments,
             ["Level.cge-scene.json", "asset-pack.json"],
-            "SolidJS Host must exclude frozen Colibri document formats before reading attachments"
+            "SolidJS Host must exclude unpublished internal document formats before reading attachments"
         )
         const solidJsPrompt = aiChatService.requests.at(-1)?.messages?.at(-1)?.content ?? ""
         assert.ok(solidJsPrompt.includes("native-scene-attachment-is-allowed"))
         assert.ok(solidJsPrompt.includes("external-asset-pack-attachment-is-allowed"))
-        assert.equal(solidJsPrompt.includes("legacy-scene-must-not-enter-solidjs-context"), false)
-        assert.equal(solidJsPrompt.includes("legacy-components-must-not-enter-solidjs-context"), false)
+        assert.equal(solidJsPrompt.includes("unsupported-scene-must-not-enter-ai-context"), false)
+        assert.equal(solidJsPrompt.includes("unsupported-components-must-not-enter-ai-context"), false)
 
         // Declared oversize bodies must be rejected from headers without
         // buffering the claimed body or returning an HTTP 200 error payload.
@@ -552,7 +552,7 @@ async function main() {
                 PORT: String(port),
                 PROJECT_DIR: projectDir,
                 EDITOR_DIR,
-                CODOGMA_EDITOR_UI: "legacy",
+                CODOGMA_EDITOR_UI: "solidjs",
                 AI_CHAT_SERVICE: aiChatService.url,
                 CODOGMA_ALLOWED_HOSTS: "preview.example,alt.example"
             },
@@ -561,20 +561,6 @@ async function main() {
         server.stdout.on("data", chunk => { logs += chunk.toString("utf8") })
         server.stderr.on("data", chunk => { logs += chunk.toString("utf8") })
         await waitForHttpServer(port, server, () => logs)
-
-        const legacyChat = await request(port, "/editor/ai-chat", {
-            method: "POST",
-            headers: { host: `127.0.0.1:${port}`, "content-type": "application/json" },
-            body: JSON.stringify({
-                messages: [{ role: "user", content: "Inspect the frozen Colibri files." }],
-                attachments: ["legacy.scene", "legacy.components"]
-            })
-        })
-        assert.equal(legacyChat.status, 200, "frozen Colibri attachment compatibility must remain available in legacy mode")
-        assert.deepEqual(JSON.parse(legacyChat.body).attachments, ["legacy.scene", "legacy.components"])
-        const legacyPrompt = aiChatService.requests.at(-1)?.messages?.at(-1)?.content ?? ""
-        assert.ok(legacyPrompt.includes("legacy-scene-must-not-enter-solidjs-context"))
-        assert.ok(legacyPrompt.includes("legacy-components-must-not-enter-solidjs-context"))
 
         const proxyOk = await request(port, "/editor/product.json", { headers: { host: "preview.example" } })
         assert.equal(proxyOk.status, 200, "an allow-listed Host from a loopback proxy must be accepted")
@@ -609,7 +595,7 @@ async function main() {
                 PORT: String(port),
                 PROJECT_DIR: projectDir,
                 EDITOR_DIR,
-                CODOGMA_EDITOR_UI: "legacy",
+                CODOGMA_EDITOR_UI: "solidjs",
                 AI_CHAT_SERVICE: aiChatService.url,
                 CODOGMA_ALLOWED_HOSTS: "gateway.internal.example",
                 CODOGMA_ALLOWED_ORIGINS: "https://*.preview.example"
