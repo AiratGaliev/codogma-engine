@@ -457,7 +457,7 @@ const SYSTEM_INSTRUCTIONS = `You are an engineering assistant for Codogma Engine
 - External Phaser Asset Pack JSON and Phaser animation JSON remain supported external contracts. Preserve their vendor-defined fields when editing them through asset tools.
 - Tilemap, physics, object-list and filter authoring are not exposed by the current native tool registry. Report this limitation instead of attempting an unsupported mutation.
 - If a workflow has no native tool yet, report the limitation instead of falling back to an unpublished internal format.
-- File-only asset inspection may work without an open editor. Scene/Node/Prefab/Component/FX mutations and screenshots require a connected SolidJS Host MCP session.
+- File-only asset inspection may work without an open editor. Scene/Node/Prefab/Component/FX mutations and screenshots require a connected Editor Host MCP session.
 
 ## Response
 Execute requested work using the available tools, verify each persisted change, and report concrete results and any unavailable capabilities. Do not claim visual verification unless a screenshot was actually returned.`
@@ -1052,7 +1052,7 @@ const nativeTool = (name, description, properties = {}, required = []) => {
 }
 
 nativeTool("scene-list", "List native Scene documents registered in project.json.")
-nativeTool("scene-get-active", "Get the native Scene or Prefab document currently open in the SolidJS Host.")
+nativeTool("scene-get-active", "Get the native Scene or Prefab document currently open in the Editor Host.")
 nativeTool("scene-open", "Open a native Scene or Prefab document by its project-relative path.", {
     path: { type: "string", description: "Path to a .cge-scene.json or .cge-prefab.json document." }
 }, ["path"])
