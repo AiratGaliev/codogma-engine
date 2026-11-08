@@ -9,7 +9,7 @@
 
 - `server/` и корневые `tests/` — части root Node.js scope: у них нет отдельных `package.json` и lockfile.
 - `mini-services/ai-chat/` — отдельный optional JavaScript service со своими manifest и lockfile.
-- `tests/workspace/test-typescript/tsconfig.json` — compiler fixture для workspace tests, не production/build scope.
+- `tests/workspace/test-typescript/tsconfig.json` — конфигурация сохранённого sample-project fixture внутри `tests/workspace/`, а не first-party npm package или TypeScript solution/project. Текущие CI/E2E/release workflows используют native fixture `packages/cge/tests/fixtures/acceptance-project`; старый sample не является их active acceptance target.
 - `scripts/jsconfig.json` — JavaScript editor configuration, не TypeScript compiler project.
 - `source/editor/` физически присутствует в дереве, но не является активным Editor Host или target native toolchain. Его конфигурации и вложенные manifests исключены из активного package/compiler inventory; физическое удаление и provenance audit отслеживаются отдельно в COD-88.
 - `.agents/skills/**` и вложенный vendor code — snapshots/third-party материалы, а не first-party runtime packages.
