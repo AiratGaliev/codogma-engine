@@ -52,7 +52,7 @@ class FakeResponse extends EventEmitter {
 }
 
 function parseEventPayload(response, eventName) {
-    const lines = response.output.split(/\\r?\\n/)
+    const lines = response.output.split(/\r?\n/)
     const eventIndex = lines.indexOf(`event: ${eventName}`)
     assert.ok(eventIndex >= 0, `Editor Host response should contain the "${eventName}" SSE event`)
     const dataLine = lines[eventIndex + 1]
@@ -61,7 +61,7 @@ function parseEventPayload(response, eventName) {
 }
 
 function parseLastCommand(response) {
-    const lines = response.output.split(/\\r?\\n/)
+    const lines = response.output.split(/\r?\n/)
     const eventIndexes = lines.flatMap((line, index) => line === "event: command" ? [index] : [])
     assert.ok(eventIndexes.length > 0, "the connected Editor Host should receive the MCP command event")
     const dataLine = lines[eventIndexes.at(-1) + 1]
