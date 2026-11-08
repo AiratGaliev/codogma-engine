@@ -118,7 +118,7 @@ npm run test:editor-host
 npm run test:editor-host:browser
 ```
 
-Browser acceptance uses a temporary copy of `tests/workspace/test-typescript`; it never points the test backend at a developer's project. Native MCP commands target one active SolidJS Host session, but multi-Host routing and a cross-client project write/version contract are not accepted. Use only one UI writer per project directory at a time.
+Browser acceptance uses a temporary copy of `packages/cge/tests/fixtures/acceptance-project`; it never points the test backend at a developer's project. Live MCP commands target an active Editor Host session. Multi-Host reconnect and shared project write/version ownership are tracked separately; use one writer per project directory until those contracts are accepted.
 
 ### Select a game project
 
@@ -241,7 +241,7 @@ The Editor SSE bridge assigns a session ID to each Host window, routes MCP comma
 The local server exposes editor routes including:
 
 - <code>/editor/</code> — editor UI;
-- <code>POST /editor/api</code> — editor project/file API;
+- <code>POST /editor/project/operations</code> — native Project File operations (listing, writing, directory and entry mutations);
 - <code>/editor/project/...</code> — project file access used by editor components;
 - <code>/editor/external/...</code> — project files for play mode;
 - <code>/editor/mcp</code> — built-in Streamable HTTP MCP endpoint;
@@ -549,7 +549,7 @@ The active Rulesets require PRs and successful checks, but **currently do not re
 
 ### The editor reports missing files or shows the wrong project
 
-Check <code>PROJECT_DIR</code>. If it is unset, the server uses the test fixture at <code>tests/workspace/test-typescript</code>. Use an absolute path to select your game project.
+Check <code>PROJECT_DIR</code>. If it is unset, the server uses the native Project Model v1 fixture at <code>packages/cge/tests/fixtures/acceptance-project</code>. Use an absolute path to select your game project.
 
 ### Changes to editor TypeScript are not visible
 
