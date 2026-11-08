@@ -252,7 +252,7 @@ async function main() {
             const listing = await request(port, "/editor/project/operations", {
                 method: "POST",
                 headers: { host, "content-type": "application/json" },
-                body: JSON.stringify({ method: "GetProjectFiles" })
+                body: JSON.stringify({ operation: "project.listEntries", arguments: {} })
             })
             assert.equal(listing.status, 200)
             assert.equal(listing.body.includes("outside-link"), false, "project listings must not follow symlink directories")
@@ -261,8 +261,8 @@ async function main() {
                 method: "POST",
                 headers: { host, "content-type": "application/json" },
                 body: JSON.stringify({
-                    method: "project.writeFile",
-                    body: { path: "outside-link/created.txt", content: "should not escape" }
+                    operation: "project.writeFile",
+                    arguments: { relativePath: "outside-link/created.txt", text: "should not escape" }
                 })
             })
             assert.equal(JSON.parse(symlinkWrite.body).error, "invalid path", "API writes must reject symlink escapes")
@@ -343,13 +343,13 @@ async function main() {
                 "project.copyEntry must not overwrite the symlink's outside target")
 
             // --- rename / move escape attempts ---
-            const renameFromOutside = await api("project.renameEntry", { oldPath: "outside-link/secret.txt", destinationPath: "renamed.txt" })
+            const renameFromOutside = await projectOperation("project.renameEntry", { sourcePath: "outside-link/secret.txt", destinationPath: "renamed.txt" })
             assert.equal(JSON.parse(renameFromOutside.body).error, "invalid path",
                 "project.renameEntry must reject a source symlink escaping the project")
             await assert.doesNotReject(fs.access(path.join(outsideDir, "secret.txt")),
                 "project.renameEntry must not move the outside target")
 
-            const renameToOutside = await api("project.renameEntry", { oldPath: "in-project.txt", destinationPath: "outside-link/renamed.txt" })
+            const renameToOutside = await projectOperation("project.renameEntry", { sourcePath: "in-project.txt", destinationPath: "outside-link/renamed.txt" })
             assert.equal(JSON.parse(renameToOutside.body).error, "invalid path",
                 "project.renameEntry must reject a destination parent outside the project")
             await assert.doesNotReject(fs.access(path.join(projectDir, "in-project.txt")),
