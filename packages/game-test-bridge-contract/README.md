@@ -2,7 +2,7 @@
 
 Engine-owned, transport-neutral and versioned JSON contracts for the Codogma Game Test Bridge. This package defines the wire format shared by Development/Test runtime adapters and future QA clients. It does not implement a runtime bridge, transport, Preview Host, browser automation or gameplay behavior.
 
-The package is intentionally independent: it imports no Phaser, DOM, Editor Host, Colibri, Codogma Core, Editor MCP or Browser Controller modules. The only runtime dependency is Ajv for JSON Schema Draft 2020-12 validation.
+The package is intentionally independent: it imports no Phaser, DOM, Editor Host, Codogma Core, Editor MCP or Browser Controller modules. The only runtime dependency is Ajv for JSON Schema Draft 2020-12 validation.
 
 ## Package commands
 
