@@ -342,9 +342,6 @@ defTool(
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
-        if (/\.(scene|components)$/i.test(rel)) {
-            throw new Error("Unpublished legacy Scene/Component documents are not supported by the native Project Model.")
-        }
         return text(readFileSafely(PROJECT_DIR, full, "utf8", 1024 * 512))
     }
 )
@@ -362,9 +359,6 @@ defTool(
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
         const normalized = rel.replace(/\\/g, "/").toLowerCase()
-        if (/\.(scene|components)$/i.test(normalized)) {
-            throw new Error("Unpublished legacy Scene/Component documents cannot be created or overwritten.")
-        }
         if (normalized === "project.json" || normalized.endsWith(".cge-scene.json") || normalized.endsWith(".cge-prefab.json")) {
             throw new Error("Native Project, Scene and Prefab documents must be changed through validated native Editor MCP tools.")
         }
@@ -443,7 +437,7 @@ const SYSTEM_INSTRUCTIONS = `You are an engineering assistant for Codogma Engine
 - Prefab documents use '.cge-prefab.json' and PrefabDocumentV1. Prefab instances reference a stable Prefab ID and carry native overrides.
 - Component definitions are declared by native Project manifest componentModules with stable typeId, moduleAssetId, export and version. Component instances have their own stable IDs.
 - FX are native Component instances attached to Nodes. Supported authoring types are Circle, Bloom, Gradient and Shine.
-- Never create, read or write legacy '.scene' / '.components' documents. Never use displayList, plainObjects, sceneType, prefabProperties, name-derived IDs or class-name mappings.
+- Use only the documented native Project, Scene, Prefab, Node and Component contracts with stable IDs.
 
 ## Workflow
 1. Inspect the project and available assets with project-list-files and assets-* tools.
@@ -459,7 +453,7 @@ const SYSTEM_INSTRUCTIONS = `You are an engineering assistant for Codogma Engine
 - Do not invent component typeIds or asset IDs. Read the Project manifest and use registered values.
 - Do not overwrite project.json, native Scene/Prefab documents or registered native assets with generic file-write operations.
 - External Phaser Asset Pack JSON and Phaser animation JSON remain supported external contracts. Preserve their vendor-defined fields when editing them through asset tools.
-- Tilemap, physics, object-list and filter workflows are not exposed as legacy Scene mutations. Do not simulate them by writing old Scene payloads.
+- Tilemap, physics, object-list and filter authoring are not exposed by the current native tool registry. Report this limitation instead of attempting an unsupported mutation.
 - If a workflow has no native tool yet, report the limitation instead of falling back to an unpublished internal format.
 - File-only asset inspection may work without an open editor. Scene/Node/Prefab/Component/FX mutations and screenshots require a connected SolidJS Host MCP session.
 
@@ -659,7 +653,7 @@ defTool(
 
 async function fetchGoogleFontFamilies(filter) {
     const resp = await fetch("https://fonts.google.com/metadata/fonts", {
-        headers: { "User-Agent": "Mozilla/5.0 (PhaserEditor2D MCP)" }
+        headers: { "User-Agent": "Codogma Engine MCP" }
     })
     let raw = await resp.text()
     if (raw.startsWith(")]}'")) raw = raw.slice(raw.indexOf("\n") + 1)
@@ -761,18 +755,10 @@ function selectActiveBridgeClient() {
     const active = activeBridgeClientId ? bridgeClients.get(activeBridgeClientId) : null
     if (active) return active
 
-    const clients = [...bridgeClients.values()]
-    const solidClient = clients
-        .filter(client => client.clientType === "solidjs")
-        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]
-    const candidate = solidClient ?? (clients.length === 1 ? clients[0] : null)
+    const candidate = [...bridgeClients.values()]
+        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0] ?? null
     activeBridgeClientId = candidate?.clientId ?? null
-    return candidate ?? null
-}
-
-function selectNativeBridgeClient() {
-    const active = activeBridgeClientId ? bridgeClients.get(activeBridgeClientId) : null
-    return active?.clientType === "solidjs" ? active : null
+    return candidate
 }
 
 function rejectPendingForClient(clientId, reason) {
@@ -810,10 +796,8 @@ function bridgeStatus() {
         connected: bridgeClients.size > 0,
         clients: bridgeClients.size,
         activeClientId: active?.clientId ?? null,
-        activeClientType: active?.clientType ?? null,
         sessions: [...bridgeClients.values()].map(client => ({
             clientId: client.clientId,
-            clientType: client.clientType,
             connectedAt: client.connectedAt,
             active: client.clientId === activeBridgeClientId
         }))
@@ -822,12 +806,9 @@ function bridgeStatus() {
 
 function bridgeCommand(command) {
     return new Promise((resolve, reject) => {
-        const client = selectNativeBridgeClient()
+        const client = selectActiveBridgeClient()
         if (!client) {
-            const hint = bridgeClients.size > 0
-                ? "No active SolidJS Host session is selected. Activate the intended SolidJS Host and retry; native commands never fall back to another session."
-                : "Open the project in the SolidJS Editor Host and wait for its MCP bridge connection."
-            return reject(new Error(`Native Codogma MCP commands require a connected SolidJS Editor Host session. ${hint}`))
+            return reject(new Error("Native Codogma MCP commands require a connected Editor Host session. Open the project in the Editor Host and retry."))
         }
 
         const id = crypto.randomUUID()
@@ -844,7 +825,7 @@ function bridgeCommand(command) {
             command,
             clientId: client.clientId
         })
-        const payload = `event: command\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\n\n`
+        const payload = `event: command\\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\\n\\n`
         try {
             client.res.write(payload)
         } catch (error) {
@@ -870,16 +851,11 @@ export function getBridgeStatus() {
 }
 
 export async function handleBridgeEvents(req, res) {
-    const url = new URL(req.url || "/editor/mcp-bridge/events", "http://127.0.0.1")
-    const clientType = url.searchParams.get("clientType") === "solidjs" ? "solidjs" : "legacy"
     // Session identity is generated by the server, never accepted from the URL.
-    // This prevents a reconnecting or competing client from choosing another
-    // editor's command-result identity.
     const clientId = crypto.randomUUID()
 
     const client = {
         clientId,
-        clientType,
         res,
         connectedAt: new Date().toISOString(),
         lastActiveAt: Date.now()
@@ -892,13 +868,13 @@ export async function handleBridgeEvents(req, res) {
         "X-Accel-Buffering": "no"
     })
     bridgeClients.set(clientId, client)
-    if (clientType === "solidjs" || !activeBridgeClientId) activateBridgeClient(clientId)
-    res.write(`event: connected\ndata: ${JSON.stringify({ clientId, clientType, active: clientId === activeBridgeClientId })}\n\n`)
-    log(`mcp-bridge: ${clientType} editor connected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
+    if (!activeBridgeClientId) activateBridgeClient(clientId)
+    res.write(`event: connected\\ndata: ${JSON.stringify({ clientId, active: clientId === activeBridgeClientId })}\\n\\n`)
+    log(`mcp-bridge: editor connected (${bridgeClients.size} client(s)); active=${activeBridgeClientId ?? "none"}`)
 
     const ping = setInterval(() => {
         try {
-            if (!res.write(": ping\n\n")) return
+            if (!res.write(": ping\\n\\n")) return
         } catch (error) {
             removeBridgeClient(clientId, client)
         }
@@ -1095,7 +1071,7 @@ export function getChatSystemPrompt() {
 ## Available tools
 ${toolLines}
 
-Use the registered tools directly. For each operation, inspect the relevant native Project/Scene/Prefab/Component data first, mutate through native tools, then read it back to verify. Never emit legacy .scene/.components documents or Phaser Editor object shapes.`
+Use the registered tools directly. For each operation, inspect the relevant native Project/Scene/Prefab/Component data first, mutate through native tools, then read it back to verify.`
 }
 
 defTool(
