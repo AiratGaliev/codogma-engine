@@ -44,7 +44,7 @@ Team home guides: [COD](https://linear.app/codogma-engine/document/codogma-engin
 - Все новые UI, authoring workflows, исправления, state owners, services и browser integration реализуются внутри native Host или соответствующих native Core/runtime packages.
 - Node server обслуживает production build Host по `/editor/`; Vite запускает то же приложение в development и проксирует native backend API через loopback.
 - Project Model/Core, server, MCP, Preview и Build используют один набор native Codogma contracts. Не добавлять переключатели UI implementation, alternate editor routes, fallback adapters или отдельную модель данных для инструментов.
-- MCP registry и system instructions принадлежат engine server. Live editor operations маршрутизируются в активную Editor Host session; multi-Host reconnect/timeout/cancellation и shared project write ownership проверяются в COD-85.
+- MCP registry и system instructions принадлежат engine server. Live editor operations маршрутизируются только в единственное подключённое приложение Editor Host через session-bound SSE. COD-85 проверяет session binding, disconnect/reconnect, stale responses, timeout/cancellation и cleanup; несколько одновременно подключённых Host clients не поддерживаются.
 - Наличие панели или завершённой Engineering issue не считается готовностью end-to-end workflow. Проверять native Project Model save/reopen, runtime/build parity и browser acceptance по [capability matrix](capability-matrix.md) и [Editor Host roadmap](editor-ui-migration.md). Координация authoring workflows — COD-82.
 
 ## 1. Перед началом каждой задачи
