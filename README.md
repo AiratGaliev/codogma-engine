@@ -588,7 +588,7 @@ When changing architecture, project formats, compiler output, runtime integratio
 
 ## Origins and licensing
 
-The current editor client includes code derived from the open-source Phaser Editor 2D v3 client. Its origin is relevant to attribution and license compliance, but it does not define Codogma's product direction. Preserve the copyright and license notices in [LICENSE](LICENSE).
+Third-party source material and assets in the repository retain their applicable copyright and license notices. Preserve these notices in [LICENSE](LICENSE) and in the corresponding package/file metadata until the related material is removed. Attribution requirements do not define Codogma's product architecture or runtime dependencies.
 
 Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integration. Phaser and other third-party components remain subject to their own licenses and terms; review those terms when distributing the engine or a game built with it.
 
