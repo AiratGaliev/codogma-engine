@@ -152,6 +152,20 @@ function parseAssetPacks() {
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"])
 
+const PROJECT_TEXT_EXTS = new Set([
+    ".atlas", ".c", ".cfg", ".conf", ".cjs", ".csv", ".css", ".fnt",
+    ".frag", ".glsl", ".h", ".html", ".ini", ".js", ".json", ".jsonc",
+    ".md", ".mjs", ".properties", ".shader", ".svg", ".tmx", ".toml",
+    ".ts", ".tsx", ".txt", ".vert", ".wgsl", ".xml", ".yaml", ".yml"
+])
+
+function isNativeProjectDocumentPath(relativePath) {
+    const normalized = relativePath.replace(/\\/g, "/").toLowerCase()
+    return normalized === "project.json"
+        || normalized.endsWith(".cge-scene.json")
+        || normalized.endsWith(".cge-prefab.json")
+}
+
 /* ================================ tools ================================== */
 
 const TOOLS = new Map()
@@ -338,19 +352,25 @@ defTool(
 
 defTool(
     "project-read-file",
-    "Read a text file of the project (code, config and external asset metadata).",
+    "Read a supported text, code, configuration or external asset metadata file. Native Project/Scene/Prefab documents use dedicated tools.",
     { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     async ({ path: p }) => {
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
+        if (isNativeProjectDocumentPath(rel)) {
+            throw new Error("Native Project, Scene and Prefab documents must be read through validated native Editor MCP tools.")
+        }
+        if (!PROJECT_TEXT_EXTS.has(path.extname(rel).toLowerCase())) {
+            throw new Error("Unsupported project text file type.")
+        }
         return text(readFileSafely(PROJECT_DIR, full, "utf8", 1024 * 512))
     }
 )
 
 defTool(
     "project-write-file",
-    "Write (create or overwrite) a text file of the project (code files, configs and external Asset Pack metadata). Native Project/Scene/Prefab documents are handled by dedicated tools.",
+    "Write supported text, code, configuration or external Asset Pack metadata files. Native Project/Scene/Prefab documents use dedicated tools.",
     {
         type: "object",
         properties: { path: { type: "string" }, content: { type: "string" } },
@@ -360,9 +380,11 @@ defTool(
         const rel = normPath(p)
         const full = safeJoin(PROJECT_DIR, rel)
         if (!full) throw new Error("invalid path")
-        const normalized = rel.replace(/\\/g, "/").toLowerCase()
-        if (normalized === "project.json" || normalized.endsWith(".cge-scene.json") || normalized.endsWith(".cge-prefab.json")) {
+        if (isNativeProjectDocumentPath(rel)) {
             throw new Error("Native Project, Scene and Prefab documents must be changed through validated native Editor MCP tools.")
+        }
+        if (!PROJECT_TEXT_EXTS.has(path.extname(rel).toLowerCase())) {
+            throw new Error("Unsupported project text file type.")
         }
         if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(full))) throw new Error("invalid path")
         const handle = await openSafeProjectFileForWrite(PROJECT_DIR, full)
