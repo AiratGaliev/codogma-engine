@@ -30,45 +30,82 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            source/editor/package-lock.json
+            src/editor/package-lock.json
+            packages/localization/package-lock.json
             packages/editor-mcp-server/package-lock.json
 
       - name: Install locked dependencies (root)
         run: npm ci
 
-      - name: Install locked dependencies (editor client)
+      - name: Install locked dependencies (native Editor Host)
         run: npm ci
-        working-directory: source/editor
+        working-directory: src/editor
 
-      - name: Install and build standalone MCP package
+      - name: Install locked dependencies (localization package)
+        run: npm ci
+        working-directory: packages/localization
+
+      - name: Install locked dependencies (first-party MCP package)
         run: npm ci
         working-directory: packages/editor-mcp-server
 
-      - name: Build editor client
-        run: npm run build
+      - name: Build native Editor Host and Core
+        run: npm run build:editor-host
 
-      - name: Smoke test (server boots, editor responds)
+      - name: Build localization package
+        run: npm run build:localization
+
+      - name: Build first-party MCP package
+        run: npm run build:mcp
+
+      - name: Smoke test (server boots, native Editor Host and Project respond)
         shell: bash
         run: |
           set -euo pipefail
-          PORT=3100 PROJECT_DIR=tests/workspace/test-typescript node server/server.mjs &
+          SERVER_LOG="$RUNNER_TEMP/codogma-engine-release.log"
+          PORT=3100 PROJECT_DIR=packages/cge/tests/fixtures/acceptance-project node server/server.mjs >"$SERVER_LOG" 2>&1 &
           SRV=$!
-          sleep 3
-          curl -sf http://localhost:3100/editor/product.json | tee /dev/stderr | grep -q "Codogma Engine"
-          curl -sf -o /dev/null http://localhost:3100/editor/
-          kill $SRV
+          cleanup() {
+            kill "$SRV" 2>/dev/null || true
+            wait "$SRV" 2>/dev/null || true
+          }
+          trap cleanup EXIT
 
-      - name: Pack release archive
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3100/editor/ -o "$RUNNER_TEMP/editor.html"; then
+              break
+            fi
+            if ! kill -0 "$SRV" 2>/dev/null; then
+              cat "$SERVER_LOG"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          test -s "$RUNNER_TEMP/editor.html"
+          grep -q 'id="root"' "$RUNNER_TEMP/editor.html"
+          grep -q "Codogma Engine" "$RUNNER_TEMP/editor.html"
+          curl -fsS http://127.0.0.1:3100/editor/project/project.json | grep -q '"schemaVersion": 1'
+
+      - name: Pack native release archive
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
-          zip -qr release/codogma-engine.zip server source/editor packages/editor-mcp-server \
+          zip -qr release/codogma-engine.zip \
+            server packages/cge packages/localization src/editor packages/editor-mcp-server \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
-            -x "source/editor/node_modules/*" \
-            -x "source/editor/.vscode/*" \
-            -x "packages/editor-mcp-server/node_modules/*" \
+            -x "src/editor/node_modules/*" \
+            -x "packages/*/node_modules/*" \
             -x "*.log"
+
+          unzip -Z1 release/codogma-engine.zip | grep -qx "src/editor/dist/index.html"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/cge/dist/index.js"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/editor-mcp-server/dist/cli.js"
+          if unzip -Z1 release/codogma-engine.zip | grep -q '^source/editor/'; then
+            echo "::error::Historical Editor sources must not be shipped in the native release archive."
+            exit 1
+          fi
 
       - name: Upload release archive
         uses: actions/upload-artifact@v7

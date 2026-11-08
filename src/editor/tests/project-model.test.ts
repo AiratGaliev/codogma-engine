@@ -598,8 +598,8 @@ testCase("distinguishes an omitted Prefab catalog from an explicitly empty Host 
   const withInstance = addNativePrefabInstance(baseScene, prefab);
   const content = JSON.stringify(withInstance);
 
-  // Omitted context retains the legacy public API fallback: manifest identity
-  // is checked but target resolution is deferred until a catalog is supplied.
+  // Without a Prefab catalog only manifest identity can be checked; target
+  // resolution is performed when the caller supplies the catalog.
   assert.doesNotThrow(() => parseNativeSceneDocument(registered, "scene-level", content));
   // The Host passes even an empty loaded catalog explicitly; that is an
   // authoritative statement that no referenced Prefab is available.

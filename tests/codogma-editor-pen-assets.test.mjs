@@ -88,7 +88,7 @@ test("each vector icon links back to its pinned official Godot SVG source", () =
 test("the remaining raster image fills are only the original dinosaur preview", () => {
     assert.equal(imageFills.length, 18)
     for (const { fill } of imageFills) {
-        assert.equal(fill.url, "../../tests/workspace/test-typescript/assets/dino.png")
+        assert.equal(fill.url, "./design-assets/dino.png")
         assert.ok(fs.existsSync(path.resolve(EDITOR_ROOT, fill.url)), "Dino preview asset must resolve from the Pen document")
     }
 })

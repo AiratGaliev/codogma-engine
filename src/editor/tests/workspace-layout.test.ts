@@ -1,5 +1,5 @@
-test("unpublished and unversioned workspace layouts are not migrated", () => {
-  const legacyLayouts: unknown[] = [
+test("unpublished and unversioned workspace layouts fall back to current defaults", () => {
+  const unpublishedLayouts: unknown[] = [
     { dockedPanels: ["Hierarchy"], consoleDocked: false },
     ...[0, 1, 2].map(schemaVersion => ({
       schemaVersion,
@@ -8,7 +8,7 @@ test("unpublished and unversioned workspace layouts are not migrated", () => {
     })),
   ];
 
-  for (const legacyLayout of legacyLayouts) {
+  for (const legacyLayout of unpublishedLayouts) {
     assert.deepEqual(
       restoreWorkspaceLayout(legacyLayout),
       createDefaultWorkspaceLayout(false),

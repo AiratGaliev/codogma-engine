@@ -153,7 +153,6 @@ test("acceptance fixture connects Project, Scene, module identity and two compon
   assert.ok(savedComponent);
   assert.equal(Object.hasOwn(savedComponent.properties, "editorLabel"), false);
   assert.equal(Object.hasOwn(savedComponent.properties, "runtimeElapsedSeconds"), false);
-  assert.deepEqual(savedComponent.properties.pluginExtension, { retained: true });
 
   const reopened = parseSceneDocument(serialized, context);
   assert.ok(reopened.value);
@@ -184,31 +183,17 @@ test("acceptance fixture connects Project, Scene, module identity and two compon
   assert.ok(savedPrefabComponent);
   assert.equal(Object.hasOwn(savedPrefabComponent.properties, "editorLabel"), false);
   assert.equal(Object.hasOwn(savedPrefabComponent.properties, "runtimeElapsedSeconds"), false);
-  assert.deepEqual(savedPrefabComponent.properties.pluginExtension, { retained: true });
 
   const reopenedPrefab = parsePrefabDocument(serializedPrefab, context);
   assert.ok(reopenedPrefab.value);
   assert.deepEqual(reopenedPrefab.value, savedPrefab);
-  assert.deepEqual((reopened.value as unknown as Record<string, unknown>).unknownSceneData, { retained: true });
-  assert.deepEqual(
-    reopened.value.rootNodes[0]?.components[0]?.properties.pluginExtension,
-    { retained: true },
-  );
-  assert.deepEqual(
-    (reopened.value.rootNodes[0] as unknown as Record<string, unknown>)?.unknownNodeData,
-    { retained: ["one", "two"] },
-  );
 
   const serializedProject = serializeProjectDocument(project);
   const reopenedProject = parseProjectDocument(serializedProject);
   assert.ok(reopenedProject.value);
-  assert.deepEqual(
-    (reopenedProject.value as unknown as Record<string, unknown>).unknownPluginData,
-    { keep: true },
-  );
 });
 
-test("component property serialization keeps persisted extensions and omits editor/runtime state", () => {
+test("component property serialization keeps declared persisted fields and omits editor/runtime state", () => {
   const { context } = loadContext();
   const serialized = serializeComponentProperties(
     componentSchema,
@@ -218,7 +203,6 @@ test("component property serialization keeps persisted extensions and omits edit
       speed: 3,
       editorLabel: "Selected in Inspector",
       runtimeElapsedSeconds: 12,
-      pluginExtension: { retained: true },
     },
     {
       assets: context.assets,
@@ -231,7 +215,6 @@ test("component property serialization keeps persisted extensions and omits edit
     sprite: { assetId: "asset-player-sprite" },
     target: { nodeId: "node-enemy" },
     speed: 3,
-    pluginExtension: { retained: true },
   });
 });
 

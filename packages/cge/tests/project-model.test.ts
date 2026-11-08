@@ -29,12 +29,14 @@ const validProject: ProjectDocumentV1 = {
   runtime: { adapterId: "phaser", settings: {} },
 };
 
-test("validates the versioned project envelope and preserves unknown JSON fields", () => {
-  const input = JSON.parse(JSON.stringify(validProject)) as Record<string, unknown>;
-  input.extensionData = { source: "plugin", keep: true };
+test("rejects fields outside the native Project v1 envelope", () => {
+  const input = { ...validProject, extensionData: { source: "unsupported", keep: true } };
   const result = validateProjectDocument(input);
-  assert.equal(result.valid, true);
-  assert.deepEqual((result.value as unknown as Record<string, unknown>).extensionData, { source: "plugin", keep: true });
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => [item.code, item.path]), [
+    ["PROJECT_INVALID_DOCUMENT", "project.extensionData"],
+  ]);
 });
 
 test("serializes deterministic JSON and round-trips the same semantic document", () => {
@@ -68,10 +70,6 @@ test("checked-in Project fixture uses only the current native schema", () => {
   )) as unknown;
   const parsed = parseProjectDocument(JSON.stringify(fixture));
   assert.equal(parsed.value?.schemaVersion, 1);
-  assert.deepEqual(
-    (parsed.value as unknown as Record<string, unknown>).unknownPluginData,
-    { keep: true },
-  );
 });
 
 test("rejects dangling scene refs, duplicate ids and traversal paths", () => {
@@ -298,130 +296,92 @@ test("enforces one stable ID grammar across project, scene and component contrac
 });
 
 
-test("preserves unknown Project and Asset fields with structured warnings", () => {
+test("rejects unknown Project, runtime and Asset fields while retaining native settings bags", () => {
   const input = {
     ...validProject,
-    extensionData: { source: "plugin", retained: true },
+    extensionData: { source: "unsupported", retained: true },
     runtime: {
       ...validProject.runtime,
+      settings: { adapterOption: { enabled: true } },
       pluginRuntimeData: { retained: true },
     },
-    assets: [{
-      ...validProject.assets[0]!,
-      importMetadata: { importer: "legacy", retained: true },
-    }],
+    assets: [{ ...validProject.assets[0]!, importMetadata: { retained: true } }],
   };
-
   const result = validateProjectDocument(input);
-  assert.equal(result.valid, true);
-  assert.deepEqual(
-    result.diagnostics
-      .filter((item) => item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED")
-      .map((item) => item.path)
-      .sort(),
-    ["assets[0].importMetadata", "project.extensionData", "runtime.pluginRuntimeData"],
-  );
-  assert.deepEqual(
-    (result.value as unknown as Record<string, unknown>).extensionData,
-    input.extensionData,
-  );
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
+    "assets[0].importMetadata", "project.extensionData", "runtime.pluginRuntimeData",
+  ]);
+
+  const settings = validateProjectDocument({
+    ...validProject,
+    runtime: { ...validProject.runtime, settings: { adapterOption: { enabled: true } } },
+  });
+  assert.equal(settings.valid, true);
+  assert.deepEqual(settings.value?.runtime.settings, { adapterOption: { enabled: true } });
 });
 
-test("preserves unknown Scene, Node, Transform and Component fields with exact diagnostics", () => {
+test("rejects unknown Scene, Node, Transform and Component fields without closing Scene settings", () => {
   const schema: ComponentTypeSchemaV1 = {
-    schemaVersion: 1,
-    typeId: "com.codogma.test.follow-target",
-    name: "Follow Target",
-    version: "1.0.0",
-    properties: {
-      speed: { type: "number" },
-    },
+    schemaVersion: 1, typeId: "com.codogma.test.follow-target", name: "Follow Target", version: "1.0.0",
+    properties: { speed: { type: "number" } },
   };
   const scene = {
-    schemaVersion: 1,
-    id: "scene-extensions",
-    name: "Extensions",
-    settings: {},
+    schemaVersion: 1, id: "scene-extensions", name: "Extensions",
+    settings: { nativeSetting: { enabled: true } },
     extensionMetadata: { keep: true },
     rootNodes: [{
-      id: "node-extensions",
-      name: "Root",
-      active: true,
-      editorMetadata: { selected: true },
+      id: "node-extensions", name: "Root", active: true, editorMetadata: { selected: true },
       transform: {
         x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
         legacyPivot: { keep: true },
       },
       components: [{
-        id: "component-extensions",
-        typeId: schema.typeId,
-        schemaVersion: 1,
-        enabled: true,
+        id: "component-extensions", typeId: schema.typeId, schemaVersion: 1, enabled: true,
         customComponentMetadata: { keep: true },
-        properties: {
-          speed: 2,
-          pluginProperty: { keep: true },
-        },
+        properties: { speed: 2, pluginProperty: { keep: true } },
       }],
       children: [],
     }],
   };
-
   const result = validateSceneDocument(scene, {
     componentSchemas: new Map([[schema.typeId, schema]]),
+    registeredComponentTypes: new Set([schema.typeId]),
   });
-  assert.equal(result.valid, true);
-  const warnings = result.diagnostics.filter((item) =>
-    item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED" ||
-    item.code === "COMPONENT_UNKNOWN_PROPERTY");
-  assert.deepEqual(
-    warnings.map((item) => item.path).sort(),
-    [
-      "rootNodes[0].components[0].customComponentMetadata",
-      "rootNodes[0].components[0].properties.pluginProperty",
-      "rootNodes[0].editorMetadata",
-      "rootNodes[0].transform.legacyPivot",
-      "scene.extensionMetadata",
-    ],
-  );
-  assert.deepEqual(
-    (result.value!.rootNodes[0] as unknown as Record<string, unknown>).editorMetadata,
-    { selected: true },
-  );
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
+    "rootNodes[0].components[0].customComponentMetadata",
+    "rootNodes[0].components[0].properties.pluginProperty",
+    "rootNodes[0].editorMetadata",
+    "rootNodes[0].transform.legacyPivot",
+    "scene.extensionMetadata",
+  ]);
+
+  const settings = validateSceneDocument({
+    schemaVersion: 1, id: "scene-settings", name: "Settings",
+    settings: { editor: { gridSize: 16 } }, rootNodes: [],
+  });
+  assert.equal(settings.valid, true);
+  assert.deepEqual(settings.value?.settings, { editor: { gridSize: 16 } });
 });
 
-test("preserves unknown Prefab and root Node fields with document-relative paths", () => {
-  const prefab = {
-    schemaVersion: 1,
-    id: "prefab-extensions",
-    name: "Extensions",
+test("rejects unknown Prefab and root Node fields at the native boundary", () => {
+  const result = validatePrefabDocument({
+    schemaVersion: 1, id: "prefab-extensions", name: "Extensions",
     pluginMetadata: { keep: true },
     root: {
-      id: "prefab-root",
-      name: "Root",
-      active: true,
-      transform: {
-        x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5,
-      },
-      components: [],
-      children: [],
-      customNodeMetadata: { keep: true },
+      id: "prefab-root", name: "Root", active: true,
+      transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, originX: 0.5, originY: 0.5 },
+      components: [], children: [], customNodeMetadata: { keep: true },
     },
-  };
-
-  const result = validatePrefabDocument(prefab);
-  assert.equal(result.valid, true);
-  assert.deepEqual(
-    result.diagnostics
-      .filter((item) => item.code === "PROJECT_UNKNOWN_FIELD_PRESERVED")
-      .map((item) => item.path)
-      .sort(),
-    ["prefab.pluginMetadata", "root.customNodeMetadata"],
-  );
-  assert.deepEqual(
-    (result.value!.root as unknown as Record<string, unknown>).customNodeMetadata,
-    { keep: true },
-  );
+  });
+  assert.equal(result.valid, false);
+  assert.equal(result.value, undefined);
+  assert.deepEqual(result.diagnostics.map((item) => item.path).sort(), [
+    "prefab.pluginMetadata", "root.customNodeMetadata",
+  ]);
 });
 
 test("rejects future Scene and Prefab versions with explicit version diagnostics", () => {

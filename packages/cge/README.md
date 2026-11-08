@@ -72,6 +72,8 @@ commands above in the Boundaries section from this package directory.
 Schema versions and API signatures are intentionally small and test-backed. Project Model v1 is the first supported persisted contract. The parser rejects unpublished schema snapshots instead of reinterpreting them; schema migrations are introduced only when a prior contract has been published and requires a versioned transition.
 
 
-### Unknown fields and validation diagnostics
+### Native contract field policy
 
-Project, Scene, Prefab, Node, Transform, Asset and Component envelope extensions that contain JSON-compatible values are preserved by validation and serialization and produce `PROJECT_UNKNOWN_FIELD_PRESERVED` warnings with the exact document path. Unknown Component property values are preserved separately with `COMPONENT_UNKNOWN_PROPERTY` warnings. Invalid non-JSON values, accessors, custom prototypes, symbol properties, sparse arrays and cyclic object graphs are rejected at the JSON boundary without executing getters. Future Project, Scene and Prefab schema versions are blocking errors.
+Project, Scene, Prefab, Asset, Node, Transform, Component-instance and Prefab-instance envelopes accept only fields declared by the current native schema. Unknown envelope fields and unknown fields in a registered Component schema are blocking validation errors; they are never copied through validation or serialization. Undeclared Component properties are rejected with `COMPONENT_UNKNOWN_PROPERTY` when the matching `ComponentTypeSchemaV1` is supplied.
+
+The native extension points are explicit JSON data bags: `Project.runtime.settings` and `Scene.settings`. Component-instance `properties` remain JSON data owned by the Component; when a registered schema is present, only its declared persisted properties are accepted and editor/runtime-only fields are omitted by serialization. JSON boundary safety rejects accessors, custom prototypes, symbols, sparse arrays, cyclic graphs and non-JSON values. Future Project, Scene and Prefab schema versions are blocking errors.

@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const [fastWorkflow, e2eWorkflow] = await Promise.all([
+const [fastWorkflow, e2eWorkflow, releaseWorkflow] = await Promise.all([
   readFile(path.join(ROOT, ".github/workflows/ci.yml"), "utf8"),
   readFile(path.join(ROOT, ".github/workflows/e2e.yml"), "utf8"),
+  readFile(path.join(ROOT, ".github/workflows/release.yml"), "utf8"),
 ]);
 
 test("CI Fast never installs or runs browser/MCP E2E suites", () => {
@@ -27,4 +28,17 @@ test("the E2E workflow is promotion-only and contains the complete current E2E s
   );
   assert.match(e2eWorkflow, /npm run test:browser/);
   assert.match(e2eWorkflow, /npm run test:e2e/);
+});
+
+
+test("release archive builds and packages only the native SolidJS Editor Host", () => {
+  assert.ok(releaseWorkflow.includes("working-directory: src/editor"));
+  assert.ok(releaseWorkflow.includes("npm run build:editor-host"));
+  assert.ok(releaseWorkflow.includes("PROJECT_DIR=packages/cge/tests/fixtures/acceptance-project"));
+  assert.ok(releaseWorkflow.includes("src/editor/dist/index.html"));
+  assert.doesNotMatch(
+    releaseWorkflow,
+    /working-directory:\s*source\/editor|zip -qr[^\n]*source\/editor|tests\/workspace\/test-typescript|product\.json/,
+    "release must not build or package the historical Editor or its workspace fixture",
+  );
 });
