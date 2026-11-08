@@ -1089,10 +1089,10 @@ function parseToolCalls(text) {
 }
 
 /*
- * AI chat scene-file attachments: the client sends project-relative paths
- * ("scenes/Level.scene", no leading project folder name). Paths that start
- * with the project folder name (getFullName() style) are accepted too.
- * Anything outside the project directory (path traversal) is rejected.
+ * AI Chat project-file attachments. Paths are project-relative (without the
+ * leading project folder name). The frozen Colibri client may attach its
+ * unpublished .scene/.components documents only in legacy UI mode; the
+ * SolidJS Host must never load those internal formats into the AI context.
  */
 function normalizeAttachmentPath(rawPath) {
 
@@ -1221,7 +1221,7 @@ async function handleAiChat(req, res) {
             ...userMessages
         ]
 
-        // scene-file attachments: prepend a context block to the LLM prompt
+        // Supported project-file attachments are added to the LLM context.
         if (Array.isArray(body.attachments)) {
 
             const attachments = []
@@ -1232,6 +1232,11 @@ async function handleAiChat(req, res) {
 
                 if (!att) {
                     log(`ai-chat: attachment rejected (outside the project directory): ${raw}`)
+                    continue
+                }
+
+                if (EDITOR_UI === "solidjs" && /\.(?:scene|components)$/i.test(att.rel)) {
+                    log(`ai-chat: attachment rejected (legacy document format is unavailable in SolidJS Host mode): ${att.rel}`)
                     continue
                 }
 
