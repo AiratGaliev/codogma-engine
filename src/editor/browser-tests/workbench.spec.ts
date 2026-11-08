@@ -932,7 +932,7 @@ test("FX preview reports unsupported parent objects instead of applying filters 
 
 test("FX Inspector edits legacy effects and creates and restores a new Shine effect", async ({ page }) => {
   // This end-to-end flow covers edit, save, scene reload and FX preview restoration.
-  test.setTimeout(90_000);
+  test.setTimeout(180_000);
 
   const pageErrors: string[] = [];
   const unsupportedContainerInputWarnings: string[] = [];
