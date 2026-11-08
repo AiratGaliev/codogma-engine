@@ -16,7 +16,7 @@
 
 | Подсистема | Состояние по исходникам | Evidence / область проверки | Автоматическое покрытие и ограничения | Приоритет |
 |---|---|---|---|---|
-| Editor Host / dual-run | Node server пока обслуживает существующий frozen UI client по /editor/; самостоятельный SolidJS Host запускается на Vite 5173 через общий backend. Production cutover не выполнен | source/editor/ — read-only inventory и временный rollback artifact, без ongoing support; src/editor/ — самостоятельное SolidJS приложение с отдельным package/lockfile; backend/file APIs общие | COD-80 CI Fast #453: Host typecheck/build, 36 domain tests, 9 Chromium tests, fast-checks success. Native MCP commands now target one active SolidJS Host and reject legacy-only fallback; multi-Host routing/write-ownership acceptance remains COD-85 | **UI cutover pending** |
+| Editor Host / serving model | Node server serves the native SolidJS Host bundle at /editor/; Vite serves the same app on 127.0.0.1:5173 during development | src/editor/ is the sole editor application; packages/cge provides the native Project Model; server and MCP use native contracts | PR #50 removes alternate UI selection, old UI/plugin routes and old client build from CI. Multi-Host routing/write-ownership acceptance for multiple native Host sessions remains COD-85 | **Native Host active; specialized workflows continue** |
 | SolidJS Editor Host / Workbench | **Первый Workbench + Scene vertical slice COD-80 реализован:** Vite proxy, Dark/Light/Compact design, Hierarchy, Scene Canvas, Game View iframe, Inspector/Transform, Project/Animation/Components/Console surfaces, panel visibility, themes, responsive/persisted layout и Undo/Redo | src/editor/ app/package, Phaser viewport, typed API service, domain models, design tokens, SVG icons, domain/browser tests | CI Fast #453 подтвердил typecheck/build, 36 domain tests, 9 Chromium acceptance и fast-checks. Ограничения: dock zones Left/Right/Bottom, без arbitrary floating/free-split tree; Animation пока поддерживает базовые clip/frame operations | **Workbench implemented; workflows continue** |
 | Scene authoring / persistence | Native Project Model v1 contracts определены; полный Editor create/edit/save/reopen workflow и data-driven runtime loader требуют завершения интеграции | src/editor/ Scene authoring surface; packages/cge/src/project-model/; native fixture packages/cge/tests/fixtures/acceptance-project/ | COD-103 реализует SceneDocument hydration; COD-28/COD-30/COD-35 — runtime/Preview/Build integration; CODQA-18 принимает integrated Host | **Native Scene workflow in progress** |
 | Script / Component authoring | Начальные Source/Components surfaces есть; native Script Asset, manifest registration, stable Definition identity и project-wide diagnostics в работе | src/editor/ Source view; packages/cge/src/components/component-schema.ts; native Project Model module contracts | COD-91 owns authoring; COD-26/COD-27 own runtime/schema contracts; CODQA-21 accepts integrated workflow | **In progress** |
@@ -55,13 +55,13 @@
 
 ## Приоритеты из матрицы
 
-1. **P0 — independent acceptance of first SolidJS Host slice on integrated candidate:** COD-80 / PR #30 is integrated; CODQA-18 checks candidate in test. PR/CI success alone does not prove production cutover.
+1. **P0 — independent acceptance of the first native Editor Host slice:** COD-80 / PR #30 is integrated; CODQA-18 checks the integrated candidate in test. PR/CI success alone does not prove visual/runtime acceptance.
 2. **P0 — runtime/security acceptance:** native Box2D/FX/Scene/Script/Asset Preview and cross-platform filesystem security need independent evidence. Preserve loopback/local-only security boundaries.
-3. **P1 — staged UI rollout:** COD-82 coordinates the remaining user-facing workflows, MCP routing and the UI cutover plan. New workflows are implemented in SolidJS Host.
+3. **P1 — native Editor Host workflows:** COD-82 coordinates remaining user-facing workflows and service integration inside the single SolidJS Host. No alternate editor route or UI fallback is part of the delivery model.
 4. **P1 — specialized authoring workflows:** Docking (COD-83), Asset/Sprite (COD-86), Prefab (COD-8), User Components/TypeScript (COD-91), camera/coordinates/sorting (COD-41), 2D UI authoring (COD-43), Tilemap (COD-40), Physics (COD-42), Animation (COD-84), Spine (COD-90), Audio/Particles (COD-61), Atlas analyzer (COD-55) and importer extensions (COD-59). FX authoring UI is implemented; native runtime parity remains CODQA-19.
 5. **P1 — Preview/Diagnostics/MCP:** Preview Host, live Inspector, EngineLogger and session-aware MCP SSE (COD-85); COD-80 Game View iframe is not a complete Preview Host.
 6. **P1 — independent functional acceptance:** CODQA-18 accepts the first Host slice; CODQA-10/11/12/13/14/16 and CODQA-4 accept their respective native workflows.
-7. **P1 — UI cutover/cleanup:** COD-87 moves the production /editor/ route to SolidJS with a bounded UI rollback window; COD-88 removes the old UI client after cutover.
+7. **Native Host completion:** continue authoring, preview, build, settings and package workflows in the single SolidJS Host. Any remaining repository cleanup is only for unused historical files and does not represent a UI cutover or supported alternate editor.
 8. **Separate engine streams:** Project Model/Core, HTML5 Build, Platform Services, Game QA MCP, Package Manager and Tauri follow their own dependencies and acceptance.
 
 ## Реестр native Editor Host workflows
@@ -83,7 +83,7 @@
 | Audio groups / Particle Preview | Native audio/particle runtime contracts | **Not implemented in Host** | COD-61; CODQA-13 |
 | Preview/live Inspector | Project Model snapshot, runtime identity, Preview lifecycle | **Partial; no shared Preview Host contract** | COD-30/31/32/47/58; CODQA-16 |
 | Diagnostics/Console | Engine-owned logging/session diagnostics | **Console surface only; no general EditorLogger** | COD-47; docs/editor-logging-and-diagnostics.md |
-| Live Editor MCP bridge | HTTP tool registry, stdio adapter and session-owned SSE routing | **Blocked pending session-aware routing** | COD-85; CODQA-8 |
+| Live Editor MCP bridge | Native HTTP tool registry, stdio adapter and session-owned SSE routing | **Single-Host routing implemented; multi-Host acceptance pending** | COD-85; CODQA-8 |
 | Production /editor/ | SolidJS production route and bounded UI rollback | **Not cut over** | COD-87; COD-88 |
 
 
@@ -108,7 +108,7 @@
 
 ## Ограничения аудита и следующая актуализация
 
-- Полный построчный review всех 1 298 TypeScript-файлов не выполнялся: в репозитории около 1 480 tracked files, из них приблизительно 1 350 в `source/editor/`; основной объём — унаследованный editor client.
+- Матрица не является построчным аудитом всего репозитория; статический review охватывает изменяемые native Core/Host/server/MCP surfaces. Runtime/browser acceptance фиксируется отдельно по соответствующим CODQA issues.
 - Детально проверялись документы/CI/manifests, текущие серверные файловые и MCP-потоки, security smoke, PR #10 и ключевые участки code generation/FX/Box2D/asset preview по заявленным изменениям.
 - Для каждой строки со статусом «не подтверждено» обновлять состояние только после привязанного regression test, runtime fixture либо документированной browser acceptance. Не переводить её в «реализовано» по наличию UI, деклараций TypeScript или успешной компиляции.
 - Матрица — живой документ: изменения возможностей должны обновлять evidence, acceptance checks и соответствующие пункты `docs/roadmap.md`.
