@@ -121,7 +121,7 @@ function walkFiles(dir, relPrefix, out = []) {
 function notifyFilesChanged() {
     if (!bridgeClient) return
     try {
-        bridgeClient.res.write("event: files-changed\\ndata: {}\\n\\n")
+        bridgeClient.res.write("event: files-changed\ndata: {}\n\n")
     } catch (error) {
         removeBridgeClient(bridgeClient)
     }
@@ -792,7 +792,7 @@ function bridgeCommand(command) {
             command,
             clientId: client.clientId
         })
-        const payload = `event: command\\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\\n\\n`
+        const payload = `event: command\ndata: ${JSON.stringify({ id, clientId: client.clientId, ...command })}\n\n`
         try {
             client.res.write(payload)
         } catch (error) {
@@ -834,12 +834,12 @@ export async function handleBridgeEvents(req, res) {
         Connection: "keep-alive",
         "X-Accel-Buffering": "no"
     })
-    res.write(`event: connected\\ndata: ${JSON.stringify({ clientId: client.clientId })}\\n\\n`)
+    res.write(`event: connected\ndata: ${JSON.stringify({ clientId: client.clientId })}\n\n`)
     log("mcp-bridge: Editor Host connected")
 
     const ping = setInterval(() => {
         try {
-            if (!res.write(": ping\\n\\n")) return
+            if (!res.write(": ping\n\n")) return
         } catch (error) {
             removeBridgeClient(client)
         }
