@@ -310,12 +310,13 @@ Data-Oriented ECS — отдельная optional runtime capability; Phaser int
 
 ### 6.5. Cross-platform Input API
 
-- Codogma предоставляет единый Input API для клавиатуры, указателя/мыши и touch screens. Поддержка gamepad может добавляться через capability-based adapter/extension.
-- Система должна различать физический ввод и логические действия игры там, где нужен remapping: bindings задаются в конфигурации проекта, могут быть заменены во время выполнения и проверяются на конфликты/неподдерживаемые устройства.
-- API определяет нормализованные pointer/touch coordinates, конвертацию между экранным, canvas, camera, world, local и UI coordinate space, а также понятное поведение при нескольких камерах/viewport.
-- Обрабатываются pointer capture/release, несколько касаний там, где браузер позволяет, cancel/lost pointer, потеря фокуса/visibility, preventDefault/scroll conflicts и повторное получение фокуса. Застрявшая кнопка/ось ввода после смены вкладки не должна оставаться активной.
-- UI input и gameplay input разделяются правилами routing/priority: взаимодействие с кнопкой/полем ввода не должно случайно запускать действие игрового персонажа под ним.
-- Тесты покрывают mouse, keyboard, touch, UI hit testing, смену вкладки, resize и преобразования координат; браузерные ограничения документируются вместо обещания одинакового поведения во всех окружениях.
+- Core предоставляет platform-neutral Input API для keyboard, mouse/pointer и touch. Gamepad остаётся отдельной optional capability и не входит в базовый контракт.
+- Host adapters передают нормализованные события через `InputEventSource`; исходные browser/DOM events остаются внутри adapter. Touch использует ту же pointer lifecycle semantics с `pointerType: "touch"`.
+- `InputEvent` фиксирует down/up/cancel и pointer move; keyboard events содержат physical `code` и layout-dependent `key`. Focus loss/background/unavailability приводит к синтетическим cancel для всех удерживаемых клавиш и pointers до уведомления о потере фокуса.
+- `InputRouteResolver` явно выбирает `ui` или `world`; если pointer event одновременно попадает в UI и world, UI имеет приоритет. Каждый routed event доставляется только соответствующему потоку и не bubbling в другой. Focus lifecycle events broadcast обоим потокам. UI hit-testing/focus resolution остаётся обязанностью host adapter.
+- `InputCoordinateMapper` задаёт преобразования screen, canvas, viewport, world, local и UI coordinates. Для viewport/camera/target-dependent преобразований передаются runtime IDs; отсутствие нужного контекста возвращает `undefined`, а не выдуманные координаты.
+- Pointer capture/release, multi-touch, lost pointer, visibility/focus recovery и browser scroll conflicts реализуются host adapter и проверяются на его уровне. Core contracts не обещают идентичное browser behavior во всех окружениях.
+- Logical actions, project bindings и runtime rebinding не входят в этот physical input contract; их schema/authoring остаются в COD-25/COD-98/COD-99.
 
 ### 6.5.1. Input Actions model и Editor authoring
 
@@ -336,22 +337,22 @@ Runtime Input API различает **физические device inputs** и *
 
 ### 6.6. Scene management и жизненный цикл уровня
 
-- Runtime API должен поддерживать загрузку, активацию, деактивацию и выгрузку сцен с определённым порядком lifecycle callbacks; в целевом Core сцена строится из Project Model и реестра компонентов, а не требует отдельного генерируемого класса уровня.
-- Асинхронная загрузка сообщает прогресс/ошибки, может быть отменена при смене уровня и не оставляет частично созданные сущности или ресурсы после неудачи.
-- Переходы между сценами определяют, какие данные/объекты уничтожаются, какие могут сохраняться и как обрабатываются ссылки между сценами. Постоянные объекты не должны случайно дублироваться при повторной загрузке.
-- Зависимости ресурсов сцены должны быть известны Asset Pipeline; возможно заранее загрузить следующий уровень и освобождать неиспользуемый набор ресурсов после перехода.
-- Экран загрузки/transition и анимации перехода могут реализовываться встроенным минимальным сценарием или расширением; базовый Scene Manager не должен зависеть от конкретного UI framework редактора.
-- Проверки покрывают повторное открытие уровня, отмену загрузки, отсутствующий ассет, повторный вход в сцену, корректное dispose и отсутствие зависших listeners/timers.
-
-- Проверки Scene Manager покрывают повторное открытие уровня, отмену загрузки, отсутствующий ассет, повторный вход в сцену, корректный dispose и отсутствие зависших listeners/timers. Ошибка или отмена на любом этапе loader не должна оставлять частичную иерархию или активированные компоненты.
+- `SceneManagerFactory.create(loader)` получает `SceneLoader` как явную зависимость и создаёт `SceneManager`. Manager управляет orchestration активной runtime scene: `switchTo`, activate/deactivate, pause/resume, stop и disposal; он не содержит serializer, component registry, filesystem или Editor UI.
+- `SceneLoader.load()` асинхронно возвращает подготовленную **неактивную** `RuntimeSceneSession`. Loader владеет hydration, reference resolution и rollback частично созданного graph; Scene Manager не создаёт Nodes/Components самостоятельно.
+- При switch текущая сцена остаётся активной, пока новая загружается. Commit сначала деактивирует старую сессию, затем активирует новую и после успешной активации освобождает предыдущую; одновременно может существовать не более одного active owner.
+- Каждая новая switch request отменяет предыдущую незавершённую request (latest request wins). Cancellation до/во время load не допускает активацию кандидата; если loader завершился после отмены, полученная сессия всё равно освобождается. После начала activation commit отмена не откатывает уже начатый commit.
+- Ошибка load оставляет старую сцену активной. Ошибка activation освобождает кандидата и пытается восстановить предыдущую сессию; если восстановление также завершается ошибкой, manager освобождает обе сессии и сообщает агрегированную ошибку.
+- `stop()` идемпотентно отменяет незавершённую загрузку и освобождает активную сцену, оставляя manager пригодным для повторного запуска; `dispose()` выполняет terminal shutdown. Повторный switch на уже активный scene ID не создаёт вторую сессию.
+- UI loading/transition animation не входит в базовый runtime contract. Проверки покрывают cancellation, repeated requests, activation rollback, single-active-owner invariant и освобождение subscriptions/timers через владельцев сцен.
 
 ### 6.7. Time, scheduler и Tween service
 
-- Определить единый источник времени и явный порядок фаз обновления; игровые компоненты, физика, анимация, tweens и события не должны независимо продвигать симуляцию.
-- API должен различать real/unscaled time и game-scaled time для паузы, меню и эффектов; таймеры и scheduled callbacks должны отменяться и очищаться вместе с владельцем.
-- Tween service должен поддерживать целевые свойства, duration, easing curves, delay, repeat/yoyo и последовательности/параллельные группы в рамках выбранного контракта.
-- Pause/resume/time scale/stop и уничтожение объекта должны иметь детерминированное поведение; callbacks не должны срабатывать после dispose их владельца.
-- Поведение scheduler/tween тестируется при frame stalls, смене сцены, pause/resume, низком FPS и повторной активации компонентов.
+- Host — единственный владелец tick и передаёт один конечный non-negative delta в `TimeService.advance()` ровно один раз за frame. `RuntimeTimeFrame` — immutable snapshot с scaled/unscaled delta и elapsed time; все значения публичного API измеряются в секундах.
+- Pause и timeScale влияют на scaled time, но не останавливают unscaled time. `TimeService` не создаёт ticker, timer loop или `requestAnimationFrame`; frame stall delta не обрезается скрыто внутри Core.
+- `Scheduler` и `TweenService` потребляют тот же `RuntimeTimeFrame`, не читают собственные системные часы и не создают самостоятельные update loops. Их порядок вызова фиксируется runtime composition/adapter и проверяется интеграционными тестами.
+- Scheduled callbacks — cancellable handles с pause/resume и явным `scaled`/ `unscaled` domain (по умолчанию `scaled`). `AbortSignal` позволяет привязать subscription/task/tween/request к lifetime владельца; cancel/dispose идемпотентны, callback после отмены не вызывается.
+- Минимальный Tween API анимирует существующие writable numeric target properties и определяет конечные non-negative duration/delay, easing, целочисленный repeat/yoyo, time domain (по умолчанию `scaled`), pause/resume/cancel и completion callback. Sequence/parallel groups и сложные property adapters не входят в v1 contract без подтверждённого vertical-slice use case.
+- Callbacks сервисов синхронны; asynchronous work выполняется вне frame callback и возвращает результат через явные host/service boundary. Исключения одного callback не должны пропускать cleanup остальных владельцев.
 
 ### 6.8. Сохранения и локальное пользовательское состояние
 

@@ -232,7 +232,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 Схема имеет versioned contract; миграции выполняются только между опубликованными версиями Codogma.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
-- [ ] Утвердить границы API для Input (mouse/keyboard/touch и coordinate spaces), Time/Tween/scheduler и Scene Manager (async load, transition, cancellation, disposal); отдельные необязательные capabilities не должны проникать во все компоненты.
+- [x] Утвердить минимальные host-neutral contracts для Input (mouse/keyboard/touch, UI/world routing, coordinate spaces и focus loss), Time/Scheduler/Tween (shared host frame, cancellation, pause/resume и owner cleanup) и Scene Manager (async loader, transition commit, cancellation и disposal) — COD-29 / [ADR-0008](decisions/ADR-0008-runtime-service-contracts.md). Реальные сервисы и интеграционные тесты остаются в COD-106.
 - [ ] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
 - [ ] Интегрировать runtime core в управляемые фазы Phaser tick; не заводить независимый `requestAnimationFrame`.
 - [ ] Добавить Component Schema/Metadata для полей Inspector, валидации, default values и ссылок на ресурсы.
