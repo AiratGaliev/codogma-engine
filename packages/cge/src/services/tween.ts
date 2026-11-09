@@ -1,8 +1,24 @@
 import type { RuntimeDisposable, RuntimeTimeFrame, RuntimeTimeDomain } from "./common.js";
 
+type IfEquals<X, Y, Then = X, Else = never> = (
+  <T>() => T extends X ? 1 : 2
+) extends <T>() => T extends Y ? 1 : 2
+  ? Then
+  : Else;
+
+type WritableNumericKeys<TTarget extends object> = {
+  [Key in keyof TTarget]-?: TTarget[Key] extends number
+    ? IfEquals<
+        { [Property in Key]: TTarget[Key] },
+        { -readonly [Property in Key]: TTarget[Key] },
+        Key
+      >
+    : never;
+}[keyof TTarget];
+
 export type TweenPropertyValues<TTarget extends object> = Readonly<
   Partial<{
-    [Key in keyof TTarget as TTarget[Key] extends number ? Key : never]: number;
+    [Key in WritableNumericKeys<TTarget>]: number;
   }>
 >;
 
@@ -18,7 +34,6 @@ export interface TweenOptions {
   readonly easing?: EasingFunction;
   /** Non-negative integer additional plays after the first; -1 means repeat indefinitely. Defaults to zero. */
   readonly repeat?: number;
-  readonly repeatDelaySeconds?: number;
   readonly yoyo?: boolean;
   /** Defaults to scaled time. */
   readonly timeDomain?: RuntimeTimeDomain;
