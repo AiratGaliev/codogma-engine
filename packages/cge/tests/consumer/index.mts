@@ -186,27 +186,44 @@ if (updates.size !== 0) throw new Error("Inactive sessions must not receive host
 session.activate();
 session.world.update(0.25);
 
-const playerUpdate = updates.get("component-player");
-const enemyUpdate = updates.get("component-enemy");
+function readUpdateSnapshot() {
+  return {
+    size: updates.size,
+    player: updates.get("component-player"),
+    enemy: updates.get("component-enemy"),
+  };
+}
+
+const updateSnapshot = readUpdateSnapshot();
 if (
-  updates.size !== 2 ||
-  playerUpdate?.nodeId !== "node-player" ||
-  playerUpdate.displacement !== 0.5 ||
-  enemyUpdate?.nodeId !== "node-enemy" ||
-  enemyUpdate.displacement !== 1.25
+  updateSnapshot.size !== 2 ||
+  updateSnapshot.player?.nodeId !== "node-player" ||
+  updateSnapshot.player.displacement !== 0.5 ||
+  updateSnapshot.enemy?.nodeId !== "node-enemy" ||
+  updateSnapshot.enemy.displacement !== 1.25
 ) {
   throw new Error("Independent Component instances or host-owned ticking failed.");
 }
 
+function readSessionSnapshot() {
+  return {
+    state: session.state,
+    worldDisposed: session.world.isDisposed,
+    nodeCount: session.world.nodeCount,
+    componentCount: session.world.componentCount,
+  };
+}
+
 session.deactivate();
 session.dispose();
+const finalSnapshot = readSessionSnapshot();
 if (
-  session.state !== "disposed" ||
-  !session.world.isDisposed ||
-  session.world.nodeCount !== 0 ||
-  session.world.componentCount !== 0
+  finalSnapshot.state !== "disposed" ||
+  !finalSnapshot.worldDisposed ||
+  finalSnapshot.nodeCount !== 0 ||
+  finalSnapshot.componentCount !== 0
 ) {
   throw new Error("Scene session disposal did not release the runtime graph.");
 }
 
-process.stdout.write("Packed @codogma/cge consumer smoke passed.\n");
+console.log("Packed @codogma/cge consumer smoke passed.");
