@@ -21,9 +21,12 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test:compile": "tsc -p tsconfig.test.json",
-    "test": "npm run test:compile && node --test .test-dist/tests/*.test.js",
-    "quality:check": "npm run typecheck && npm run build && npm test",
-    "benchmark": "node benchmarks/component-world.bench.mjs"
+    "test": "npm run test:compile && npm run test:compiled",
+    "quality:check": "npm run typecheck && npm run build && npm run test:compile && npm run test:compiled && npm run test:consumer:compiled",
+    "benchmark": "npm run test:compile && node .test-dist/benchmarks/component-world.bench.js",
+    "test:compiled": "node --test .test-dist/tests/*.test.js",
+    "test:consumer:compiled": "node .test-dist/scripts/consumer-smoke.js",
+    "test:consumer": "npm run test:compile && npm run test:consumer:compiled"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
