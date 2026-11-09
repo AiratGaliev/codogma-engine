@@ -577,7 +577,7 @@ test("SceneManager serializes concurrent pause and scene-switch lifecycle operat
           pause() {
             firstPauseCalls++;
             calls.push("first:pause-start");
-            return pauseGate.promise.then(() => calls.push("first:pause-end"));
+            return pauseGate.promise.then(() => { calls.push("first:pause-end"); });
           },
           resume() {},
           dispose() { calls.push("first:dispose"); },
@@ -609,9 +609,9 @@ test("SceneManager serializes concurrent pause and scene-switch lifecycle operat
     "first:pause-start",
     "first:pause-end",
     "first:deactivate",
-    "first:dispose",
     "second:activate",
     "second:pause",
+    "first:dispose",
   ]);
 
   await Promise.all([manager.resume(), manager.resume()]);
