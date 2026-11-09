@@ -58,7 +58,6 @@ export default function ProjectManager(props: ProjectManagerProps) {
   const parentDirectories = createMemo(() =>
     (snapshot()?.directories ?? []).filter((item) => !item.isProject),
   );
-  const activeProject = createMemo(() => snapshot()?.activeProject ?? null);
 
   async function refreshSnapshot() {
     setLoading(true);

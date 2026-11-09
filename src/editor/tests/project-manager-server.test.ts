@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,9 +135,13 @@ test("Project Manager creates, opens and restores a validated project after serv
     assert.equal(manifest.id, created.payload.activeProject.projectId);
     createdProjectId = manifest.id;
     assert.equal(manifest.scenes.length, 1);
+    const sceneAsset = manifest.assets[0];
+    const sceneReference = manifest.scenes[0];
+    assert.ok(sceneAsset);
+    assert.ok(sceneReference);
 
-    const sceneText = await readFile(path.join(projectsRoot, "Demo-Project", manifest.assets[0].path), "utf8");
-    assert.equal((JSON.parse(sceneText) as { id: string }).id, manifest.scenes[0].id);
+    const sceneText = await readFile(path.join(projectsRoot, "Demo-Project", sceneAsset.path), "utf8");
+    assert.equal((JSON.parse(sceneText) as { id: string }).id, sceneReference.id);
 
     const duplicate = await callProjectManager(server.origin, "projectManager.create", {
       name: "Another Name",
