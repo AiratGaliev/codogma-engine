@@ -265,6 +265,7 @@ jobs:
   editor-host:
     name: editor-host
     needs: fast
+    needs: fast
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -301,6 +302,13 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
+
+      - name: Download npm-generated workspace lockfile
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: codogma-workspace-lockfile
+          path: .
 
       - name: Download npm-generated workspace lockfile
         if: steps.scope.outputs.run == 'true'
