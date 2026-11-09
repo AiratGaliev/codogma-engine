@@ -30,33 +30,22 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            src/editor/package-lock.json
-            packages/localization/package-lock.json
-            packages/editor-mcp-server/package-lock.json
 
-      - name: Install locked dependencies (root)
+      - name: Install root and all first-party workspace dependencies
         run: npm ci
 
-      - name: Install locked dependencies (native Editor Host)
-        run: npm ci
-        working-directory: src/editor
+      - name: Build Core and all first-party library packages
+        run: |
+          npm run build:cge
+          npm run build:localization
+          npm run build:mcp
+          npm run build:game-test-bridge-contract
 
-      - name: Install locked dependencies (localization package)
-        run: npm ci
-        working-directory: packages/localization
-
-      - name: Install locked dependencies (first-party MCP package)
-        run: npm ci
-        working-directory: packages/editor-mcp-server
-
-      - name: Build native Editor Host and Core
+      - name: Build native Editor Host
         run: npm run build:editor-host
 
-      - name: Build localization package
-        run: npm run build:localization
-
-      - name: Build first-party MCP package
-        run: npm run build:mcp
+      - name: Verify workspace consumer imports
+        run: npm run test:workspace-consumer
 
       - name: Smoke test (server boots, native Editor Host and Project respond)
         shell: bash
@@ -93,7 +82,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           zip -qr release/codogma-engine.zip \
-            server packages/cge packages/localization src/editor packages/editor-mcp-server \
+            server packages/cge packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
             -x "src/editor/node_modules/*" \
             -x "packages/*/node_modules/*" \
@@ -102,6 +91,7 @@ jobs:
           unzip -Z1 release/codogma-engine.zip | grep -qx "src/editor/dist/index.html"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/cge/dist/index.js"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/editor-mcp-server/dist/cli.js"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/game-test-bridge-contract/dist/index.js"
           if unzip -Z1 release/codogma-engine.zip | grep -q '^source/editor/'; then
             echo "::error::Historical Editor sources must not be shipped in the native release archive."
             exit 1

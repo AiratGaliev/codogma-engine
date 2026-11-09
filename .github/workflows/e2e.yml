@@ -30,27 +30,15 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            packages/editor-mcp-server/package-lock.json
-            src/editor/package-lock.json
 
-      - name: Install locked dependencies
+      - name: Install root and all first-party workspace dependencies
         run: npm ci
 
-      - name: Install and build standalone MCP package
-        run: npm ci
-        working-directory: packages/editor-mcp-server
-
-      - name: Install Editor Host dependencies
-        run: npm ci
-        working-directory: src/editor
-
-      - name: Build and typecheck SolidJS Host
-        run: npm run build
-        working-directory: src/editor
+      - name: Build and typecheck SolidJS Host and Core workspace dependency
+        run: npm run build --workspace=@codogma/editor-host
 
       - name: Run Editor Host domain tests
-        run: npm test
-        working-directory: src/editor
+        run: npm test --workspace=@codogma/editor-host
 
       - name: Install Chromium for Editor Host browser E2E
         run: npx playwright install --with-deps chromium
