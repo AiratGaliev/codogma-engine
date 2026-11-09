@@ -22,7 +22,7 @@ import {
 } from "../src/index.js";
 
 class FakeInputSource implements InputEventSource {
-  private handler?: InputEventHandler;
+  private handler: InputEventHandler | undefined;
   subscribe(handler: InputEventHandler): InputSubscription {
     this.handler = handler;
     let disposed = false;
@@ -259,9 +259,9 @@ test("Tween supports pause/resume, owner cancellation and unscaled time", () => 
 
 test("Tween rejects accessor, readonly, non-finite and empty destination properties", () => {
   const tweens = createTweenService();
-  const target: { x: number; readonly readonlyValue: number } = Object.defineProperties(
-    { x: 0 },
-    { readonlyValue: { value: 1, writable: false, enumerable: true } },
+  const target = Object.defineProperties(
+    { x: 0, readonlyValue: 1 },
+    { readonlyValue: { writable: false } },
   );
   assert.throws(() => tweens.to(target, { x: Number.NaN }, { durationSeconds: 1 }), /finite/i);
   const readonlyDestination = { readonlyValue: 2 } as unknown as import("../src/index.js").TweenPropertyValues<typeof target>;
