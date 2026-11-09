@@ -43,10 +43,10 @@ The fixture and tests cover:
 - [x] Keep Core independent of Phaser, DOM, Editor UI, Node-only APIs and platform SDKs.
 - [x] Consume the packed `@codogma/cge` artifact from an independent ESM/TypeScript project; verify declarations, runtime exports and the native Scene Loader lifecycle (`tests/consumer`).
 - [x] Verify that every Core source module uses only relative imports and that the package declares no runtime npm dependencies (`tests/package-boundary.test.ts`).
-- [ ] TimeService, Scheduler, TweenService, InputService, typed Event Bus and Scene Manager have executable behavior tests for timing, ownership, routing, cancellation, transitions and failure cleanup.
-- [ ] Host-owned runtime composition consumes one frame in a fixed Time → Scheduler → Tween → active ComponentWorld order; no Core-owned ticker or loop is created.
-- [ ] Integration tests compose a real ComponentWorld, fake normalized input provider, SceneLoader and SceneManager; repeated load/stop/dispose leaves no active session or owned subscriptions.
-- [ ] ComponentWorld provides instance-lifetime and enabled-period owner signals, aborting them at disable/destroy/world-dispose boundaries.
+- [x] TimeService, Scheduler, TweenService, InputService, typed Event Bus and Scene Manager have executable behavior tests for timing, ownership, routing, cancellation, transitions and failure cleanup.
+- [x] Host-owned runtime composition consumes one frame in a fixed Time → Scheduler → Tween → active ComponentWorld order; no Core-owned ticker or loop is created.
+- [x] Integration tests compose a real ComponentWorld, fake normalized input provider, SceneLoader and SceneManager; repeated load/stop/dispose leaves no active session or owned subscriptions.
+- [x] ComponentWorld provides instance-lifetime and enabled-period owner signals, aborting them at disable/destroy/world-dispose boundaries.
 
 
 ## 4. Preview and runtime acceptance
