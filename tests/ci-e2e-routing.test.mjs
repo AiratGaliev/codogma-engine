@@ -18,6 +18,15 @@ test("CI Fast never installs or runs browser/MCP E2E suites", () => {
   );
 });
 
+test("CI Fast builds and validates the native release archive workspace topology", () => {
+  assert.match(fastWorkflow, /name: Build native Editor Host for release archive validation/);
+  assert.match(fastWorkflow, /name: Verify the release archive contains the complete workspace graph/);
+  assert.match(fastWorkflow, /zip -qr "\$archive"/);
+  assert.match(fastWorkflow, /packages\/game-test-bridge-contract\/dist\/index\.js/);
+  assert.match(fastWorkflow, /src\/editor\/dist\/index\.html/);
+  assert.match(fastWorkflow, /Historical Editor sources must not be shipped/);
+});
+
 test("the E2E workflow is promotion-only and contains the complete current E2E suites", () => {
   assert.match(e2eWorkflow, /pull_request:\s*\n\s*branches:\s*\[test, main\]/);
   assert.doesNotMatch(e2eWorkflow, /^\s*workflow_dispatch:/m);
