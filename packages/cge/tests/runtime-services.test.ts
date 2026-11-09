@@ -287,6 +287,39 @@ test("Tween callback failure cancels only the failed tween and does not block si
   assert.equal(second.status, "running");
 });
 
+test("Tween enforces synchronous callbacks and reports the terminal yoyo progress", () => {
+  const time = createTimeService();
+  const tweens = createTweenService();
+  const updateTween = tweens.to({ x: 0 }, { x: 1 }, {
+    durationSeconds: 1,
+    onUpdate: async () => undefined,
+  });
+  assert.throws(() => tweens.update(time.advance(0.25)), AggregateError);
+  assert.equal(updateTween.status, "cancelled");
+
+  const completionTween = tweens.to({ x: 0 }, { x: 1 }, {
+    durationSeconds: 1,
+    onComplete: async () => undefined,
+  });
+  assert.throws(() => tweens.update(time.advance(1)), AggregateError);
+  assert.equal(completionTween.status, "completed");
+  tweens.dispose();
+
+  const yoyoTime = createTimeService();
+  const yoyoTweens = createTweenService();
+  const progress: number[] = [];
+  yoyoTweens.to({ x: 0 }, { x: 10 }, {
+    durationSeconds: 0.5,
+    repeat: 1,
+    yoyo: true,
+    onUpdate: (value) => progress.push(value),
+  });
+  yoyoTweens.update(yoyoTime.advance(0.5));
+  yoyoTweens.update(yoyoTime.advance(0.5));
+  assert.equal(progress.at(-1), 0);
+  yoyoTweens.dispose();
+});
+
 test("Input routes exclusively and captures pointer ownership through move and up", () => {
   const source = new FakeInputSource();
   const input = createInputService({
@@ -592,6 +625,24 @@ test("SceneManager surfaces failed disposal of a late cancelled candidate", asyn
   secondLoad.resolve(makeSession("second"));
   assert.deepEqual(await second, { status: "activated", sceneId: "second" });
   await manager.dispose();
+});
+
+test("EngineRuntime validates SceneLoader before acquiring a host input subscription", () => {
+  let subscribeCalls = 0;
+  const source: InputEventSource = {
+    subscribe() {
+      subscribeCalls++;
+      return { isDisposed: false, dispose() {} };
+    },
+  };
+
+  assert.throws(() => createEngineRuntime({
+    inputSource: source,
+    inputRouteResolver: { resolve: () => "world" },
+    inputCoordinates: coordinates,
+    sceneLoader: {} as SceneLoader,
+  }), /SceneLoader/);
+  assert.equal(subscribeCalls, 0);
 });
 
 test("EngineRuntime rejects reentrant disposal and promise-returning world callbacks", async () => {
