@@ -40,8 +40,8 @@ Provider содержит стабильный provider ID, kind (`builtin` ил
 
 - Package inventory содержит точный stable package instance ID, npm name/version, declared scopes/targets и результат host/API compatibility проверки.
 - Provider сопоставляется с точной package instance; совпадения только по package name при нескольких установленных экземплярах недостаточно.
-- В режиме `single` один доступный provider instance должен быть однозначен. Иначе требуется явный binding `providerId → packageInstanceId`; неявный выбор по порядку установки запрещён.
-- В режиме `all` явно разрешается композиция всех совместимых providers. Отсутствующий или несовместимый обязательный contribution блокирует selection.
+- В режиме `single` один доступный provider descriptor должен быть однозначен. Иначе требуется явный binding `providerId → packageInstanceId`; неявный выбор по порядку установки запрещён. Независимо от режима каждый package provider descriptor разрешается ровно в один exact package instance; если одному descriptor соответствуют несколько установленных instances, требуется явный binding.
+- В режиме `all` явно разрешается композиция всех объявленных compatible provider descriptors, но не всех установленных версий одного и того же provider package. Отсутствующий, неоднозначный или несовместимый обязательный contribution блокирует selection.
 - Built-in provider не требует фиктивного npm package instance.
 - Feature availability является результатом metadata + inventory + scope/target + compatibility checks; факт установки package сам по себе не включает capability. Feature, не поддерживающие запрошенный scope (например, editor-only feature в runtime selection), остаются в report с `scope-unsupported` и исключаются без блокировки другого scope; недоступный provider для feature, действительно выбранной в этом scope, даёт blocking diagnostic.
 

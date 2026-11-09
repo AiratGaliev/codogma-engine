@@ -229,7 +229,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
       else if (!targetMatches.length) status = "target-unsupported";
       else if (!compatible.length) status = "incompatible";
       else if (bound && !chosen.length) status = "binding-invalid";
-      else if (!bound && f.providerMode !== "all" && chosen.length > 1) status = "ambiguous-package-instance";
+      else if (!bound && chosen.length > 1) status = "ambiguous-package-instance";
       return { providerId: p.id, kind: p.kind, status, packageInstanceIds: chosen.map(x => x.id), packageName: p.packageName, entryPoints: p.entryPoints } as FeatureProviderResolution;
     });
     const hasExplicitProviderBinding = f.providers.some(p => binding.has(p.id));
@@ -241,7 +241,6 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     const providerAvailable = builtin ? relevant.length === f.providers.length : relevant.length > 0 && (f.providerMode === "all" ? relevant.length === f.providers.length : relevant.length === 1) && !bindingInvalid;
     const scopeOk = f.scopes.includes(input.scope), targetOk = supports(f.targets, input.target);
     const available = providerAvailable && scopeOk && targetOk;
-    const packageCandidateCount = providers.reduce((n,p) => n + p.packageInstanceIds.length, 0);
     states.set(f.id, { descriptor:f, enabled, source, providers, selectedProviderPackageIds, available, included:false, requiredBy:new Set(), ...(!scopeOk ? {reason:"scope-unsupported" as const} : !targetOk ? {reason:"target-unsupported" as const} : !providerAvailable ? {reason:providers.some(p => p.status === "incompatible") ? "provider-incompatible" as const : (providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance")) ? "provider-ambiguous" as const : "provider-missing" as const} : !enabled ? {reason:"not-enabled" as const} : {}) });
     if (enabled && !targetOk) diagnostics.push(error("FEATURE_TARGET_UNSUPPORTED", "Feature " + f.id + " does not support target " + input.target + ".", f.id, undefined, input.target));
     if (enabled && scopeOk && targetOk && bindingInvalid) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "An explicit provider binding does not match an installed compatible package instance.", f.id));
@@ -253,7 +252,6 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
         : "FEATURE_PROVIDER_MISSING";
       diagnostics.push(error(code, "Feature " + f.id + " has no unambiguous available provider for " + input.target + "/" + input.scope + ".", f.id, undefined, input.target));
     }
-    void packageCandidateCount;
   }
   const visiting = new Set<string>(), included = new Set<string>();
   const visit = (id: string, root: string) => {

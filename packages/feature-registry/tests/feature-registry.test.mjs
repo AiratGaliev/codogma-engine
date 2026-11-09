@@ -137,6 +137,33 @@ test("single provider binding contributes only the selected provider package ins
  assert.deepEqual(r.buildAnalysisFeatures[0]?.providerPackageIds,undefined);
  assert.equal(r.buildAnalysisFeatures[0]?.providerPackageId,"p-phaser");
 });
+test("all provider mode still requires one exact package instance per provider descriptor", () => {
+ const registryWithTwo = {schemaVersion:1,features:[{
+  id:"runtime.composed",
+  scopes:["runtime"],
+  targets:["web"],
+  policy:"optional",
+  providerMode:"all",
+  providers:[
+   {id:"provider.phaser",kind:"package",packageName:"@codogma/runtime-phaser",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"."}},
+   {id:"provider.ecs",kind:"package",packageName:"@codogma/ecs",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"."}}
+  ]
+ }]};
+ const duplicateInstance=[...packages,{...pkg("p-phaser-secondary","@codogma/runtime-phaser")}];
+ const ambiguous=resolveFeatureSelection({registry:registryWithTwo,project:project(["runtime.composed"]),installedPackages:duplicateInstance,target:"web",scope:"runtime"});
+ assert.equal(ambiguous.valid,false);
+ assert.ok(ambiguous.diagnostics.some(x=>x.code==="FEATURE_PROVIDER_AMBIGUOUS"));
+ const selected=resolveFeatureSelection({
+  registry:registryWithTwo,
+  project:project(["runtime.composed"]),
+  installedPackages:duplicateInstance,
+  target:"web",
+  scope:"runtime",
+  providerBindings:[{providerId:"provider.phaser",packageInstanceId:"p-phaser"}]
+ });
+ assert.equal(selected.valid,true,JSON.stringify(selected.diagnostics));
+ assert.deepEqual(selected.buildAnalysisFeatures[0]?.providerPackageIds,["p-ecs","p-phaser"]);
+});
 test("all provider mode composes all exact providers", () => {
  const r=resolveFeatureSelection({registry:{schemaVersion:1,features:[{id:"runtime.multi",scopes:["runtime"],targets:["web"],policy:"optional",providerMode:"all",providers:[
   {id:"p-a",kind:"package",packageName:"@codogma/runtime-phaser",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"."}},
