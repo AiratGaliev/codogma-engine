@@ -174,6 +174,7 @@ class HostTween implements TweenHandle {
 
   private applyProgress(progress: number): void {
     const eased = (this.options.easing ?? identityEasing)(progress);
+    assertSynchronousResult(eased, "Tween easing");
     if (!Number.isFinite(eased)) throw new RangeError("Tween easing must return a finite value.");
     for (const track of this.tracks) {
       const value = track.from + (track.to - track.from) * eased;
