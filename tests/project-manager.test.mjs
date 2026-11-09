@@ -1,170 +1,192 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer as createNetServer } from "node:net";
-import { afterEach, test } from "vitest";
+import { after, test } from "node:test";
+import {
+  createEmptyProject,
+  getProjectManagerSnapshot,
+  openProjectDirectory,
+  ProjectManagerError,
+  removeRecentProject,
+  validateProjectDirectory,
+} from "../server/project-manager.mjs";
+import { writeNewFileSafely } from "../server/path-security.mjs";
 
-const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(testDirectory, "../../..");
-const editorHostDirectory = path.join(repositoryRoot, "src", "editor", "dist");
-const temporaryDirectories = new Set<string>();
+const sandboxes = new Set();
 
-async function reserveLoopbackPort(): Promise<number> {
-  const server = createNetServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  return address.port;
+async function createSandbox() {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "codogma-project-manager-"));
+  sandboxes.add(root);
+  const projectsRoot = path.join(root, "projects");
+  const userDataDirectory = path.join(root, "user-data");
+  await fsp.mkdir(projectsRoot, { recursive: true });
+  await fsp.mkdir(userDataDirectory, { recursive: true });
+  return { root, projectsRoot, userDataDirectory };
 }
 
-async function startProjectManagerServer(projectsRoot: string, userDataDirectory: string, initialProject = "") {
-  const port = await reserveLoopbackPort();
-  const child = spawn(process.execPath, [path.join(repositoryRoot, "server", "server.mjs")], {
-    cwd: repositoryRoot,
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      PORT: String(port),
-      PROJECT_DIR: initialProject,
-      PROJECTS_DIR: projectsRoot,
-      CODOGMA_USER_DATA_DIR: userDataDirectory,
-      EDITOR_HOST_DIR: editorHostDirectory,
-      CODOGMA_ALLOWED_ORIGINS: "",
-      CODOGMA_ALLOWED_HOSTS: "",
-    },
-  });
-
-  let output = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => { output += chunk; });
-  child.stderr.on("data", (chunk: string) => { output += chunk; });
-
-  const origin = "http://127.0.0.1:" + port;
-  let ready = false;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error("Project Manager server exited during startup:\n" + output);
-    }
-    try {
-      const response = await fetch(origin + "/editor/mcp-bridge-status");
-      if (response.ok) {
-        ready = true;
-        break;
-      }
-    } catch {
-      // Wait until the loopback listener is ready.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  if (!ready) {
-    child.kill("SIGTERM");
-    throw new Error("Project Manager server did not become ready:\n" + output);
-  }
-
-  return {
-    origin,
-    stop: async () => {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-      child.kill("SIGTERM");
-      await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, 3000))]);
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-    },
-  };
+async function createProject(options, extra = {}) {
+  return createEmptyProject({
+    ...options,
+    name: "My Game",
+    folderName: "My-Game",
+    templateId: "empty-2d",
+  }, extra);
 }
 
-async function callProjectManager<T>(origin: string, operation: string, args: Record<string, unknown> = {}) {
-  const response = await fetch(origin + "/editor/project/operations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ operation, arguments: args }),
-  });
-  const payload = await response.json() as T & { error?: string };
-  return { response, payload };
-}
-
-afterEach(async () => {
-  await Promise.all([...temporaryDirectories].map((directory) => rm(directory, { recursive: true, force: true })));
-  temporaryDirectories.clear();
+after(async () => {
+  await Promise.all([...sandboxes].map((directory) => fsp.rm(directory, { recursive: true, force: true })));
 });
 
-test("Project Manager creates, opens and restores a validated project after server restart", async () => {
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "codogma-project-manager-server-"));
-  temporaryDirectories.add(temporaryRoot);
-  const projectsRoot = path.join(temporaryRoot, "projects");
-  const userDataDirectory = path.join(temporaryRoot, "user-data");
-  await mkdir(projectsRoot, { recursive: true });
-  await mkdir(userDataDirectory, { recursive: true });
+test("Empty 2D template is generated through Core serializers and passes Project/Scene validation", async () => {
+  const sandbox = await createSandbox();
+  const result = await createProject(sandbox);
+  const projectDirectory = result.projectDirectory;
 
-  let createdProjectId = "";
-  let server = await startProjectManagerServer(projectsRoot, userDataDirectory);
-  try {
-    const initial = await callProjectManager<Record<string, unknown>>(server.origin, "projectManager.getSnapshot");
-    assert.equal(initial.response.status, 200);
-    assert.equal(initial.payload.activeProject, null);
-    assert.equal(initial.payload.projectsRoot, projectsRoot);
+  assert.equal(result.project.name, "My Game");
+  assert.equal(result.project.runtime.adapterId, "phaser");
+  assert.equal(result.project.scenes.length, 1);
+  assert.equal(result.project.assets.length, 1);
+  assert.equal(result.project.componentModules.length, 0);
 
-    const created = await callProjectManager<{ activeProject: { projectId: string; name: string; relativePath: string } }>(
-      server.origin,
-      "projectManager.create",
-      { name: "Demo Project", folderName: "Demo-Project", templateId: "empty-2d" },
-    );
-    assert.equal(created.response.status, 200);
-    assert.equal(created.payload.activeProject.name, "Demo Project");
-    assert.equal(created.payload.activeProject.relativePath, "Demo-Project");
+  const manifestText = await fsp.readFile(path.join(projectDirectory, "project.json"), "utf8");
+  const scenePath = result.project.assets[0].path;
+  const sceneText = await fsp.readFile(path.join(projectDirectory, scenePath), "utf8");
+  const manifest = JSON.parse(manifestText);
+  const scene = JSON.parse(sceneText);
 
-    const manifestText = await readFile(path.join(projectsRoot, "Demo-Project", "project.json"), "utf8");
-    const manifest = JSON.parse(manifestText) as { id: string; scenes: Array<{ id: string; assetId: string }>; assets: Array<{ path: string }> };
-    assert.equal(manifest.id, created.payload.activeProject.projectId);
-    createdProjectId = manifest.id;
-    assert.equal(manifest.scenes.length, 1);
+  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.scenes[0].id, scene.id);
+  assert.equal(scene.schemaVersion, 1);
+  assert.deepEqual(scene.rootNodes, []);
+  assert.equal(fs.existsSync(path.join(projectDirectory, "assets", "README.md")), true);
+  assert.equal(fs.existsSync(path.join(projectDirectory, "scripts", "README.md")), true);
+  assert.equal(fs.existsSync(path.join(projectDirectory, "build", "README.md")), true);
+  assert.equal(fs.existsSync(path.join(projectDirectory, "package.json")), false);
+  assert.equal(fs.existsSync(path.join(projectDirectory, "src", "main.ts")), false);
 
-    const sceneText = await readFile(path.join(projectsRoot, "Demo-Project", manifest.assets[0].path), "utf8");
-    assert.equal((JSON.parse(sceneText) as { id: string }).id, sceneReference.id);
-
-    const duplicate = await callProjectManager(server.origin, "projectManager.create", {
-      name: "Another Name",
-      folderName: "Demo-Project",
-      templateId: "empty-2d",
-    });
-    assert.equal(duplicate.response.status, 409);
-    assert.match(duplicate.payload.error ?? "", /already exists/i);
-
-    const activeManifest = await fetch(server.origin + "/editor/project/project.json");
-    assert.equal(activeManifest.status, 200);
-
-    const recents = JSON.parse(await readFile(path.join(userDataDirectory, "recent-projects.json"), "utf8")) as {
-      projects: Array<{ projectId: string; relativePath: string }>;
-    };
-    assert.equal(recents.projects[0].projectId, manifest.id);
-    assert.equal(recents.projects[0].relativePath, "Demo-Project");
-    assert.equal(JSON.stringify(recents).includes(projectsRoot), false);
-  } finally {
-    await server.stop();
-  }
-
-  server = await startProjectManagerServer(projectsRoot, userDataDirectory, path.join(projectsRoot, "Demo-Project"));
-  try {
-    const restored = await callProjectManager<{ activeProject: { projectId: string; relativePath: string } }>(
-      server.origin,
-      "projectManager.getSnapshot",
-    );
-    assert.equal(restored.response.status, 200);
-    assert.equal(restored.payload.activeProject?.relativePath, "Demo-Project");
-    assert.equal(restored.payload.activeProject?.projectId, createdProjectId);
-    const tree = await fetch(server.origin + "/editor/project/project.json");
-    assert.equal(tree.status, 200);
-  } finally {
-    await server.stop();
-  }
+  const validation = await validateProjectDirectory(projectDirectory);
+  assert.equal(validation.valid, true, JSON.stringify(validation.diagnostics));
+  assert.equal(validation.project.id, manifest.id);
+  assert.match(result.relativePath, /^My-Game$/);
 });
 
+test("existing destination is never overwritten and duplicate creation is rejected", async () => {
+  const sandbox = await createSandbox();
+  await createProject(sandbox);
+  const readme = path.join(sandbox.projectsRoot, "My-Game", "README.md");
+  const original = await fsp.readFile(readme, "utf8");
+
+  await assert.rejects(
+    createProject(sandbox),
+    (error) => error instanceof ProjectManagerError && error.statusCode === 409,
+  );
+
+  assert.equal(await fsp.readFile(readme, "utf8"), original);
+  assert.equal(fs.existsSync(path.join(sandbox.projectsRoot, "My-Game", "project.json")), true);
+  assert.deepEqual(await fsp.readdir(sandbox.projectsRoot), ["My-Game"]);
+});
+
+test("a staging write failure cleans temporary files and leaves no published project", async () => {
+  const sandbox = await createSandbox();
+  let writeCount = 0;
+
+  await assert.rejects(
+    createProject(sandbox, {
+      writeFile: (base, target, content) => {
+        writeCount += 1;
+        if (writeCount === 2) return false;
+        return writeNewFileSafely(base, target, content);
+      },
+    }),
+    (error) => error instanceof ProjectManagerError && error.statusCode === 500,
+  );
+
+  assert.equal(writeCount, 2);
+  assert.deepEqual(await fsp.readdir(sandbox.projectsRoot), []);
+});
+
+test("opening a corrupt manifest fails closed and keeps the recent entry marked invalid", async () => {
+  const sandbox = await createSandbox();
+  const created = await createProject(sandbox);
+  await fsp.writeFile(path.join(created.projectDirectory, "project.json"), "{ not valid json", "utf8");
+
+  await assert.rejects(
+    openProjectDirectory({
+      projectsRoot: sandbox.projectsRoot,
+      userDataDirectory: sandbox.userDataDirectory,
+      relativePath: created.relativePath,
+    }),
+    (error) => error instanceof ProjectManagerError && error.statusCode === 422,
+  );
+
+  const snapshot = await getProjectManagerSnapshot(sandbox);
+  assert.equal(snapshot.recentProjects.length, 1);
+  assert.equal(snapshot.recentProjects[0].status, "invalid");
+  assert.equal(fs.existsSync(path.join(sandbox.userDataDirectory, "recent-projects.json")), true);
+});
+
+test("open, restart snapshot and relocation recovery use stable Project IDs without absolute recents paths", async () => {
+  const sandbox = await createSandbox();
+  const created = await createProject(sandbox);
+  const opened = await openProjectDirectory({
+    projectsRoot: sandbox.projectsRoot,
+    userDataDirectory: sandbox.userDataDirectory,
+    relativePath: created.relativePath,
+  });
+  assert.equal(opened.project.id, created.project.id);
+
+  const recentFile = path.join(sandbox.userDataDirectory, "recent-projects.json");
+  const recentContent = await fsp.readFile(recentFile, "utf8");
+  assert.equal(recentContent.includes(sandbox.projectsRoot), false);
+  assert.equal(recentContent.includes(sandbox.userDataDirectory), false);
+
+  const relocatedPath = path.join(sandbox.projectsRoot, "Moved-Game");
+  await fsp.rename(created.projectDirectory, relocatedPath);
+  const movedSnapshot = await getProjectManagerSnapshot(sandbox);
+  assert.equal(movedSnapshot.recentProjects[0].status, "available");
+  assert.equal(movedSnapshot.recentProjects[0].relativePath, "Moved-Game");
+
+  const reopened = await openProjectDirectory({
+    projectsRoot: sandbox.projectsRoot,
+    userDataDirectory: sandbox.userDataDirectory,
+    relativePath: "Moved-Game",
+  });
+  assert.equal(reopened.project.id, created.project.id);
+
+  await fsp.rm(relocatedPath, { recursive: true, force: true });
+  const missingSnapshot = await getProjectManagerSnapshot(sandbox);
+  assert.equal(missingSnapshot.recentProjects[0].status, "missing");
+  await removeRecentProject({ userDataDirectory: sandbox.userDataDirectory, projectId: created.project.id });
+  const cleanedSnapshot = await getProjectManagerSnapshot(sandbox);
+  assert.deepEqual(cleanedSnapshot.recentProjects, []);
+});
+
+test("project creation rejects traversal, platform paths and invalid folder names", async () => {
+  const sandbox = await createSandbox();
+  for (const folderName of ["../escape", "folder/name", "folder\\name", "CON", "trailing."]) {
+    await assert.rejects(
+      createEmptyProject({
+        projectsRoot: sandbox.projectsRoot,
+        userDataDirectory: sandbox.userDataDirectory,
+        name: "My Game",
+        folderName,
+      }),
+      ProjectManagerError,
+    );
+  }
+  for (const parentRelativePath of ["../outside", "/tmp", "C:\\outside"]) {
+    await assert.rejects(
+      createEmptyProject({
+        projectsRoot: sandbox.projectsRoot,
+        userDataDirectory: sandbox.userDataDirectory,
+        name: "My Game",
+        folderName: "Game",
+        parentRelativePath,
+      }),
+      ProjectManagerError,
+    );
+  }
+  assert.deepEqual(await fsp.readdir(sandbox.projectsRoot), []);
+});

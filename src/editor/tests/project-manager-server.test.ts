@@ -157,8 +157,10 @@ test("Project Manager creates, opens and restores a validated project after serv
     const recents = JSON.parse(await readFile(path.join(userDataDirectory, "recent-projects.json"), "utf8")) as {
       projects: Array<{ projectId: string; relativePath: string }>;
     };
-    assert.equal(recents.projects[0].projectId, manifest.id);
-    assert.equal(recents.projects[0].relativePath, "Demo-Project");
+    const recentRecord = recents.projects[0];
+    assert.ok(recentRecord);
+    assert.equal(recentRecord.projectId, manifest.id);
+    assert.equal(recentRecord.relativePath, "Demo-Project");
     assert.equal(JSON.stringify(recents).includes(projectsRoot), false);
   } finally {
     await server.stop();
