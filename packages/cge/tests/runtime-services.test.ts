@@ -477,6 +477,7 @@ test("SceneManager stop cancels loading, disposes active owner and remains reusa
   await manager.switchTo("active");
   const pending = manager.switchTo("pending");
   const stop = manager.stop();
+  assert.equal(manager.stop(), stop);
   pendingLoad.resolve(makeSession("pending"));
   assert.deepEqual(await pending, { status: "cancelled", sceneId: "pending" });
   await stop;
