@@ -204,7 +204,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
   const override = project.value.targetOverrides?.find(o => o.target === input.target);
   const targetEnabled = new Set(override?.enabledFeatureIds ?? []), targetDisabled = new Set(override?.disabledFeatureIds ?? []);
   for (const id of [...project.value.enabledFeatureIds, ...(project.value.disabledFeatureIds ?? []), ...targetEnabled, ...targetDisabled]) if (!byId.has(id)) diagnostics.push(error("FEATURE_CONFIGURATION_UNKNOWN_FEATURE", "Project configuration references unknown feature " + id + ".", id));
-  interface State { descriptor: FeatureDescriptor; enabled: boolean; source: FeatureSelectionSource; providers: FeatureProviderResolution[]; available: boolean; included: boolean; requiredBy: Set<string>; reason?: FeatureExclusionReason }
+  interface State { descriptor: FeatureDescriptor; enabled: boolean; source: FeatureSelectionSource; providers: FeatureProviderResolution[]; selectedProviderPackageIds: string[]; available: boolean; included: boolean; requiredBy: Set<string>; reason?: FeatureExclusionReason }
   const states = new Map<string, State>();
   const installed = packages.value;
   for (const f of definitions) {
@@ -234,6 +234,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     });
     const hasExplicitProviderBinding = f.providers.some(p => binding.has(p.id));
     const relevant = providers.filter(p => p.status === "available" && (f.providerMode === "all" || !hasExplicitProviderBinding || binding.has(p.providerId)));
+    const selectedProviderPackageIds = sorted(relevant.flatMap(p => p.packageInstanceIds));
     const builtin = f.providers[0]?.kind === "builtin";
     const providerAmbiguous = !builtin && f.providerMode !== "all" && relevant.length > 1;
     const bindingInvalid = providers.some(p => p.status === "binding-invalid");
@@ -241,7 +242,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     const scopeOk = f.scopes.includes(input.scope), targetOk = supports(f.targets, input.target);
     const available = providerAvailable && scopeOk && targetOk;
     const packageCandidateCount = providers.reduce((n,p) => n + p.packageInstanceIds.length, 0);
-    states.set(f.id, { descriptor:f, enabled, source, providers, available, included:false, requiredBy:new Set(), ...(!scopeOk ? {reason:"scope-unsupported" as const} : !targetOk ? {reason:"target-unsupported" as const} : !providerAvailable ? {reason:providers.some(p => p.status === "incompatible") ? "provider-incompatible" as const : (providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance")) ? "provider-ambiguous" as const : "provider-missing" as const} : !enabled ? {reason:"not-enabled" as const} : {}) });
+    states.set(f.id, { descriptor:f, enabled, source, providers, selectedProviderPackageIds, available, included:false, requiredBy:new Set(), ...(!scopeOk ? {reason:"scope-unsupported" as const} : !targetOk ? {reason:"target-unsupported" as const} : !providerAvailable ? {reason:providers.some(p => p.status === "incompatible") ? "provider-incompatible" as const : (providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance")) ? "provider-ambiguous" as const : "provider-missing" as const} : !enabled ? {reason:"not-enabled" as const} : {}) });
     if (enabled && !targetOk) diagnostics.push(error("FEATURE_TARGET_UNSUPPORTED", "Feature " + f.id + " does not support target " + input.target + ".", f.id, undefined, input.target));
     if (enabled && scopeOk && targetOk && bindingInvalid) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "An explicit provider binding does not match an installed compatible package instance.", f.id));
     if (enabled && scopeOk && targetOk && !providerAvailable && !bindingInvalid) {
@@ -295,7 +296,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
   const buildAnalysisFeatures: ProjectBuildFeatureSnapshot[] = definitions.map(f => {
     const s = states.get(f.id)!, selected = valid && s.included;
     const provider = f.providers[0]!;
-    const ids = sorted(s.providers.flatMap(p => p.packageInstanceIds));
+    const ids = s.selectedProviderPackageIds;
     return { id:f.id, providerKind:provider.kind, ...(provider.kind === "package" ? ids.length === 1 ? {providerPackageId:ids[0]!} : {providerPackageIds:ids} : {}), selected, available:s.available, targetCompatible:s.available };
   });
   const finalIncluded = valid ? included : new Set<string>();

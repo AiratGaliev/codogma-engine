@@ -113,6 +113,30 @@ test("ambiguous package instances require an exact provider binding", () => {
  assert.equal(r.valid,true,JSON.stringify(r.diagnostics));
  assert.equal(r.buildAnalysisFeatures.find(x=>x.id==="runtime.phaser")?.providerPackageId,"p2");
 });
+test("single provider binding contributes only the selected provider package instance", () => {
+ const input = {
+  registry:{schemaVersion:1,features:[{
+   id:"runtime.renderer",
+   scopes:["runtime"],
+   targets:["web"],
+   policy:"optional",
+   providerMode:"single",
+   providers:[
+    {id:"provider.renderer-a",kind:"package",packageName:"@codogma/runtime-phaser",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"."}},
+    {id:"provider.renderer-b",kind:"package",packageName:"@codogma/ecs",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"."}}
+   ]
+  }]},
+  project:project(["runtime.renderer"]),
+  installedPackages:packages,
+  target:"web",
+  scope:"runtime",
+  providerBindings:[{providerId:"provider.renderer-a",packageInstanceId:"p-phaser"}]
+ };
+ const r=resolveFeatureSelection(input);
+ assert.equal(r.valid,true,JSON.stringify(r.diagnostics));
+ assert.deepEqual(r.buildAnalysisFeatures[0]?.providerPackageIds,undefined);
+ assert.equal(r.buildAnalysisFeatures[0]?.providerPackageId,"p-phaser");
+});
 test("all provider mode composes all exact providers", () => {
  const r=resolveFeatureSelection({registry:{schemaVersion:1,features:[{id:"runtime.multi",scopes:["runtime"],targets:["web"],policy:"optional",providerMode:"all",providers:[
   {id:"p-a",kind:"package",packageName:"@codogma/runtime-phaser",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"."}},
