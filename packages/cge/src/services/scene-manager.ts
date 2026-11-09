@@ -235,8 +235,6 @@ class HostSceneManager implements SceneManager {
         return { status: "cancelled", sceneId };
       }
 
-      // Complete pause/resume against the current owner before changing that owner.
-      await this.lifecycleTail;
       if (operation.controller.signal.aborted || this.disposed || this.pending !== operation) {
         try {
           await this.disposeSession(candidate);
@@ -247,8 +245,10 @@ class HostSceneManager implements SceneManager {
         return { status: "cancelled", sceneId };
       }
 
+      // Serialize activation with pause/resume. Lifecycle calls queued before this
+      // commit finish against the previous owner; later calls target the new owner.
       operation.commitStarted = true;
-      const commit = this.commitCandidate(candidate);
+      const commit = this.enqueueLifecycle(() => this.commitCandidate(candidate));
       this.commitPromise = commit;
       try { await commit; } finally {
         if (this.commitPromise === commit) this.commitPromise = undefined;
