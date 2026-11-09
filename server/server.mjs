@@ -12,6 +12,7 @@ import http from "http"
 import fs from "fs"
 import fsp from "fs/promises"
 import path from "path"
+import os from "os"
 import crypto from "crypto"
 import { fileURLToPath } from "url"
 import {
@@ -26,12 +27,34 @@ import {
 import { safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync } from "./path-security.mjs"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 import { readRequestBuffer } from "./request-body.mjs"
+import {
+    ProjectManagerError,
+    createEmptyProject,
+    getProjectManagerSnapshot,
+    openProjectDirectory,
+    removeRecentProject,
+    validateProjectDirectory
+} from "./project-manager.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
 
 const PORT = Number(process.env.PORT || 3000)
-const PROJECT_DIR = path.resolve(process.env.PROJECT_DIR || path.join(ROOT, "packages", "cge", "tests", "fixtures", "acceptance-project"))
+const CONFIGURED_PROJECT_DIR = process.env.PROJECT_DIR?.trim()
+    ? path.resolve(process.env.PROJECT_DIR.trim())
+    : null
+const PROJECTS_DIR = path.resolve(
+    process.env.PROJECTS_DIR?.trim()
+        || (CONFIGURED_PROJECT_DIR ? path.dirname(CONFIGURED_PROJECT_DIR) : path.join(os.homedir(), "CodogmaProjects"))
+)
+const USER_DATA_DIR = path.resolve(
+    process.env.CODOGMA_USER_DATA_DIR?.trim()
+        || path.join(os.homedir(), ".codogma-engine")
+)
+await fsp.mkdir(PROJECTS_DIR, { recursive: true, mode: 0o700 })
+const PROJECTS_ROOT = await fsp.realpath(PROJECTS_DIR)
+let PROJECT_DIR = null
+let startupProjectError = ""
 const MAX_API_BODY_BYTES = 32 * 1024 * 1024
 const EDITOR_HOST_DIR = path.resolve(process.env.EDITOR_HOST_DIR || path.join(ROOT, "src", "editor", "dist"))
 const EDITOR_ICONS_DIR = path.resolve(ROOT, "src", "editor", "icons")
@@ -327,8 +350,8 @@ function sendJSON(res, data) {
     res.end(body)
 }
 
-function apiError(res, message, statusCode = 200) {
-    const body = JSON.stringify({ error: message || "unknown error" })
+function apiError(res, message, statusCode = 200, details = {}) {
+    const body = JSON.stringify({ error: message || "unknown error", ...details })
     res.writeHead(statusCode, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store"
@@ -336,6 +359,13 @@ function apiError(res, message, statusCode = 200) {
     res.end(body)
 }
 
+function activateProject(projectDirectory) {
+    PROJECT_DIR = path.resolve(projectDirectory)
+    startupProjectError = ""
+    hashCache.value = ""
+    hashCache.stamp = 0
+    initMcp({ projectDir: PROJECT_DIR, log })
+}
 async function handleProjectOperation(req, res) {
     let request
     try {
@@ -354,10 +384,55 @@ async function handleProjectOperation(req, res) {
 
     try {
         switch (operation) {
+            case "projectManager.getSnapshot": {
+                const snapshot = await getProjectManagerSnapshot({
+                    projectsRoot: PROJECTS_ROOT,
+                    userDataDirectory: USER_DATA_DIR,
+                    activeProjectDirectory: PROJECT_DIR,
+                    startupProjectError
+                })
+                return sendJSON(res, snapshot)
+            }
+
+            case "projectManager.create": {
+                const result = await createEmptyProject({
+                    projectsRoot: PROJECTS_ROOT,
+                    userDataDirectory: USER_DATA_DIR,
+                    name: args.name,
+                    folderName: args.folderName,
+                    parentRelativePath: args.parentRelativePath ?? "",
+                    templateId: args.templateId ?? "empty-2d"
+                })
+                activateProject(result.projectDirectory)
+                return sendJSON(res, {
+                    activeProject: { projectId: result.project.id, name: result.project.name, relativePath: result.relativePath },
+                    recentWarning: result.recentWarning
+                })
+            }
+
+            case "projectManager.open": {
+                const result = await openProjectDirectory({
+                    projectsRoot: PROJECTS_ROOT,
+                    userDataDirectory: USER_DATA_DIR,
+                    relativePath: args.relativePath
+                })
+                activateProject(result.projectDirectory)
+                return sendJSON(res, {
+                    activeProject: { projectId: result.project.id, name: result.project.name, relativePath: result.relativePath },
+                    recentWarning: result.recentWarning
+                })
+            }
+
+            case "projectManager.removeRecent":
+                await removeRecentProject({ userDataDirectory: USER_DATA_DIR, projectId: args.projectId })
+                return sendJSON(res, {})
+
             case "project.getContentHash":
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 return sendJSON(res, { contentHash: computeProjectHash() })
 
             case "project.listEntries": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const entries = collectProjectEntries(PROJECT_DIR)
                 return sendJSON(res, {
                     contentHash: computeProjectHash(),
@@ -368,6 +443,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.createDirectory": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const fullPath = safeJoin(PROJECT_DIR, args.relativePath)
                 if (!fullPath) return apiError(res, "invalid project path")
 
@@ -390,6 +466,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.writeFile": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 if (typeof args.relativePath !== "string" || typeof args.text !== "string") {
                     return apiError(res, "relativePath and text are required")
                 }
@@ -424,6 +501,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.deleteEntries": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const relativePaths = Array.isArray(args.relativePaths) ? args.relativePaths : []
                 for (const relativePath of relativePaths) {
                     const fullPath = safeJoin(PROJECT_DIR, relativePath)
@@ -437,6 +515,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.renameEntry": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const sourcePath = safeJoin(PROJECT_DIR, args.sourcePath)
                 const destinationPath = safeJoin(PROJECT_DIR, args.destinationPath)
                 if (!sourcePath || !destinationPath || sourcePath === PROJECT_DIR || destinationPath === PROJECT_DIR) {
@@ -453,6 +532,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.copyEntry": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const sourcePath = safeJoin(PROJECT_DIR, args.sourcePath)
                 const destinationPath = safeJoin(PROJECT_DIR, args.destinationPath)
                 if (!sourcePath || !destinationPath || sourcePath === PROJECT_DIR || destinationPath === PROJECT_DIR) {
@@ -467,6 +547,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.moveEntries": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const destinationDirectory = safeJoin(PROJECT_DIR, args.destinationDirectory)
                 if (!destinationDirectory) return apiError(res, "invalid project path")
                 if (!await ensureProjectDirectorySafely(PROJECT_DIR, destinationDirectory)) {
@@ -487,6 +568,7 @@ async function handleProjectOperation(req, res) {
             }
 
             case "project.readImageDimensions": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
                 const fullPath = safeJoin(PROJECT_DIR, args.relativePath)
                 if (!fullPath) return apiError(res, "project file not found")
                 const handle = await openSafeProjectFileForRead(PROJECT_DIR, fullPath)
@@ -510,6 +592,9 @@ async function handleProjectOperation(req, res) {
         }
     } catch (error) {
         log("project operation error:", operation, error.message)
+        if (error instanceof ProjectManagerError) {
+            return apiError(res, error.message, error.statusCode, { diagnostics: error.diagnostics })
+        }
         return apiError(res, error.message, error.statusCode || 200)
     }
 }
@@ -712,6 +797,10 @@ const server = http.createServer(async (req, res) => {
 
         // MCP server (Model Context Protocol, JSON-RPC over Streamable HTTP)
         if (urlPath === "/editor/mcp" || urlPath === "/editor/mcp/") {
+            if (!PROJECT_DIR) {
+                res.writeHead(409, { "Content-Type": "application/json; charset=utf-8" })
+                return res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Open a project before using MCP." }, id: null }))
+            }
             return await handleMcpHttpRequest(req, res)
         }
 
@@ -732,6 +821,7 @@ const server = http.createServer(async (req, res) => {
 
         // AI Chat (v5-style feature): LLM agent with MCP tool access
         if (urlPath === "/editor/ai-chat" && req.method === "POST") {
+            if (!PROJECT_DIR) return apiError(res, "Open a project before using AI Chat.", 409)
             return await handleAiChat(req, res)
         }
 
@@ -795,6 +885,11 @@ const server = http.createServer(async (req, res) => {
 
         // project files (editor views)
         if (rest.startsWith("project/")) {
+            if (!PROJECT_DIR) {
+                res.writeHead(409, { "Content-Type": "text/plain; charset=utf-8" })
+                res.end("No project is open")
+                return
+            }
             const rel = rest.slice("project/".length).split("?")[0]
             const full = safeJoin(PROJECT_DIR, rel)
             if (!full) {
@@ -807,6 +902,11 @@ const server = http.createServer(async (req, res) => {
 
         // Generated runtime output loaded by the native Editor Host Game View.
         if (rest.startsWith("external/")) {
+            if (!PROJECT_DIR) {
+                res.writeHead(409, { "Content-Type": "text/plain; charset=utf-8" })
+                res.end("No project is open")
+                return
+            }
             const rel = rest.slice("external/".length).split("?")[0]
             const full = safeJoin(PROJECT_DIR, rel)
             if (!full) {
@@ -826,7 +926,25 @@ const server = http.createServer(async (req, res) => {
     }
 })
 
-initMcp({ projectDir: PROJECT_DIR, log })
+if (CONFIGURED_PROJECT_DIR) {
+    const initialProject = await validateProjectDirectory(CONFIGURED_PROJECT_DIR)
+    const projectRelativePath = path.relative(PROJECTS_ROOT, initialProject.projectDirectory || CONFIGURED_PROJECT_DIR)
+    const isInsideProjectsRoot = projectRelativePath !== ""
+        && projectRelativePath !== ".."
+        && !projectRelativePath.startsWith(".." + path.sep)
+        && !path.isAbsolute(projectRelativePath)
+    if (initialProject.valid && initialProject.project && isInsideProjectsRoot) {
+        PROJECT_DIR = initialProject.projectDirectory
+        initMcp({ projectDir: PROJECT_DIR, log })
+    } else {
+        startupProjectError = initialProject.diagnostics
+            .map(item => (item.path ? item.path + ": " : "") + item.message)
+            .join("\n")
+            || (isInsideProjectsRoot
+                ? "The configured project could not be opened."
+                : "The configured project is outside PROJECTS_DIR. Set PROJECTS_DIR to a parent directory that contains it.")
+    }
+}
 
 /* ============================== AI chat loop ============================== */
 
@@ -1108,7 +1226,8 @@ async function handleAiChat(req, res) {
 
 server.listen(PORT, "127.0.0.1", () => {
     log(`Codogma Engine server running at http://localhost:${PORT}/editor/`)
-    log(`  project:  ${PROJECT_DIR}`)
+    log(`  project:  ${PROJECT_DIR || "none (Project Manager)"}`)
+    log(`  projects: ${PROJECTS_ROOT}`)
     log(`  host:     ${EDITOR_HOST_DIR}`)
     log(`  mcp:      http://localhost:${PORT}/editor/mcp (Streamable HTTP)`)
     log(`  stdio:    node server/mcp-launcher.mjs (@codogma/editor-mcp-server)`)

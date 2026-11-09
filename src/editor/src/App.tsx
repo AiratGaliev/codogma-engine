@@ -88,8 +88,10 @@ import {
   type FxObject,
   type FxType,
 } from "./domain/fx-model.ts";
+import ProjectManager from "./ProjectManager";
 import {
   getProjectDirectorySnapshot,
+  getProjectManagerSnapshot,
   readProjectFile,
   writeProjectFile,
   deleteProjectEntries,
@@ -370,6 +372,7 @@ function App() {
     return stored === "light" ? "light" : "dark";
   })());
   const [projectName, setProjectName] = createSignal("Project");
+  const [projectManagerVisible, setProjectManagerVisible] = createSignal(true);
   const [projectTree, setProjectTree] = createSignal<ProjectTreeEntry | null>(null);
   const [projectDocument, setProjectDocument] = createSignal<import("@codogma/cge").ProjectDocumentV1 | null>(null);
   const [savedProjectContent, setSavedProjectContent] = createSignal("");
@@ -872,6 +875,16 @@ function App() {
     setLoading(true);
     setLoadError("");
     try {
+      const manager = await getProjectManagerSnapshot();
+      if (!manager.activeProject) {
+        setProjectTree(null);
+        setProjectDocument(null);
+        setScene(null);
+        setLoadError(manager.startupProjectError);
+        setProjectManagerVisible(true);
+        return;
+      }
+      setProjectManagerVisible(false);
       const result = await getProjectDirectorySnapshot();
       setProjectTree(result.root);
       setProjectName(result.root.name);
@@ -936,6 +949,11 @@ function App() {
     }
   }
 
+  function showProjectManager() {
+    if (documentDirty() && !window.confirm("There are unsaved changes. Open Project Manager and discard the current editor session?")) return;
+    stopAnimationPreview(true);
+    setProjectManagerVisible(true);
+  }
   function applySceneChange(
     next: EditorDocument,
     selectionAfter = selectedId(),
@@ -3100,6 +3118,7 @@ function App() {
 
   const menuItems = createMemo<Record<string, MenuItem[]>>(() => ({
     File: [
+      { label: "Project Manager…", action: showProjectManager },
       { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !scriptSourcePath() },
       { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
       { label: "New Animation file", action: () => void createAnimationFile() },
@@ -3139,6 +3158,14 @@ function App() {
   }));
 
   return (
+    <Show when={!projectManagerVisible()} fallback={
+      <ProjectManager
+        theme={theme()}
+        canClose={Boolean(projectDocument())}
+        onClose={() => setProjectManagerVisible(false)}
+        onProjectOpened={() => void loadProject()}
+      />
+    }>
     <div
       class="workbench"
       data-testid="workbench"
@@ -4493,6 +4520,7 @@ function App() {
         </div>
       </Show>
     </div>
+    </Show>
   );
 }
 

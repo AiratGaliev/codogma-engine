@@ -56,7 +56,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 |---|---|
 | Клиент редактора | Native SolidJS + TypeScript/TSX приложение в `src/editor/`, Vite 8 и Tailwind CSS 4 |
 | Рабочая среда | Workbench, Scene/Game View, Hierarchy, Inspector, Project/Assets и команды реализуются как feature modules одного Editor Host |
-| Работа с файлами | `server/server.mjs` предоставляет loopback HTTP API для операций с файлами и native project documents; доступ ограничен выбранным `PROJECT_DIR` |
+| Работа с файлами | Project Manager выбирает и валидирует единственный active project; loopback HTTP API и MCP ограничивают project operations текущим безопасным project root. `PROJECTS_DIR` задаёт каталог обнаружения/создания, а `PROJECT_DIR` — необязательный стартовый проект |
 | Расширения | Внутренние feature modules принадлежат Editor Host; публичный/versioned Extension API является отдельным будущим решением и не предполагается готовым |
 | Сервер | `server/server.mjs` обслуживает production build Host, native project/runtime files, AI Chat и engine-owned MCP HTTP endpoint |
 | Runtime | Phaser 4.2.1 — выбранный HTML5 runtime target. Native Project Model/Core не зависят от Phaser; host-neutral ProjectSceneLoader реализован в packages/cge/, а Phaser adapter и Preview/Build pipeline остаются отдельными implementation stages |

@@ -65,6 +65,7 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Area | Available today |
 |---|---|
 | Browser-based IDE | The Node.js server serves the native SolidJS Editor Host at <code>/editor/</code>; Vite serves the same application during development. |
+| Project lifecycle | Project Manager creates the native Empty 2D Project, opens validated projects, and tracks Recent Projects outside the serialized Project Model. See [Project Manager](docs/project-manager.md). |
 | Scene authoring | The SolidJS Host provides the initial Phaser-backed Scene Canvas, selection and Transform interactions. The complete native Project/Scene save/reopen workflow and data-driven Preview are being integrated through the Project Model and Scene Loader. |
 | Project assets | Native Asset Library, Sprite metadata, import and reimport workflows are being implemented for the SolidJS Host in [COD-86](https://linear.app/codogma-engine/issue/COD-86/sozdat-native-asset-library-i-realizovat-sprite-authoring-v-solidjs). See [Sprite asset metadata](docs/sprite-asset-metadata.md) for the target metadata contract. |
 | Animation and components | The Host has basic animation clip/frame operations and initial Component surfaces. Full Timeline/tracks/keyframes/curves/events belong to COD-84; native Script Asset + manifest-backed User Components belong to COD-91 (using Core contracts COD-26/COD-27); native Prefab overrides remain in COD-8. |
@@ -106,7 +107,7 @@ npm start
 
 The server serves the built native Editor Host at `http://127.0.0.1:3000/editor/`. For hot reload during development, use [Run the Editor Host](#run-the-editor-host).
 
-Open **http://127.0.0.1:3000/editor/**.
+Open **http://127.0.0.1:3000/editor/**. The Project Manager opens by default and manages projects under `~/CodogmaProjects`; see [Project Manager configuration](docs/project-manager.md) to choose another location or open an existing project automatically.
 
 The server should respond at that address. MCP bridge status is available at [http://localhost:3000/editor/mcp-bridge-status](http://localhost:3000/editor/mcp-bridge-status).
 
