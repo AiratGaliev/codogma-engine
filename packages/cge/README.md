@@ -131,7 +131,7 @@ The host supplies:
 - a bounded project-relative file inventory, including regular files, directories, symbolic links and measured source sizes;
 - parsed Scene and Prefab documents keyed by their registered Asset IDs;
 - validated Component Schemas and an explicit Script/module import graph, including declared dynamic entry points;
-- resolved npm package-lock metadata (package identity/version, declared dependencies, Codogma scope and supported targets);
+- resolved npm package-lock metadata keyed by stable installed package-instance IDs, with exact name/version, Codogma scope/targets and dependency edges to the specific instances selected by npm;
 - feature provider decisions already resolved by the Feature Registry, plus required/optional external runtime files;
 - optional final production output metadata collected from the real bundler output.
 
@@ -140,6 +140,7 @@ Core does **not** traverse the filesystem, resolve or install npm packages, pars
 ### Analysis guarantees
 
 - The graph uses stable project/asset/scene/Prefab/module/package/feature identities; file paths are locations, not identities.
+- npm package nodes use stable IDs for exact installed package instances. Package dependencies, module imports and Feature Providers refer to those IDs rather than package names, preserving multiple installed versions of the same package and nested lockfile instances.
 - Registered assets and script modules must resolve to regular files in the supplied snapshot. Missing files, unsafe paths, path collisions, invalid documents, unresolved imports/references, missing package dependencies and unsupported production package scopes produce structured diagnostics with a source kind/ID/path.
 - Scene and Prefab Component instances contribute only persisted Asset-property references declared by their validated Component Schema. Additional importer-discovered references are supplied through `assetReferences`; external runtime files declare their referencing graph nodes.
 - Static module/package imports and required package dependencies form transitive reachability. Dynamic imports are accepted only when the host resolves them and provides a matching explicit dynamic entry point.

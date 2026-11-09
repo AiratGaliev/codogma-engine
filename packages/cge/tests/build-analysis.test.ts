@@ -203,18 +203,21 @@ test("unreferenced assets are warnings only when every reference scanner reports
 test("static module imports and declared package dependencies form one transitive production graph", () => {
   const packages: ProjectBuildPackageSnapshot[] = [
     {
+      id: "pkg-phaser-root",
       name: "phaser",
       version: "4.2.1",
       scope: "runtime",
-      dependencies: ["eventemitter3"],
+      dependencies: ["pkg-eventemitter-root"],
     },
     {
+      id: "pkg-eventemitter-root",
       name: "eventemitter3",
       version: "5.0.1",
       scope: "runtime",
       dependencies: [],
     },
     {
+      id: "pkg-codogma-ecs",
       name: "@codogma/ecs",
       version: "0.1.0",
       scope: "runtime",
@@ -228,11 +231,11 @@ test("static module imports and declared package dependencies form one transitiv
       assetId: "asset-follow-target-module",
       path: "src/FollowTarget.ts",
       entryPoint: "component",
-      imports: [{ specifier: "phaser", kind: "static", packageName: "phaser" }],
+      imports: [{ specifier: "phaser", kind: "static", resolvedPackageId: "pkg-phaser-root" }],
     }],
     features: [{
       id: "runtime.ecs",
-      providerPackageName: "@codogma/ecs",
+      providerPackageId: "pkg-codogma-ecs",
       selected: false,
       available: true,
       targetCompatible: true,
@@ -246,7 +249,7 @@ test("static module imports and declared package dependencies form one transitiv
   assert.ok(result.report.includedPackages.includes("eventemitter3@5.0.1"));
   assert.ok(!result.report.includedPackages.some((name) => name.startsWith("@codogma/ecs@")));
   assert.ok(result.graph.excludedNodes.some((item) =>
-    item.nodeId === "package:@codogma/ecs" &&
+    item.nodeId === "package:pkg-codogma-ecs" &&
     item.reason === "feature-not-selected",
   ));
 });
@@ -254,17 +257,18 @@ test("static module imports and declared package dependencies form one transitiv
 test("incomplete package discovery downgrades unresolved package references to warnings", () => {
   const result = analyzeProjectBuild(makeInput({
     packages: [{
+      id: "pkg-phaser-root",
       name: "phaser",
       version: "4.2.1",
       scope: "runtime",
-      dependencies: ["eventemitter3"],
+      dependencies: ["pkg-eventemitter-missing"],
     }],
     modules: [{
       id: "module-follow-target",
       assetId: "asset-follow-target-module",
       path: "src/FollowTarget.ts",
       entryPoint: "component",
-      imports: [{ specifier: "phaser", kind: "static", packageName: "phaser" }],
+      imports: [{ specifier: "phaser", kind: "static", resolvedPackageId: "pkg-phaser-root" }],
     }],
     coverage: {
       resourceReferences: true,
@@ -279,7 +283,7 @@ test("incomplete package discovery downgrades unresolved package references to w
   assert.ok(result.diagnostics.some((item) =>
     item.code === "PROJECT_BUILD_PACKAGE_DEPENDENCY_MISSING" &&
     item.severity === "warning" &&
-    item.source?.id === "phaser",
+    item.source?.id === "pkg-phaser-root",
   ));
   assert.ok(hasDiagnostic(result, "PROJECT_BUILD_REFERENCE_SCAN_INCOMPLETE"));
 });
@@ -290,9 +294,10 @@ test("an undeclared dynamic import blocks the build; the matching explicit entry
     assetId: "asset-follow-target-module",
     path: "src/FollowTarget.ts",
     entryPoint: "component",
-    imports: [{ specifier: "./optional-runtime.js", kind: "dynamic", packageName: "optional-runtime" }],
+    imports: [{ specifier: "./optional-runtime.js", kind: "dynamic", resolvedPackageId: "pkg-optional-runtime" }],
   }];
   const packages: ProjectBuildPackageSnapshot[] = [{
+    id: "pkg-optional-runtime",
     name: "optional-runtime",
     version: "1.0.0",
     scope: "runtime",
@@ -308,7 +313,7 @@ test("an undeclared dynamic import blocks the build; the matching explicit entry
     dynamicEntryPoints: [{
       sourceModuleId: "module-follow-target",
       specifier: "./optional-runtime.js",
-      targetPackageName: "optional-runtime",
+      targetPackageId: "pkg-optional-runtime",
     }],
   }));
   assert.equal(resolved.valid, true, JSON.stringify(resolved.diagnostics));
@@ -318,6 +323,7 @@ test("an undeclared dynamic import blocks the build; the matching explicit entry
 test("production graph rejects editor-only packages imported by runtime modules", () => {
   const result = analyzeProjectBuild(makeInput({
     packages: [{
+      id: "pkg-editor-only",
       name: "@codogma/editor-only",
       version: "1.0.0",
       scope: "editor",
@@ -331,7 +337,7 @@ test("production graph rejects editor-only packages imported by runtime modules"
       imports: [{
         specifier: "@codogma/editor-only",
         kind: "static",
-        packageName: "@codogma/editor-only",
+        resolvedPackageId: "pkg-editor-only",
       }],
     }],
   }));
@@ -341,9 +347,67 @@ test("production graph rejects editor-only packages imported by runtime modules"
   assert.ok(!result.report.includedPackages.some((name) => name.startsWith("@codogma/editor-only@")));
 });
 
+test("npm package graph preserves multiple installed versions of the same package", () => {
+  const base = makeInput();
+  const result = analyzeProjectBuild(makeInput({
+    files: [...base.files, {
+      path: "src/Secondary.ts",
+      kind: "file",
+      sizeBytes: 128,
+    }],
+    packages: [
+      {
+        id: "pkg-lodash-v4",
+        name: "lodash",
+        version: "4.17.21",
+        scope: "runtime",
+        dependencies: [],
+      },
+      {
+        id: "pkg-lodash-v3",
+        name: "lodash",
+        version: "3.10.1",
+        scope: "runtime",
+        dependencies: [],
+      },
+    ],
+    modules: [
+      {
+        id: "module-follow-target",
+        assetId: "asset-follow-target-module",
+        path: "src/FollowTarget.ts",
+        entryPoint: "component",
+        imports: [
+          { specifier: "lodash", kind: "static", resolvedPackageId: "pkg-lodash-v4" },
+          { specifier: "./Secondary.js", kind: "static", resolvedModuleId: "module-secondary" },
+        ],
+      },
+      {
+        id: "module-secondary",
+        path: "src/Secondary.ts",
+        imports: [
+          { specifier: "lodash", kind: "static", resolvedPackageId: "pkg-lodash-v3" },
+        ],
+      },
+    ],
+  }));
+
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.deepEqual(
+    result.report.includedPackageInstances.map((item) => [item.id, item.name, item.version]),
+    [
+      ["pkg-lodash-v3", "lodash", "3.10.1"],
+      ["pkg-lodash-v4", "lodash", "4.17.21"],
+    ],
+  );
+  assert.ok(result.graph.includedNodeIds.includes("package:pkg-lodash-v3"));
+  assert.ok(result.graph.includedNodeIds.includes("package:pkg-lodash-v4"));
+});
+
 test("feature provider inclusion requires an explicitly selected available provider", () => {
   const result = analyzeProjectBuild(makeInput({
     packages: [{
+      id: "pkg-codogma-ecs",
       name: "@codogma/ecs",
       version: "0.1.0",
       scope: "runtime",
@@ -351,7 +415,7 @@ test("feature provider inclusion requires an explicitly selected available provi
     }],
     features: [{
       id: "runtime.ecs",
-      providerPackageName: "@codogma/ecs",
+      providerPackageId: "pkg-codogma-ecs",
       selected: true,
       available: false,
       targetCompatible: true,

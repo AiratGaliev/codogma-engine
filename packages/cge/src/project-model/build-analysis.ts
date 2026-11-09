@@ -80,7 +80,7 @@ export interface ProjectBuildModuleImport {
   specifier: string;
   kind: "static" | "dynamic";
   resolvedModuleId?: string;
-  packageName?: string;
+  resolvedPackageId?: string;
 }
 
 export interface ProjectBuildModuleSnapshot {
@@ -92,9 +92,12 @@ export interface ProjectBuildModuleSnapshot {
 }
 
 export interface ProjectBuildPackageSnapshot {
+  /** Stable identity of this exact installed npm package instance. */
+  id: string;
   name: string;
   version: string;
   scope: ProjectBuildPackageScope;
+  /** IDs of exact installed package instances selected by npm for each dependency. */
   dependencies: readonly string[];
   optionalDependencies?: readonly string[];
   supportedTargets?: readonly string[];
@@ -102,7 +105,8 @@ export interface ProjectBuildPackageSnapshot {
 
 export interface ProjectBuildFeatureSnapshot {
   id: string;
-  providerPackageName?: string;
+  /** Exact installed npm package instance that provides the feature. */
+  providerPackageId?: string;
   selected: boolean;
   available: boolean;
   targetCompatible: boolean;
@@ -128,7 +132,7 @@ export interface ProjectBuildDynamicEntryPoint {
   sourceModuleId: string;
   specifier: string;
   targetModuleId?: string;
-  targetPackageName?: string;
+  targetPackageId?: string;
 }
 
 export interface ProjectBuildCoverage {
@@ -217,6 +221,7 @@ export interface ProjectBuildAnalysisReport {
   unusedAssets: string[];
   includedModules: string[];
   includedPackages: string[];
+  includedPackageInstances: Array<{ id: string; name: string; version: string }>;
   includedFeatures: string[];
   output: ProjectBuildOutputReport;
 }
@@ -303,6 +308,7 @@ function emptyResult(target: string, diagnostics: CoreDiagnostic[]): ProjectBuil
       unusedAssets: [],
       includedModules: [],
       includedPackages: [],
+      includedPackageInstances: [],
       includedFeatures: [],
       output: { status: "not-produced", target: safeTarget(target) },
     },
@@ -885,37 +891,39 @@ export function analyzeProjectBuild(
     componentModuleNodeIds.set(moduleReference.typeId, nodeId);
   }
 
-  const packageNodesByName = new Map<string, string>();
-  const packageSnapshotsByName = new Map<string, ProjectBuildPackageSnapshot>();
+  const packageNodeIdsById = new Map<string, string>();
+  const packageSnapshotsById = new Map<string, ProjectBuildPackageSnapshot>();
   const packageSnapshots = input.packages ?? [];
   for (const packageSnapshot of packageSnapshots) {
-    const source = makeSource("package", packageSnapshot.name);
-    if (!packageSnapshot.name.trim() || !packageSnapshot.version.trim() ||
+    const source = makeSource("package", packageSnapshot.id);
+    if (!isValidStableId(packageSnapshot.id) ||
+        !packageSnapshot.name.trim() ||
+        !packageSnapshot.version.trim() ||
         !PACKAGE_SCOPES.includes(packageSnapshot.scope)) {
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_GRAPH_INVALID",
-        "Package descriptor requires a name, version and supported Codogma scope.",
+        "Package descriptor requires a stable package-instance id, a name, a version and a supported Codogma scope.",
         source,
         "packages",
       );
       continue;
     }
-    if (packageSnapshotsByName.has(packageSnapshot.name)) {
+    if (packageSnapshotsById.has(packageSnapshot.id)) {
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_GRAPH_INVALID",
-        "Package " + packageSnapshot.name + " appears more than once in the resolved package graph.",
+        "Package instance id " + packageSnapshot.id + " appears more than once in the resolved npm graph.",
         source,
         "packages",
       );
       continue;
     }
-    packageSnapshotsByName.set(packageSnapshot.name, packageSnapshot);
-    const id = "package:" + packageSnapshot.name;
-    packageNodesByName.set(packageSnapshot.name, id);
+    packageSnapshotsById.set(packageSnapshot.id, packageSnapshot);
+    const nodeId = "package:" + packageSnapshot.id;
+    packageNodeIdsById.set(packageSnapshot.id, nodeId);
     addNode({
-      id,
+      id: nodeId,
       kind: "package",
       name: packageSnapshot.name + "@" + packageSnapshot.version,
       scope: packageSnapshot.scope,
@@ -951,14 +959,14 @@ export function analyzeProjectBuild(
     featureNodesById.set(feature.id, nodeId);
     addNode({ id: nodeId, kind: "feature", name: feature.id }, source);
     if (!feature.selected) {
-      if (feature.providerPackageName) {
-        const existing = unselectedProviderFeatures.get(feature.providerPackageName) ?? [];
+      if (feature.providerPackageId) {
+        const existing = unselectedProviderFeatures.get(feature.providerPackageId) ?? [];
         existing.push(feature.id);
-        unselectedProviderFeatures.set(feature.providerPackageName, existing);
+        unselectedProviderFeatures.set(feature.providerPackageId, existing);
       }
       continue;
     }
-    if (!feature.available || !feature.targetCompatible || !feature.providerPackageName) {
+    if (!feature.available || !feature.targetCompatible || !feature.providerPackageId) {
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_FEATURE_PROVIDER_MISSING",
@@ -968,12 +976,12 @@ export function analyzeProjectBuild(
       );
       continue;
     }
-    const providerNodeId = packageNodesByName.get(feature.providerPackageName);
+    const providerNodeId = packageNodeIdsById.get(feature.providerPackageId);
     if (!providerNodeId) {
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_FEATURE_PROVIDER_MISSING",
-        "Selected feature " + feature.id + " requires missing npm package " + feature.providerPackageName + ".",
+        "Selected feature " + feature.id + " requires missing npm package instance " + feature.providerPackageId + ".",
         source,
         "features",
       );
@@ -982,37 +990,39 @@ export function analyzeProjectBuild(
     addEdge(nodeId, providerNodeId, "provides", "Selected feature provider", source);
   }
 
-  for (const [packageName, packageSnapshot] of packageSnapshotsByName) {
-    const from = packageNodesByName.get(packageName);
+  for (const [packageId, packageSnapshot] of packageSnapshotsById) {
+    const from = packageNodeIdsById.get(packageId);
     if (!from) continue;
-    for (const dependencyName of packageSnapshot.dependencies) {
-      const to = packageNodesByName.get(dependencyName);
+    for (const dependencyId of packageSnapshot.dependencies) {
+      const to = packageNodeIdsById.get(dependencyId);
       if (!to) {
         addDiagnostic(
           diagnostics,
           "PROJECT_BUILD_PACKAGE_DEPENDENCY_MISSING",
-          "Package " + packageName + " declares unresolved dependency " + dependencyName + ".",
-          makeSource("package", packageName),
+          "Package " + packageSnapshot.name + "@" + packageSnapshot.version +
+            " declares unresolved npm package instance " + dependencyId + ".",
+          makeSource("package", packageId),
           "dependencies",
           input.coverage?.packageDependencies === true ? "error" : "warning",
         );
       } else {
-        addEdge(from, to, "depends-on", "Required npm dependency");
+        addEdge(from, to, "depends-on", "Required npm dependency instance " + dependencyId);
       }
     }
-    for (const dependencyName of packageSnapshot.optionalDependencies ?? []) {
-      const to = packageNodesByName.get(dependencyName);
+    for (const dependencyId of packageSnapshot.optionalDependencies ?? []) {
+      const to = packageNodeIdsById.get(dependencyId);
       if (!to) {
         addDiagnostic(
           diagnostics,
           "PROJECT_BUILD_PACKAGE_DEPENDENCY_MISSING",
-          "Optional package dependency " + dependencyName + " of " + packageName + " is not installed.",
-          makeSource("package", packageName),
+          "Optional npm package instance " + dependencyId + " required by " +
+            packageSnapshot.name + "@" + packageSnapshot.version + " is not installed.",
+          makeSource("package", packageId),
           "optionalDependencies",
           "warning",
         );
       } else {
-        addEdge(from, to, "depends-on", "Installed optional npm dependency");
+        addEdge(from, to, "depends-on", "Installed optional npm dependency instance " + dependencyId);
       }
     }
   }
@@ -1026,13 +1036,12 @@ export function analyzeProjectBuild(
     for (const imported of module.imports ?? []) {
       const source = makeSource("module", module.id, module.path);
       const hasModule = imported.resolvedModuleId !== undefined;
-      const hasPackage = imported.packageName !== undefined;
+      const hasPackage = imported.resolvedPackageId !== undefined;
       const validKind = imported.kind === "static" || imported.kind === "dynamic";
       const validModuleId = !hasModule || isValidStableId(imported.resolvedModuleId);
-      const validPackageName = !hasPackage ||
-        (typeof imported.packageName === "string" && imported.packageName.trim().length > 0);
+      const validPackageId = !hasPackage || isValidStableId(imported.resolvedPackageId);
       if (!imported.specifier.trim() || hasModule === hasPackage ||
-          !validKind || !validModuleId || !validPackageName) {
+          !validKind || !validModuleId || !validPackageId) {
         referenceDiscoveryComplete = false;
         addDiagnostic(
           diagnostics,
@@ -1057,14 +1066,14 @@ export function analyzeProjectBuild(
           );
           continue;
         }
-      } else if (hasPackage && imported.packageName) {
-        targetNodeId = packageNodesByName.get(imported.packageName);
+      } else if (hasPackage && imported.resolvedPackageId) {
+        targetNodeId = packageNodeIdsById.get(imported.resolvedPackageId);
         if (!targetNodeId) {
           referenceDiscoveryComplete = false;
           addDiagnostic(
             diagnostics,
             "PROJECT_BUILD_PACKAGE_MISSING",
-            "Import " + imported.specifier + " resolves to missing npm package " + imported.packageName + ".",
+            "Import " + imported.specifier + " resolves to missing npm package instance " + imported.resolvedPackageId + ".",
             source,
             module.path,
             input.coverage?.packageDependencies === true ? "error" : "warning",
@@ -1078,7 +1087,7 @@ export function analyzeProjectBuild(
           entry.sourceModuleId === module.id &&
           entry.specifier === imported.specifier &&
           ((entry.targetModuleId !== undefined && entry.targetModuleId === imported.resolvedModuleId) ||
-           (entry.targetPackageName !== undefined && entry.targetPackageName === imported.packageName)),
+           (entry.targetPackageId !== undefined && entry.targetPackageId === imported.resolvedPackageId)),
         );
         if (!declared) {
           addDiagnostic(
@@ -1109,10 +1118,10 @@ export function analyzeProjectBuild(
     }
     const sourceModule = modulesById.get(entry.sourceModuleId);
     const hasTargetModule = entry.targetModuleId !== undefined;
-    const hasTargetPackage = entry.targetPackageName !== undefined;
+    const hasTargetPackage = entry.targetPackageId !== undefined;
     if (!entry.specifier.trim() || hasTargetModule === hasTargetPackage ||
         (hasTargetModule && !isValidStableId(entry.targetModuleId)) ||
-        (hasTargetPackage && !entry.targetPackageName?.trim())) {
+        (hasTargetPackage && !isValidStableId(entry.targetPackageId))) {
       referenceDiscoveryComplete = false;
       addDiagnostic(
         diagnostics,
@@ -1127,7 +1136,7 @@ export function analyzeProjectBuild(
       imported.kind === "dynamic" &&
       imported.specifier === entry.specifier &&
       ((hasTargetModule && imported.resolvedModuleId === entry.targetModuleId) ||
-       (hasTargetPackage && imported.packageName === entry.targetPackageName)),
+       (hasTargetPackage && imported.resolvedPackageId === entry.targetPackageId)),
     );
     if (!matchingImport) {
       referenceDiscoveryComplete = false;
@@ -1404,16 +1413,17 @@ export function analyzeProjectBuild(
   }
 
   const blockedPackageIds = new Set<string>();
-  for (const [packageName, packageSnapshot] of packageSnapshotsByName) {
-    const nodeId = packageNodesByName.get(packageName);
+  for (const [packageId, packageSnapshot] of packageSnapshotsById) {
+    const nodeId = packageNodeIdsById.get(packageId);
     if (!nodeId || !reachableNodeIds.has(nodeId)) continue;
-    const source = makeSource("package", packageName);
+    const source = makeSource("package", packageId);
+    const packageLabel = packageSnapshot.name + "@" + packageSnapshot.version;
     if (packageSnapshot.scope !== "runtime") {
       blockedPackageIds.add(nodeId);
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_PACKAGE_SCOPE_INVALID",
-        "Package " + packageName + " has scope " + packageSnapshot.scope + " and cannot be included in a production game runtime.",
+        "Package " + packageLabel + " has scope " + packageSnapshot.scope + " and cannot be included in a production game runtime.",
         source,
         "scope",
       );
@@ -1425,7 +1435,7 @@ export function analyzeProjectBuild(
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_PACKAGE_TARGET_UNSUPPORTED",
-        "Package " + packageName + " does not support target " + target + ".",
+        "Package " + packageLabel + " does not support target " + target + ".",
         source,
         "supportedTargets",
       );
@@ -1444,8 +1454,8 @@ export function analyzeProjectBuild(
   }
 
   const unselectedFeatureByPackage = new Map<string, string[]>();
-  for (const [packageName, featureIds] of unselectedProviderFeatures) {
-    unselectedFeatureByPackage.set(packageName, featureIds);
+  for (const [packageId, featureIds] of unselectedProviderFeatures) {
+    unselectedFeatureByPackage.set(packageId, featureIds);
   }
 
   const unusedAnalysisComplete = referenceDiscoveryComplete &&
@@ -1462,8 +1472,8 @@ export function analyzeProjectBuild(
       const feature = (input.features ?? []).find((item) => "feature:" + item.id === node.id);
       if (feature && !feature.selected) reason = "feature-not-selected";
     } else if (node.kind === "package") {
-      const packageName = node.id.slice("package:".length);
-      if (unselectedFeatureByPackage.has(packageName)) reason = "feature-not-selected";
+      const packageId = node.id.slice("package:".length);
+      if (unselectedFeatureByPackage.has(packageId)) reason = "feature-not-selected";
       else if (blockedPackageIds.has(node.id)) reason = "scope-or-target-incompatible";
       else if (reachableNodeIds.has(node.id)) reason = "blocked-by-incompatible-dependency";
     } else if (node.kind === "asset") {
@@ -1670,6 +1680,18 @@ export function analyzeProjectBuild(
     .filter((node) => node.kind === "package" && includedNodeIds.has(node.id))
     .map((node) => node.name)
     .sort();
+  const includedPackageInstances = nodes
+    .filter((node) => node.kind === "package" && includedNodeIds.has(node.id))
+    .map((node) => {
+      const id = node.id.slice("package:".length);
+      const packageSnapshot = packageSnapshotsById.get(id);
+      return {
+        id,
+        name: packageSnapshot?.name ?? node.name,
+        version: packageSnapshot?.version ?? "",
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
   const graph: ProjectBuildGraph = {
     nodes,
     edges,
@@ -1696,6 +1718,7 @@ export function analyzeProjectBuild(
     unusedAssets: unusedAssets.sort(),
     includedModules,
     includedPackages,
+    includedPackageInstances,
     includedFeatures,
     output: finalizedOutput,
   };
