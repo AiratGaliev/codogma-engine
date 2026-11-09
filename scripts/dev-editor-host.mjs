@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import "dotenv/config";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
-const hostDir = resolve(rootDir, "src", "editor");
 const defaultProjectDirectory = resolve(rootDir, "packages", "cge", "tests", "fixtures", "acceptance-project");
 const projectDirectory = resolve(rootDir, process.env.PROJECT_DIR || defaultProjectDirectory);
 const projectManifest = resolve(projectDirectory, "project.json");
@@ -17,65 +16,46 @@ if (!existsSync(projectManifest)) {
   console.error("[dev] " + defaultProjectDirectory);
   process.exit(1);
 }
-const coreCompiler = resolve(hostDir, "node_modules", "typescript", "bin", "tsc");
-const viteCli = resolve(hostDir, "node_modules", "vite", "bin", "vite.js");
 
-if (!existsSync(coreCompiler) || !existsSync(viteCli)) {
-  console.error("[dev] SolidJS Host dependencies are missing.");
-  console.error("[dev] Run: npm ci --prefix src/editor");
-  process.exit(1);
-}
-
-function runCoreBuild() {
-  return new Promise((resolveResult) => {
-    console.log("[dev] Building @codogma/cge...");
-    const child = spawn(process.execPath, [
-      coreCompiler,
-      "-p",
-      resolve(rootDir, "packages", "cge", "tsconfig.json"),
-    ], { cwd: rootDir, stdio: "inherit", env: process.env });
-
-    child.once("error", (error) => {
-      console.error("[dev] Cannot start the Core compiler:", error);
-      resolveResult(1);
-    });
-    child.once("close", (code) => resolveResult(code ?? 1));
-  });
-}
-
-const buildExitCode = await runCoreBuild();
-if (buildExitCode !== 0) {
-  console.error("[dev] Core build failed; backend and Vite were not started.");
-  process.exit(buildExitCode);
-}
+const npmExecPath = process.env.npm_execpath;
+const npmCommand = npmExecPath
+  ? process.execPath
+  : process.platform === "win32"
+    ? "npm.cmd"
+    : "npm";
+const npmPrefix = npmExecPath ? [npmExecPath] : [];
 
 const backendPort = Number(process.env.PORT || 3000);
 const hostPort = Number(process.env.VITE_PORT || 5173);
 const services = [
   {
     name: "Codogma backend",
-    command: resolve(rootDir, "server", "server.mjs"),
+    command: process.execPath,
+    args: [resolve(rootDir, "server", "server.mjs")],
     cwd: rootDir,
   },
   {
     name: "SolidJS Editor Host",
-    command: viteCli,
-    args: ["--host", "127.0.0.1"],
-    cwd: hostDir,
+    command: npmCommand,
+    args: [...npmPrefix, "run", "dev", "--workspace=@codogma/editor-host"],
+    cwd: rootDir,
+    shell: process.platform === "win32" && !npmExecPath,
   },
 ];
 
 console.log("[dev] Starting backend and SolidJS Host.");
 console.log("[dev] Backend API: http://127.0.0.1:" + backendPort + "/editor/");
 console.log("[dev] SolidJS Host: http://127.0.0.1:" + hostPort + "/");
+console.log("[dev] The Host workspace predev hook builds @codogma/cge before Vite starts.");
 console.log("[dev] Press Ctrl+C to stop both processes.");
 
 const children = services.map((service) => ({
   ...service,
-  child: spawn(process.execPath, service.args ? [service.command, ...service.args] : [service.command], {
+  child: spawn(service.command, service.args, {
     cwd: service.cwd,
     stdio: "inherit",
     env: process.env,
+    ...(service.shell ? { shell: true } : {}),
   }),
 }));
 
