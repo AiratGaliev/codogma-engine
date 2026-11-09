@@ -135,11 +135,11 @@ class HostTween implements TweenHandle {
     const duration = this.options.durationSeconds;
     const repeat = this.options.repeat ?? 0;
     if (duration === 0) {
-      const lastReverse = this.options.yoyo === true && repeat % 2 === 1;
-      this.applyProgress(lastReverse ? 0 : 1);
+      const finalProgress = this.options.yoyo === true && repeat % 2 === 1 ? 0 : 1;
+      this.applyProgress(finalProgress);
       this.finish();
       if (this.options.onUpdate) {
-        assertSynchronousResult(this.options.onUpdate(1), "Tween onUpdate callback");
+        assertSynchronousResult(this.options.onUpdate(finalProgress), "Tween onUpdate callback");
       }
       if (this.options.onComplete) {
         assertSynchronousResult(this.options.onComplete(), "Tween onComplete callback");
@@ -150,11 +150,15 @@ class HostTween implements TweenHandle {
     this.elapsedSeconds += activeDelta;
     if (!Number.isFinite(this.elapsedSeconds)) throw new RangeError("Tween elapsed time overflowed.");
     if (repeat !== -1 && this.elapsedSeconds >= this.totalDuration) {
-      const lastReverse = this.options.yoyo === true && repeat % 2 === 1;
-      this.applyProgress(lastReverse ? 0 : 1);
+      const finalProgress = this.options.yoyo === true && repeat % 2 === 1 ? 0 : 1;
+      this.applyProgress(finalProgress);
       this.finish();
-      this.options.onUpdate?.(1);
-      this.options.onComplete?.();
+      if (this.options.onUpdate) {
+        assertSynchronousResult(this.options.onUpdate(finalProgress), "Tween onUpdate callback");
+      }
+      if (this.options.onComplete) {
+        assertSynchronousResult(this.options.onComplete(), "Tween onComplete callback");
+      }
       return;
     }
 
@@ -163,7 +167,9 @@ class HostTween implements TweenHandle {
     let progress = cycleElapsed / duration;
     if (this.options.yoyo === true && cycleIndex % 2 === 1) progress = 1 - progress;
     this.applyProgress(progress);
-    this.options.onUpdate?.(progress);
+    if (this.options.onUpdate) {
+      assertSynchronousResult(this.options.onUpdate(progress), "Tween onUpdate callback");
+    }
   }
 
   private applyProgress(progress: number): void {
