@@ -46,7 +46,7 @@ Host-neutral contracts and the first component-object Core slice.
 - Component callbacks run in Node insertion / component attachment order; registered systems run afterwards in registration order. System registration/removal requested during update is queued to the operation boundary. Each system registration captures its ID and callbacks; removal disposes it once, and world disposal disposes remaining systems in reverse registration order.
 - Structural mutations requested during update or lifecycle callbacks are drained FIFO at the safe boundary, with a 10,000-operation guard against an endlessly self-enqueuing callback chain.
 - World disposal is idempotent, rejects reentrant mutations while disposing, attempts all component/system cleanup, aggregates failures and clears world-owned state even when a callback throws.
-- The Phaser adapter owns the concrete Phaser tick binding (COD-28); Project Model hydration, live Inspector mapping and Preview session are separate integration responsibilities (COD-103, COD-31 and COD-30).
+- The Phaser adapter owns the concrete Phaser tick binding (COD-28); live Inspector mapping (COD-31) and Preview session lifecycle (COD-30) remain separate integration responsibilities.
 
 ## Optional runtime service contracts (COD-29)
 

@@ -454,3 +454,49 @@ test("Scene Loader source imports only host-neutral Core modules", () => {
   assert.ok(imports.every((specifier) => specifier?.startsWith(".")));
   assert.doesNotMatch(source, /\brequestAnimationFrame\b|\bdocument\.createElement\b|\bwindow\./);
 });
+
+
+test("retains valid Component extension warnings on the runtime graph", async () => {
+  const scene = fixtureScene();
+  const component = scene.rootNodes[0]?.components[0];
+  assert.ok(component);
+  component.properties.futureExtension = { enabled: true };
+  const session = await loaderFor(JSON.stringify(scene)).load({
+    sceneId: scene.id,
+    signal: new AbortController().signal,
+  });
+
+  assert.ok(session.graph.diagnostics.some((item) =>
+    item.code === "COMPONENT_UNKNOWN_PROPERTY" && item.severity === "warning",
+  ));
+  session.dispose();
+});
+
+test("abort requested by the final progress callback rolls back the prepared session", async () => {
+  const controller = new AbortController();
+  const events: string[] = [];
+  const sessionEvents = trackingDefinition(events);
+  const loader = loaderFor(sceneContent, { registry: registryWith(sessionEvents) });
+
+  let failure: unknown;
+  try {
+    await loader.load({
+      sceneId: "scene-level",
+      signal: controller.signal,
+      onProgress: ({ progress }) => {
+        if (progress === 1) controller.abort("cancelled from progress callback");
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  assert.ok(failure instanceof SceneLoaderError);
+  assert.equal(failure.code, "SCENE_LOAD_ABORTED");
+  assert.deepEqual(events, [
+    "create:component-follow-player",
+    "create:component-follow-enemy",
+    "destroy:component-follow-player",
+    "destroy:component-follow-enemy",
+  ]);
+});

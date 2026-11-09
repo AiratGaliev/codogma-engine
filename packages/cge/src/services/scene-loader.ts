@@ -47,6 +47,7 @@ export interface RuntimeSceneGraph {
   readonly sceneId: string;
   /** Immutable, validated source snapshot; runtime mutations never rewrite it. */
   readonly document: Readonly<SceneDocumentV1>;
+  readonly diagnostics: readonly CoreDiagnostic[];
   readonly rootNodes: readonly RuntimeSceneGraphNode[];
   getNode(nodeId: string): RuntimeSceneGraphNode | undefined;
   getComponent(instanceId: string): RuntimeComponentSnapshot | undefined;
@@ -302,6 +303,7 @@ function createRuntimeGraph(
   world: ComponentWorld,
   assets: ReadonlyMap<string, AssetReference>,
   prefabs: ReadonlyMap<string, PrefabReference>,
+  diagnostics: readonly CoreDiagnostic[],
 ): RuntimeSceneGraph {
   const nodes = new Map<string, RuntimeSceneGraphNode>();
   const materialize = (record: NodeBuildRecord): RuntimeSceneGraphNode => {
@@ -321,9 +323,14 @@ function createRuntimeGraph(
 
   const rootNodes = Object.freeze(roots.map(materialize));
   const document = snapshotJson(scene);
+  const diagnosticSnapshot = Object.freeze(diagnostics.map((item) => Object.freeze({
+    ...item,
+    ...(item.details === undefined ? {} : { details: snapshotJson(item.details) }),
+  })));
   return Object.freeze({
     sceneId: scene.id,
     document,
+    diagnostics: diagnosticSnapshot,
     rootNodes,
     getNode(nodeId: string): RuntimeSceneGraphNode | undefined { return nodes.get(nodeId); },
     getComponent(instanceId: string): RuntimeComponentSnapshot | undefined {
@@ -346,6 +353,7 @@ export class ProjectSceneLoader implements SceneLoader {
   private readonly prefabs: ReadonlyMap<string, PrefabReference>;
   private readonly schemas: ReadonlyMap<string, ComponentTypeSchemaV1>;
   private readonly prefabIds: ReadonlySet<string>;
+  private readonly projectDiagnostics: readonly CoreDiagnostic[];
   private readonly readAssetDocument: ProjectSceneLoaderOptions["readAssetDocument"];
 
   constructor(options: ProjectSceneLoaderOptions) {
@@ -360,6 +368,7 @@ export class ProjectSceneLoader implements SceneLoader {
     }
 
     this.project = snapshotJson(projectResult.value);
+    this.projectDiagnostics = Object.freeze(projectResult.diagnostics.map((item) => Object.freeze({ ...item })));
     this.assets = new Map(this.project.assets.map((asset) => [asset.id, asset] as const));
     this.prefabs = new Map(this.project.prefabs.map((prefab) => [prefab.id, prefab] as const));
     this.prefabIds = new Set(this.prefabs.keys());
@@ -481,7 +490,7 @@ export class ProjectSceneLoader implements SceneLoader {
       throwIfAborted(request.sceneId, request.signal);
       this.reportProgress(request, 0.9, "Component instances hydrated");
 
-      const graph = createRuntimeGraph(scene, roots, world, this.assets, this.prefabs);
+      const graph = createRuntimeGraph(scene, roots, world, this.assets, this.prefabs, [...this.projectDiagnostics, ...parsed.diagnostics]);
       const session = new ProjectRuntimeSceneSessionImpl(world, graph, records);
       throwIfAborted(request.sceneId, request.signal);
       this.reportProgress(request, 1, "Inactive runtime session ready");
@@ -508,6 +517,7 @@ export class ProjectSceneLoader implements SceneLoader {
   private reportProgress(request: SceneLoadRequest, progress: number, message: string): void {
     throwIfAborted(request.sceneId, request.signal);
     request.onProgress?.({ progress, message } satisfies SceneLoadProgress);
+    throwIfAborted(request.sceneId, request.signal);
   }
 }
 
