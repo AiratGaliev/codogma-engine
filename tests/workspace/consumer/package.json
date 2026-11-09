@@ -1,0 +1,11 @@
+{
+  "name": "codogma-workspace-consumer-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@codogma/cge": "0.1.0",
+    "@codogma/editor-mcp-server": "0.1.0",
+    "@codogma/game-test-bridge-contract": "0.1.0",
+    "@codogma/localization": "0.1.0"
+  }
+}
