@@ -30,6 +30,24 @@ test("missing provider is a blocking diagnostic and is not included", () => {
  assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_PROVIDER_MISSING"));
  assert.deepEqual(r.includedFeatureIds,[]);
 });
+test("declared package provider remains provided when its package is not installed", () => {
+ const r=resolve(project([]),[]);
+ const state=r.features.find(x=>x.id==="runtime.phaser");
+ assert.equal(r.valid,true);
+ assert.equal(state?.packageInstalled,false);
+ assert.equal(state?.provided,true);
+ assert.equal(state?.available,false);
+ assert.equal(state?.enabled,false);
+ assert.equal(state?.includedInTarget,false);
+});
+test("one-sided conflicts are symmetric and independent of feature ID ordering", () => {
+ const r=resolveFeatureSelection({registry:{schemaVersion:1,features:[
+  {id:"runtime.a",scopes:["runtime"],targets:["web"],policy:"optional",providers:[{id:"builtin.a",kind:"builtin",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"codogma:a"}}]},
+  {id:"runtime.z",scopes:["runtime"],targets:["web"],policy:"optional",providers:[{id:"builtin.z",kind:"builtin",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"codogma:z"}}],conflicts:["runtime.a"]}
+ ]},project:project(["runtime.a","runtime.z"]),installedPackages:[],target:"web",scope:"runtime"});
+ assert.equal(r.valid,false);
+ assert.equal(r.diagnostics.filter(x=>x.code==="FEATURE_CONFLICT").length,1);
+});
 test("installing ECS does not enable the ECS-Phaser bridge", () => {
  const r=resolve(project(["runtime.ecs"]),packages);
  assert.equal(r.valid,true);

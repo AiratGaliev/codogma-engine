@@ -35,6 +35,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:$-]*$/;
 const PACKAGE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const object = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v) && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
 const ids = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === "string" && ID.test(x)) && new Set(v).size === v.length;
+const scopesValid = (v: unknown): v is FeatureScope[] => Array.isArray(v) && v.length > 0 && v.every(x => typeof x === "string" && FEATURE_SCOPES.includes(x as FeatureScope)) && new Set(v).size === v.length;
 const targets = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.every(x => typeof x === "string" && (x === "*" || ID.test(x))) && new Set(v).size === v.length && (v.includes("*") ? v.length === 1 : true);
 const supports = (values: readonly string[], target: string) => values.includes("*") || values.includes(target);
 const result = <T>(diagnostics: FeatureDiagnostic[]): { valid: boolean; diagnostics: FeatureDiagnostic[]; value?: T } => diagnostics.length ? { valid: false, diagnostics } : { valid: true, diagnostics: [], value: undefined as T };
@@ -51,7 +52,7 @@ function validateProvider(raw: unknown, feature: FeatureDescriptor, index: numbe
     return;
   }
   seen.add(raw.id);
-  if (!Array.isArray(raw.scopes) || raw.scopes.length === 0 || !raw.scopes.every(s => FEATURE_SCOPES.includes(s as FeatureScope)) || !targets(raw.targets)) {
+  if (!scopesValid(raw.scopes) || !targets(raw.targets)) {
     diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Provider must declare valid scopes and targets.", feature.id, path));
     return;
   }
@@ -85,7 +86,7 @@ export function validateFeatureRegistryDocument(input: unknown): { valid: boolea
   input.features.forEach((raw, i) => {
     const path = "features[" + i + "]";
     if (!object(raw) || typeof raw.id !== "string" || !ID.test(raw.id) || seen.has(raw.id)) { diagnostics.push(error(seen.has(String(raw && object(raw) ? raw.id : "")) ? "FEATURE_DUPLICATE_ID" : "FEATURE_ID_INVALID", "Feature requires a unique stable ID.", undefined, path)); return; }
-    if (!Array.isArray(raw.scopes) || raw.scopes.length === 0 || !raw.scopes.every(s => FEATURE_SCOPES.includes(s as FeatureScope)) || !targets(raw.targets) || !["required", "default", "optional"].includes(String(raw.policy)) || !Array.isArray(raw.providers) || raw.providers.length === 0 || raw.providers.length > 32 || (raw.providerMode !== undefined && raw.providerMode !== "single" && raw.providerMode !== "all") || !knownKeys(raw, ["id", "scopes", "targets", "policy", "providers", "providerMode", "requires", "conflicts"])) { diagnostics.push(error("FEATURE_REGISTRY_INVALID", "Feature descriptor has invalid scopes, targets, policy or providers.", raw.id, path)); return; }
+    if (!scopesValid(raw.scopes) || !targets(raw.targets) || !["required", "default", "optional"].includes(String(raw.policy)) || !Array.isArray(raw.providers) || raw.providers.length === 0 || raw.providers.length > 32 || (raw.providerMode !== undefined && raw.providerMode !== "single" && raw.providerMode !== "all") || !knownKeys(raw, ["id", "scopes", "targets", "policy", "providers", "providerMode", "requires", "conflicts"])) { diagnostics.push(error("FEATURE_REGISTRY_INVALID", "Feature descriptor has invalid scopes, targets, policy or providers.", raw.id, path)); return; }
     seen.add(raw.id);
     const descriptor: FeatureDescriptor = { id: raw.id, scopes: raw.scopes as FeatureScope[], targets: raw.targets as string[], policy: raw.policy as FeaturePolicy, providers: [], providerMode: (raw.providerMode ?? "single") as ProviderMode };
     const providerIds = new Set<string>();
@@ -153,7 +154,7 @@ export function validateInstalledFeaturePackages(input: unknown): { valid: boole
   const value: InstalledFeaturePackage[] = [];
   input.forEach((p, i) => {
     const path = "installedPackages[" + i + "]";
-    if (!object(p) || typeof p.id !== "string" || !ID.test(p.id) || seen.has(String(p.id)) || typeof p.name !== "string" || !PACKAGE.test(p.name) || typeof p.version !== "string" || !p.version || typeof p.compatible !== "boolean" || !Array.isArray(p.scopes) || !p.scopes.length || !p.scopes.every(s => FEATURE_SCOPES.includes(s as FeatureScope)) || !targets(p.targets) || !knownKeys(p, ["id", "name", "version", "scopes", "targets", "compatible"])) { diagnostics.push(error("FEATURE_PACKAGE_SNAPSHOT_INVALID", "Package snapshot is invalid or duplicated.", undefined, path)); return; }
+    if (!object(p) || typeof p.id !== "string" || !ID.test(p.id) || seen.has(String(p.id)) || typeof p.name !== "string" || !PACKAGE.test(p.name) || typeof p.version !== "string" || !p.version || typeof p.compatible !== "boolean" || !scopesValid(p.scopes) || !targets(p.targets) || !knownKeys(p, ["id", "name", "version", "scopes", "targets", "compatible"])) { diagnostics.push(error("FEATURE_PACKAGE_SNAPSHOT_INVALID", "Package snapshot is invalid or duplicated.", undefined, path)); return; }
     seen.add(p.id);
     value.push({ id: p.id, name: p.name, version: p.version, scopes: p.scopes as FeatureScope[], targets: p.targets as string[], compatible: p.compatible });
   });
@@ -258,13 +259,27 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
   };
   const requested = [...states.values()].filter(s => s.enabled && s.descriptor.scopes.includes(input.scope) && supports(s.descriptor.targets,input.target)).map(s => s.descriptor.id).sort();
   for (const id of requested) visit(id, id);
-  for (const id of included) for (const conflict of states.get(id)?.descriptor.conflicts ?? []) if (included.has(conflict) && id.localeCompare(conflict) < 0) { diagnostics.push(error("FEATURE_CONFLICT", "Selected features " + id + " and " + conflict + " conflict.", id)); states.get(id)!.reason = "conflict"; states.get(conflict)!.reason = "conflict"; included.delete(id); included.delete(conflict); states.get(id)!.included = false; states.get(conflict)!.included = false; }
+  const conflictingPairs = new Map<string, readonly [string, string]>();
+  for (const id of included) for (const conflict of states.get(id)?.descriptor.conflicts ?? []) {
+    if (!included.has(conflict)) continue;
+    const pair = [id, conflict].sort((a, b) => a.localeCompare(b)) as [string, string];
+    conflictingPairs.set(pair.join("\\0"), pair);
+  }
+  for (const [left, right] of conflictingPairs.values()) {
+    diagnostics.push(error("FEATURE_CONFLICT", "Selected features " + left + " and " + right + " conflict.", left));
+    states.get(left)!.reason = "conflict";
+    states.get(right)!.reason = "conflict";
+    states.get(left)!.included = false;
+    states.get(right)!.included = false;
+    included.delete(left);
+    included.delete(right);
+  }
   const valid = diagnostics.length === 0;
   const featureStates: FeatureSelectionState[] = definitions.map(f => {
     const s = states.get(f.id)!;
     const chosen = s.providers.flatMap(p => p.packageInstanceIds);
     const packageInstalled = f.providers[0]?.kind === "builtin" ? null : installed.some(p => f.providers.some(v => v.kind === "package" && v.packageName === p.name));
-    return { id:f.id, packageInstalled, provided:s.providers.some(p => p.status === "available"), available:s.available, enabled:s.enabled, includedInTarget:valid && s.included, activation:"not-managed", selectionSource:s.source, requiredBy:sorted([...s.requiredBy]), providers:s.providers, ...(s.reason ? {exclusionReason:s.reason} : {}) };
+    return { id:f.id, packageInstalled, provided:s.descriptor.providers.length > 0, available:s.available, enabled:s.enabled, includedInTarget:valid && s.included, activation:"not-managed", selectionSource:s.source, requiredBy:sorted([...s.requiredBy]), providers:s.providers, ...(s.reason ? {exclusionReason:s.reason} : {}) };
   });
   const buildAnalysisFeatures: ProjectBuildFeatureSnapshot[] = definitions.map(f => {
     const s = states.get(f.id)!, selected = valid && s.included;
