@@ -177,23 +177,7 @@ jobs:
               ;;
           esac
 
-      - name: Generate candidate workspace lockfile from package manifests (COD-107 bootstrap)
-        id: workspace-lockfile
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: |
-          rm -f package-lock.json
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-
-      - name: Upload candidate workspace lockfile
-        if: steps.workspace-lockfile.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: codogma-workspace-lockfile
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Install locked workspace dependencies
+      - name: Install root and all first-party workspace dependencies
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
 
@@ -270,7 +254,6 @@ jobs:
 
   editor-host:
     name: editor-host
-    needs: fast
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -314,13 +297,6 @@ jobs:
           npm install --global npm@11.21.2 --no-audit --no-fund
           test "$(npm --version)" = "11.21.2"
 
-      - name: Download npm-generated workspace lockfile
-        if: steps.scope.outputs.run == 'true'
-        uses: actions/download-artifact@v7
-        with:
-          name: codogma-workspace-lockfile
-          path: .
-
       - name: Install root and workspace dependencies
         if: steps.scope.outputs.run == 'true'
         run: npm ci
@@ -360,39 +336,3 @@ jobs:
       - name: Run Editor Host domain tests
         if: steps.scope.outputs.run == 'true'
         run: npm test --workspace=@codogma/editor-host
-  commit-workspace-lockfile:
-    name: commit-workspace-lockfile
-    needs: fast
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/cod-107-npm-workspaces-consumer-fixtures'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout the task branch
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-
-      - name: Download npm-generated workspace lockfile
-        uses: actions/download-artifact@v7
-        with:
-          name: codogma-workspace-lockfile
-          path: .
-
-      - name: Commit the exact generated lockfile
-        shell: bash
-        env:
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          if git diff --cached --quiet; then
-            echo "The generated workspace lockfile is already committed."
-            exit 0
-          fi
-          git commit -m "chore(workspaces): add npm-generated root lockfile"
-          git push origin "HEAD:${HEAD_BRANCH}"
-
