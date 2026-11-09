@@ -74,6 +74,7 @@ class HostSceneManager implements SceneManager {
   private paused = false;
   private stopping: Promise<void> | undefined;
   private disposing?: Promise<void>;
+  private lifecycleTail: Promise<void> = Promise.resolve();
   private readonly disposedSessions = new WeakSet<object>();
 
   constructor(private readonly loader: SceneLoader) {
@@ -120,22 +121,26 @@ class HostSceneManager implements SceneManager {
     return operation.promise;
   }
 
-  async pause(): Promise<void> {
+  pause(): Promise<void> {
     this.assertAcceptingWork();
-    if (this.paused) return;
-    await this.commitPromise;
-    const active = this.activeSession;
-    if (active) await active.pause();
-    this.paused = true;
+    return this.enqueueLifecycle(async () => {
+      if (this.paused) return;
+      await this.commitPromise;
+      const active = this.activeSession;
+      if (active) await active.pause();
+      this.paused = true;
+    });
   }
 
-  async resume(): Promise<void> {
+  resume(): Promise<void> {
     this.assertAcceptingWork();
-    if (!this.paused) return;
-    await this.commitPromise;
-    const active = this.activeSession;
-    if (active) await active.resume();
-    this.paused = false;
+    return this.enqueueLifecycle(async () => {
+      if (!this.paused) return;
+      await this.commitPromise;
+      const active = this.activeSession;
+      if (active) await active.resume();
+      this.paused = false;
+    });
   }
 
   stop(): Promise<void> {
@@ -147,11 +152,12 @@ class HostSceneManager implements SceneManager {
       const errors: unknown[] = [];
       try { await pending?.promise; } catch (error) { errors.push(error); }
       try { await this.commitPromise; } catch (error) { errors.push(error); }
+      await this.lifecycleTail;
       const active = this.activeSession;
       this.activeSession = undefined;
       this.paused = false;
       if (active) {
-        try { await this.disposeSession(active); } catch (error) { errors.push(error); }
+        try { await this.deactivateAndDisposeSession(active); } catch (error) { errors.push(error); }
       }
       if (errors.length > 0) throw new AggregateError(errors, "SceneManager.stop() completed with cleanup errors.");
     })().finally(() => { this.stopping = undefined; });
@@ -168,11 +174,12 @@ class HostSceneManager implements SceneManager {
       try { await this.stopping; } catch (error) { errors.push(error); }
       try { await pending?.promise; } catch (error) { errors.push(error); }
       try { await this.commitPromise; } catch (error) { errors.push(error); }
+      await this.lifecycleTail;
       const active = this.activeSession;
       this.activeSession = undefined;
       this.paused = false;
       if (active) {
-        try { await this.disposeSession(active); } catch (error) { errors.push(error); }
+        try { await this.deactivateAndDisposeSession(active); } catch (error) { errors.push(error); }
       }
       if (errors.length > 0) throw new AggregateError(errors, "SceneManager disposal failed.");
     })();
@@ -218,6 +225,18 @@ class HostSceneManager implements SceneManager {
         }
         throw new Error("SceneLoader returned a session for a different Scene ID.");
       }
+      if (operation.controller.signal.aborted || this.disposed || this.pending !== operation) {
+        try {
+          await this.disposeSession(candidate);
+        } catch (cleanupError) {
+          cleanupFailed = true;
+          throw new AggregateError([cleanupError], "A cancelled Scene candidate could not be disposed.");
+        }
+        return { status: "cancelled", sceneId };
+      }
+
+      // Complete pause/resume against the current owner before changing that owner.
+      await this.lifecycleTail;
       if (operation.controller.signal.aborted || this.disposed || this.pending !== operation) {
         try {
           await this.disposeSession(candidate);
@@ -282,6 +301,21 @@ class HostSceneManager implements SceneManager {
 
     this.activeSession = candidate;
     if (previous) await this.disposeSession(previous);
+  }
+
+  private enqueueLifecycle(operation: () => Promise<void>): Promise<void> {
+    const result = this.lifecycleTail.then(operation);
+    this.lifecycleTail = result.catch(() => undefined);
+    return result;
+  }
+
+  private async deactivateAndDisposeSession(session: RuntimeSceneSession): Promise<void> {
+    const errors: unknown[] = [];
+    try { await session.deactivate(); } catch (error) { errors.push(error); }
+    try { await this.disposeSession(session); } catch (error) { errors.push(error); }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Active Scene deactivation or disposal failed.");
+    }
   }
 
   private async disposeSession(session: RuntimeSceneSession): Promise<void> {
