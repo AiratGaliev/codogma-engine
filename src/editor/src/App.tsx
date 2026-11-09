@@ -3185,7 +3185,10 @@ function App() {
         theme={theme()}
         canClose={Boolean(projectDocument())}
         onClose={() => setProjectManagerVisible(false)}
-        onProjectOpened={() => void loadProject()}
+        onProjectOpened={(recentWarning) => {
+          if (recentWarning) log("warning", recentWarning);
+          void loadProject();
+        }}
       />
     }>
     <div

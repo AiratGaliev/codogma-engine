@@ -16,7 +16,7 @@ interface ProjectManagerProps {
   theme: ProjectManagerTheme;
   canClose: boolean;
   onClose?: () => void;
-  onProjectOpened: () => void;
+  onProjectOpened: (recentWarning?: string) => void;
 }
 
 function formatLastOpened(value: string): string {
@@ -89,8 +89,7 @@ export default function ProjectManager(props: ProjectManagerProps) {
     setWarning("");
     try {
       const result = await openManagedProject(project.relativePath);
-      if (result.recentWarning) setWarning(result.recentWarning);
-      props.onProjectOpened();
+      props.onProjectOpened(result.recentWarning || undefined);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(message);
@@ -111,8 +110,7 @@ export default function ProjectManager(props: ProjectManagerProps) {
         parentRelativePath: parentRelativePath(),
         templateId: templateId(),
       });
-      if (result.recentWarning) setWarning(result.recentWarning);
-      props.onProjectOpened();
+      props.onProjectOpened(result.recentWarning || undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
