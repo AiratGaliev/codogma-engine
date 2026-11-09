@@ -120,6 +120,12 @@ jobs:
             package-lock.json
             mini-services/ai-chat/package-lock.json
 
+      - name: Install compatible npm CLI
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: |
+          npm install --global npm@11.21.2 --no-audit --no-fund
+          test "$(npm --version)" = "11.21.2"
+
       - name: Validate changed Markdown files
         if: github.event_name == 'pull_request'
         env:
@@ -302,6 +308,12 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
+
+      - name: Install compatible npm CLI
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          npm install --global npm@11.21.2 --no-audit --no-fund
+          test "$(npm --version)" = "11.21.2"
 
       - name: Download npm-generated workspace lockfile
         if: steps.scope.outputs.run == 'true'

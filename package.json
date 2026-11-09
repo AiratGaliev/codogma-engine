@@ -57,5 +57,17 @@
   "workspaces": [
     "packages/*",
     "src/editor"
-  ]
+  ],
+  "packageManager": "npm@11.21.2",
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=11.21.2 <12"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": ">=11.21.2 <12",
+      "onFail": "error"
+    }
+  }
 }

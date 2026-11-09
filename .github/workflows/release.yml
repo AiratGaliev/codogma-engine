@@ -31,6 +31,11 @@ jobs:
           cache-dependency-path: |
             package-lock.json
 
+      - name: Install compatible npm CLI
+        run: |
+          npm install --global npm@11.21.2 --no-audit --no-fund
+          test "$(npm --version)" = "11.21.2"
+
       - name: Install root and all first-party workspace dependencies
         run: npm ci
 
