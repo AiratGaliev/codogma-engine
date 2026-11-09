@@ -11,6 +11,7 @@ import {
 import type {
   ComponentTypeDefinition,
   ComponentTypeSchemaV1,
+  NodeDocument,
   PrefabDocumentV1,
   ProjectDocumentV1,
   SceneDocumentV1,
@@ -48,7 +49,7 @@ function createNode(
   name: string,
   componentId: string,
   speed: number,
-) {
+): NodeDocument {
   return {
     id,
     name,
