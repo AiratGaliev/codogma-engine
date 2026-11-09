@@ -81,7 +81,7 @@ $CODOGMA_USER_DATA_DIR/recent-projects.json (default ~/.codogma-engine/recent-pr
 
 It stores only the Project ID, display name, Projects-root-relative path and last-opened timestamp. It does not store an absolute path or modify the project's serialized Project Model.
 
-On startup/reload, Project Manager scans the configured root with bounded depth and entry count. Unreadable directories and scan-limit exhaustion are surfaced as warnings instead of being silently treated as an empty Projects location. A recent entry is matched by stable Project ID, not only by the previous folder name. When a project moved elsewhere inside the configured root, the recent path is updated. Deleted/out-of-root folders are marked missing and can be removed from the recent list. A project with an unreadable or unsupported manifest is marked invalid and cannot be opened from Recent Projects.
+On startup/reload, Project Manager scans the configured root with bounded depth and entry count. Unreadable directories and scan-limit exhaustion are surfaced as warnings instead of being silently treated as an empty Projects location. A recent entry is matched by stable Project ID, not only by the previous folder name. When a project moved elsewhere inside the configured root, the recent path is updated. Each matched recent entry is revalidated with the full safe-open gate, including registered files and Scene/Prefab documents, before it is marked available. Deleted/out-of-root folders are marked missing and can be removed from the recent list. A project with an unreadable or unsupported manifest, missing registered asset, or invalid Scene/Prefab is marked invalid and cannot be opened from Recent Projects.
 
 ## Editor Host ownership
 
