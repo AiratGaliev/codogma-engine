@@ -34,7 +34,7 @@ Build Analysis в \`@codogma/cge\` уже формирует общий resource
 
 Provider содержит стабильный provider ID, kind (\`builtin\` или \`package\`), scopes, targets и публичные entry points для каждого разрешённого scope. Package provider также содержит npm package name и при необходимости точную версию. Provider scopes/targets не могут расширять descriptor scopes/targets. Built-in entry points используют явный \`codogma:\` namespace; package entry points являются безопасными относительными npm exports paths. Неизвестные поля и небезопасные entry-point paths отклоняются.
 
-Один feature ID не смешивает builtin и package provider kinds. Provider IDs уникальны внутри feature descriptor. Unknown feature references, self-dependencies, duplicate IDs и dependency cycles являются validation errors.
+Один feature ID не смешивает builtin и package provider kinds. Provider IDs уникальны в пределах всего registry, чтобы provider bindings оставались однозначными. Unknown feature references, self-dependencies, duplicate IDs и dependency cycles являются validation errors.
 
 ### 3. Provider resolution
 
