@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { cpus, release, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
 import {
@@ -32,6 +33,7 @@ interface Fixture {
   readonly project: ProjectDocumentV1;
   readonly sceneJson: string;
   readonly sceneBytes: number;
+  readonly sceneSha256: string;
   readonly serializationMs: number;
   readonly sumSpeed: number;
 }
@@ -117,6 +119,7 @@ function createFixture(size: number): Fixture {
     project,
     sceneJson,
     sceneBytes: Buffer.byteLength(sceneJson, "utf8"),
+    sceneSha256: createHash("sha256").update(sceneJson).digest("hex"),
     serializationMs,
     sumSpeed,
   };
@@ -230,6 +233,7 @@ async function main(): Promise<void> {
   process.stdout.write("Codogma Core native Scene benchmark\n");
   process.stdout.write(JSON.stringify({
     node: process.version,
+    npmUserAgent: process.env.npm_config_user_agent ?? null,
     platform: process.platform,
     arch: process.arch,
     osRelease: release(),
@@ -265,6 +269,7 @@ async function main(): Promise<void> {
       nodes: size,
       components: size,
       sceneBytes: fixture.sceneBytes,
+      sceneSha256: fixture.sceneSha256,
       serializationMs: round(fixture.serializationMs),
       summary: {
         compositionMsMedian: round(median(compositionValues)),
