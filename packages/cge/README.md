@@ -88,33 +88,28 @@ Run `npm run quality:check` for typecheck, build, unit tests and the packed cons
 
 ## Commands
 
-Run from this directory:
+Install dependencies once from the repository root, then run the package-owned quality suite:
 
 ```sh
 npm ci
-npm run quality:check
+npm run quality:check --workspace=@codogma/cge
+npm run benchmark --workspace=@codogma/cge
 ```
+
+The package remains an independently buildable/public-export boundary, but its development dependencies are resolved by the repository's root workspace lockfile. Do not run a separate `npm ci` inside this workspace.
 
 ## SolidJS Editor Host integration
 
-The SolidJS Host consumes this package through the local npm dependency
-`file:../../packages/cge`. Vite and TypeScript resolve the package entry points
-from `dist/`, so the Core output must exist before starting the Host.
+The Host consumes this workspace through the versioned `@codogma/cge` dependency. npm Workspaces links the checked-out package at install time; Vite and TypeScript resolve its public `dist/` entry points.
 
-From the repository root, install/update the Host dependency link once after
-checking out a branch that adds or changes this dependency:
+From the repository root:
 
 ```sh
-npm ci --prefix src/editor
+npm ci
 npm run dev:editor-host
 ```
 
-The Host package now builds Core automatically before `dev`, `typecheck`,
-and `test` commands by using its pinned TypeScript compiler. There is no need
-to install a second copy of TypeScript under `packages/cge` for this workflow.
-For standalone Core development and its full quality suite, continue to use the
-commands above in the Boundaries section from this package directory.
-
+The Host workspace builds Core before `dev`, `typecheck`, `build` and `test` using the package's pinned TypeScript compiler. The root install owns both packages' dependencies; there is no second Host or Core lockfile.
 
 ## Initial contracts
 

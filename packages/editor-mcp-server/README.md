@@ -57,25 +57,19 @@ Native Project, Scene and Prefab authoring is performed through dedicated tools 
 
 ## Local development
 
-From this directory:
+From the repository root, install every first-party workspace once:
 
 ```bash
 npm ci
-npm test
-```
-
-`npm ci` builds the TypeScript CLI through the package's `prepare` script. To run it directly:
-
-```bash
-npm start
-```
-
-Or use the root launcher after installing this package's dependencies:
-
-```bash
-npm --prefix packages/editor-mcp-server ci
+npm test --workspace=@codogma/editor-mcp-server
+npm run build:mcp
 npm run mcp
 ```
+
+The workspace's `prepare` hook builds the TypeScript CLI during installation.
+To invoke the package-owned start script directly, use
+`npm start --workspace=@codogma/editor-mcp-server`. The root launcher
+(`npm run mcp`) starts the engine's configured MCP integration.
 
 The engine endpoint defaults to `http://127.0.0.1:3000/editor/mcp`.
 

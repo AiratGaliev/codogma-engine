@@ -1,6 +1,6 @@
 # ADR-0003: Архитектура пакетов и менеджер пакетов Codogma
 
-**Статус:** целевое направление принято; детали API metadata, миграции и workspace configuration требуют аудита и PoC.  
+**Статус:** архитектура package roots и npm Workspaces принята и внедрена; точная metadata schema Feature Registry и её публичный контракт остаются отдельной областью проектирования и PoC.  
 **Дата:** 29.10.2026  
 **Связанные документы:** [ТЗ](../technical-specification.md), [дорожная карта](../roadmap.md), [каталог технических источников](../REFERENCE-SOURCES.md).
 
@@ -12,15 +12,15 @@ Codogma Engine — самостоятельный Web-first 2D game engine. Ем
 
 Native SolidJS Editor Host подключает Phaser Scene runtime через явный project-level script reference: viewport извлекает script URL из project index.html либо находит runtime script в выбранном Project directory и загружает его через project-scoped file service. Этот workflow не использует UI plugin registry и не привязывает Engine Core к Phaser. Phaser 4.2.1 является выбранным runtime target; provider/version, artifact provenance и build inclusion должны быть подтверждены native project/build fixtures. См. [аудит в ТЗ](../technical-specification.md) и [каталог исходников](../REFERENCE-SOURCES.md).
 
-**Текущее состояние на 08.11.2026:** в репозитории существуют root npm project, единственный SolidJS Editor Host в `src/editor/` и самостоятельные package roots в `packages/*`/mini-services. Host создан COD-80; PR #30 смержен в `dev`. Root scripts, Node server и CI направлены на native Host. npm Workspaces и единый workspace lockfile пока не внедрены. Этот ADR определяет package architecture, а не утверждает, что workspace consolidation уже выполнена.
+**Текущее состояние после COD-107 (09.11.2026):** root npm project использует npm Workspaces для четырёх активных библиотечных пакетов в `packages/*` и единственного SolidJS Editor Host в `src/editor/`. Один корневой `package-lock.json` фиксирует их общий dependency graph. Root server/tests/scripts остаются частью root package, а optional `mini-services/ai-chat/` сохраняет независимый manifest/lockfile из-за отдельного lifecycle. Исторический `source/editor/` не является workspace и не включён в активную install topology; его cleanup остаётся в COD-88. Workspaces предназначены для разработки самого движка и не меняют dependency graph пользовательских игровых проектов.
 
 ## Принятые архитектурные принципы
 
 ### 1. Editor Host и корень исходников редактора
 
 - Целевой путь приложения редактора — `src/editor/`. Это Editor Host: он отвечает за рабочую среду, регистрацию расширений, UI shell и взаимодействие с типизированными extension contracts.
-- `src/editor/` содержит единственное приложение SolidJS Editor Host с собственным manifest/lockfile, Vite Host, UI source, design system и tests. Использовать его native domain/services/contracts; не вводить альтернативные UI implementations, параллельные state models или дополнительные compatibility adapters.
-- Перенос редактора, переход на npm Workspaces и реализация нового Core не объединяются в один большой PR. Сначала проводится audit/path migration; включение в Workspaces и консолидация lockfiles — отдельное проверяемое изменение.
+- `src/editor/` содержит единственное приложение SolidJS Editor Host с собственным package manifest, Vite Host, UI source, design system и tests. Его зависимости устанавливаются как часть root npm workspace; отдельного workspace lockfile у Host нет. Использовать его native domain/services/contracts; не вводить альтернативные UI implementations, параллельные state models или дополнительные compatibility adapters.
+- Перенос редактора и реализация нового Core остаются самостоятельными архитектурными изменениями; включение уже выбранного native Host в npm Workspaces и консолидация lockfiles выполнены отдельно в COD-107.
 
 ### 2. Source monorepo и самостоятельные пакеты
 
@@ -34,10 +34,12 @@ Native SolidJS Editor Host подключает Phaser Scene runtime через 
 
 ### 3. npm Workspaces и локальная разработка
 
-- Целевая модель разработки — один npm monorepo с root workspace, который связывает `packages/*` и после проверки совместимости — `src/editor`. Корневой `package.json` задаёт workspaces; root lockfile становится источником воспроизводимой установки workspace graph.
+- Модель разработки — один npm monorepo: корневой `package.json` задаёт `workspaces: ["packages/*", "src/editor"]`, а root `package-lock.json` является единственным lockfile для root package и всех активных first-party workspaces. Сейчас это включает `@codogma/cge`, `@codogma/localization`, `@codogma/editor-mcp-server`, `@codogma/game-test-bridge-contract` и `@codogma/editor-host`.
 - npm Workspaces отвечает за linking локальных пакетов и стандартную npm dependency semantics. Workspace linking нужен для разработки; он **не означает**, что все пакеты станут dependencies каждого игрового проекта.
-- Перед внедрением проверяются текущие manifests, scripts, TypeScript project references, root/editor lockfiles, CI, release packaging и npm CLI version. Включение редактора в Workspace и удаление его отдельного lockfile производится только после clean install/build/server/release PoC.
-- До завершения миграции допускается переходное состояние с существующими root/editor npm roots и lockfiles. Документация обязана различать текущие команды/пути и целевую структуру.
+- В ходе COD-107 проверены manifests, scripts, TypeScript configs, CI и release packaging. Чистый runner выполняет один `npm ci` из repository root; отдельные package installs не являются частью обычного workflow.
+- Корневой install охватывает только активные `packages/*` и `src/editor/`. `mini-services/ai-chat/` остаётся отдельным npm root с собственным lockfile и отдельным audit/install path; это независимый optional service, а не часть engine package graph. `server/` и root `tests/` не имеют отдельных manifests. Исторический `source/editor/` и его старый lockfile не включаются и не обслуживаются этим workspace; их provenance/удаление принадлежат COD-88.
+- Межпакетные first-party зависимости используют обычные semver ranges, совпадающие с версиями локальных package manifests. npm Workspaces создаёт локальные links; нестандартный `workspace:` protocol и `file:` dependencies между активными workspace roots не используются.
+- Root scripts адресуют package-owned commands через `--workspace=<package-name>`. Package-local scripts и TypeScript versions остаются принадлежащими package scope; workspace migration не унифицирует compiler versions и не создаёт TypeScript project-reference graph.
 - Не использовать `node_modules` как место исходной разработки и не редактировать установленную копию пакета вручную. Источник истины для package source — контролируемый репозиторий; `node_modules` формируется npm.
 
 ### 4. Выборочная установка пакетов в пользовательский проект

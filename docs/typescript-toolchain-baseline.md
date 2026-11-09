@@ -1,7 +1,7 @@
 # TypeScript toolchain и package roots — baseline
 
 **Снимок:** ветка `dev`, commit `2eb37fa734e3bcefb2ad6d695bc286af67711ac1` (08.11.2026).  
-**Назначение:** фактическая инвентаризация compiler configs, package roots, scripts, lockfiles и entry points перед последующими изменениями toolchain/workspace. Это read-only baseline, а не предложение немедленно унифицировать версии или конфигурации.
+**Назначение:** фактическая инвентаризация compiler configs, package roots, scripts, lockfiles и entry points. Разделы 1–11 сохраняют исходный read-only снимок до COD-107 и не описывают текущую install topology после workspace migration. Актуальная топология после COD-107 приведена в разделе 12. Документ не предлагает унифицировать версии TypeScript или конфигурации.
 
 ## 1. Границы инвентаризации
 
@@ -219,3 +219,26 @@ Snapshot показывает, что более новые compiler versions у
 - `.github/workflows/ci.yml`, `docs/code-quality-baseline.md`, `docs/dependency-capability-matrix.md`, ADR-0002, ADR-0003 и `docs/engineering-workflow.md`.
 
 **Verification boundary:** это source/configuration inventory по exact GitHub `dev` tree и file contents на snapshot SHA. Локальные npm install, compiler invocation, tests, benchmark и build при снятии read-only baseline не выполнялись.
+
+
+## 12. Workspace topology после COD-107 (09.11.2026)
+
+Первичная inventory-таблица выше намеренно сохранена как историческое свидетельство состояния до миграции. Текущее состояние активного npm dependency graph:
+
+| Scope | Workspace / install root | Lockfile | Причина |
+|---|---|---|---|
+| Root server, scripts и tests | Repository root | `package-lock.json` | Общие server dependencies и quality tools |
+| Core | `packages/cge/` — `@codogma/cge` | Root lockfile | Самостоятельный host-neutral public package |
+| Localization | `packages/localization/` — `@codogma/localization` | Root lockfile | Самостоятельный optional package и CLI |
+| Editor MCP | `packages/editor-mcp-server/` — `@codogma/editor-mcp-server` | Root lockfile | First-party stdio adapter |
+| Game Test Bridge contract | `packages/game-test-bridge-contract/` — `@codogma/game-test-bridge-contract` | Root lockfile | First-party versioned contract package |
+| Native Editor Host | `src/editor/` — `@codogma/editor-host` | Root lockfile | Единственный SolidJS Editor Host |
+| Optional AI Chat service | `mini-services/ai-chat/` | Own `package-lock.json` | Independent optional service and lifecycle; not coupled to engine workspace installation |
+
+Root `package.json` declares only `packages/*` and `src/editor`. One `npm ci` from the repository root installs the root and all five workspaces and creates their local links. Root scripts address workspace-owned tasks with explicit `--workspace=<name>`. The package-level TypeScript pins remain unchanged: Core/Host 5.9.3, Localization 5.3.3, Editor MCP and Game Test Bridge 6.0.3. There is still no TypeScript project-reference solution; npm Workspaces does not imply one.
+
+Active workspace directories no longer contain their own `package-lock.json`. The historical `source/editor/package-lock.json` remains outside the active install topology until its separate COD-88 provenance/cleanup work; it is not read or used by npm Workspaces. The mini-service lockfile remains active and is installed/audited separately.
+
+The workspace consumer fixture at `tests/workspace/consumer/` imports every library package through its public bare specifier from the root workspace links. Core's package-owned quality check continues to pack its public tarball and install it into a temporary consumer before checking declarations and runtime ESM. Neither fixture manually copies `dist/`; package builds and public exports remain authoritative.
+
+CI Fast installs and audits the root workspace once, runs package-owned quality scripts (including Game Test Bridge, which previously had no package-specific CI check), and runs the workspace consumer. The Editor Host job uses the same root install; promotion-only E2E and release jobs also install once from the root. Release ZIP includes every workspace directory required by the root workspace manifest, including Game Test Bridge, so its own `npm ci` topology remains complete.

@@ -6,21 +6,26 @@ The package is intentionally independent: it imports no Phaser, DOM, Editor Host
 
 ## Package commands
 
-Use Node.js 22 or later and run from this directory:
+Use Node.js 22 or later. Install from the repository root once:
 
-~~~sh
+~~~
 npm ci
-npm run typecheck
-npm run build
-npm test
-npm run quality:check
+~~~
+
+Then run the package-owned commands from the repository root:
+
+~~~
+npm run typecheck --workspace=@codogma/game-test-bridge-contract
+npm run build --workspace=@codogma/game-test-bridge-contract
+npm test --workspace=@codogma/game-test-bridge-contract
+npm run quality:check --workspace=@codogma/game-test-bridge-contract
 ~~~
 
 - **typecheck** checks production source and TypeScript tests with the strict ADR-0002 compiler profile.
 - **build** emits ESM JavaScript, declarations and the versioned schema JSON.
 - **test** compiles the TypeScript node:test suite and runs its conformance tests.
 - **quality:check** runs typecheck, build and tests.
-- **package-lock.json** pins the standalone dependency graph. This package is not connected to npm Workspaces or the root lockfile.
+- The root workspace lockfile pins this package's dependencies and TypeScript compiler version; this package does not maintain a separate lockfile.
 
 ## Public API
 

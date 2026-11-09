@@ -10,6 +10,35 @@ The current implementation provides a browser-based authoring environment, a loc
 - **License:** MIT — see [LICENSE](LICENSE)
 - **Build notes:** [BUILD.md](BUILD.md)
 
+## Repository setup and npm Workspaces
+
+Use Node.js 22 or later and install the repository once from its root:
+
+```bash
+npm ci
+```
+
+The root npm workspace owns the active first-party package graph:
+
+- `packages/cge/` — `@codogma/cge`;
+- `packages/localization/` — `@codogma/localization`;
+- `packages/editor-mcp-server/` — `@codogma/editor-mcp-server`;
+- `packages/game-test-bridge-contract/` — `@codogma/game-test-bridge-contract`;
+- `src/editor/` — `@codogma/editor-host`, the only Editor Host.
+
+The root `package-lock.json` is the only lockfile for these workspaces. Run package-owned scripts from the repository root with an explicit workspace, for example:
+
+```bash
+npm run quality:check --workspace=@codogma/cge
+npm run quality:check --workspace=@codogma/game-test-bridge-contract
+npm run quality:check --workspace=@codogma/localization
+npm test --workspace=@codogma/editor-mcp-server
+npm run build:editor-host
+npm run test:workspace-consumer
+```
+
+The optional `mini-services/ai-chat/` service remains an independent npm root with its own lockfile and lifecycle; install it separately from that directory only when working on the service. Historical `source/editor/` is not an active package or workspace and is intentionally outside this migration. Workspace links are repository-development tooling: they do not add Codogma packages to a game project's own `package.json` or lockfile.
+
 ## Project direction
 
 Codogma Engine is a standalone 2D Web-first engine with its own native Project Model, TypeScript Component system, runtime and SolidJS Editor Host. The single supported editor application lives in `src/editor/`; Core, runtime, build, server and MCP use native Codogma contracts. The Node.js server serves this application at `/editor/`, while Vite provides the development server. See [ADR-0007](docs/decisions/ADR-0007-native-codogma-project-model.md), [Editor Host plan](docs/editor-ui-migration.md), [ADR-0005](docs/decisions/ADR-0005-solidjs-editor-host.md) and [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md) (sole normative source for optional Data-Oriented ECS).
