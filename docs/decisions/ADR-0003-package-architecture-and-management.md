@@ -108,7 +108,7 @@ Native SolidJS Editor Host подключает Phaser Scene runtime через 
 
 1. Провести инвентаризацию root/editor manifests, lockfiles, scripts, CI и release packaging; подтвердить dependency/capability baseline.
 2. Новый SolidJS Host уже создан в `src/editor/` (COD-80 / PR #30). Дальнейшая работа реализует workflows на native Host contracts. Root scripts, server entrypoint и CI используют этот Host; package/workspace changes остаются отдельными проверяемыми изменениями.
-3. Отдельным PoC подключить npm Workspaces для `packages/*` и `src/editor`, проверить clean install, TypeScript build, server smoke, MCP integration/release archive и согласованность единого root lockfile.
+3. **Выполнено в COD-107:** подключить npm Workspaces для активных `packages/*` и `src/editor`; объединить workspace lockfiles в root lockfile; подтвердить чистую установку, package builds/tests, server/Host smoke, MCP integration и release archive. Установленные package scopes, версии TypeScript и отдельный lifecycle AI Chat зафиксированы в разделе 3.
 4. Создать минимальный `packages/cge` и только необходимые для первого vertical slice package roots; проверить strict typecheck, tests и dependency boundaries. В согласованном с Roadmap build-пилоте проверить базовый registry на built-in features и test provider без зависимости от готового Package Manager UI.
 5. Утвердить package metadata и package-provided Feature/Capability descriptors на fixture package: проверить feature dependencies/conflicts, project/target selection и передачу выбранных capabilities в build report.
 6. Утвердить Editor Extension API/lifecycle на fixture package, который регистрирует команду и панель; точно зафиксировать versioned contracts.
@@ -117,8 +117,7 @@ Native SolidJS Editor Host подключает Phaser Scene runtime через 
 
 ## Открытые вопросы
 
-- Окончательная конфигурация npm Workspaces, порядок включения `src/editor`, root scripts и удаление второго lockfile после успешного PoC.
-- Доступность имени `@codogma/cge` и права на npm scope `@codogma` перед публичной публикацией.
+- Публичная публикация пакетов, включая доступность имени `@codogma/cge` и права на npm scope `@codogma`, после стабилизации exports/API, SemVer policy и release process. Внутренняя workspace topology уже реализована в COD-107.
 - Финальная структура `codogma` metadata/schema, Feature/Capability Registry descriptor, project feature configuration и перечень package kinds/scopes.
 - Семантика required/default/optional features, conflicts, target-specific overrides и диагностика отсутствующего provider.
 - Какие bundler/module graph guarantees доступны в реальном pipeline и при каких side effects/dynamic imports можно доказать, что выключенный feature code не попадает в output.
