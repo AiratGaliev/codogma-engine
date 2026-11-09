@@ -202,7 +202,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Этап 2 — Project Model и host-neutral TypeScript Component Core
 
-**Реализационный baseline (03.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization добавлены в packages/cge/ (PR #39). Начальные persisted contracts реализованы; Scene Loader, Phaser adapter, Preview и независимый HTML5 Build остаются отдельными этапами.
+**Реализационный baseline (09.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization добавлены в packages/cge/ (PR #39); host-neutral `ProjectSceneLoader` реализован в COD-103. Phaser adapter, Preview и независимый HTML5 Build остаются отдельными этапами.
 
 
 **Цель:** создать основу собственного движка над существующим runtime — не подключать второй game runtime поверх Phaser, а связать editor model и игру через общий API.
@@ -224,7 +224,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
 - [ ] Зафиксировать инвариант: в целевом Core сцена хранится как versioned data, а не как обязательный генерируемый TypeScript-класс; стабильные IDs и явные ссылки не зависят от имён файлов/классов.
 - [ ] Реализовать explicit component registry и module manifest с предсказуемым build-time graph; не использовать runtime scanning, угадывание путей или `eval` для подключения игровых скриптов.
-- [ ] Реализовать data-driven scene loader: preflight schema/ref validation, зарегистрированные миграции, детерминированное создание hierarchy/Transform/components, lifecycle activation и rollback/cleanup при ошибке загрузки.
+- [x] Реализовать data-driven Scene Loader для Project Model v1: preflight schema/ref validation, явный module manifest + ComponentRegistry, stable-ID references, deterministic Node/Transform/Component hierarchy, inactive runtime session, cancellation и rollback/cleanup. Миграции добавляются только при появлении опубликованных предыдущих schema versions; runtime Prefab expansion/overrides остаются в COD-8.
 - [ ] Подтвердить, что один независимо написанный TypeScript component module можно повторно использовать несколькими узлами и сценами без копирования логики в scene-specific code; type ID и instance ID различаются, значения каждого экземпляра независимы.
 - [ ] Разделить persisted properties, editor-only metadata и transient runtime state в общей component schema; Inspector, serializer, validator и runtime adapter читают один schema contract.
 - [ ] Зафиксировать разрешение ссылок на узлы/компоненты по стабильным ID и поведение отсутствующей цели/неподдерживаемой циклической ссылки.

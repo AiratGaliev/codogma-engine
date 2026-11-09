@@ -22,7 +22,9 @@ export type CoreDiagnosticCode =
   | "CORE_WORLD_DISPOSED"
   | "CORE_DUPLICATE_REGISTRATION"
   | "CORE_UNKNOWN_NODE"
-  | "CORE_UNKNOWN_COMPONENT";
+  | "CORE_UNKNOWN_COMPONENT"
+  | "SCENE_LOAD_ABORTED"
+  | "SCENE_LOAD_FAILED";
 
 export interface CoreDiagnostic {
   code: CoreDiagnosticCode;
