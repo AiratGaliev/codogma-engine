@@ -202,7 +202,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Этап 2 — Project Model и host-neutral TypeScript Component Core
 
-**Реализационный baseline (03.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization добавлены в packages/cge/ (PR #39). Начальные persisted contracts реализованы; Scene Loader, Phaser adapter, Preview и независимый HTML5 Build остаются отдельными этапами.
+**Реализационный baseline (09.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization добавлены в packages/cge/ (PR #39); host-neutral `ProjectSceneLoader` реализован в COD-103. Phaser adapter, Preview и независимый HTML5 Build остаются отдельными этапами.
 
 
 **Цель:** создать основу собственного движка над существующим runtime — не подключать второй game runtime поверх Phaser, а связать editor model и игру через общий API.
