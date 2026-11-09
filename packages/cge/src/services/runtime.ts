@@ -44,16 +44,20 @@ export interface EngineRuntime<TEvents extends object> extends RuntimeAsyncDispo
 export function createEngineRuntime<TEvents extends object = Record<string, never>>(
   options: EngineRuntimeOptions,
 ): EngineRuntime<TEvents> {
+  if (!options || typeof options !== "object") {
+    throw new TypeError("EngineRuntime requires explicit host service providers.");
+  }
+  // Validate the loader before acquiring the host input subscription.
+  const scenes = createSceneManager(options.sceneLoader);
   const time = createTimeService();
   const scheduler = createScheduler();
   const tweens = createTweenService();
+  const events = createTypedEventBus<TEvents>();
   const input = createInputService({
     source: options.inputSource,
     routeResolver: options.inputRouteResolver,
     coordinates: options.inputCoordinates,
   });
-  const events = createTypedEventBus<TEvents>();
-  const scenes = createSceneManager(options.sceneLoader);
   let disposed = false;
   let disposePromise: Promise<void> | undefined;
   let updating = false;
