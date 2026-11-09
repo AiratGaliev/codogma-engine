@@ -57,11 +57,25 @@ The package exports host-neutral contracts for optional runtime services:
 - **Tween:** numeric property interpolation, delay, easing, repeat/yoyo, pause/resume and cancellation using that same frame snapshot.
 - **Scene Manager:** asynchronous orchestration through an injected `SceneLoader` and inactive `RuntimeSceneSession`; the manager does not parse Project Model data or instantiate the scene graph.
 
-These are **contracts only**, not implemented services. Their implementations, deterministic phase integration and runtime lifecycle tests belong to [COD-106](https://linear.app/codogma-engine/issue/COD-106/realizovat-bazovie-host-neutral-engine-services-v1-v-codogmacge). [COD-103](https://linear.app/codogma-engine/issue/COD-103/realizovat-data-driven-scene-loader-dlya-project-model-v1) owns the Project Model-to-runtime Scene Loader implementation.
+These contracts now have executable implementations. [COD-106](https://linear.app/codogma-engine/issue/COD-106/realizovat-bazovie-host-neutral-engine-services-v1-v-codogmacge) owns the runtime services; [COD-103](https://linear.app/codogma-engine/issue/COD-103/realizovat-data-driven-scene-loader-dlya-project-model-v1) remains the owner of Project Model-to-runtime Scene hydration.
 
-Services are independent optional dependencies. No new mandatory properties were added to `ComponentBehavior` or `ComponentFactoryContext`; components receive only capabilities explicitly composed by the host. The contracts use no Phaser, DOM event objects, Editor UI, Node-only APIs or platform SDKs.
+Services are independent optional capabilities. No mandatory properties were added to `ComponentBehavior` or `ComponentFactoryContext`; hosts compose only the capabilities they need. The Core implementations contain no Phaser, DOM, Editor UI, Node-only API or platform SDK dependency.
 
-All time values are seconds. The host remains the sole tick owner and passes one `RuntimeTimeFrame` to time-driven services. `AbortSignal` is the shared cancellation boundary for subscriptions, scheduled tasks, tweens and in-flight scene requests.
+All time values are seconds. The external host remains the sole tick owner and passes one immutable `RuntimeTimeFrame` to time-driven services. `AbortSignal` owns subscriptions, scheduled tasks, tweens and in-flight scene requests. Cleanup continues across sibling resources and callback failures are aggregated rather than silently swallowed.
+
+### Runtime service implementations
+
+- `createTimeService()` produces immutable scaled/unscaled frames, preserves frame stalls without hidden clamping and rejects invalid deltas/scales without corrupting the last frame.
+- `createScheduler()` supports cancellable one-shot tasks, pause/resume, scaled/unscaled domains, owner cancellation and snapshot iteration (tasks created from callbacks start on the next frame).
+- `createTweenService()` interpolates own writable finite numeric data properties with delay, easing, repeat/yoyo, pause/resume and owner cancellation. Accessors, readonly properties, non-finite values and zero-duration infinite loops are rejected.
+- `createInputService()` consumes an injected normalized event source, routes each physical event to one UI/world audience, retains the initial route through a held keyboard/pointer interaction, synthesizes cancel events on focus loss and exposes an injected coordinate mapper.
+- `createTypedEventBus<TEvents>()` creates an isolated typed pub/sub channel. Subscriptions are disposable and may be bound to an owner signal; it never creates a process-wide singleton.
+- `createSceneManager(loader)` owns at most one active runtime session, uses latest-request-wins loading, disposes late candidates, restores the previous scene after activation failures and supports reusable stop plus terminal disposal.
+- `createEngineRuntime<TEvents>()` composes these capabilities. Its `update(delta, updateWorld)` method consumes exactly one host delta in the fixed order **Time → Scheduler → Tween → active ComponentWorld callback**. It does not schedule or own a loop; the host calls it from its existing frame source and supplies the currently active world update explicitly.
+
+The public package exports contracts and factories from the root entry point. Behavioral tests are in `tests/runtime-services.test.ts`; the existing contract-consumer tests remain separate. Scene Loader hydration/rollback tests continue to live in `tests/scene-loader.test.ts`.
+
+All services are constructible in the Node test environment and require no browser globals.
 
 ## Public package verification
 

@@ -1,9 +1,5 @@
-import {
-  assertRuntimeTimeFrame,
-  type RuntimeDisposable,
-  type RuntimeTimeFrame,
-  type RuntimeTimeDomain,
-} from "./common.js";
+import type { RuntimeDisposable, RuntimeTimeFrame, RuntimeTimeDomain } from "./common.js";
+import { assertRuntimeTimeFrame } from "./frame-validation.js";
 
 export interface TimeService extends RuntimeDisposable {
   readonly currentFrame: RuntimeTimeFrame;
