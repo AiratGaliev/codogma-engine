@@ -118,6 +118,186 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
+            mini-services/ai-chat/package-lock.json
+
+      - name: Validate changed Markdown files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-markdown.mjs "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Validate pull request routing
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$BASE_BRANCH" in
+            dev)
+              case "$HEAD_BRANCH" in
+                feat/*|feature/*|fix/*|refactor/*|test/*|docs/*|chore/*|hotfix/*)
+                  echo "Допустимый маршрут: $HEAD_BRANCH -> dev"
+                  ;;
+                *)
+                  echo "::error::Рабочие PR должны использовать feat/*, feature/*, fix/*, refactor/*, test/*, docs/* или chore/* и направляться в dev."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            test)
+              if [[ "$HEAD_BRANCH" != "dev" ]]; then
+                echo "::error::В test допускается только PR из dev."
+                exit 1
+              fi
+              echo "Допустимый маршрут: dev -> test"
+              ;;
+            main)
+              case "$HEAD_BRANCH" in
+                test|hotfix/*)
+                  echo "Допустимый маршрут: $HEAD_BRANCH -> main"
+                  ;;
+                *)
+                  echo "::error::В main допускается только PR из test или аварийной ветки hotfix/*."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "::error::Неизвестная целевая ветка: $BASE_BRANCH"
+              exit 1
+              ;;
+          esac
+
+      - name: Generate candidate workspace lockfile (COD-107 bootstrap)
+        id: workspace-lockfile
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Upload candidate workspace lockfile
+        if: steps.workspace-lockfile.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: codogma-workspace-lockfile
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Install locked workspace dependencies
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm ci
+
+      - name: Audit root and first-party workspace dependencies
+        if: steps.scope.outputs.audit_workspace == 'true'
+        run: npm audit --workspaces --include-workspace-root --audit-level=low
+
+      - name: Unit regression tests (editor, serialization, security and icons)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:unit
+
+      - name: Smoke test (server boots, editor responds)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3100 node server/server.mjs &
+          SRV=$!
+          sleep 3
+          curl -sf http://localhost:3100/editor/mcp-bridge-status | tee /dev/stderr | grep -q '"connected"'
+          curl -sf -o /dev/null http://127.0.0.1:3100/editor/mcp-bridge-status
+          kill $SRV
+
+      - name: Security smoke tests (local access, symlinks, MCP compatibility)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:security
+
+      - name: Install locked AI Chat service dependencies
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm ci
+        working-directory: mini-services/ai-chat
+
+      - name: Audit AI Chat service dependencies
+        if: steps.scope.outputs.audit_ai_chat == 'true'
+        run: npm audit --audit-level=low
+        working-directory: mini-services/ai-chat
+
+      - name: Mini-services security tests (AI Chat loopback, Host/Origin and limits)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:mini-services
+
+      - name: Build, test and quality-pilot localization package (COD-19/COD-62/COD-64)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run quality:check && npm run quality:report
+        working-directory: packages/localization
+
+      - name: Localization project diagnostics CLI (COD-64)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:localization:project
+
+      - name: Localization runtime acceptance (server + fixture tables)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:localization:acceptance
+      - name: Build, typecheck and test Codogma Core (COD-24/25/26/27)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run quality:check
+        working-directory: packages/cge
+      - name: Measure native Core Scene baseline (100/1,000/10,000 Nodes + Components)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run benchmark
+        working-directory: packages/cge
+
+      - name: Build and test Codogma MCP stdio package
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm test --workspace=@codogma/editor-mcp-server
+
+      - name: Build, typecheck and test Game Test Bridge contracts
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run quality:check --workspace=@codogma/game-test-bridge-contract
+
+      - name: Verify workspace package imports from the consumer fixture
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:workspace-consumer
+
+  editor-host:
+    name: editor-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check whether Editor Host needs verification
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -Eq '^(src/editor/|packages/|package.json$|package-lock.json$|server/server\.mjs|server/request-origin\.mjs)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
 
       - name: Install root and workspace dependencies
         if: steps.scope.outputs.run == 'true'
