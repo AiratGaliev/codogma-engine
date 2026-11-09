@@ -242,10 +242,16 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     const available = providerAvailable && scopeOk && targetOk;
     const packageCandidateCount = providers.reduce((n,p) => n + p.packageInstanceIds.length, 0);
     states.set(f.id, { descriptor:f, enabled, source, providers, available, included:false, requiredBy:new Set(), ...(!scopeOk ? {reason:"scope-unsupported" as const} : !targetOk ? {reason:"target-unsupported" as const} : !providerAvailable ? {reason:providers.some(p => p.status === "incompatible") ? "provider-incompatible" as const : (providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance")) ? "provider-ambiguous" as const : "provider-missing" as const} : !enabled ? {reason:"not-enabled" as const} : {}) });
-    if (enabled && !scopeOk) diagnostics.push(error("FEATURE_SCOPE_UNSUPPORTED", "Feature " + f.id + " does not support scope " + input.scope + ".", f.id));
     if (enabled && !targetOk) diagnostics.push(error("FEATURE_TARGET_UNSUPPORTED", "Feature " + f.id + " does not support target " + input.target + ".", f.id, undefined, input.target));
-    if (enabled && bindingInvalid) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "An explicit provider binding does not match an installed compatible package instance.", f.id));
-    if (enabled && !providerAvailable && !bindingInvalid) diagnostics.push(error(providers.some(p => p.status === "incompatible") ? "FEATURE_PROVIDER_INCOMPATIBLE" : providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance") ? "FEATURE_PROVIDER_AMBIGUOUS" : "FEATURE_PROVIDER_MISSING", "Feature " + f.id + " has no unambiguous available provider for " + input.target + "/" + input.scope + ".", f.id));
+    if (enabled && scopeOk && targetOk && bindingInvalid) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "An explicit provider binding does not match an installed compatible package instance.", f.id));
+    if (enabled && scopeOk && targetOk && !providerAvailable && !bindingInvalid) {
+      const code: FeatureDiagnosticCode = providers.some(p => p.status === "scope-unsupported") ? "FEATURE_SCOPE_UNSUPPORTED"
+        : providers.some(p => p.status === "target-unsupported") ? "FEATURE_TARGET_UNSUPPORTED"
+        : providers.some(p => p.status === "incompatible") ? "FEATURE_PROVIDER_INCOMPATIBLE"
+        : providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance") ? "FEATURE_PROVIDER_AMBIGUOUS"
+        : "FEATURE_PROVIDER_MISSING";
+      diagnostics.push(error(code, "Feature " + f.id + " has no unambiguous available provider for " + input.target + "/" + input.scope + ".", f.id, undefined, input.target));
+    }
     void packageCandidateCount;
   }
   const visiting = new Set<string>(), included = new Set<string>();

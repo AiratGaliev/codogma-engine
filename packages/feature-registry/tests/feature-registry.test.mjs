@@ -24,6 +24,24 @@ test("ECS-Phaser selection expands dependency closure to ECS and base Phaser", (
  assert.deepEqual(r.includedFeatureIds,["runtime.ecs","runtime.ecs-phaser","runtime.phaser"]);
  assert.equal(r.buildAnalysisFeatures.find(x=>x.id==="runtime.ecs-phaser")?.providerPackageId,"p-bridge");
 });
+test("missing feature dependencies block a selected dependent feature", () => {
+ const r=resolve(project(["runtime.ecs-phaser"]),packages.filter(x=>x.name!=="@codogma/ecs"));
+ assert.equal(r.valid,false);
+ assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_REQUIREMENT_MISSING"));
+ assert.deepEqual(r.includedFeatureIds,[]);
+});
+test("an explicitly disabled optional dependency blocks its selected dependent feature", () => {
+ const r=resolve(project(["runtime.ecs-phaser"],["runtime.ecs"]));
+ assert.equal(r.valid,false);
+ assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_REQUIREMENT_DISABLED"));
+ assert.deepEqual(r.includedFeatureIds,[]);
+});
+test("a provider that does not support the requested target is diagnosed and excluded", () => {
+ const r=resolveFeatureSelection({registry:{schemaVersion:1,features:[{id:"runtime.native",scopes:["runtime"],targets:["web","native"],policy:"optional",providers:[{id:"provider.native",kind:"package",packageName:"@codogma/runtime-phaser",scopes:["runtime"],targets:["native"],entryPoints:{runtime:"."}}]}]},project:project(["runtime.native"]),installedPackages:[pkg("p-phaser","@codogma/runtime-phaser",["runtime"],["native"])],target:"web",scope:"runtime"});
+ assert.equal(r.valid,false);
+ assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_TARGET_UNSUPPORTED"));
+ assert.deepEqual(r.includedFeatureIds,[]);
+});
 test("missing provider is a blocking diagnostic and is not included", () => {
  const r=resolve(project(["runtime.ecs"]),packages.filter(x=>x.name!=="@codogma/ecs"));
  assert.equal(r.valid,false);
@@ -53,10 +71,16 @@ test("installing ECS does not enable the ECS-Phaser bridge", () => {
  assert.equal(r.valid,true);
  assert.deepEqual(r.includedFeatureIds,["runtime.ecs"]);
 });
-test("editor-only feature is unavailable for a runtime target", () => {
- const r=resolveFeatureSelection({registry:{schemaVersion:1,features:[{id:"editor.inspector",scopes:["editor"],targets:["web"],policy:"optional",providers:[{id:"builtin.inspector",kind:"builtin",scopes:["editor"],targets:["web"],entryPoints:{editor:"codogma:inspector"}}]}]},project:project(["editor.inspector"]),installedPackages:[],target:"web",scope:"runtime"});
- assert.equal(r.valid,false);
- assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_SCOPE_UNSUPPORTED"));
+test("editor-only features are excluded from runtime selection without blocking runtime features", () => {
+ const r=resolveFeatureSelection({registry:{schemaVersion:1,features:[
+  {id:"editor.inspector",scopes:["editor"],targets:["web"],policy:"default",providers:[{id:"builtin.inspector",kind:"builtin",scopes:["editor"],targets:["web"],entryPoints:{editor:"codogma:inspector"}}]},
+  {id:"runtime.core",scopes:["runtime"],targets:["web"],policy:"optional",providers:[{id:"builtin.core",kind:"builtin",scopes:["runtime"],targets:["web"],entryPoints:{runtime:"codogma:core"}}]}
+ ]},project:project(["runtime.core","editor.inspector"]),installedPackages:[],target:"web",scope:"runtime"});
+ assert.equal(r.valid,true,JSON.stringify(r.diagnostics));
+ assert.deepEqual(r.includedFeatureIds,["runtime.core"]);
+ const editorFeature=r.features.find(x=>x.id==="editor.inspector");
+ assert.equal(editorFeature?.includedInTarget,false);
+ assert.equal(editorFeature?.exclusionReason,"scope-unsupported");
 });
 test("target override selects a feature without mutating project-level configuration", () => {
  const input=project([],[],[{target:"web",enabledFeatureIds:["runtime.phaser"]}]);

@@ -43,7 +43,7 @@ Provider содержит стабильный provider ID, kind (\`builtin\` и
 - В режиме \`single\` один доступный provider instance должен быть однозначен. Иначе требуется явный binding \`providerId → packageInstanceId\`; неявный выбор по порядку установки запрещён.
 - В режиме \`all\` явно разрешается композиция всех совместимых providers. Отсутствующий или несовместимый обязательный contribution блокирует selection.
 - Built-in provider не требует фиктивного npm package instance.
-- Feature availability является результатом metadata + inventory + scope/target + compatibility checks; факт установки package сам по себе не включает capability.
+- Feature availability является результатом metadata + inventory + scope/target + compatibility checks; факт установки package сам по себе не включает capability. Feature, не поддерживающие запрошенный scope (например, editor-only feature в runtime selection), остаются в report с `scope-unsupported` и исключаются без блокировки другого scope; недоступный provider для feature, действительно выбранной в этом scope, даёт blocking diagnostic.
 
 ### 4. Project selection
 
