@@ -354,6 +354,17 @@ Runtime Input API различает **физические device inputs** и *
 - Минимальный Tween API анимирует существующие writable numeric target properties и определяет конечные non-negative duration/delay, easing, целочисленный repeat/yoyo, time domain (по умолчанию `scaled`), pause/resume/cancel и completion callback. Sequence/parallel groups и сложные property adapters не входят в v1 contract без подтверждённого vertical-slice use case.
 - Callbacks сервисов синхронны; asynchronous work выполняется вне frame callback и возвращает результат через явные host/service boundary. Исключения одного callback не должны пропускать cleanup остальных владельцев.
 
+#### Реализованная композиция Engine Services v1 (COD-106)
+
+- `createEngineRuntime()` объединяет независимые optional services и предоставляет синхронный `update(hostDelta, updateWorld)`. Метод вызывается внешним host и не создаёт отдельный loop/ticker.
+- Единственный порядок фаз: `TimeService.advance` → `Scheduler.update` → `TweenService.update` → callback активного `ComponentWorld.update`. Каждая time-driven service получает тот же immutable frame index ровно один раз; повторное потребление того же или более старого frame отклоняется.
+- Ошибка callback в одной фазе агрегируется, но не пропускает следующие фазы текущего frame. Ошибка самого host delta отклоняется до продвижения frame.
+- Keyboard/pointer route фиксируется на down и сохраняется до release/cancel; focus loss синтезирует cancel для всех удерживаемых клавиш и pointer до focus-lost notification. Поздний unmatched up не создаёт повторный release.
+- Typed Event Bus имеет локальную instance ownership, snapshot dispatch и `AbortSignal` cleanup. Listener failures агрегируются после обхода остальных активных listeners.
+- Scene Manager не выполняет hydration и не владеет host tick: он принимает только injected `SceneLoader` и управляет session lifecycle. Host передаёт активный `ComponentWorld` callback в runtime update; Loader остаётся отдельным владельцем Project Model parsing и rollback.
+- Для Scheduler/Tween/Input/Event Bus освобождение owner выполняется через idempotent handle или `AbortSignal`. Ошибки отдельных callbacks не отменяют cleanup других ресурсов.
+- `ComponentFactoryContext.signal` (optional для source compatibility) представляет lifetime конкретного Component instance; `ComponentBehavior.onEnable({ signal })` получает новый signal на каждый enabled период. ComponentWorld abort-ит enabled signal до `onDisable` и lifetime signal до `onDestroy`; старые callbacks без параметров продолжают работать.
+
 ### 6.8. Сохранения и локальное пользовательское состояние
 
 - Предусмотреть backend-neutral Save/Storage API для пользовательских настроек и игровых сохранений. В Web runtime базовая реализация использует браузерное persistent storage (например, IndexedDB) там, где это подходит; localStorage допустим для небольших простых настроек, а не больших игровых состояний.

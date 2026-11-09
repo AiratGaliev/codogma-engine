@@ -215,7 +215,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 2. **Затем — registry и loader:** явная регистрация TypeScript component modules со стабильными type IDs и metadata; data-driven scene loader валидирует текущую версию и применяет только зарегистрированные миграции между выпущенными версиями Codogma, разрешает ссылки и детерминированно создаёт runtime-иерархию. Сцене не требуется отдельный сгенерированный TS-класс.
 3. **Затем — минимальный API:** Node/Entity, Transform, Component, lifecycle, events и metadata/schema; Inspector, сериализация, валидация и runtime adapter используют единый контракт.
 4. **Затем — один рабочий adapter:** один объект/компонент проходит весь цикл до Phaser display object и обратно к runtime diagnostics. Проверить lifecycle, структурные изменения и disposal; не создавать независимый ticker или вторую точку истины.
-5. **Затем — сервисы по реальному срезу:** Input, Time/Tween/scheduler и Scene Manager сначала проектируются на уровне контрактов, а реализуются по минимальной очереди, необходимой для первого реального проекта. Обязательно проверять focus loss, cancellation, pause/resume и cleanup там, где соответствующая capability входит в срез.
+5. **Затем — сервисы по реальному срезу:** минимальные contracts для Input, Time/Tween/Scheduler и Scene Manager зафиксированы в COD-29 / ADR-0008; host-neutral Engine Services v1 реализованы и проверены в COD-106. Расширенные capabilities и платформенные adapters остаются отдельными workstreams. Базовый Core сохраняет host-owned tick, UI/world input routing, focus-loss cancellation, pause/resume и deterministic cleanup.
 6. **Граница optional ECS:** базовый `ComponentWorld` в `@codogma/cge` остаётся object/component runtime; Data-Oriented ECS развивается отдельно от минимального Core и не блокирует его acceptance. Нормативные package/integration/performance требования и владельцы COD-111/112 закреплены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
 ### Задачи
@@ -232,8 +232,9 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Ввести стабильные идентификаторы сущностей, компонентов и ассетов; определить поведение переименования/перемещения и восстановления ссылок.
 Схема имеет versioned contract; миграции выполняются только между опубликованными версиями Codogma.
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
-- [x] Утвердить минимальные host-neutral contracts для Input (mouse/keyboard/touch, UI/world routing, coordinate spaces и focus loss), Time/Scheduler/Tween (shared host frame, cancellation, pause/resume и owner cleanup) и Scene Manager (async loader, transition commit, cancellation и disposal) — COD-29 / [ADR-0008](decisions/ADR-0008-runtime-service-contracts.md). Реальные сервисы и интеграционные тесты остаются в COD-106.
-- [ ] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
+- [x] Утвердить минимальные host-neutral contracts для Input, Time/Scheduler/Tween и Scene Manager — COD-29 / [ADR-0008](decisions/ADR-0008-runtime-service-contracts.md).
+- [x] Реализовать и проверить Engine Services v1 в `@codogma/cge`: Time/Scheduler, Tween, normalized Input, typed Event Bus, Scene Manager, deterministic host-owned runtime composition и ComponentWorld lifetime ownership — COD-106. Phaser/browser adapters остаются вне Core.
+- [x] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
 - [ ] Интегрировать runtime core в управляемые фазы Phaser tick; не заводить независимый `requestAnimationFrame`.
 - [ ] Добавить Component Schema/Metadata для полей Inspector, валидации, default values и ссылок на ресурсы.
 - [ ] Создать Phaser adapter для выбранного среза: сущность ↔ sprite/view, Transform ↔ display transform, physics body и lifecycle.
