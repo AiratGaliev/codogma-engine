@@ -47,7 +47,7 @@ Core уже предоставляет native Project Model v1 и object/compone
 
 ### 5. Scene Manager and Loader boundary
 
-- Scene Manager получает `SceneLoader` как явную зависимость. Loader — единственный владелец разбора/валидации Project Model, hydration runtime graph, разрешения references и rollback частичных allocations (COD-103).
+- `SceneManagerFactory.create(loader)` — явная composition boundary: factory получает `SceneLoader` и создаёт `SceneManager`. Loader — единственный владелец разбора/валидации Project Model, hydration runtime graph, разрешения references и rollback частичных allocations (COD-103).
 - `SceneLoader.load()` возвращает подготовленную **неактивную** `RuntimeSceneSession`; загрузка сама по себе не активирует сцену.
 - Scene Manager владеет orchestration одной активной сессии: switch, activate/deactivate, pause/resume, stop и disposal. Он не содержит serializer, component registry, file/project browser или Phaser API.
 - Пока новая сцена загружается, текущая остаётся активной. Commit деактивирует старую сессию перед активацией новой; после успешной активации старая сессия освобождается. Одновременно допускается не более одного активного owner.

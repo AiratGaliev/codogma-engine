@@ -13,6 +13,7 @@ import type {
   Scheduler,
   SceneLoader,
   SceneManager,
+  SceneManagerFactory,
   RuntimeSceneSession,
   TimeService,
   TweenHandle,
@@ -146,6 +147,13 @@ const sceneManager: SceneManager = {
   async dispose() {},
 };
 
+const sceneManagerFactory: SceneManagerFactory = {
+  create(loader) {
+    assert.equal(loader, sceneLoader);
+    return sceneManager;
+  },
+};
+
 test("input provider, routing and coordinate contracts are independently consumable", () => {
   let received: InputEvent | undefined;
   inputSource.subscribe((event) => { received = event; });
@@ -170,7 +178,8 @@ test("time, scheduler and tween contracts share one host frame", () => {
 test("scene loader and manager contracts are host-neutral and asynchronous", async () => {
   const controller = new AbortController();
   const loaded = await sceneLoader.load({ sceneId: "scene-main", signal: controller.signal });
-  const result = await sceneManager.switchTo(loaded.sceneId);
+  const manager = sceneManagerFactory.create(sceneLoader);
+  const result = await manager.switchTo(loaded.sceneId);
 
   assert.equal(loaded.sceneId, "scene-main");
   assert.deepEqual(result, { status: "activated", sceneId: "scene-main" });

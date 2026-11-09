@@ -337,7 +337,7 @@ Runtime Input API различает **физические device inputs** и *
 
 ### 6.6. Scene management и жизненный цикл уровня
 
-- `SceneManager` управляет orchestration активной runtime scene: `switchTo`, activate/deactivate, pause/resume, stop и disposal. Он получает `SceneLoader` явной зависимостью и не содержит serializer, component registry, filesystem или Editor UI.
+- `SceneManagerFactory.create(loader)` получает `SceneLoader` как явную зависимость и создаёт `SceneManager`. Manager управляет orchestration активной runtime scene: `switchTo`, activate/deactivate, pause/resume, stop и disposal; он не содержит serializer, component registry, filesystem или Editor UI.
 - `SceneLoader.load()` асинхронно возвращает подготовленную **неактивную** `RuntimeSceneSession`. Loader владеет hydration, reference resolution и rollback частично созданного graph; Scene Manager не создаёт Nodes/Components самостоятельно.
 - При switch текущая сцена остаётся активной, пока новая загружается. Commit сначала деактивирует старую сессию, затем активирует новую и после успешной активации освобождает предыдущую; одновременно может существовать не более одного active owner.
 - Каждая новая switch request отменяет предыдущую незавершённую request (latest request wins). Cancellation до/во время load не допускает активацию кандидата; если loader завершился после отмены, полученная сессия всё равно освобождается. После начала activation commit отмена не откатывает уже начатый commit.

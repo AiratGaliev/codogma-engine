@@ -52,3 +52,8 @@ export interface SceneManager extends RuntimeAsyncDisposable {
   /** Cancels a pending switch and releases the active scene; manager remains reusable. */
   stop(): Promise<void>;
 }
+
+/** Explicit composition point: the SceneManager receives its Loader, never discovers or creates one. */
+export interface SceneManagerFactory {
+  create(loader: SceneLoader): SceneManager;
+}
