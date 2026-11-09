@@ -63,6 +63,14 @@ Services are independent optional dependencies. No new mandatory properties were
 
 All time values are seconds. The host remains the sole tick owner and passes one `RuntimeTimeFrame` to time-driven services. `AbortSignal` is the shared cancellation boundary for subscriptions, scheduled tasks, tweens and in-flight scene requests.
 
+## Public package verification
+
+The Core quality suite includes an independent consumer check. It packs the package with `npm pack`, installs that tarball into a temporary project without network access, type-checks a consumer against the published declaration entry point, and executes the emitted ESM against the package export. The fixture exercises Project/Scene/Prefab serialization, manifest-backed Scene loading, independent Component instances, host-owned ticking and disposal.
+
+The source-boundary test scans every Core TypeScript module and rejects non-relative imports and runtime npm dependencies. This protects the package boundary independently of the current Editor Host consumer.
+
+Run `npm run quality:check` for typecheck, build, unit tests and the packed consumer smoke. Run `npm run benchmark` for the repeated native Scene serialization/hydration/lifecycle workload used by CI; the benchmark is diagnostic evidence, not a functional or browser-performance acceptance test.
+
 ## Commands
 
 Run from this directory:

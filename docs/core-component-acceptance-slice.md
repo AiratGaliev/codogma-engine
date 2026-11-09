@@ -32,15 +32,17 @@ The fixture and tests cover:
 
 ## 3. Core acceptance
 
-- [ ] Parse and validate Project/Scene/Prefab documents using native fixtures.
-- [ ] Serialize/deserialize with deterministic output and stable identities.
-- [ ] Validate IDs, asset paths, module declarations and typed references.
-- [ ] Apply the same Component Schema validator during registration, Inspector edits, Undo/Redo, pre-save and serialization.
+- [x] Parse and validate Project/Scene/Prefab documents using native fixtures (`project-model`, `acceptance-slice` and `scene-loader` tests).
+- [x] Serialize/deserialize with deterministic output and stable identities (`project-model`, `acceptance-slice` and `component-schema` tests).
+- [x] Validate IDs, asset paths, module declarations and typed references (`project-model`, `acceptance-slice` and `scene-loader` tests).
+- [x] Apply the same Component Schema validator during registration, Inspector edits, Undo/Redo, pre-save and serialization (Core schema tests and the integrated COD-27 Editor Host tests).
 - [x] Preserve independent values for multiple instances of the same Component Definition (Core Scene Loader fixture).
 - [x] Resolve Script modules through the explicit Project manifest and the matching pre-registered Component definition.
 - [x] Create an inactive runtime Node/Transform/Component graph from SceneDocument data with stable source IDs and parent/child hierarchy.
 - [x] Fail atomically on invalid Scene, missing module/reference or cancelled load; dispose all partial resources.
 - [x] Keep Core independent of Phaser, DOM, Editor UI, Node-only APIs and platform SDKs.
+- [x] Consume the packed `@codogma/cge` artifact from an independent ESM/TypeScript project; verify declarations, runtime exports and the native Scene Loader lifecycle (`tests/consumer`).
+- [x] Verify that every Core source module uses only relative imports and that the package declares no runtime npm dependencies (`tests/package-boundary.test.ts`).
 
 ## 4. Preview and runtime acceptance
 
@@ -77,7 +79,7 @@ The fixture and tests cover:
 
 ## 7. Automated evidence
 
-Core tests use native Project/Scene/Prefab/Component fixtures authored against the current Codogma schema. Tests cover validation, serialization, stable identities, module resolution, references, lifecycle ordering, cancellation and cleanup.
+Core tests use native Project/Scene/Prefab/Component fixtures authored against the current Codogma schema. The packed consumer fixture is run by `npm run test:consumer`; it validates the generated package artifact rather than importing Core source by relative path. CI Fast runs the same quality suite and the native Scene benchmark. Tests cover validation, serialization, stable identities, module resolution, references, lifecycle ordering, cancellation and cleanup.
 
 SolidJS Host tests cover Script authoring, Component attach/detach, typed Inspector controls, invalid draft preservation, Asset/Node picker filtering, Undo/Redo and save/reopen. Browser tests use disposable native Project fixtures and record the exact build/commit SHA. The COD-27 browser scenario is defined separately from the normal feature-branch CI path; independent browser/runtime acceptance remains owned by CODQA-21.
 
