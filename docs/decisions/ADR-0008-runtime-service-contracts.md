@@ -25,7 +25,7 @@ Core уже предоставляет native Project Model v1 и object/compone
 - Платформенный provider публикует нормализованные `InputEvent` через `InputEventSource`; исходные browser/DOM events остаются внутри adapter.
 - Начальный физический scope — keyboard и pointer с `mouse`, `touch` и `pen` pointer types. Touch использует общую pointer lifecycle модель. Gamepad остаётся optional capability.
 - Keyboard и pointer phases — down/up/cancel; pointer дополнительно имеет move. События содержат monotonic timestamp, modifiers и координаты/идентификаторы, не зависящие от Phaser.
-- `InputRouteResolver` определяет единственный маршрут `ui` или `world`. Событие, отнесённое к UI, не дублируется в world listeners. Focus lifecycle notifications доставляются обоим маршрутам.
+- `InputRouteResolver` определяет единственный маршрут `ui` или `world`; если pointer event одновременно eligible для UI и world, UI имеет приоритет. Событие, отнесённое к UI, не дублируется и не bubbling в world listeners. Focus lifecycle notifications доставляются обоим маршрутам.
 - После focus lost/background/unavailable сервис синтезирует cancel для каждой удерживаемой клавиши и pointer, сохраняя исходный route; затем публикуется focus-lost notification. Полученные позже up events не должны повторно завершать отменённое состояние.
 - `InputCoordinateMapper` поддерживает screen/canvas/viewport/world/local/ui spaces. Преобразования, зависящие от viewport/camera/target, требуют соответствующий runtime ID; если контекст недоступен, результат — `undefined`.
 - Logical Actions, project bindings и editor keymap не входят в этот контракт: они принадлежат COD-25/COD-97/COD-98/COD-99, а dispatch/device lifecycle остаётся единственным в COD-29.
@@ -40,8 +40,8 @@ Core уже предоставляет native Project Model v1 и object/compone
 
 ### 4. Tween
 
-- Начальный API анимирует только существующие numeric properties обычного объекта; destination values абсолютные и конечные.
-- Контракт включает duration, delay, easing function, repeat (количество дополнительных проходов), yoyo, scaled/unscaled time domain, pause/resume/cancel и completion/update callbacks.
+- Начальный API анимирует только существующие writable numeric properties обычного объекта; destination values абсолютные и конечные. Duration и delay конечные и неотрицательные; repeat — целое неотрицательное число дополнительных проходов либо -1 для бесконечного repeat.
+- Контракт включает duration, delay, easing function, repeat (количество дополнительных проходов), yoyo, scaled/unscaled time domain (по умолчанию scaled), pause/resume/cancel и completion/update callbacks.
 - Tween service потребляет тот же `RuntimeTimeFrame`; он не создаёт собственный ticker и не читает системные часы.
 - Sequence/parallel groups, relative strings, arbitrary property adapters и non-numeric interpolators не входят в минимальный v1 contract. Их добавление требует подтверждённого use case и отдельного уточнения API.
 

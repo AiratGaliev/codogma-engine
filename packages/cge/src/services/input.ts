@@ -98,7 +98,7 @@ export interface InputEventSource {
 }
 
 export interface InputRouteResolver {
-  /** Undefined means that the event has no gameplay/UI recipient. */
+  /** UI wins over world when both could receive the same physical event; undefined means no recipient. */
   resolve(event: RoutedInputEvent): InputRoute | undefined;
 }
 

@@ -11,3 +11,4 @@ export * from "./services/input.js";
 export * from "./services/time.js";
 export * from "./services/tween.js";
 export * from "./services/scene-manager.js";
+export * from "./services/scene-types.js";

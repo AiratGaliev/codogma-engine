@@ -25,7 +25,7 @@ export interface RuntimeSceneSession {
 }
 
 export interface SceneLoader {
-  /** Load and prepare an inactive session; never activate it as a side effect. */
+  /** Load and prepare an inactive session; honor abort before/during load and roll back partial allocations before rejecting. */
   load(request: SceneLoadRequest): Promise<RuntimeSceneSession>;
 }
 

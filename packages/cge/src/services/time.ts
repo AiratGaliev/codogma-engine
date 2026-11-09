@@ -27,7 +27,7 @@ export interface ScheduleOptions {
 }
 
 export interface Scheduler extends RuntimeDisposable {
-  /** Schedule one callback after a finite, non-negative delay in seconds. */
+  /** Schedule one callback after a finite, non-negative delay in seconds; timeDomain defaults to scaled. */
   schedule(delaySeconds: number, callback: () => void, options?: ScheduleOptions): ScheduledTask;
   /** Consume the same immutable frame produced by TimeService.advance(). */
   update(frame: RuntimeTimeFrame): void;
