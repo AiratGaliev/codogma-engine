@@ -1,6 +1,6 @@
 # Baseline производительности
 
-**Базовый снимок репозитория:** `dev` на `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. CI Fast подтверждает только заданные workflow checks и не является performance result; актуальный статус PR проверяется по live checks. Измерения производительности остаются не снятыми.  
+**Базовый снимок репозитория:** `dev` на `3351b069a11c7992fb28324ae22b48a411f307c7`, 29.10.2026. CI Fast сам по себе не является performance result: численные значения принимаются только из отдельного измерительного шага с зафиксированным workload, окружением и raw samples. Частичный Core native Scene baseline зафиксирован ниже; остальные сценарии остаются не измерены.  
 **Статус:** частичный численный baseline снят для Core native Scene workload (PERF-06, CI run #962); остальные сценарии, включая браузерный runtime, Preview/Build и mobile, остаются не измерены. В репозитории нет оснований утверждать конкретные FPS, CPU %, latency или размер собранной игры.
 
 ## Цель и границы
@@ -98,16 +98,8 @@
 
 ## Запись результатов
 
-При первом измерении заменить статусы `Не измерено` только вместе с evidence:
+Частичные результаты PERF-06 Core native Scene зафиксированы в одноимённом разделе выше: CI run #962, PR head `1651ecd58b9817eddfd3328186d32ec4e4e036bb`, synthetic CI merge SHA `4f57bc983a794a0502d82fb38553ffc996954f6f`, Linux x64 / AMD EPYC 9V74 / Node.js 22.23.4 / npm 10.9.9. Fixture hashes, raw samples и summary приведены в таблицах; полный runtime output находится в [CI run #962 logs](https://github.com/AiratGaliev/codogma-engine/actions/runs/42572900017).
 
-| Поле | Значение |
-|---|---|
-| Commit SHA | Не записан |
-| ОС / CPU / RAM | Не записано |
-| Node.js / npm | Не записано |
-| Браузер / GPU | Не записано |
-| Fixture hash / набор ресурсов | Не записано |
-| Raw samples / trace | Не приложены |
-| Summary (median / p95) | Не измерено |
+Для каждого ещё не измеренного сценария PERF-01…PERF-10 сохранять отдельные evidence: точный source/build SHA, окружение, fixture/resource hash, raw samples или trace, median/p95 и ограничения применимости. Не переносить Node/Linux microbenchmark на browser/GPU/mobile и не считать его заменой functional acceptance.
 
-Не ставить performance threshold, пока одна и та же процедура не даст воспроизводимые результаты.
+Не ставить performance threshold, пока одна и та же процедура не даст воспроизводимые результаты на сопоставимом окружении.

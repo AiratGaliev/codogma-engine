@@ -14,57 +14,112 @@ function collectTypeScriptFiles(directory: string): string[] {
   });
 }
 
+function collectExternalImportViolations(source: string, fileName: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const violations: string[] = [];
+
+  const recordSpecifier = (specifier: string, syntax: string): void => {
+    if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+      violations.push(fileName + ": " + syntax + " " + JSON.stringify(specifier));
+    }
+  };
+
+  const isRequireCall = (expression: ts.Expression): boolean =>
+    (ts.isIdentifier(expression) && expression.text === "require") ||
+    (ts.isPropertyAccessExpression(expression) && expression.name.text === "require");
+
+  const inspect = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      const moduleSpecifier = node.moduleSpecifier;
+      if (moduleSpecifier !== undefined && ts.isStringLiteral(moduleSpecifier)) {
+        recordSpecifier(
+          moduleSpecifier.text,
+          ts.isImportDeclaration(node) ? "import" : "export",
+        );
+      }
+    } else if (ts.isImportEqualsDeclaration(node)) {
+      if (ts.isExternalModuleReference(node.moduleReference)) {
+        const expression = node.moduleReference.expression;
+        if (expression !== undefined && ts.isStringLiteral(expression)) {
+          recordSpecifier(expression.text, "import = require()");
+        } else {
+          violations.push(fileName + ": import = require() must use a literal relative specifier");
+        }
+      }
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const argument = node.arguments[0];
+      if (argument !== undefined && ts.isStringLiteral(argument)) {
+        recordSpecifier(argument.text, "dynamic import");
+      } else {
+        violations.push(fileName + ": dynamic import must use a literal relative specifier");
+      }
+    } else if (ts.isCallExpression(node) && isRequireCall(node.expression)) {
+      const argument = node.arguments[0];
+      if (argument !== undefined && ts.isStringLiteral(argument)) {
+        recordSpecifier(argument.text, "require()");
+      } else {
+        violations.push(fileName + ": require() must use a literal relative specifier");
+      }
+    } else if (ts.isImportTypeNode(node)) {
+      if (
+        ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteral(node.argument.literal)
+      ) {
+        recordSpecifier(node.argument.literal.text, "import type");
+      } else {
+        violations.push(fileName + ": import type must use a literal relative specifier");
+      }
+    }
+
+    ts.forEachChild(node, inspect);
+  };
+
+  inspect(sourceFile);
+  return violations;
+}
+
+test("Core source rejects ESM, dynamic, CommonJS and import-equals external dependencies", () => {
+  const fixture = [
+    'import "./internal.js";',
+    'export * from "../shared.js";',
+    'import "node:fs";',
+    'export { value } from "@scope/external";',
+    'void import("external-dynamic");',
+    'require("external-commonjs");',
+    'import legacy = require("external-import-equals");',
+    'void import("./" + suffix);',
+    'module.require("external-module-require");',
+  ].join("\n");
+
+  assert.deepEqual(
+    collectExternalImportViolations(fixture, "fixture.ts"),
+    [
+      'fixture.ts: import "node:fs"',
+      'fixture.ts: export "@scope/external"',
+      'fixture.ts: dynamic import "external-dynamic"',
+      'fixture.ts: require() "external-commonjs"',
+      'fixture.ts: import = require() "external-import-equals"',
+      "fixture.ts: dynamic import must use a literal relative specifier",
+      'fixture.ts: require() "external-module-require"',
+    ],
+  );
+});
+
 test("Core source has no external module imports or runtime npm dependencies", () => {
   const packageRoot = process.cwd();
   const sourceRoot = resolve(packageRoot, "src");
   const sourceFiles = collectTypeScriptFiles(sourceRoot);
   assert.ok(sourceFiles.length > 0, "Core source files must be present.");
 
-  const violations: string[] = [];
-  for (const filePath of sourceFiles) {
-    const source = readFileSync(filePath, "utf8");
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      source,
-      ts.ScriptTarget.ES2022,
-      true,
-      filePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    );
-
-    const inspect = (node: ts.Node): void => {
-      let specifier: string | undefined;
-      if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-        const moduleSpecifier = node.moduleSpecifier;
-        if (moduleSpecifier !== undefined && ts.isStringLiteral(moduleSpecifier)) {
-          specifier = moduleSpecifier.text;
-        }
-      } else if (
-        ts.isCallExpression(node) &&
-        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-        node.arguments[0] !== undefined &&
-        ts.isStringLiteral(node.arguments[0])
-      ) {
-        specifier = node.arguments[0].text;
-      } else if (
-        ts.isImportTypeNode(node) &&
-        ts.isLiteralTypeNode(node.argument) &&
-        ts.isStringLiteral(node.argument.literal)
-      ) {
-        specifier = node.argument.literal.text;
-      }
-
-      if (
-        specifier !== undefined &&
-        !specifier.startsWith("./") &&
-        !specifier.startsWith("../")
-      ) {
-        violations.push(filePath + " imports " + JSON.stringify(specifier));
-      }
-      ts.forEachChild(node, inspect);
-    };
-    inspect(sourceFile);
-  }
-
+  const violations = sourceFiles.flatMap((filePath) =>
+    collectExternalImportViolations(readFileSync(filePath, "utf8"), filePath),
+  );
   assert.deepEqual(violations, [], "Core imports must stay inside the package source tree.");
 
   const manifest = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")) as {
