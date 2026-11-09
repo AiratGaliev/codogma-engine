@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "runtime.phaser",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "web"
+      ],
+      "policy": "optional",
+      "providers": [
+        {
+          "id": "provider.phaser",
+          "kind": "package",
+          "packageName": "@codogma/runtime-phaser",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "web"
+          ],
+          "entryPoints": {
+            "runtime": "."
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime.ecs",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "web"
+      ],
+      "policy": "optional",
+      "providers": [
+        {
+          "id": "provider.ecs",
+          "kind": "package",
+          "packageName": "@codogma/ecs",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "web"
+          ],
+          "entryPoints": {
+            "runtime": "."
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime.ecs-phaser",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "web"
+      ],
+      "policy": "optional",
+      "providers": [
+        {
+          "id": "provider.ecs-phaser",
+          "kind": "package",
+          "packageName": "@codogma/ecs-phaser",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "web"
+          ],
+          "entryPoints": {
+            "runtime": "."
+          }
+        }
+      ],
+      "requires": [
+        "runtime.ecs",
+        "runtime.phaser"
+      ]
+    }
+  ]
+}

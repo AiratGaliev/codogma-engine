@@ -1,0 +1,30 @@
+{
+  "name": "@codogma/feature-registry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Host-neutral feature/capability registry, project selection and deterministic target dependency closure.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "quality:check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  },
+  "license": "MIT"
+}

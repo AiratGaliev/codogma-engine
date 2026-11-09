@@ -42,6 +42,7 @@ jobs:
       - name: Build Core and all first-party library packages
         run: |
           npm run build:cge
+          npm run build:feature-registry
           npm run build:localization
           npm run build:mcp
           npm run build:game-test-bridge-contract
@@ -87,7 +88,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           zip -qr release/codogma-engine.zip \
-            server packages/cge packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
+            server packages/cge packages/feature-registry packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
             -x "src/editor/node_modules/*" \
             -x "packages/*/node_modules/*" \
@@ -95,6 +96,8 @@ jobs:
 
           unzip -Z1 release/codogma-engine.zip | grep -qx "src/editor/dist/index.html"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/cge/dist/index.js"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/feature-registry/package.json"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/feature-registry/dist/index.js"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/editor-mcp-server/dist/cli.js"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/game-test-bridge-contract/dist/index.js"
           if unzip -Z1 release/codogma-engine.zip | grep -q '^source/editor/'; then

@@ -2,7 +2,7 @@
 
 **Статус:** принято как целевое архитектурное направление; реализация package ещё не начата.  
 **Дата:** 05.11.2026  
-**Связанные документы:** [ТЗ](../technical-specification.md), [roadmap](../roadmap.md), [ADR-0001](ADR-0001-core-architecture.md), [ADR-0003](ADR-0003-package-architecture-and-management.md), [performance baseline](../performance-baseline.md), [capability matrix](../capability-matrix.md).
+**Связанные документы:** [ТЗ](../technical-specification.md), [roadmap](../roadmap.md), [ADR-0001](ADR-0001-core-architecture.md), [ADR-0003](ADR-0003-package-architecture-and-management.md), [ADR-0009](ADR-0009-feature-capability-registry.md), [performance baseline](../performance-baseline.md), [capability matrix](../capability-matrix.md).
 
 **Канонический источник:** этот ADR — единственный нормативный источник требований к optional Data-Oriented ECS: package/API boundaries, data ownership and identity mapping, lifecycle/tick, Phaser integration, EVA.js reuse policy, feature selection, production exclusion and performance acceptance. Другие документы могут сохранять собственные сведения о текущем состоянии, владельцах, рисках, очередности работ и фактических измерениях, но должны ссылаться сюда вместо повторения ECS-контрактов.
 
@@ -15,6 +15,9 @@ Codogma уже имеет базовую host-neutral object/component моде�
 Синтетический Node.js benchmark ComponentWorld полезен как baseline конкретного scheduler, но не моделирует браузер, Phaser, физику, рендеринг, реальные AI-системы или профиль allocations/GC. Порог по числу сущностей сам по себе не является доказательством потребности или эффективности.
 
 ## Решения
+
+Feature IDs, provider selection, project/target feature configuration и общая dependency-closure algorithm описаны в [ADR-0009](ADR-0009-feature-capability-registry.md). Этот ADR остаётся единственным нормативным источником ECS-specific package/API boundaries, lifecycle, data ownership, performance и browser acceptance.
+
 
 ### 1. Core и Data-Oriented ECS — разные packages
 
