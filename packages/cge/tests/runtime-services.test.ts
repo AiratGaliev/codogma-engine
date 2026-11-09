@@ -462,6 +462,28 @@ test("SceneManager activation failure restores the previous active session", asy
   await manager.dispose();
 });
 
+test("SceneManager pause and resume are idempotent across scene switches", async () => {
+  const calls: string[] = [];
+  const manager = createSceneManager({
+    async load(request) {
+      return makeSession(request.sceneId, {
+        pause: () => calls.push(request.sceneId + ":pause"),
+        resume: () => calls.push(request.sceneId + ":resume"),
+      });
+    },
+  });
+
+  await manager.switchTo("first");
+  await manager.pause();
+  await manager.pause();
+  await manager.switchTo("second");
+  await manager.resume();
+  await manager.resume();
+
+  assert.deepEqual(calls, ["first:pause", "second:pause", "second:resume"]);
+  await manager.dispose();
+});
+
 test("SceneManager stop cancels loading, disposes active owner and remains reusable", async () => {
   const pendingLoad = deferred<RuntimeSceneSession>();
   let activeDisposals = 0;
@@ -488,23 +510,42 @@ test("SceneManager stop cancels loading, disposes active owner and remains reusa
   await manager.dispose();
 });
 
-test("EngineRuntime fixes service phase order and integrates a host-owned ComponentWorld", async () => {
+test("EngineRuntime fixes service phase order and integrates the active SceneManager ComponentWorld", async () => {
   type Events = { input: string };
   const source = new FakeInputSource();
+  let activeWorld: ComponentWorld | undefined;
+  const loadedWorlds: ComponentWorld[] = [];
   const runtime = createEngineRuntime<Events>({
     inputSource: source,
     inputRouteResolver: { resolve: () => "world" },
     inputCoordinates: coordinates,
-    sceneLoader: { async load(request) { return makeSession(request.sceneId); } },
-  });
-  const order: string[] = [];
-  const world = new ComponentWorld("scene-main", new ComponentRegistry());
-  world.registerSystem({
-    id: "test-observer",
-    update(deltaSeconds) {
-      order.push("world:" + deltaSeconds);
+    sceneLoader: {
+      async load(request) {
+        const world = new ComponentWorld(request.sceneId, new ComponentRegistry());
+        loadedWorlds.push(world);
+        world.registerSystem({
+          id: "test-observer",
+          update(deltaSeconds) {
+            order.push("world:" + deltaSeconds);
+          },
+        });
+        return {
+          sceneId: request.sceneId,
+          activate() { activeWorld = world; },
+          deactivate() {
+            if (activeWorld === world) activeWorld = undefined;
+          },
+          pause() {},
+          resume() {},
+          dispose() {
+            if (activeWorld === world) activeWorld = undefined;
+            world.dispose();
+          },
+        };
+      },
     },
   });
+  const order: string[] = [];
   runtime.scheduler.schedule(0, () => order.push("scheduler"));
   const target = { x: 0 };
   runtime.tweens.to(target, { x: 10 }, {
@@ -517,13 +558,15 @@ test("EngineRuntime fixes service phase order and integrates a host-owned Compon
   });
   source.emit(pointerEvent("move"));
   await runtime.scenes.switchTo("scene-main");
-  const frame = runtime.update(1, (deltaSeconds) => world.update(deltaSeconds));
+  assert.ok(activeWorld);
+  const frame = runtime.update(1, (deltaSeconds) => activeWorld?.update(deltaSeconds));
   assert.equal(frame.frameIndex, 1);
   assert.deepEqual(order, ["event:move", "scheduler", "tween", "world:1"]);
   assert.equal(target.x, 10);
 
-  world.dispose();
   await runtime.dispose();
+  assert.equal(activeWorld, undefined);
+  assert.equal(loadedWorlds[0]?.isDisposed, true);
   assert.equal(runtime.isDisposed, true);
   assert.throws(() => runtime.update(0), /disposed/i);
 });
