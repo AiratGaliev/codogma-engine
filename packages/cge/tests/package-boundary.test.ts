@@ -123,6 +123,7 @@ test("Core source has no external module imports or runtime npm dependencies", (
   assert.deepEqual(violations, [], "Core imports must stay inside the package source tree.");
 
   const manifest = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")) as {
+    name?: string;
     dependencies?: Record<string, string>;
   };
   const lockfile = JSON.parse(readFileSync(resolve(packageRoot, "../../package-lock.json"), "utf8")) as {
