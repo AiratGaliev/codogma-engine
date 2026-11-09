@@ -149,9 +149,9 @@ test("Scheduler uses the selected time domain and supports task pause/resume", (
   scaled.resume();
 
   time.setTimeScale(2);
-  scheduler.update(time.advance(0.25));
+  scheduler.update(time.advance(0.1));
   assert.deepEqual(calls, ["unscaled"]);
-  scheduler.update(time.advance(0.25));
+  scheduler.update(time.advance(0.15));
   assert.deepEqual(calls, ["unscaled", "scaled"]);
   assert.equal(scaled.status, "completed");
   assert.equal(scaled.isDisposed, true);
@@ -511,6 +511,9 @@ test("EngineRuntime fixes service phase order and integrates a host-owned Compon
     onUpdate: () => order.push("tween"),
   });
   runtime.events.subscribe("input", (value) => order.push("event:" + value));
+  runtime.input.subscribe("world", (event) => {
+    if (event.kind === "pointer") runtime.events.emit("input", event.phase);
+  });
   source.emit(pointerEvent("move"));
   await runtime.scenes.switchTo("scene-main");
   const frame = runtime.update(1, (deltaSeconds) => world.update(deltaSeconds));
