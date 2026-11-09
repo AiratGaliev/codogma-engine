@@ -25,7 +25,9 @@ const readProjectFile = (relativePath: string): string => {
 const readJson = (relativePath: string): unknown => JSON.parse(readProjectFile(relativePath));
 const fixtureProject = readJson("project.json") as ProjectDocumentV1;
 const fixtureSceneAsset = fixtureProject.assets.find((asset) => asset.kind === "scene");
-assert.ok(fixtureSceneAsset);
+if (!fixtureSceneAsset) {
+  throw new Error("Acceptance project fixture must register a Scene asset.");
+}
 const fixtureScene = readJson(fixtureSceneAsset.path);
 const fixtureComponentSchema: ComponentTypeSchemaV1 = componentDefinition.schema;
 
