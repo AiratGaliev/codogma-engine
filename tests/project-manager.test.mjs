@@ -190,3 +190,50 @@ test("project creation rejects traversal, platform paths and invalid folder name
   }
   assert.deepEqual(await fsp.readdir(sandbox.projectsRoot), []);
 });
+
+test("concurrent creation attempts cannot overwrite or publish duplicate projects", async () => {
+  const sandbox = await createSandbox();
+  const results = await Promise.allSettled([
+    createProject(sandbox),
+    createProject(sandbox),
+  ]);
+
+  const successful = results.filter((result) => result.status === "fulfilled");
+  const rejected = results.filter((result) => result.status === "rejected");
+  assert.equal(successful.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.ok(rejected[0]?.status === "rejected");
+  assert.ok(rejected[0].reason instanceof ProjectManagerError);
+  assert.equal(rejected[0].reason.statusCode, 409);
+  assert.deepEqual(await fsp.readdir(sandbox.projectsRoot), ["My-Game"]);
+  const snapshot = await getProjectManagerSnapshot(sandbox);
+  assert.equal(snapshot.projects.length, 1);
+  assert.equal(snapshot.recentProjects.length, 1);
+});
+
+test("opening a project through a symlink outside PROJECTS_DIR is rejected", {
+  skip: process.platform === "win32",
+}, async () => {
+  const sandbox = await createSandbox();
+  const outsideRoot = path.join(sandbox.root, "outside-projects");
+  const outsideUserData = path.join(sandbox.root, "outside-user-data");
+  await fsp.mkdir(outsideRoot, { recursive: true });
+  await fsp.mkdir(outsideUserData, { recursive: true });
+  const outsideProject = await createProject({
+    projectsRoot: outsideRoot,
+    userDataDirectory: outsideUserData,
+  });
+  const linkedPath = path.join(sandbox.projectsRoot, "Linked-Project");
+  await fsp.symlink(outsideProject.projectDirectory, linkedPath, "dir");
+
+  await assert.rejects(
+    openProjectDirectory({
+      projectsRoot: sandbox.projectsRoot,
+      userDataDirectory: sandbox.userDataDirectory,
+      relativePath: "Linked-Project",
+    }),
+    (error) => error instanceof ProjectManagerError && error.statusCode === 400,
+  );
+  assert.equal(fs.lstatSync(linkedPath).isSymbolicLink(), true);
+  assert.deepEqual(await fsp.readdir(sandbox.projectsRoot), ["Linked-Project"]);
+});
