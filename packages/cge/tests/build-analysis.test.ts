@@ -431,6 +431,85 @@ test("feature provider inclusion requires an explicitly selected available provi
   ));
 });
 
+test("built-in features are graph roots and do not require a fictitious npm package", () => {
+  const result = analyzeProjectBuild(makeInput({
+    features: [{
+      id: "editor.inspector",
+      providerKind: "builtin",
+      selected: true,
+      available: true,
+      targetCompatible: true,
+    }],
+  }));
+
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.ok(result.report.includedFeatures.includes("editor.inspector"));
+  assert.ok(result.graph.includedNodeIds.includes("feature:editor.inspector"));
+  assert.ok(!result.report.includedPackages.some((name) => name.includes("editor.inspector")));
+});
+
+test("a multi-provider feature includes every exact npm provider package instance", () => {
+  const result = analyzeProjectBuild(makeInput({
+    packages: [
+      { id: "pkg-ecs", name: "@codogma/ecs", version: "0.1.0", scope: "runtime", dependencies: [] },
+      { id: "pkg-ecs-phaser", name: "@codogma/ecs-phaser", version: "0.1.0", scope: "runtime", dependencies: [] },
+    ],
+    features: [{
+      id: "runtime.ecs-phaser",
+      providerKind: "package",
+      providerPackageIds: ["pkg-ecs", "pkg-ecs-phaser"],
+      selected: true,
+      available: true,
+      targetCompatible: true,
+    }],
+  }));
+
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.ok(result.report.includedFeatures.includes("runtime.ecs-phaser"));
+  assert.ok(result.report.includedPackages.includes("@codogma/ecs@0.1.0"));
+  assert.ok(result.report.includedPackages.includes("@codogma/ecs-phaser@0.1.0"));
+  assert.ok(result.graph.edges.some((edge) => edge.from === "feature:runtime.ecs-phaser" && edge.to === "package:pkg-ecs" && edge.kind === "provides"));
+  assert.ok(result.graph.edges.some((edge) => edge.from === "feature:runtime.ecs-phaser" && edge.to === "package:pkg-ecs-phaser" && edge.kind === "provides"));
+});
+
+test("unselected multi-provider features explain exclusion for each installed provider package", () => {
+  const result = analyzeProjectBuild(makeInput({
+    packages: [
+      { id: "pkg-ecs", name: "@codogma/ecs", version: "0.1.0", scope: "runtime", dependencies: [] },
+      { id: "pkg-ecs-phaser", name: "@codogma/ecs-phaser", version: "0.1.0", scope: "runtime", dependencies: [] },
+    ],
+    features: [{
+      id: "runtime.ecs-phaser",
+      providerKind: "package",
+      providerPackageIds: ["pkg-ecs", "pkg-ecs-phaser"],
+      selected: false,
+      available: true,
+      targetCompatible: true,
+    }],
+  }));
+
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.ok(result.graph.excludedNodes.some((item) => item.nodeId === "package:pkg-ecs" && item.reason === "feature-not-selected"));
+  assert.ok(result.graph.excludedNodes.some((item) => item.nodeId === "package:pkg-ecs-phaser" && item.reason === "feature-not-selected"));
+});
+
+test("rejects contradictory built-in and npm package provider metadata", () => {
+  const result = analyzeProjectBuild(makeInput({
+    packages: [{ id: "pkg-ecs", name: "@codogma/ecs", version: "0.1.0", scope: "runtime", dependencies: [] }],
+    features: [{
+      id: "runtime.ecs",
+      providerKind: "builtin",
+      providerPackageId: "pkg-ecs",
+      selected: true,
+      available: true,
+      targetCompatible: true,
+    }],
+  }));
+
+  assert.equal(result.valid, false);
+  assert.ok(hasDiagnostic(result, "PROJECT_BUILD_GRAPH_INVALID"));
+});
+
 test("external runtime file references are part of reachability and unavailable required files block build", () => {
   const available = analyzeProjectBuild(makeInput({
     runtimeFiles: [{

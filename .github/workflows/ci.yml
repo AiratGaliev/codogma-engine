@@ -240,6 +240,10 @@ jobs:
         run: npm run benchmark
         working-directory: packages/cge
 
+      - name: Build, typecheck and test Feature Registry (COD-34)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run quality:check --workspace=@codogma/feature-registry
+
       - name: Build and test Codogma MCP stdio package
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm test --workspace=@codogma/editor-mcp-server
@@ -263,7 +267,7 @@ jobs:
           set -euo pipefail
           archive="$RUNNER_TEMP/codogma-engine-release-check.zip"
           zip -qr "$archive" \
-            server packages/cge packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
+            server packages/cge packages/feature-registry packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
             -x "src/editor/node_modules/*" \
             "packages/*/node_modules/*" \
@@ -273,6 +277,8 @@ jobs:
             package-lock.json \
             packages/cge/package.json \
             packages/cge/dist/index.js \
+            packages/feature-registry/package.json \
+            packages/feature-registry/dist/index.js \
             packages/localization/package.json \
             packages/localization/dist/index.js \
             packages/editor-mcp-server/package.json \

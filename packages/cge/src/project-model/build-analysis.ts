@@ -105,8 +105,12 @@ export interface ProjectBuildPackageSnapshot {
 
 export interface ProjectBuildFeatureSnapshot {
   id: string;
-  /** Exact installed npm package instance that provides the feature. */
+  /** Provider kind; omitted legacy values are interpreted as package providers. */
+  providerKind?: "package" | "builtin";
+  /** Exact installed npm package instance for a package-backed feature. */
   providerPackageId?: string;
+  /** Multiple exact package instances selected by an explicit multi-provider feature. */
+  providerPackageIds?: readonly string[];
   selected: boolean;
   available: boolean;
   targetCompatible: boolean;
@@ -959,15 +963,43 @@ export function analyzeProjectBuild(
     const nodeId = "feature:" + feature.id;
     featureNodesById.set(feature.id, nodeId);
     addNode({ id: nodeId, kind: "feature", name: feature.id }, source);
+
+    const providerKind = feature.providerKind ?? "package";
+    const hasLegacyPackageId = feature.providerPackageId !== undefined;
+    const hasPackageIds = feature.providerPackageIds !== undefined;
+    const providerPackageIds = feature.providerPackageIds ?? (
+      feature.providerPackageId === undefined ? [] : [feature.providerPackageId]
+    );
+    if (
+      (providerKind !== "package" && providerKind !== "builtin") ||
+      (hasLegacyPackageId && hasPackageIds) ||
+      (providerKind === "builtin" && providerPackageIds.length > 0) ||
+      providerPackageIds.some((id) => !isValidStableId(id)) ||
+      new Set(providerPackageIds).size !== providerPackageIds.length
+    ) {
+      addDiagnostic(
+        diagnostics,
+        "PROJECT_BUILD_GRAPH_INVALID",
+        "Feature " + feature.id + " has an invalid provider kind or package instance selection.",
+        source,
+        "features",
+      );
+      continue;
+    }
+
     if (!feature.selected) {
-      if (feature.providerPackageId) {
-        const existing = unselectedProviderFeatures.get(feature.providerPackageId) ?? [];
+      for (const packageId of providerPackageIds) {
+        const existing = unselectedProviderFeatures.get(packageId) ?? [];
         existing.push(feature.id);
-        unselectedProviderFeatures.set(feature.providerPackageId, existing);
+        unselectedProviderFeatures.set(packageId, existing);
       }
       continue;
     }
-    if (!feature.available || !feature.targetCompatible || !feature.providerPackageId) {
+    if (
+      !feature.available ||
+      !feature.targetCompatible ||
+      (providerKind === "package" && providerPackageIds.length === 0)
+    ) {
       addDiagnostic(
         diagnostics,
         "PROJECT_BUILD_FEATURE_PROVIDER_MISSING",
@@ -977,18 +1009,27 @@ export function analyzeProjectBuild(
       );
       continue;
     }
-    const providerNodeId = packageNodeIdsById.get(feature.providerPackageId);
-    if (!providerNodeId) {
-      addDiagnostic(
-        diagnostics,
-        "PROJECT_BUILD_FEATURE_PROVIDER_MISSING",
-        "Selected feature " + feature.id + " requires missing npm package instance " + feature.providerPackageId + ".",
-        source,
-        "features",
-      );
-      continue;
+
+    if (providerKind === "package") {
+      const providerNodeIds = providerPackageIds.map((packageId) => packageNodeIdsById.get(packageId));
+      const missingPackageIds = providerPackageIds.filter((packageId) => !packageNodeIdsById.has(packageId));
+      if (missingPackageIds.length > 0 || providerNodeIds.some((providerNodeId) => providerNodeId === undefined)) {
+        addDiagnostic(
+          diagnostics,
+          "PROJECT_BUILD_FEATURE_PROVIDER_MISSING",
+          "Selected feature " + feature.id + " requires missing npm package instance(s): " + missingPackageIds.join(", ") + ".",
+          source,
+          "features",
+        );
+        continue;
+      }
+      for (const providerNodeId of providerNodeIds) {
+        if (providerNodeId) {
+          addEdge(nodeId, providerNodeId, "provides", "Selected feature provider", source);
+        }
+      }
     }
-    addEdge(nodeId, providerNodeId, "provides", "Selected feature provider", source);
+    // Built-in providers are logical roots owned by the engine, not invented npm packages.
     resolvedSelectedFeatureNodeIds.add(nodeId);
   }
 
