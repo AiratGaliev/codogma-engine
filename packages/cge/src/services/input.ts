@@ -210,6 +210,7 @@ class InputServiceImpl implements InputService {
   private readonly listeners = new Set<InputListener>();
   private readonly heldKeys = new Map<string, HeldInput>();
   private readonly heldPointers = new Map<number, HeldInput>();
+  private focused = true;
   private sourceSubscription: InputSubscription | undefined;
   private disposed = false;
 
@@ -271,6 +272,7 @@ class InputServiceImpl implements InputService {
       this.receiveFocus(event);
       return;
     }
+    if (!this.focused) return;
     if (event.kind === "keyboard") this.receiveKeyboard(event);
     else this.receivePointer(event);
   }
@@ -289,6 +291,7 @@ class InputServiceImpl implements InputService {
 
   private receiveFocus(event: InputFocusEvent): void {
     const errors: unknown[] = [];
+    this.focused = event.state === "gained";
     if (event.state === "lost") {
       for (const [code, held] of this.heldKeys) {
         const original = held.event as InputKeyboardEvent;
@@ -313,7 +316,7 @@ class InputServiceImpl implements InputService {
   private receiveKeyboard(event: InputKeyboardEvent): void {
     const held = this.heldKeys.get(event.code);
     if (event.phase === "down") {
-      const route = held?.route ?? this.routeResolver.resolve(event);
+      const route = held?.route ?? this.resolveRoute(event);
       if (!route) return;
       if (!held) this.heldKeys.set(event.code, { route, event });
       this.dispatch(route, event);
@@ -327,7 +330,7 @@ class InputServiceImpl implements InputService {
   private receivePointer(event: InputPointerEvent): void {
     const held = this.heldPointers.get(event.pointerId);
     if (event.phase === "down") {
-      const route = held?.route ?? this.routeResolver.resolve(event);
+      const route = held?.route ?? this.resolveRoute(event);
       if (!route) return;
       if (!held) this.heldPointers.set(event.pointerId, { route, event });
       else this.heldPointers.set(event.pointerId, { route: held.route, event });
@@ -335,7 +338,7 @@ class InputServiceImpl implements InputService {
       return;
     }
     if (event.phase === "move") {
-      const route = held?.route ?? this.routeResolver.resolve(event);
+      const route = held?.route ?? this.resolveRoute(event);
       if (route) {
         if (held) this.heldPointers.set(event.pointerId, { route: held.route, event });
         this.dispatch(route, event);
@@ -346,6 +349,14 @@ class InputServiceImpl implements InputService {
     if (event.phase === "cancel" || event.buttons === 0) this.heldPointers.delete(event.pointerId);
     else this.heldPointers.set(event.pointerId, { route: held.route, event });
     this.dispatch(held.route, event);
+  }
+
+  private resolveRoute(event: RoutedInputEvent): InputRoute | undefined {
+    const route = this.routeResolver.resolve(event);
+    if (route !== undefined && route !== "ui" && route !== "world") {
+      throw new TypeError("Input route resolver returned an invalid route.");
+    }
+    return route;
   }
 
   private dispatch(route: InputRoute, event: InputEvent): void {
