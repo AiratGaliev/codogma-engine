@@ -42,15 +42,25 @@ test("root lockfile owns every workspace link and active workspace roots have no
     assert.equal(linkRecord?.link, true, `missing npm workspace link for ${manifest.name}`);
     assert.equal(existsSync(join(repositoryRoot, workspacePath, "package-lock.json")), false);
   }
+
+  assert.equal(existsSync(join(repositoryRoot, "mini-services/ai-chat/package-lock.json")), true);
+  assert.equal(existsSync(join(repositoryRoot, "source/editor/package-lock.json")), true);
 });
 
 test("first-party workspace consumers use versioned package dependencies instead of file links", () => {
   const localization = readJson("packages/localization/package.json");
   const core = readJson("packages/cge/package.json");
   const editor = readJson("src/editor/package.json");
+  const consumer = readJson("tests/workspace/consumer/package.json");
+  const bridge = readJson("packages/game-test-bridge-contract/package.json");
+  const mcp = readJson("packages/editor-mcp-server/package.json");
 
   assert.equal(rootManifest.dependencies["@codogma/localization"], localization.version);
   assert.equal(editor.dependencies["@codogma/cge"], core.version);
+  assert.equal(consumer.dependencies[core.name], core.version);
+  assert.equal(consumer.dependencies[localization.name], localization.version);
+  assert.equal(consumer.dependencies[bridge.name], bridge.version);
+  assert.equal(consumer.dependencies[mcp.name], mcp.version);
   assert.equal(rootManifest.dependencies["@codogma/localization"].startsWith("file:"), false);
   assert.equal(editor.dependencies["@codogma/cge"].startsWith("file:"), false);
 });
