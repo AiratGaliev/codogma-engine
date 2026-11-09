@@ -58,6 +58,18 @@ const coordinateMapper: InputCoordinateMapper = {
   },
 };
 
+type NumericTweenTarget = {
+  x: number;
+  label: string;
+  readonly immutable: number;
+};
+
+const validTweenProperties: TweenPropertyValues<NumericTweenTarget> = { x: 100 };
+// @ts-expect-error Non-numeric target properties are not tweenable.
+const invalidStringTweenProperties: TweenPropertyValues<NumericTweenTarget> = { label: 100 };
+// @ts-expect-error Readonly numeric target properties are not tweenable.
+const invalidReadonlyTweenProperties: TweenPropertyValues<NumericTweenTarget> = { immutable: 100 };
+
 const frame: RuntimeTimeFrame = {
   frameIndex: 1,
   deltaSeconds: 0.016,
