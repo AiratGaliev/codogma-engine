@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { cpus, release, totalmem } from "node:os";
-import { arch, platform } from "node:process";
 import { performance } from "node:perf_hooks";
 import {
   ComponentRegistry,
@@ -231,8 +230,8 @@ async function main(): Promise<void> {
   process.stdout.write("Codogma Core native Scene benchmark\n");
   process.stdout.write(JSON.stringify({
     node: process.version,
-    platform: platform(),
-    arch: arch(),
+    platform: process.platform,
+    arch: process.arch,
     osRelease: release(),
     cpu,
     totalMemoryMiB: Math.round(totalmem() / (1024 * 1024)),
