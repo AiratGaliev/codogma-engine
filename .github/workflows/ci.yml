@@ -271,7 +271,6 @@ jobs:
   editor-host:
     name: editor-host
     needs: fast
-    needs: fast
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
