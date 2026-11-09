@@ -320,6 +320,18 @@ test("Tween enforces synchronous callbacks and reports the terminal yoyo progres
   yoyoTweens.dispose();
 });
 
+test("Tween rejects asynchronous easing functions", () => {
+  const time = createTimeService();
+  const tweens = createTweenService();
+  const tween = tweens.to({ x: 0 }, { x: 1 }, {
+    durationSeconds: 1,
+    easing: (async () => 0.5) as unknown as (progress: number) => number,
+  });
+  assert.throws(() => tweens.update(time.advance(0.5)), AggregateError);
+  assert.equal(tween.status, "cancelled");
+  tweens.dispose();
+});
+
 test("Input routes exclusively and captures pointer ownership through move and up", () => {
   const source = new FakeInputSource();
   const input = createInputService({
@@ -387,6 +399,38 @@ test("Input focus loss cancels every held key and pointer before broadcasting fo
 
   assert.deepEqual(world, ["down", "down", "cancel", "cancel", "lost"]);
   assert.deepEqual(ui, ["lost"]);
+  input.dispose();
+});
+
+test("Input ignores keyboard and pointer events while unfocused until focus is regained", () => {
+  const source = new FakeInputSource();
+  const input = createInputService({
+    source,
+    routeResolver: { resolve: () => "world" },
+    coordinates,
+  });
+  const observed: string[] = [];
+  input.subscribe("world", (event) => {
+    if (event.kind === "focus") observed.push(event.state);
+    else if (event.kind === "keyboard") observed.push(event.phase);
+    else observed.push(event.phase);
+  });
+
+  source.emit({ kind: "focus", state: "lost", reason: "background", timestampSeconds: 1 });
+  source.emit({
+    kind: "keyboard", phase: "down", timestampSeconds: 1.1,
+    code: "KeyW", key: "w", repeat: false, modifiers,
+  });
+  source.emit(pointerEvent("down"));
+  assert.deepEqual(observed, ["lost"]);
+
+  source.emit({ kind: "focus", state: "gained", reason: "host", timestampSeconds: 2 });
+  source.emit({
+    kind: "keyboard", phase: "down", timestampSeconds: 2.1,
+    code: "KeyW", key: "w", repeat: false, modifiers,
+  });
+  source.emit({ kind: "focus", state: "lost", reason: "background", timestampSeconds: 3 });
+  assert.deepEqual(observed, ["lost", "gained", "down", "cancel", "lost"]);
   input.dispose();
 });
 
