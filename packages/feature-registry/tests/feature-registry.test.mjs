@@ -29,6 +29,8 @@ test("missing feature dependencies block a selected dependent feature", () => {
  assert.equal(r.valid,false);
  assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_REQUIREMENT_MISSING"));
  assert.deepEqual(r.includedFeatureIds,[]);
+ assert.deepEqual(r.excludedFeatureIds,["runtime.ecs","runtime.ecs-phaser","runtime.phaser"]);
+ assert.equal(r.features.find(x=>x.id==="runtime.ecs-phaser")?.exclusionReason,"dependency-unavailable");
 });
 test("an explicitly disabled optional dependency blocks its selected dependent feature", () => {
  const r=resolve(project(["runtime.ecs-phaser"],["runtime.ecs"]));
@@ -47,6 +49,8 @@ test("missing provider is a blocking diagnostic and is not included", () => {
  assert.equal(r.valid,false);
  assert.ok(r.diagnostics.some(x=>x.code==="FEATURE_PROVIDER_MISSING"));
  assert.deepEqual(r.includedFeatureIds,[]);
+ assert.deepEqual(r.excludedFeatureIds,["runtime.ecs","runtime.ecs-phaser","runtime.phaser"]);
+ assert.equal(r.features.find(x=>x.id==="runtime.ecs")?.exclusionReason,"dependency-unavailable");
 });
 test("declared package provider remains provided when its package is not installed", () => {
  const r=resolve(project([]),[]);

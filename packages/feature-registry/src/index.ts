@@ -261,8 +261,8 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     state.requiredBy.add(root);
     if (visiting.has(id)) { diagnostics.push(error("FEATURE_REQUIREMENT_CYCLE", "Feature dependency cycle at " + id + ".", id)); return; }
     if (included.has(id)) return;
-    if (targetDisabled.has(id) || (project.value!.disabledFeatureIds ?? []).includes(id)) { diagnostics.push(error("FEATURE_REQUIREMENT_DISABLED", "Feature " + id + " is required by " + root + " but explicitly disabled.", id)); state.reason = "required-dependency-disabled"; return; }
-    if (!state.descriptor.scopes.includes(input.scope) || !supports(state.descriptor.targets, input.target) || !state.available) { diagnostics.push(error("FEATURE_REQUIREMENT_MISSING", "Required feature " + id + " is unavailable for " + input.target + "/" + input.scope + ".", id)); state.reason = "dependency-unavailable"; return; }
+    if (targetDisabled.has(id) || (project.value!.disabledFeatureIds ?? []).includes(id)) { diagnostics.push(error("FEATURE_REQUIREMENT_DISABLED", "Feature " + id + " is required by " + root + " but explicitly disabled.", id)); state.reason = "required-dependency-disabled"; if (root !== id) states.get(root)!.reason = "required-dependency-disabled"; return; }
+    if (!state.descriptor.scopes.includes(input.scope) || !supports(state.descriptor.targets, input.target) || !state.available) { diagnostics.push(error("FEATURE_REQUIREMENT_MISSING", "Required feature " + id + " is unavailable for " + input.target + "/" + input.scope + ".", id)); state.reason = "dependency-unavailable"; if (root !== id) states.get(root)!.reason = "dependency-unavailable"; return; }
     visiting.add(id);
     for (const dependency of state.descriptor.requires ?? []) visit(dependency, root);
     visiting.delete(id);
@@ -298,7 +298,8 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     const ids = sorted(s.providers.flatMap(p => p.packageInstanceIds));
     return { id:f.id, providerKind:provider.kind, ...(provider.kind === "package" ? ids.length === 1 ? {providerPackageId:ids[0]!} : {providerPackageIds:ids} : {}), selected, available:s.available, targetCompatible:s.available };
   });
-  return { valid, schemaVersion:1, target:input.target, scope:input.scope, diagnostics, features:featureStates, requestedFeatureIds:requested, includedFeatureIds:valid ? sorted([...included]) : [], excludedFeatureIds:definitions.map(f => f.id).filter(id => !included.has(id)).sort(), buildAnalysisFeatures };
+  const finalIncluded = valid ? included : new Set<string>();
+  return { valid, schemaVersion:1, target:input.target, scope:input.scope, diagnostics, features:featureStates, requestedFeatureIds:requested, includedFeatureIds:sorted([...finalIncluded]), excludedFeatureIds:definitions.map(f => f.id).filter(id => !finalIncluded.has(id)).sort(), buildAnalysisFeatures };
 }
 
 export function createOptionalRuntimeFeatureRegistry(): FeatureRegistryDocumentV1 {
