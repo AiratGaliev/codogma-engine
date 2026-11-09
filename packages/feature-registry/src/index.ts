@@ -41,7 +41,7 @@ const result = <T>(diagnostics: FeatureDiagnostic[]): { valid: boolean; diagnost
 const error = (code: FeatureDiagnosticCode, message: string, featureId?: string, path?: string, target?: string): FeatureDiagnostic => ({ code, severity: "error", message, ...(featureId ? { featureId } : {}), ...(path ? { path } : {}), ...(target ? { target } : {}) });
 const sorted = (v: readonly string[]) => [...v].sort((a, b) => a.localeCompare(b));
 const ENTRY_KEYS = ["runtime", "editor", "build", "platform", "tooling"] as const;
-const safeEntry = (value: unknown, kind: "builtin" | "package") => typeof value === "string" && value.length > 0 && value.length <= 256 && (kind === "builtin" ? /^codogma:[A-Za-z0-9][A-Za-z0-9._:$/-]*$/.test(value) : value === "." || (value.startsWith("./") && value.slice(2).split("/").every(p => p !== "" && p !== "." && p !== ".." && /^[A-Za-z0-9._-]+$/.test(p))));
+const safeEntry = (value: unknown, kind: "builtin" | "package") => typeof value === "string" && value.length > 0 && value.length <= 256 && (kind === "builtin" ? /^codogma:[A-Za-z0-9][A-Za-z0-9._:$-]*$/.test(value) : value === "." || (value.startsWith("./") && value.slice(2).split("/").every(p => p !== "" && p !== "." && p !== ".." && /^[A-Za-z0-9._-]+$/.test(p))));
 const knownKeys = (v: Record<string, unknown>, keys: readonly string[]) => Object.keys(v).every(k => keys.includes(k));
 
 function validateProvider(raw: unknown, feature: FeatureDescriptor, index: number, seen: Set<string>, diagnostics: FeatureDiagnostic[]): FeatureProvider | undefined {
@@ -56,7 +56,7 @@ function validateProvider(raw: unknown, feature: FeatureDescriptor, index: numbe
     return;
   }
   const scopes = raw.scopes as FeatureScope[];
-  if (scopes.some(s => !feature.scopes.includes(s)) || (!(raw.targets as string[]).includes("*") && !(feature.targets.includes("*")) && (raw.targets as string[]).some(t => !feature.targets.includes(t)))) {
+  if (scopes.some(s => !feature.scopes.includes(s)) || (raw.targets as string[]).some(t => !feature.targets.includes("*") && !feature.targets.includes(t))) {
     diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Provider scopes and targets cannot exceed the feature descriptor.", feature.id, path));
     return;
   }
@@ -98,6 +98,12 @@ export function validateFeatureRegistryDocument(input: unknown): { valid: boolea
     features.push(descriptor);
   });
   const byId = new Map(features.map(f => [f.id, f]));
+  const providerOwners = new Map<string, string>();
+  for (const f of features) for (const p of f.providers) {
+    const owner = providerOwners.get(p.id);
+    if (owner) diagnostics.push(error("FEATURE_PROVIDER_DUPLICATE_ID", "Provider ID " + p.id + " is already owned by feature " + owner + ".", f.id));
+    else providerOwners.set(p.id, f.id);
+  }
   for (const f of features) for (const id of [...(f.requires ?? []), ...(f.conflicts ?? [])]) if (!byId.has(id)) diagnostics.push(error("FEATURE_REGISTRY_INVALID", "Feature references unknown feature " + id + ".", f.id));
   const visiting = new Set<string>(), visited = new Set<string>();
   const visit = (id: string) => { if (visiting.has(id)) { diagnostics.push(error("FEATURE_REQUIREMENT_CYCLE", "Feature requirements contain a cycle at " + id + ".", id)); return; } if (visited.has(id)) return; visiting.add(id); for (const next of byId.get(id)?.requires ?? []) visit(next); visiting.delete(id); visited.add(id); };
@@ -186,7 +192,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
   const byId = new Map(definitions.map(f => [f.id, f]));
   const binding = new Map<string,string>();
   for (const b of input.providerBindings ?? []) {
-    if (!ID.test(b.providerId) || !ID.test(b.packageInstanceId) || binding.has(b.providerId) || !definitions.some(f => f.providers.some(p => p.id === b.providerId && p.kind === "package"))) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "Provider binding must reference one declared package provider and one unique package instance."));
+    if (!object(b) || typeof b.providerId !== "string" || !ID.test(b.providerId) || typeof b.packageInstanceId !== "string" || !ID.test(b.packageInstanceId) || binding.has(b.providerId) || !definitions.some(f => f.providers.some(p => p.id === b.providerId && p.kind === "package"))) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "Provider binding must reference one declared package provider and one unique package instance."));
     else binding.set(b.providerId, b.packageInstanceId);
   }
   const override = project.value.targetOverrides?.find(o => o.target === input.target);
@@ -204,7 +210,7 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
     if (targetDisabled.has(f.id)) { enabled = false; source = "disabled"; }
     if (f.policy === "required" && !enabled) diagnostics.push(error("FEATURE_REQUIREMENT_DISABLED", "Required feature cannot be disabled.", f.id, undefined, input.target));
     const providers: FeatureProviderResolution[] = f.providers.map(p => {
-      if (p.kind === "builtin") return { providerId: p.id, kind: p.kind, status: "available", packageInstanceIds: [], entryPoints: p.entryPoints };
+      if (p.kind === "builtin") return { providerId: p.id, kind: p.kind, status: !p.scopes.includes(input.scope) ? "scope-unsupported" : !supports(p.targets, input.target) ? "target-unsupported" : "available", packageInstanceIds: [], entryPoints: p.entryPoints };
       const matches = installed.filter(x => x.name === p.packageName && (p.packageVersion === undefined || x.version === p.packageVersion));
       const scoped = matches.filter(x => x.scopes.includes(input.scope));
       const targetMatches = scoped.filter(x => supports(x.targets, input.target));
@@ -220,16 +226,20 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
       else if (!bound && f.providerMode !== "all" && chosen.length > 1) status = "ambiguous-package-instance";
       return { providerId: p.id, kind: p.kind, status, packageInstanceIds: chosen.map(x => x.id), packageName: p.packageName, entryPoints: p.entryPoints } as FeatureProviderResolution;
     });
-    const relevant = providers.filter(p => p.status === "available" && (f.providerMode === "all" || !providers.some(x => x.status === "available" && binding.has(x.providerId)) || binding.has(p.providerId)));
+    const hasExplicitProviderBinding = f.providers.some(p => binding.has(p.id));
+    const relevant = providers.filter(p => p.status === "available" && (f.providerMode === "all" || !hasExplicitProviderBinding || binding.has(p.providerId)));
     const builtin = f.providers[0]?.kind === "builtin";
-    const providerAvailable = builtin ? supports(f.scopes, input.scope) && supports(f.targets, input.target) : relevant.length > 0 && (f.providerMode === "all" ? relevant.length === f.providers.length : relevant.length === 1);
+    const providerAmbiguous = !builtin && f.providerMode !== "all" && relevant.length > 1;
+    const bindingInvalid = providers.some(p => p.status === "binding-invalid");
+    const providerAvailable = builtin ? relevant.length === f.providers.length : relevant.length > 0 && (f.providerMode === "all" ? relevant.length === f.providers.length : relevant.length === 1) && !bindingInvalid;
     const scopeOk = f.scopes.includes(input.scope), targetOk = supports(f.targets, input.target);
     const available = providerAvailable && scopeOk && targetOk;
     const packageCandidateCount = providers.reduce((n,p) => n + p.packageInstanceIds.length, 0);
-    states.set(f.id, { descriptor:f, enabled, source, providers, available, included:false, requiredBy:new Set(), ...(!scopeOk ? {reason:"scope-unsupported" as const} : !targetOk ? {reason:"target-unsupported" as const} : !providerAvailable ? {reason:providers.some(p => p.status === "incompatible") ? "provider-incompatible" as const : providers.some(p => p.status === "ambiguous-package-instance") ? "provider-ambiguous" as const : "provider-missing" as const} : !enabled ? {reason:"not-enabled" as const} : {}) });
+    states.set(f.id, { descriptor:f, enabled, source, providers, available, included:false, requiredBy:new Set(), ...(!scopeOk ? {reason:"scope-unsupported" as const} : !targetOk ? {reason:"target-unsupported" as const} : !providerAvailable ? {reason:providers.some(p => p.status === "incompatible") ? "provider-incompatible" as const : (providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance")) ? "provider-ambiguous" as const : "provider-missing" as const} : !enabled ? {reason:"not-enabled" as const} : {}) });
     if (enabled && !scopeOk) diagnostics.push(error("FEATURE_SCOPE_UNSUPPORTED", "Feature " + f.id + " does not support scope " + input.scope + ".", f.id));
     if (enabled && !targetOk) diagnostics.push(error("FEATURE_TARGET_UNSUPPORTED", "Feature " + f.id + " does not support target " + input.target + ".", f.id, undefined, input.target));
-    if (enabled && !providerAvailable) diagnostics.push(error(providers.some(p => p.status === "incompatible") ? "FEATURE_PROVIDER_INCOMPATIBLE" : providers.some(p => p.status === "ambiguous-package-instance") ? "FEATURE_PROVIDER_AMBIGUOUS" : "FEATURE_PROVIDER_MISSING", "Feature " + f.id + " has no unambiguous available provider for " + input.target + "/" + input.scope + ".", f.id));
+    if (enabled && bindingInvalid) diagnostics.push(error("FEATURE_PROVIDER_BINDING_INVALID", "An explicit provider binding does not match an installed compatible package instance.", f.id));
+    if (enabled && !providerAvailable && !bindingInvalid) diagnostics.push(error(providers.some(p => p.status === "incompatible") ? "FEATURE_PROVIDER_INCOMPATIBLE" : providerAmbiguous || providers.some(p => p.status === "ambiguous-package-instance") ? "FEATURE_PROVIDER_AMBIGUOUS" : "FEATURE_PROVIDER_MISSING", "Feature " + f.id + " has no unambiguous available provider for " + input.target + "/" + input.scope + ".", f.id));
     void packageCandidateCount;
   }
   const visiting = new Set<string>(), included = new Set<string>();
@@ -259,8 +269,8 @@ export function resolveFeatureSelection(input: ResolveFeatureSelectionInput): Fe
   const buildAnalysisFeatures: ProjectBuildFeatureSnapshot[] = definitions.map(f => {
     const s = states.get(f.id)!, selected = valid && s.included;
     const provider = f.providers[0]!;
-    const ids = s.providers.flatMap(p => p.packageInstanceIds);
-    return { id:f.id, providerKind:provider.kind, ...(provider.kind === "package" ? ids.length === 1 ? {providerPackageId:ids[0]} : {providerPackageIds:ids} : {}), selected, available:s.available, targetCompatible:s.available };
+    const ids = sorted(s.providers.flatMap(p => p.packageInstanceIds));
+    return { id:f.id, providerKind:provider.kind, ...(provider.kind === "package" ? ids.length === 1 ? {providerPackageId:ids[0]!} : {providerPackageIds:ids} : {}), selected, available:s.available, targetCompatible:s.available };
   });
   return { valid, schemaVersion:1, target:input.target, scope:input.scope, diagnostics, features:featureStates, requestedFeatureIds:requested, includedFeatureIds:valid ? sorted([...included]) : [], excludedFeatureIds:definitions.map(f => f.id).filter(id => !included.has(id)).sort(), buildAnalysisFeatures };
 }
