@@ -36,11 +36,11 @@ The fixture and tests cover:
 - [ ] Serialize/deserialize with deterministic output and stable identities.
 - [ ] Validate IDs, asset paths, module declarations and typed references.
 - [ ] Apply the same Component Schema validator during registration, Inspector edits, Undo/Redo, pre-save and serialization.
-- [ ] Preserve independent values for multiple instances of the same Component Definition.
-- [ ] Resolve Script modules through the explicit Project manifest.
-- [ ] Create a runtime Node/Transform/Component graph from SceneDocument data.
-- [ ] Fail atomically on invalid Scene, missing module/reference or cancelled load; dispose all partial resources.
-- [ ] Keep Core independent of Phaser, DOM, Editor UI, Node-only APIs and platform SDKs.
+- [x] Preserve independent values for multiple instances of the same Component Definition (Core Scene Loader fixture).
+- [x] Resolve Script modules through the explicit Project manifest and the matching pre-registered Component definition.
+- [x] Create an inactive runtime Node/Transform/Component graph from SceneDocument data with stable source IDs and parent/child hierarchy.
+- [x] Fail atomically on invalid Scene, missing module/reference or cancelled load; dispose all partial resources.
+- [x] Keep Core independent of Phaser, DOM, Editor UI, Node-only APIs and platform SDKs.
 
 ## 4. Preview and runtime acceptance
 

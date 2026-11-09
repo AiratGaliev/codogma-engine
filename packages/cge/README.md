@@ -8,7 +8,7 @@ Host-neutral contracts and the first component-object Core slice.
 - components owns the component schema, registry, lifecycle and explicit-tick scheduler.
 - The package does not depend on Phaser, browser DOM, Editor Host UI, Node-only APIs or platform SDKs.
 - The Core never creates a game loop. A runtime adapter calls ComponentWorld.update(deltaSeconds) from its controlled tick.
-- A scene host owns one ComponentWorld lifetime per active scene. Replacing a scene disposes the previous world before creating the next one.
+- `ProjectSceneLoader` prepares one inactive `ComponentWorld` per Scene. Scene Manager owns activation, replacement and active-session ownership; the runtime host owns the tick.
 - Component modules are supplied through explicit registration. Project data stores stable type/module references; it never supplies executable import paths or source code.
 
 ## Public runtime contract
@@ -28,6 +28,17 @@ Host-neutral contracts and the first component-object Core slice.
 - A failed `onEnable`, `onDisable`, `onStart` or `onUpdate` removes the affected instance, attempts the remaining cleanup callbacks, continues processing siblings and aggregates errors. Failed activation never advances to start/update.
 - Factories and lifecycle callbacks are synchronous. Promise-like results are rejected; perform asynchronous loading in an explicit host/service phase before attaching or activating components.
 - Component properties are validated, cloned at the mutation request boundary and passed to factories as a deeply frozen JSON snapshot. Component behavior owns its external resources: acquire them in `onCreate`, release subscriptions/handles in `onDestroy`. Core invokes cleanup but does not own external resource implementations.
+
+### Project Scene Loader and runtime graph
+
+- `ProjectSceneLoader` validates and snapshots a native Project Model v1 document and the explicitly registered `ComponentRegistry` at composition time.
+- The host supplies `readAssetDocument(asset, signal)`; Core asks it only for the selected Scene asset's UTF-8 JSON. File access, asset bytes, TypeScript compilation and module evaluation remain outside Core.
+- Each Scene Component must be declared by `Project.componentModules`, have a matching registered `typeId`, and use the manifest's implementation `version`. Project data never controls executable imports.
+- Scene parsing uses the same registered Component schemas as the rest of Core. Asset, Node and Prefab references are resolved through Project/Scene stable-ID catalogs; Component values are not silently rewritten.
+- The returned `ProjectRuntimeSceneSession` is fully hydrated but inactive. Its `graph` exposes immutable source data, root/child hierarchy, stable runtime Node IDs, Component instance IDs and Asset/Prefab lookups. Transform values remain local to the parent.
+- Nodes are created inactive. Component `onCreate` runs during hydration; `onEnable` runs only when the Scene Manager activates the session. The host calls `world.update(deltaSeconds)` only while `session.isActive && !session.isPaused`.
+- Aborted or failed hydration disposes the partial world. Session `dispose()` is idempotent and attempts every Component cleanup even if a callback throws.
+- Prefab instances resolve their Project Prefab reference but are not expanded into instantiated subtrees by this slice; nested Prefab expansion, propagation and override behavior remain owned by COD-8.
 
 ### Systems, update and disposal
 
