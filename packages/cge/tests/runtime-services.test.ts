@@ -561,14 +561,78 @@ test("SceneManager pause and resume are idempotent across scene switches", async
   await manager.dispose();
 });
 
-test("SceneManager stop cancels loading, disposes active owner and remains reusable", async () => {
+test("SceneManager serializes concurrent pause and scene-switch lifecycle operations", async () => {
+  const pauseGate = deferred<void>();
+  const calls: string[] = [];
+  let firstPauseCalls = 0;
+  let secondPauseCalls = 0;
+  let secondResumeCalls = 0;
+  const manager = createSceneManager({
+    async load(request) {
+      if (request.sceneId === "first") {
+        return {
+          sceneId: "first",
+          activate() {},
+          deactivate() { calls.push("first:deactivate"); },
+          pause() {
+            firstPauseCalls++;
+            calls.push("first:pause-start");
+            return pauseGate.promise.then(() => calls.push("first:pause-end"));
+          },
+          resume() {},
+          dispose() { calls.push("first:dispose"); },
+        };
+      }
+      return makeSession("second", {
+        activate: () => calls.push("second:activate"),
+        pause: () => { secondPauseCalls++; calls.push("second:pause"); },
+        resume: () => { secondResumeCalls++; calls.push("second:resume"); },
+        deactivate: () => calls.push("second:deactivate"),
+        dispose: () => calls.push("second:dispose"),
+      });
+    },
+  });
+
+  await manager.switchTo("first");
+  const firstPause = manager.pause();
+  const duplicatePause = manager.pause();
+  await Promise.resolve();
+  const switching = manager.switchTo("second");
+  await Promise.resolve();
+  assert.deepEqual(calls, ["first:pause-start"]);
+
+  pauseGate.resolve();
+  await Promise.all([firstPause, duplicatePause, switching]);
+  assert.equal(firstPauseCalls, 1);
+  assert.equal(secondPauseCalls, 1);
+  assert.deepEqual(calls, [
+    "first:pause-start",
+    "first:pause-end",
+    "first:deactivate",
+    "first:dispose",
+    "second:activate",
+    "second:pause",
+  ]);
+
+  await Promise.all([manager.resume(), manager.resume()]);
+  assert.equal(secondResumeCalls, 1);
+  await manager.dispose();
+  assert.deepEqual(calls.slice(-3), [
+    "second:resume",
+    "second:deactivate",
+    "second:dispose",
+  ]);
+});
+
+test("SceneManager stop deactivates before disposal, cancels loading and remains reusable", async () => {
   const pendingLoad = deferred<RuntimeSceneSession>();
-  let activeDisposals = 0;
+  const lifecycle: string[] = [];
   const loader: SceneLoader = {
     load(request) {
       if (request.sceneId === "pending") return pendingLoad.promise;
       return Promise.resolve(makeSession(request.sceneId, {
-        dispose: () => activeDisposals++,
+        deactivate: () => lifecycle.push(request.sceneId + ":deactivate"),
+        dispose: () => lifecycle.push(request.sceneId + ":dispose"),
       }));
     },
   };
@@ -581,10 +645,11 @@ test("SceneManager stop cancels loading, disposes active owner and remains reusa
   assert.deepEqual(await pending, { status: "cancelled", sceneId: "pending" });
   await stop;
   assert.equal(manager.activeSceneId, undefined);
-  assert.equal(activeDisposals, 1);
+  assert.deepEqual(lifecycle, ["active:deactivate", "active:dispose"]);
   await manager.switchTo("restarted");
   assert.equal(manager.activeSceneId, "restarted");
   await manager.dispose();
+  assert.deepEqual(lifecycle.slice(-2), ["restarted:deactivate", "restarted:dispose"]);
 });
 
 test("EngineRuntime fixes service phase order and integrates the active SceneManager ComponentWorld", async () => {
