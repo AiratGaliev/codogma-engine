@@ -28,6 +28,7 @@ const fixtureSceneAsset = fixtureProject.assets.find((asset) => asset.kind === "
 if (!fixtureSceneAsset) {
   throw new Error("Acceptance project fixture must register a Scene asset.");
 }
+const fixtureSceneAssetId = fixtureSceneAsset.id;
 const fixtureScene = readJson(fixtureSceneAsset.path);
 const fixtureComponentSchema: ComponentTypeSchemaV1 = componentDefinition.schema;
 
@@ -61,7 +62,7 @@ function makeInput(
     project: structuredClone(fixtureProject),
     target: "web",
     files,
-    scenes: [{ assetId: fixtureSceneAsset.id, document: structuredClone(fixtureScene) }],
+    scenes: [{ assetId: fixtureSceneAssetId, document: structuredClone(fixtureScene) }],
     prefabs: [],
     componentSchemas: [fixtureComponentSchema],
     modules,
