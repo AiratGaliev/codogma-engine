@@ -54,7 +54,7 @@ interface ComponentRecord {
   activeNotified: boolean;
   destroyed: boolean;
   readonly lifetimeController: AbortController;
-  activationController?: AbortController;
+  activationController: AbortController | undefined;
 }
 
 type Mutation = () => void;
@@ -406,6 +406,7 @@ export class ComponentWorld {
       activeNotified: false,
       destroyed: false,
       lifetimeController,
+      activationController: undefined,
     };
     this.components.set(instanceId, record);
     this.componentsByNode.get(nodeId)?.push(instanceId);

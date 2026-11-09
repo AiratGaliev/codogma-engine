@@ -102,7 +102,7 @@ interface ScheduledTaskOwner {
 class HostScheduledTask implements ScheduledTask {
   private state: ScheduledTaskStatus = "scheduled";
   private remainingSeconds: number;
-  private readonly signal?: AbortSignal;
+  private readonly signal: AbortSignal | undefined;
   private readonly onAbort?: () => void;
   readonly timeDomain: RuntimeTimeDomain;
 

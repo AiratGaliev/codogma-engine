@@ -67,12 +67,12 @@ interface SwitchOperation {
 }
 
 class HostSceneManager implements SceneManager {
-  private activeSession?: RuntimeSceneSession;
-  private pending?: SwitchOperation;
-  private commitPromise?: Promise<void>;
+  private activeSession: RuntimeSceneSession | undefined;
+  private pending: SwitchOperation | undefined;
+  private commitPromise: Promise<void> | undefined;
   private disposed = false;
   private paused = false;
-  private stopping?: Promise<void>;
+  private stopping: Promise<void> | undefined;
   private disposing?: Promise<void>;
   private readonly disposedSessions = new WeakSet<object>();
 

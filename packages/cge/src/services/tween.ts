@@ -75,7 +75,7 @@ class HostTween implements TweenHandle {
   private state: TweenStatus;
   private elapsedSeconds = 0;
   private remainingDelay: number;
-  private readonly signal?: AbortSignal;
+  private readonly signal: AbortSignal | undefined;
   private readonly onAbort?: () => void;
   private readonly totalDuration: number;
   readonly timeDomain: RuntimeTimeDomain;

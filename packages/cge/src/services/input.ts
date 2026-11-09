@@ -210,7 +210,7 @@ class InputServiceImpl implements InputService {
   private readonly listeners = new Set<InputListener>();
   private readonly heldKeys = new Map<string, HeldInput>();
   private readonly heldPointers = new Map<number, HeldInput>();
-  private sourceSubscription?: InputSubscription;
+  private sourceSubscription: InputSubscription | undefined;
   private disposed = false;
 
   constructor(
