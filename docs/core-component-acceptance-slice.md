@@ -65,6 +65,8 @@ The fixture and tests cover:
 |---|---|
 | Project Model and serialization | [COD-25](https://linear.app/codogma-engine/issue/COD-25/opredelit-serializuemuyu-project-model-i-versioned-schema) |
 | Component lifecycle and registry | [COD-26](https://linear.app/codogma-engine/issue/COD-26/realizovat-typescript-component-core-i-determinirovannyj-lifecycle) |
+| Input, Time/Scheduler/Tween and Scene Manager contracts | [COD-29](https://linear.app/codogma-engine/issue/COD-29/utverdit-minimalnye-kontrakty-input-timetween-i-scene-manager) |
+| Runtime service implementations and integration | [COD-106](https://linear.app/codogma-engine/issue/COD-106/realizovat-bazovie-host-neutral-engine-services-v1-v-codogmacge) |
 | Component Schema and Inspector validation | [COD-27](https://linear.app/codogma-engine/issue/COD-27/svyazat-component-schemametadata-inspector-i-serializaciej) |
 | Script/Component authoring | [COD-91](https://linear.app/codogma-engine/issue/COD-91/zavershit-user-components-i-typescript-script-authoring-v-solidjs) |
 | Native Scene Loader | [COD-103](https://linear.app/codogma-engine/issue/COD-103/realizovat-data-driven-scene-loader-dlya-project-model-v1) |

@@ -73,7 +73,7 @@ Codogma Core должен предоставлять независимые от
 
 Core остаётся небольшим и независимо тестируемым; data model не зависит от renderer; пользовательские workflows развиваются в самостоятельном SolidJS Host; runtime adapter можно менять через явные границы.
 
-JSON schema, API signatures, component metadata conflict resolution, update order и Preview transport protocol уточняются при реализации и закрепляются тестами до подключения соответствующих Editor features.
+JSON schema, component metadata conflict resolution и Preview transport protocol уточняются при реализации. Минимальные public contracts Input, Time/Scheduler/Tween и Scene Manager утверждены в [ADR-0008](ADR-0008-runtime-service-contracts.md); их исполняемые реализации и интеграционный update order остаются отдельными implementation slices.
 
 ## Implementation baseline
 
