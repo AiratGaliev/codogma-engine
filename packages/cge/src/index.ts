@@ -3,6 +3,7 @@ export * from "./diagnostics.js";
 export * from "./project-model/contracts.js";
 export * from "./project-model/validation.js";
 export * from "./project-model/serialization.js";
+export * from "./project-model/build-analysis.js";
 export * from "./components/component-schema.js";
 export * from "./components/component-registry.js";
 export * from "./components/component-world.js";
