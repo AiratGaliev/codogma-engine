@@ -125,9 +125,11 @@ test("Core source has no external module imports or runtime npm dependencies", (
   const manifest = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")) as {
     dependencies?: Record<string, string>;
   };
-  const lockfile = JSON.parse(readFileSync(resolve(packageRoot, "package-lock.json"), "utf8")) as {
-    packages?: Record<string, { dependencies?: Record<string, string> }>;
+  const lockfile = JSON.parse(readFileSync(resolve(packageRoot, "../../package-lock.json"), "utf8")) as {
+    packages?: Record<string, { name?: string; dependencies?: Record<string, string> }>;
   };
+  const workspaceRecord = lockfile.packages?.["packages/cge"];
+  assert.equal(workspaceRecord?.name, manifest.name);
   assert.deepEqual(Object.keys(manifest.dependencies ?? {}), []);
-  assert.deepEqual(Object.keys(lockfile.packages?.[""]?.dependencies ?? {}), []);
+  assert.deepEqual(Object.keys(workspaceRecord?.dependencies ?? {}), []);
 });
