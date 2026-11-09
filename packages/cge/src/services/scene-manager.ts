@@ -235,16 +235,6 @@ class HostSceneManager implements SceneManager {
         return { status: "cancelled", sceneId };
       }
 
-      if (operation.controller.signal.aborted || this.disposed || this.pending !== operation) {
-        try {
-          await this.disposeSession(candidate);
-        } catch (cleanupError) {
-          cleanupFailed = true;
-          throw new AggregateError([cleanupError], "A cancelled Scene candidate could not be disposed.");
-        }
-        return { status: "cancelled", sceneId };
-      }
-
       // Serialize activation with pause/resume. Lifecycle calls queued before this
       // commit finish against the previous owner; later calls target the new owner.
       operation.commitStarted = true;
