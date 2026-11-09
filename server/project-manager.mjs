@@ -491,7 +491,7 @@ function createEmptyTemplate(projectName) {
       ["project.json", serializeProjectDocument(project)],
       ["scenes/Main.cge-scene.json", serializeSceneDocument(scene)],
       [".gitignore", "dist/\nnode_modules/\n.codogma-cache/\n"],
-      ["README.md", `# ${projectName}\n\nAn empty 2D Codogma Engine project.\n\nThe project uses the native Project Model v1 and the `phaser` runtime adapter. Its starter scene is `scenes/Main.cge-scene.json`.\n`],
+      ["README.md", `# ${projectName}\n\nAn empty 2D Codogma Engine project.\n\nThe project uses the native Project Model v1 and the phaser runtime adapter. Its starter scene is scenes/Main.cge-scene.json.\n`],
       ["assets/README.md", "# Assets\n\nPlace project-owned images, audio, fonts and other source assets here.\n"],
       ["scripts/README.md", "# Scripts\n\nPlace project-owned TypeScript scripts here. No game-specific code or optional packages are included in this template.\n"],
       ["build/README.md", "# Build\n\nBuild profiles are configured through the dedicated build workflow when that contract is available. This template does not invent or serialize a build-profile schema.\n"],
