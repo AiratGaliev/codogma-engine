@@ -10,6 +10,35 @@ The current implementation provides a browser-based authoring environment, a loc
 - **License:** MIT — see [LICENSE](LICENSE)
 - **Build notes:** [BUILD.md](BUILD.md)
 
+## Repository setup and npm Workspaces
+
+Use Node.js `>=22.12.0` and npm `>=11.21.2 <12` (the repository pins `npm@11.21.2`). Node's bundled npm may be older; update it once with `npm install --global npm@11.21.2`, then install the repository once from its root:
+
+```bash
+npm ci
+```
+
+The root npm workspace owns the active first-party package graph:
+
+- `packages/cge/` — `@codogma/cge`;
+- `packages/localization/` — `@codogma/localization`;
+- `packages/editor-mcp-server/` — `@codogma/editor-mcp-server`;
+- `packages/game-test-bridge-contract/` — `@codogma/game-test-bridge-contract`;
+- `src/editor/` — `@codogma/editor-host`, the only Editor Host.
+
+The root `package-lock.json` is the only lockfile for these workspaces. Run package-owned scripts from the repository root with an explicit workspace, for example:
+
+```bash
+npm run quality:check --workspace=@codogma/cge
+npm run quality:check --workspace=@codogma/game-test-bridge-contract
+npm run quality:check --workspace=@codogma/localization
+npm test --workspace=@codogma/editor-mcp-server
+npm run build:editor-host
+npm run test:workspace-consumer
+```
+
+The optional `mini-services/ai-chat/` service remains an independent npm root with its own lockfile and lifecycle; install it separately from that directory only when working on the service. Historical `source/editor/` is not an active package or workspace and is intentionally outside this migration. Workspace links are repository-development tooling: they do not add Codogma packages to a game project's own `package.json` or lockfile.
+
 ## Project direction
 
 Codogma Engine is a standalone 2D Web-first engine with its own native Project Model, TypeScript Component system, runtime and SolidJS Editor Host. The single supported editor application lives in `src/editor/`; Core, runtime, build, server and MCP use native Codogma contracts. The Node.js server serves this application at `/editor/`, while Vite provides the development server. See [ADR-0007](docs/decisions/ADR-0007-native-codogma-project-model.md), [Editor Host plan](docs/editor-ui-migration.md), [ADR-0005](docs/decisions/ADR-0005-solidjs-editor-host.md) and [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md) (sole normative source for optional Data-Oriented ECS).
@@ -56,8 +85,8 @@ This table is a practical overview, not a guarantee that every feature has ident
 
 ### Requirements
 
-- Node.js 22 (the version used by CI).
-- npm, included with Node.js.
+- Node.js `>=22.12.0`.
+- npm `>=11.21.2 <12` (pin: `npm@11.21.2`; update Node's bundled npm when necessary).
 - A modern browser.
 - Git to clone the repository.
 
@@ -69,9 +98,8 @@ Clone the repository and install the engine and Editor Host dependencies:
 git clone https://github.com/AiratGaliev/codogma-engine.git
 cd codogma-engine
 
+npm install --global npm@11.21.2
 npm ci
-
-npm --prefix src/editor ci
 npm run build
 npm start
 ~~~
@@ -90,7 +118,7 @@ The server should respond at that address. MCP bridge status is available at [ht
 
 ### Run the Editor Host
 
-Install the Host dependencies once with `npm --prefix src/editor ci`. Then start the backend and Vite development server together:
+After the root `npm ci`, start the backend and Vite development server together:
 
 Bash:
 
@@ -155,9 +183,9 @@ Use a project directory you control. Avoid pointing the development server at a 
 |---|---|
 | <code>server/server.mjs</code> | Local HTTP server for the native Editor Host, project files, runtime output, AI Chat endpoint and engine-owned MCP HTTP endpoint. |
 | <code>server/mcp-launcher.mjs</code> | Starts the Codogma-owned MCP package; startup fails with an actionable error if the package is missing or has not been built. |
-| <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter, its independent npm manifest/lockfile, tests and documentation. It reuses engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
+| <code>packages/editor-mcp-server/</code> | Private TypeScript stdio adapter in the root npm workspace, with its own package manifest, public exports, tests and documentation. It reuses engine MCP schemas and execution through <code>POST /editor/mcp</code>. |
 | <code>tests/security-smoke-test.mjs</code> | Verifies local-only HTTP access, symlink containment and the MCP HTTP/stdio security boundary. |
-| <code>src/editor/</code> | Independent SolidJS + TypeScript/TSX Editor Host with its own <code>package.json</code>, lockfile, Vite config, design system, Godot SVG icons and domain/browser tests. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
+| <code>src/editor/</code> | Native SolidJS + TypeScript/TSX Editor Host workspace with its own <code>package.json</code>, Vite config, design system, Godot SVG icons and domain/browser tests. Its dependencies are installed from the root lockfile. Build and domain tests run in CI Fast; browser E2E runs only in the promotion E2E workflow. |
 | <code>mini-services/ai-chat/</code> | Optional standalone AI Chat backend. |
 | <code>tests/mcp-e2e-test.mjs</code> | MCP integration test driver used by the local test command and CI. |
 | <code>packages/cge/tests/fixtures/acceptance-project/</code> | Default native Project Model v1 fixture for server development and MCP acceptance. |
@@ -169,7 +197,7 @@ Use a project directory you control. Avoid pointing the development server at a 
 
 **Optional runtime packages:** ECS remains an approved but not yet implemented optional workstream, owned by COD-111/112. Current status is tracked in the [capability matrix](docs/capability-matrix.md); the sole normative architecture and acceptance source is [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 
-**Package source layout:** the first standalone tooling package follows the ТЗ layout in `packages/editor-mcp-server/` and owns its manifest, lockfile, exports, tests and documentation. This does **not** mean npm Workspaces have been enabled: root, Editor Host and local package boundaries and lockfiles remain separate. The Editor Host is an independent application under `src/editor/` and is the only supported editor application. npm Workspaces, Feature/Capability Registry and a public/versioned Extension API remain separate future steps. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
+**Package source layout:** active first-party package roots and the native Editor Host are connected through the root npm workspace. The root `package-lock.json` is the only lockfile for these workspaces; optional `mini-services/ai-chat/` and historical `source/editor/` remain outside it. The Editor Host is the only supported editor application under `src/editor/`. Feature/Capability Registry and a public/versioned Extension API remain separate future work. Consumer projects must not acquire every engine package as a dependency; only explicitly selected packages and their npm-resolved transitive dependencies belong in a game project.
 
 **SolidJS frontend model:** the new Host uses JSX/TSX and fine-grained reactivity. Solid compiles JSX into DOM operations and updates nodes that depend on changed signals/stores; it does not use Virtual DOM reconciliation. Its JSX is familiar to React developers, but its component execution and reactive-state model are different: components are not re-rendered as React function components on each state update. Use Solid primitives such as `createSignal`, `createMemo`, `createStore`, `createEffect` and `onCleanup`, and the `vite-plugin-solid` integration rather than copying React Hooks patterns.
 
@@ -182,17 +210,17 @@ Run these commands from the repository root unless noted otherwise.
 | <code>npm start</code> | Start the local editor server. |
 | <code>npm run dev</code> | Start the server and pipe its output to <code>dev.log</code> (requires a shell with <code>tee</code>). |
 | <code>npm run dev:proxy</code> | Like <code>npm run dev</code>, but accept any `Host` header from loopback peers (<code>CODOGMA_ALLOWED_HOSTS=*</code>) and any browser `Origin` (<code>CODOGMA_ALLOWED_ORIGINS=*</code>, overridable) for publishing behind a trusted local reverse proxy. |
-| <code>npm run build</code> | Build/type-check the editor client through TypeScript project references. |
-| <code>npm run watch</code> | Run the editor TypeScript compiler in watch mode. Start the server separately if you need to use the editor. |
+| <code>npm run build</code> | Build and type-check the native SolidJS Editor Host and its Core workspace dependency. |
+| <code>npm run watch</code> | Start the backend and SolidJS Editor Host development servers together. |
 | <code>npm run mcp</code> | Start the Codogma stdio MCP package through the launcher (when package dependencies are installed and built); the editor server must be running. |
 
-| <code>npm run build:mcp</code> | Build the standalone MCP package TypeScript sources. |
+| <code>npm run build:mcp</code> | Build the first-party MCP workspace package TypeScript sources. |
 | <code>npm run test:mcp-package</code> | Run isolated stdio/HTTP bridge contract tests for the package. |
 | <code>npm run build:editor-host</code> | Typecheck and production-build the independent SolidJS Host in <code>src/editor/</code>. |
 | <code>npm run test:editor-host</code> | Run SolidJS Host domain tests. |
 | <code>npm run test:editor-host:browser</code> | Run Chromium browser acceptance for the implemented Host slice. |
 | <code>npm run test:e2e</code> | Run the engine MCP integration test driver. Start the editor server first. |
-| <code>npm run test:all</code> | Run the complete local test collection, including MCP E2E. This is not the routine feature-PR gate; automated E2E gating starts at promotion (<code>dev → test</code>). Install dependencies in each package first and start the editor server for MCP E2E. |
+| <code>npm run test:all</code> | Run the complete local test collection, including MCP E2E. This is not the routine feature-PR gate; automated E2E gating starts at promotion (<code>dev → test</code>). Run one root <code>npm ci</code> first and start the editor server for MCP E2E. |
 
 For a typical local code change:
 
@@ -461,31 +489,27 @@ If a promotion gate fails, stop the promotion. Fix the issue in the appropriate 
 
 ### Local checks before a PR
 
-For implementation changes, run commands from the repository root. Root, editor, localization and standalone MCP package dependencies are installed separately (there are no npm Workspaces yet). A Markdown-only PR does not require dependency installation or a game/editor build: CI runs the changed-document checks directly.
+For implementation changes, run commands from the repository root. The root npm workspace owns the active first-party package graph; install it once. The optional AI Chat service remains an independent install root. A Markdown-only PR does not require dependency installation or a game/editor build: CI runs the changed-document checks directly.
 
 ~~~bash
 npm ci
-npm --prefix src/editor ci
-npm --prefix packages/localization ci
-cd packages/editor-mcp-server
-npm ci
-cd ../..
 npm run build
 npm run test:security
 npm run test:mcp-package
+npm run test:workspace-consumer
 ~~~
+
+Run package-owned checks through `--workspace=<package-name>`. Do not run nested `npm ci` commands inside Core, Localization, Editor MCP, Game Test Bridge or Editor Host.
 
 Run `npm audit --audit-level=low` in the affected package scope when its `package.json`, `package-lock.json` or applicable `.npmrc` changes. CI Fast applies the same scope selection; manual workflow dispatch runs every configured audit.
 
-Для запуска SolidJS Editor Host (`src/editor/`) выполните из корня репозитория:
+Для запуска SolidJS Editor Host (`src/editor/`) сначала выполните однократный `npm ci` из корня репозитория, затем:
 
 ```bash
-npm ci --prefix src/editor
 npm run dev:editor-host
 ```
 
-`npm ci` обновляет локальную ссылку `file:../../packages/cge`. Команда `dev:editor-host`
-сначала собирает Core, затем одновременно запускает Node backend и Vite Host.
+Команда `dev:editor-host` сначала собирает Core через npm Workspace lifecycle, затем одновременно запускает Node backend и Vite Host.
 Откройте `http://127.0.0.1:5173/` (порт берётся из `VITE_PORT`); backend API
 обслуживается на порту `PORT` из корневого `.env` (по умолчанию `3000`).
 Нажатие Ctrl+C останавливает оба процесса. Отдельно устанавливать зависимости

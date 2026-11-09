@@ -37,7 +37,7 @@ jobs:
 
           if [[ "$EVENT_NAME" != "pull_request" ]]; then
             echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
-            for scope in root host ai_chat localization mcp_package cge; do
+            for scope in workspace ai_chat; do
               echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
             done
             echo "Manual run: full code checks and all dependency audits are enabled."
@@ -47,7 +47,7 @@ jobs:
           if ! changed_file_list="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::Не удалось определить diff PR; безопасный режим — полный набор проверок и все dependency audits."
             echo "run_code_checks=true" >> "$GITHUB_OUTPUT"
-            for scope in root host ai_chat localization mcp_package cge; do
+            for scope in workspace ai_chat; do
               echo "audit_${scope}=true" >> "$GITHUB_OUTPUT"
             done
             exit 0
@@ -108,12 +108,8 @@ jobs:
             echo "audit_${name}=${enabled}" >> "$GITHUB_OUTPUT"
           }
 
-          emit_audit_scope root package-lock.json
-          emit_audit_scope host src/editor/package.json src/editor/package-lock.json
+          emit_audit_scope workspace package.json package-lock.json packages/cge/package.json packages/editor-mcp-server/package.json packages/game-test-bridge-contract/package.json packages/localization/package.json src/editor/package.json
           emit_audit_scope ai_chat mini-services/ai-chat/package.json mini-services/ai-chat/package-lock.json
-          emit_audit_scope localization packages/localization/package.json packages/localization/package-lock.json
-          emit_audit_scope mcp_package packages/editor-mcp-server/package.json packages/editor-mcp-server/package-lock.json
-          emit_audit_scope cge packages/cge/package.json packages/cge/package-lock.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -122,11 +118,13 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            src/editor/package-lock.json
-            packages/localization/package-lock.json
-            packages/editor-mcp-server/package-lock.json
-            packages/cge/package-lock.json
             mini-services/ai-chat/package-lock.json
+
+      - name: Install compatible npm CLI
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: |
+          npm install --global npm@11.21.2 --no-audit --no-fund
+          test "$(npm --version)" = "11.21.2"
 
       - name: Validate changed Markdown files
         if: github.event_name == 'pull_request'
@@ -179,18 +177,13 @@ jobs:
               ;;
           esac
 
-      - name: Install locked dependencies (root)
+      - name: Install root and all first-party workspace dependencies
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm ci
 
-      - name: Audit root dependencies
-        if: steps.scope.outputs.audit_root == 'true'
-        run: npm audit --audit-level=low
-
-      - name: Audit Editor Host dependencies
-        if: steps.scope.outputs.audit_host == 'true'
-        run: npm audit --audit-level=low
-        working-directory: src/editor
+      - name: Audit root and first-party workspace dependencies
+        if: steps.scope.outputs.audit_workspace == 'true'
+        run: npm audit --workspaces --include-workspace-root --audit-level=low
 
       - name: Unit regression tests (editor, serialization, security and icons)
         if: steps.scope.outputs.run_code_checks == 'true'
@@ -226,16 +219,6 @@ jobs:
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:mini-services
 
-      - name: Install locked dependencies (localization package)
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm ci
-        working-directory: packages/localization
-
-      - name: Audit localization dependencies
-        if: steps.scope.outputs.audit_localization == 'true'
-        run: npm audit --audit-level=low
-        working-directory: packages/localization
-
       - name: Build, test and quality-pilot localization package (COD-19/COD-62/COD-64)
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run quality:check && npm run quality:report
@@ -248,16 +231,6 @@ jobs:
       - name: Localization runtime acceptance (server + fixture tables)
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run test:localization:acceptance
-      - name: Install locked dependencies (Codogma Core)
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm ci
-        working-directory: packages/cge
-
-      - name: Audit Codogma Core dependencies
-        if: steps.scope.outputs.audit_cge == 'true'
-        run: npm audit --audit-level=low
-        working-directory: packages/cge
-
       - name: Build, typecheck and test Codogma Core (COD-24/25/26/27)
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run quality:check
@@ -267,20 +240,58 @@ jobs:
         run: npm run benchmark
         working-directory: packages/cge
 
-      - name: Install locked dependencies (MCP package)
-        if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm ci
-        working-directory: packages/editor-mcp-server
-
-      - name: Audit MCP package dependencies
-        if: steps.scope.outputs.audit_mcp_package == 'true'
-        run: npm audit --audit-level=low
-        working-directory: packages/editor-mcp-server
-
       - name: Build and test Codogma MCP stdio package
         if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm test
-        working-directory: packages/editor-mcp-server
+        run: npm test --workspace=@codogma/editor-mcp-server
+
+      - name: Build, typecheck and test Game Test Bridge contracts
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run quality:check --workspace=@codogma/game-test-bridge-contract
+
+      - name: Verify workspace package imports from the consumer fixture
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run test:workspace-consumer
+
+      - name: Build native Editor Host for release archive validation
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run build:editor-host
+
+      - name: Verify the release archive contains the complete workspace graph
+        if: steps.scope.outputs.run_code_checks == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/codogma-engine-release-check.zip"
+          zip -qr "$archive" \
+            server packages/cge packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
+            package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
+            -x "src/editor/node_modules/*" \
+            "packages/*/node_modules/*" \
+            "*.log"
+
+          for entry in \
+            package-lock.json \
+            packages/cge/package.json \
+            packages/cge/dist/index.js \
+            packages/localization/package.json \
+            packages/localization/dist/index.js \
+            packages/editor-mcp-server/package.json \
+            packages/editor-mcp-server/dist/cli.js \
+            packages/game-test-bridge-contract/package.json \
+            packages/game-test-bridge-contract/dist/index.js \
+            src/editor/package.json \
+            src/editor/dist/index.html; do
+            unzip -Z1 "$archive" | grep -qx "$entry"
+          done
+
+          if unzip -Z1 "$archive" | grep -q '^source/editor/'; then
+            echo "::error::Historical Editor sources must not be shipped in the native release archive."
+            exit 1
+          fi
+          if unzip -Z1 "$archive" | grep -Eq '(^|/)node_modules/[^/]'; then
+            echo "::error::Installed dependencies must not be included in the release archive."
+            exit 1
+          fi
 
   editor-host:
     name: editor-host
@@ -306,7 +317,7 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -Eq '^(src/editor/|packages/cge/|server/server\.mjs|server/request-origin\.mjs)'; then
+          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -Eq '^(src/editor/|packages/|package.json$|package-lock.json$|server/server\.mjs|server/request-origin\.mjs)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -320,27 +331,20 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            src/editor/package-lock.json
-            packages/cge/package-lock.json
 
-      - name: Install root dependencies for the existing backend
+      - name: Install compatible npm CLI
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          npm install --global npm@11.21.2 --no-audit --no-fund
+          test "$(npm --version)" = "11.21.2"
+
+      - name: Install root and workspace dependencies
         if: steps.scope.outputs.run == 'true'
         run: npm ci
 
-      - name: Install and build Codogma Core for the Host
+      - name: Build and typecheck SolidJS Host and Core workspace dependency
         if: steps.scope.outputs.run == 'true'
-        run: npm ci --no-audit --no-fund && npm run build
-        working-directory: packages/cge
-
-      - name: Install Editor Host dependencies
-        if: steps.scope.outputs.run == 'true'
-        run: npm ci --no-audit --no-fund
-        working-directory: src/editor
-
-      - name: Build and typecheck SolidJS Host
-        if: steps.scope.outputs.run == 'true'
-        run: npm run build
-        working-directory: src/editor
+        run: npm run build --workspace=@codogma/editor-host
 
       - name: Smoke-test Vite dev server and Core package resolution
         if: steps.scope.outputs.run == 'true'
@@ -372,6 +376,4 @@ jobs:
 
       - name: Run Editor Host domain tests
         if: steps.scope.outputs.run == 'true'
-        run: npm test
-        working-directory: src/editor
-
+        run: npm test --workspace=@codogma/editor-host

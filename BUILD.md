@@ -4,25 +4,33 @@ Codogma Engine is a Web-first 2D game engine. The repository contains one browse
 
 ## Requirements
 
-- Node.js 22 or newer.
-- npm.
+- Node.js `>=22.12.0`.
+- npm `>=11.21.2 <12` (repository pin: `npm@11.21.2`).
 - A modern Chromium-based browser for development and browser acceptance.
 
 ## Install dependencies
 
-From the repository root:
+Verify the toolchain, then install the root package and every active first-party workspace once from the repository root:
 
 ```bash
+node --version
+npm --version
+
+# Only when the bundled npm is older than 11.21.2:
+npm install --global npm@11.21.2
+
 npm ci
-npm --prefix src/editor ci
 ```
 
-Install optional package dependencies only when working in those packages, for example:
+The root manifest declares `packageManager: "npm@11.21.2"` and requires npm 11.21.2 or newer within the npm 11 major. This minimum is intentional: npm 10.9.9 crashes in Arborist's optional-peer resolution with the repository's Vitest 5.0.5 dependency graph; do not work around it by disabling peer dependency resolution.
+
+The root lockfile includes the active packages in `packages/*` and the native Editor Host in `src/editor/`. The optional AI Chat service is not part of that workspace and keeps its own install lifecycle; install it only when working on the service:
 
 ```bash
-npm --prefix packages/editor-mcp-server ci
-npm --prefix mini-services/ai-chat ci
+npm ci --prefix mini-services/ai-chat
 ```
+
+Do not run nested `npm ci` commands for Core, Localization, Editor MCP, Game Test Bridge or Editor Host.
 
 ## Build the Editor Host
 
@@ -36,14 +44,19 @@ The root build command builds the SolidJS Editor Host from `src/editor/` into `s
 npm run build:editor-host
 ```
 
-Typecheck and tests:
+Package-owned quality checks:
 
 ```bash
-npm --prefix src/editor run typecheck
-npm --prefix src/editor run test
-npm --prefix packages/cge run typecheck
-npm --prefix packages/cge run test
+npm run quality:check --workspace=@codogma/cge
+npm run quality:check --workspace=@codogma/game-test-bridge-contract
+npm run quality:check --workspace=@codogma/localization
+npm test --workspace=@codogma/editor-mcp-server
+npm run typecheck --workspace=@codogma/editor-host
+npm test --workspace=@codogma/editor-host
+npm run test:workspace-consumer
 ```
+
+The Core quality suite also runs its existing packed-tarball consumer fixture: it packs the package, installs the resulting archive into a temporary consumer and compiles/executes consumer code against the published exports. The workspace consumer fixture imports every library package through its bare public specifier after the root install.
 
 Use the scripts declared in each package manifest as the authoritative list of available commands.
 

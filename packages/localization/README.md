@@ -59,22 +59,22 @@ duplicate ids are always detectable.
 ## Development commands
 
 ~~~bash
-cd packages/localization
-npm ci          # package-lock: TypeScript 5.3.3
-npm run build   # strict typecheck + emit dist/
-npm test        # build + node --test contract/service/validation/fixture/CLI tests
-npm run quality:check  # strict typecheck, scoped ESLint, config-format check and unit tests
-npm run quality:report # non-blocking Knip + dependency-cruiser reports
+# Run once from the repository root after a clean checkout:
+npm ci
+
+# Run the package-owned scripts from the repository root:
+npm run quality:check --workspace=@codogma/localization
+npm run quality:report --workspace=@codogma/localization
 ~~~
 
 The quality pilot deliberately uses root-locked ESLint, Prettier, Knip and
 dependency-cruiser versions rather than duplicating tool dependencies in this
-package's lockfile. Prettier checks all package-owned source, test and CLI files
-together with the manifest and tooling configuration. The package files were
-normalized in the pilot branch and the CI check now runs in read-only check
-mode. Run the root `npm ci` first, then `npm ci` here for the package's pinned
-TypeScript compiler. Strict TypeScript, ESLint and formatting gates remain
-scoped to this package; they are not applied to unrelated application source.
+package manifest. The root workspace lockfile also records this package's
+pinned TypeScript 5.3.3 compiler without changing its version. Prettier checks
+all package-owned source, test and CLI files together with the manifest and
+tooling configuration. The CI check runs in read-only check mode. Strict
+TypeScript, ESLint and formatting gates remain scoped to this package; they
+are not applied to unrelated application source.
 
 `quality:report` is report-only: Knip uses `--no-exit-code`; dependency-cruiser
 rules use warning severity. Review findings before promoting either report to a
@@ -92,11 +92,10 @@ npm run test:localization:acceptance    # boots the editor server, loads fixture
 
 ## Integration and public entry point (COD-64)
 
-The package is installed as a dependency of the root repository (`file:` link);
-its compiled `dist/` is produced by the documented build command. A clean
-checkout must run `npm run build:localization` (or `npm ci` followed by
-`npm run prepare` in the package directory) before importing from
-`@codogma/localization`.
+The package is a first-party npm workspace. Root `npm ci` links it through the
+ordinary versioned dependency declared by the repository root. Its compiled
+`dist/` is produced by `npm run build:localization` or the workspace-owned
+build script; no package-local lockfile or nested install is required.
 
 Project-level diagnostics entry point:
 
