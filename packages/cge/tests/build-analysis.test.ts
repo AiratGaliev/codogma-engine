@@ -424,6 +424,11 @@ test("feature provider inclusion requires an explicitly selected available provi
 
   assert.equal(result.valid, false);
   assert.ok(hasDiagnostic(result, "PROJECT_BUILD_FEATURE_PROVIDER_MISSING"));
+  assert.ok(!result.report.includedFeatures.includes("runtime.ecs"));
+  assert.ok(result.graph.excludedNodes.some((item) =>
+    item.nodeId === "feature:runtime.ecs" &&
+    item.reason === "provider-unavailable",
+  ));
 });
 
 test("external runtime file references are part of reachability and unavailable required files block build", () => {

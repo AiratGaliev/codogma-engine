@@ -932,6 +932,7 @@ export function analyzeProjectBuild(
   }
 
   const featureNodesById = new Map<string, string>();
+  const resolvedSelectedFeatureNodeIds = new Set<string>();
   const unselectedProviderFeatures = new Map<string, string[]>();
   for (const feature of input.features ?? []) {
     const source = makeSource("feature", feature.id);
@@ -988,6 +989,7 @@ export function analyzeProjectBuild(
       continue;
     }
     addEdge(nodeId, providerNodeId, "provides", "Selected feature provider", source);
+    resolvedSelectedFeatureNodeIds.add(nodeId);
   }
 
   for (const [packageId, packageSnapshot] of packageSnapshotsById) {
@@ -1384,10 +1386,8 @@ export function analyzeProjectBuild(
       if (id) entryPointNodeIds.add(id);
     }
   }
-  for (const feature of input.features ?? []) {
-    if (!feature.selected) continue;
-    const id = featureNodesById.get(feature.id);
-    if (id) entryPointNodeIds.add(id);
+  for (const nodeId of resolvedSelectedFeatureNodeIds) {
+    entryPointNodeIds.add(nodeId);
   }
   for (const runtimeFile of input.runtimeFiles ?? []) {
     if (!runtimeFile.required || !runtimeFile.available) continue;
@@ -1471,6 +1471,7 @@ export function analyzeProjectBuild(
     if (node.kind === "feature") {
       const feature = (input.features ?? []).find((item) => "feature:" + item.id === node.id);
       if (feature && !feature.selected) reason = "feature-not-selected";
+      else if (feature && !resolvedSelectedFeatureNodeIds.has(node.id)) reason = "provider-unavailable";
     } else if (node.kind === "package") {
       const packageId = node.id.slice("package:".length);
       if (unselectedFeatureByPackage.has(packageId)) reason = "feature-not-selected";
