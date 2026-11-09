@@ -7,7 +7,6 @@ Codogma Engine is a Web-first 2D game engine. The repository contains one browse
 - Node.js `>=22.12.0`.
 - npm `>=11.21.2 <12` (repository pin: `npm@11.21.2`).
 - A modern Chromium-based browser for development and browser acceptance.
-- A modern Chromium-based browser for development and browser acceptance.
 
 ## Install dependencies
 
