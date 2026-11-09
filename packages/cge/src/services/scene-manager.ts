@@ -125,7 +125,6 @@ class HostSceneManager implements SceneManager {
     this.assertAcceptingWork();
     return this.enqueueLifecycle(async () => {
       if (this.paused) return;
-      await this.commitPromise;
       const active = this.activeSession;
       if (active) await active.pause();
       this.paused = true;
@@ -136,7 +135,6 @@ class HostSceneManager implements SceneManager {
     this.assertAcceptingWork();
     return this.enqueueLifecycle(async () => {
       if (!this.paused) return;
-      await this.commitPromise;
       const active = this.activeSession;
       if (active) await active.resume();
       this.paused = false;
