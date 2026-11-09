@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
 
 function run(command: string, args: string[], cwd: string): string {
   const result = spawnSync(command, args, {
@@ -81,8 +82,13 @@ try {
     archivePath,
   ], consumerDirectory);
 
-  const tscPath = resolve(packageRoot, "node_modules", "typescript", "bin", "tsc");
-  if (!existsSync(tscPath)) throw new Error("Pinned TypeScript compiler is not installed.");
+  const packageRequire = createRequire(join(packageRoot, "package.json"));
+  let tscPath: string;
+  try {
+    tscPath = packageRequire.resolve("typescript/bin/tsc");
+  } catch (error) {
+    throw new Error("The package's pinned TypeScript compiler is not resolvable from the npm workspace.", { cause: error });
+  }
   run(process.execPath, [
     tscPath,
     "--strict",
