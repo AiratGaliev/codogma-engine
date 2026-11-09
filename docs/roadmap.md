@@ -234,7 +234,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Спроектировать минимальный публичный TypeScript API: Node/Entity, Component, Transform, lifecycle, события и service access.
 - [x] Утвердить минимальные host-neutral contracts для Input, Time/Scheduler/Tween и Scene Manager — COD-29 / [ADR-0008](decisions/ADR-0008-runtime-service-contracts.md).
 - [x] Реализовать и проверить Engine Services v1 в `@codogma/cge`: Time/Scheduler, Tween, normalized Input, typed Event Bus, Scene Manager, deterministic host-owned runtime composition и ComponentWorld lifetime ownership — COD-106. Phaser/browser adapters остаются вне Core.
-- [ ] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
+- [x] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
 - [ ] Интегрировать runtime core в управляемые фазы Phaser tick; не заводить независимый `requestAnimationFrame`.
 - [ ] Добавить Component Schema/Metadata для полей Inspector, валидации, default values и ссылок на ресурсы.
 - [ ] Создать Phaser adapter для выбранного среза: сущность ↔ sprite/view, Transform ↔ display transform, physics body и lifecycle.
