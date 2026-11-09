@@ -127,6 +127,36 @@ test("opening a corrupt manifest fails closed and keeps the recent entry marked 
   assert.equal(fs.existsSync(path.join(sandbox.userDataDirectory, "recent-projects.json")), true);
 });
 
+test("Recent Projects marks a manifest-valid project invalid when a registered Scene asset is missing", async () => {
+  const sandbox = await createSandbox();
+  const created = await createProject(sandbox);
+  const opened = await openProjectDirectory({
+    projectsRoot: sandbox.projectsRoot,
+    userDataDirectory: sandbox.userDataDirectory,
+    relativePath: created.relativePath,
+  });
+  assert.equal(opened.project.id, created.project.id);
+
+  const sceneAsset = created.project.assets.find((asset) => asset.kind === "scene");
+  assert.ok(sceneAsset);
+  await fsp.unlink(path.join(created.projectDirectory, sceneAsset.path));
+
+  const snapshot = await getProjectManagerSnapshot(sandbox);
+  const recent = snapshot.recentProjects[0];
+  assert.ok(recent);
+  assert.equal(recent.status, "invalid");
+  assert.ok(recent.diagnostics.some((item) => item.code === "PROJECT_ASSET_MISSING"));
+
+  await assert.rejects(
+    openProjectDirectory({
+      projectsRoot: sandbox.projectsRoot,
+      userDataDirectory: sandbox.userDataDirectory,
+      relativePath: recent.relativePath,
+    }),
+    (error) => error instanceof ProjectManagerError && error.statusCode === 422,
+  );
+});
+
 test("open, restart snapshot and relocation recovery use stable Project IDs without absolute recents paths", async () => {
   const sandbox = await createSandbox();
   const created = await createProject(sandbox);

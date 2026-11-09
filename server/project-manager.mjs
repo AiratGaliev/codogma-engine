@@ -667,9 +667,9 @@ export async function getProjectManagerSnapshot({
   const projectsById = new Map(directories.filter((item) => item.isProject && item.projectId).map((item) => [item.projectId, item]));
   let recentChanged = false;
 
-  const recentProjects = records.map((record) => {
+  const recentProjects = await Promise.all(records.map(async (record) => {
     const original = directories.find((item) => item.relativePath === record.relativePath);
-    let match = original?.projectId === record.projectId ? original : projectsById.get(record.projectId);
+    const match = original?.projectId === record.projectId ? original : projectsById.get(record.projectId);
     if (match && match.relativePath !== record.relativePath) {
       record.relativePath = match.relativePath;
       record.projectName = match.projectName;
@@ -677,13 +677,31 @@ export async function getProjectManagerSnapshot({
     }
 
     if (match) {
+      let status = "invalid";
+      let diagnostics = match.diagnostics ?? [];
+      if (match.manifestValid) {
+        const projectPath = safeJoin(root, match.relativePath);
+        const validation = projectPath
+          ? await validateProjectDirectory(projectPath)
+          : { valid: false, diagnostics: [diagnostic("PROJECT_PATH_UNSAFE", "The recent project path is not safe.", match.relativePath)] };
+        const sameProject = validation.project?.id === record.projectId;
+        if (validation.valid && sameProject) {
+          status = "available";
+          diagnostics = [];
+        } else {
+          diagnostics = validation.diagnostics.length
+            ? validation.diagnostics
+            : [diagnostic("PROJECT_ID_MISMATCH", "The project at this path has a different Project ID.", match.relativePath)];
+        }
+      }
+
       return {
         projectId: record.projectId,
         name: match.projectName || record.projectName,
         relativePath: match.relativePath,
         lastOpenedAt: record.lastOpenedAt,
-        status: match.manifestValid ? "available" : "invalid",
-        diagnostics: match.diagnostics ?? [],
+        status,
+        diagnostics,
       };
     }
 
@@ -696,7 +714,7 @@ export async function getProjectManagerSnapshot({
       status: hasInvalidOriginal ? "invalid" : "missing",
       diagnostics: hasInvalidOriginal ? original.diagnostics ?? [] : [],
     };
-  });
+  }));
 
   if (recentChanged) {
     await writeRecentRecords(userDataDirectory, records).catch(() => {});
