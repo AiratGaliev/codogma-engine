@@ -32,6 +32,8 @@ test("only active first-party packages and the native Editor Host are npm worksp
 
 test("root lockfile owns every workspace link and active workspace roots have no nested lockfiles", () => {
   assert.equal(lockfile.lockfileVersion, 3);
+  assert.deepEqual(lockfile.packages[""].dependencies, rootManifest.dependencies);
+  assert.deepEqual(lockfile.packages[""].devDependencies, rootManifest.devDependencies);
 
   for (const workspacePath of expectedWorkspaces) {
     const manifest = readJson(`${workspacePath}/package.json`);
@@ -41,6 +43,15 @@ test("root lockfile owns every workspace link and active workspace roots have no
     assert.equal(packageRecord?.name, manifest.name, `missing lockfile package record for ${workspacePath}`);
     assert.equal(linkRecord?.link, true, `missing npm workspace link for ${manifest.name}`);
     assert.equal(existsSync(join(repositoryRoot, workspacePath, "package-lock.json")), false);
+
+    if (manifest.devDependencies?.typescript) {
+      const compiler = lockfile.packages[`${workspacePath}/node_modules/typescript`];
+      assert.equal(
+        compiler?.version,
+        manifest.devDependencies.typescript,
+        `the workspace compiler pin changed for ${manifest.name}`,
+      );
+    }
   }
 
   assert.equal(existsSync(join(repositoryRoot, "mini-services/ai-chat/package-lock.json")), true);
