@@ -171,10 +171,12 @@ jobs:
               ;;
           esac
 
-      - name: Generate candidate workspace lockfile (COD-107 bootstrap)
+      - name: Generate candidate workspace lockfile from package manifests (COD-107 bootstrap)
         id: workspace-lockfile
         if: steps.scope.outputs.run_code_checks == 'true'
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+        run: |
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
       - name: Upload candidate workspace lockfile
         if: steps.workspace-lockfile.outcome == 'success'
@@ -262,6 +264,7 @@ jobs:
 
   editor-host:
     name: editor-host
+    needs: fast
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -298,6 +301,13 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
+
+      - name: Download npm-generated workspace lockfile
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: codogma-workspace-lockfile
+          path: .
 
       - name: Install root and workspace dependencies
         if: steps.scope.outputs.run == 'true'
