@@ -61,7 +61,12 @@ function validateProvider(raw: unknown, feature: FeatureDescriptor, index: numbe
     diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Provider scopes and targets cannot exceed the feature descriptor.", feature.id, path));
     return;
   }
-  if (!object(raw.entryPoints) || !knownKeys(raw.entryPoints, ENTRY_KEYS) || scopes.some(s => !safeEntry(raw.entryPoints[s], raw.kind as "builtin" | "package")) || Object.keys(raw.entryPoints).some(k => !scopes.includes(k as FeatureScope))) {
+  if (!object(raw.entryPoints)) {
+    diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Provider entry points must be a scope-to-path object.", feature.id, path));
+    return;
+  }
+  const entryPoints = raw.entryPoints;
+  if (!knownKeys(entryPoints, ENTRY_KEYS) || scopes.some(scope => !safeEntry(entryPoints[scope], raw.kind as "builtin" | "package")) || Object.keys(entryPoints).some(key => !scopes.includes(key as FeatureScope))) {
     diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Provider must declare safe public entry points exactly for its supported scopes.", feature.id, path));
     return;
   }
@@ -69,7 +74,7 @@ function validateProvider(raw: unknown, feature: FeatureDescriptor, index: numbe
     if (!knownKeys(raw, ["id", "kind", "scopes", "targets", "entryPoints"])) {
       diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Built-in provider contains unsupported properties.", feature.id, path)); return;
     }
-    return { id: raw.id, kind: "builtin", scopes, targets: raw.targets as string[], entryPoints: raw.entryPoints as FeatureEntryPoints };
+    return { id: raw.id, kind: "builtin", scopes, targets: raw.targets as string[], entryPoints: entryPoints as FeatureEntryPoints };
   }
   if (typeof raw.packageName !== "string" || !PACKAGE.test(raw.packageName) || (raw.packageVersion !== undefined && (typeof raw.packageVersion !== "string" || !raw.packageVersion)) || !knownKeys(raw, ["id", "kind", "scopes", "targets", "entryPoints", "packageName", "packageVersion"])) {
     diagnostics.push(error("FEATURE_PROVIDER_INVALID", "Package provider must declare an npm package name and supported metadata only.", feature.id, path)); return;
