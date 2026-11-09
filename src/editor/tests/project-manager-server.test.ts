@@ -166,15 +166,33 @@ test("Project Manager creates, opens and restores a validated project after serv
     await server.stop();
   }
 
-  server = await startProjectManagerServer(projectsRoot, userDataDirectory, path.join(projectsRoot, "Demo-Project"));
+  server = await startProjectManagerServer(projectsRoot, userDataDirectory);
   try {
-    const restored = await callProjectManager<{ activeProject: { projectId: string; relativePath: string } }>(
+    const restored = await callProjectManager<{
+      activeProject: { projectId: string; relativePath: string } | null;
+      recentProjects: Array<{ projectId: string; relativePath: string; status: string }>;
+    }>(
       server.origin,
       "projectManager.getSnapshot",
     );
     assert.equal(restored.response.status, 200);
-    assert.equal(restored.payload.activeProject?.relativePath, "Demo-Project");
-    assert.equal(restored.payload.activeProject?.projectId, createdProjectId);
+    assert.equal(restored.payload.activeProject, null);
+    const recentProject = restored.payload.recentProjects[0];
+    assert.ok(recentProject);
+    assert.equal(recentProject.projectId, createdProjectId);
+    assert.equal(recentProject.relativePath, "Demo-Project");
+    assert.equal(recentProject.status, "available");
+
+    const reopened = await callProjectManager<{
+      activeProject: { projectId: string; relativePath: string };
+    }>(
+      server.origin,
+      "projectManager.open",
+      { relativePath: recentProject.relativePath },
+    );
+    assert.equal(reopened.response.status, 200);
+    assert.equal(reopened.payload.activeProject.projectId, createdProjectId);
+    assert.equal(reopened.payload.activeProject.relativePath, "Demo-Project");
     const tree = await fetch(server.origin + "/editor/project/project.json");
     assert.equal(tree.status, 200);
   } finally {
