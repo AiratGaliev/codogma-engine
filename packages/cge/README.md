@@ -37,6 +37,21 @@ Host-neutral contracts and the first component-object Core slice.
 - World disposal is idempotent, rejects reentrant mutations while disposing, attempts all component/system cleanup, aggregates failures and clears world-owned state even when a callback throws.
 - The Phaser adapter owns the concrete Phaser tick binding (COD-28); Project Model hydration, live Inspector mapping and Preview session are separate integration responsibilities (COD-103, COD-31 and COD-30).
 
+## Optional runtime service contracts (COD-29)
+
+The package exports host-neutral contracts for optional runtime services:
+
+- **Input:** normalized keyboard and pointer/touch events, explicit UI/world routing, coordinate-space conversion and focus-loss cancellation.
+- **Time and scheduler:** one immutable frame snapshot from the host-owned clock, scaled/unscaled time, cancellable scheduled callbacks and owner cancellation through `AbortSignal`.
+- **Tween:** numeric property interpolation, delay, easing, repeat/yoyo, pause/resume and cancellation using that same frame snapshot.
+- **Scene Manager:** asynchronous orchestration through an injected `SceneLoader` and inactive `RuntimeSceneSession`; the manager does not parse Project Model data or instantiate the scene graph.
+
+These are **contracts only**, not implemented services. Their implementations, deterministic phase integration and runtime lifecycle tests belong to [COD-106](https://linear.app/codogma-engine/issue/COD-106/realizovat-bazovie-host-neutral-engine-services-v1-v-codogmacge). [COD-103](https://linear.app/codogma-engine/issue/COD-103/realizovat-data-driven-scene-loader-dlya-project-model-v1) owns the Project Model-to-runtime Scene Loader implementation.
+
+Services are independent optional dependencies. No new mandatory properties were added to `ComponentBehavior` or `ComponentFactoryContext`; components receive only capabilities explicitly composed by the host. The contracts use no Phaser, DOM event objects, Editor UI, Node-only APIs or platform SDKs.
+
+All time values are seconds. The host remains the sole tick owner and passes one `RuntimeTimeFrame` to time-driven services. `AbortSignal` is the shared cancellation boundary for subscriptions, scheduled tasks, tweens and in-flight scene requests.
+
 ## Commands
 
 Run from this directory:
