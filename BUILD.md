@@ -4,17 +4,26 @@ Codogma Engine is a Web-first 2D game engine. The repository contains one browse
 
 ## Requirements
 
-- Node.js 22 or newer.
-- npm.
+- Node.js `>=22.12.0`.
+- npm `>=11.21.2 <12` (repository pin: `npm@11.21.2`).
+- A modern Chromium-based browser for development and browser acceptance.
 - A modern Chromium-based browser for development and browser acceptance.
 
 ## Install dependencies
 
-Install the root package and every active first-party workspace once from the repository root:
+Verify the toolchain, then install the root package and every active first-party workspace once from the repository root:
 
 ```bash
+node --version
+npm --version
+
+# Only when the bundled npm is older than 11.21.2:
+npm install --global npm@11.21.2
+
 npm ci
 ```
+
+The root manifest declares `packageManager: "npm@11.21.2"` and requires npm 11.21.2 or newer within the npm 11 major. This minimum is intentional: npm 10.9.9 crashes in Arborist's optional-peer resolution with the repository's Vitest 5.0.5 dependency graph; do not work around it by disabling peer dependency resolution.
 
 The root lockfile includes the active packages in `packages/*` and the native Editor Host in `src/editor/`. The optional AI Chat service is not part of that workspace and keeps its own install lifecycle; install it only when working on the service:
 
