@@ -524,6 +524,53 @@ test("EngineRuntime fixes service phase order and integrates a host-owned Compon
   assert.throws(() => runtime.update(0), /disposed/i);
 });
 
+
+test("SceneManager surfaces failed disposal of a late cancelled candidate", async () => {
+  const firstLoad = deferred<RuntimeSceneSession>();
+  const secondLoad = deferred<RuntimeSceneSession>();
+  const loader: SceneLoader = {
+    load(request) {
+      return request.sceneId === "first" ? firstLoad.promise : secondLoad.promise;
+    },
+  };
+  const manager = createSceneManager(loader);
+  const first = manager.switchTo("first");
+  const second = manager.switchTo("second");
+
+  firstLoad.resolve(makeSession("first", {
+    dispose: () => { throw new Error("candidate cleanup failed"); },
+  }));
+  await assert.rejects(first, AggregateError);
+
+  secondLoad.resolve(makeSession("second"));
+  assert.deepEqual(await second, { status: "activated", sceneId: "second" });
+  await manager.dispose();
+});
+
+test("EngineRuntime rejects reentrant disposal and promise-returning world callbacks", async () => {
+  const source = new FakeInputSource();
+  const runtime = createEngineRuntime({
+    inputSource: source,
+    inputRouteResolver: { resolve: () => "world" },
+    inputCoordinates: coordinates,
+    sceneLoader: { async load(request) { return makeSession(request.sceneId); } },
+  });
+
+  assert.throws(
+    () => runtime.update(0.1, () => runtime.dispose()),
+    AggregateError,
+  );
+  assert.equal(runtime.isDisposed, false);
+
+  assert.throws(
+    () => runtime.update(0.1, (() => Promise.resolve()) as unknown as (delta: number) => void),
+    AggregateError,
+  );
+  assert.equal(runtime.isDisposed, false);
+  await runtime.dispose();
+  assert.equal(runtime.isDisposed, true);
+});
+
 test("EngineRuntime still advances later phases after a service callback error", async () => {
   const source = new FakeInputSource();
   const runtime = createEngineRuntime({

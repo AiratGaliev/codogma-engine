@@ -14,6 +14,7 @@ import {
 } from "./scene-manager.js";
 import { createScheduler, createTimeService, type Scheduler, type TimeService } from "./time.js";
 import { createTweenService, type TweenService } from "./tween.js";
+import { assertSynchronousResult } from "./sync-callback.js";
 
 export interface EngineRuntimeOptions {
   readonly inputSource: InputEventSource;
@@ -78,7 +79,9 @@ export function createEngineRuntime<TEvents extends object = Record<string, neve
         try { scheduler.update(frame); } catch (error) { errors.push(error); }
         try { tweens.update(frame); } catch (error) { errors.push(error); }
         if (updateWorld) {
-          try { updateWorld(frame.deltaSeconds); } catch (error) { errors.push(error); }
+          try {
+            assertSynchronousResult(updateWorld(frame.deltaSeconds), "ComponentWorld update callback");
+          } catch (error) { errors.push(error); }
         }
       } finally {
         updating = false;
@@ -88,6 +91,7 @@ export function createEngineRuntime<TEvents extends object = Record<string, neve
     },
     dispose(): Promise<void> {
       if (disposePromise) return disposePromise;
+      if (updating) throw new Error("EngineRuntime.dispose() cannot run during EngineRuntime.update().");
       disposed = true;
       disposePromise = (async () => {
         const errors: unknown[] = [];

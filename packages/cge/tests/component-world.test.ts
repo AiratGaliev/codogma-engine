@@ -4,6 +4,7 @@ import {
   ComponentRegistrationError,
   ComponentRegistry,
   ComponentWorld,
+  createTypedEventBus,
   type ComponentBehavior,
   type ComponentSystem,
   type ComponentTypeDefinition,
@@ -36,6 +37,68 @@ function createRegistry(log: string[]): ComponentRegistry {
   });
   return registry;
 }
+
+
+test("aborts instance and enabled-scope owner signals at their lifecycle boundaries", () => {
+  const bus = createTypedEventBus<{ tick: number }>();
+  const registry = new ComponentRegistry();
+  const observed: string[] = [];
+  let activationSignals: AbortSignal[] = [];
+  let lifetimeSignal: AbortSignal | undefined;
+  let lifetimeCalls = 0;
+  let activationCalls = 0;
+
+  registry.register({
+    schema,
+    create: (context) => {
+      if (!context.signal) throw new Error("ComponentWorld must provide an instance owner signal.");
+      lifetimeSignal = context.signal;
+      bus.subscribe("tick", () => { lifetimeCalls++; }, { signal: context.signal });
+      return {
+        onEnable: ({ signal }) => {
+          activationSignals.push(signal);
+          bus.subscribe("tick", () => { activationCalls++; }, { signal });
+        },
+        onDisable: () => observed.push("disable-signal-aborted:" + String(activationSignals.at(-1)?.aborted)),
+        onDestroy: () => observed.push("lifetime-signal-aborted:" + String(lifetimeSignal?.aborted)),
+      };
+    },
+  });
+
+  const world = new ComponentWorld("scene-owner", registry);
+  world.createNode({ id: "node-owner", name: "Owner" });
+  world.attachComponent("node-owner", schema.typeId, {}, { instanceId: "owned-component" });
+  bus.emit("tick", 1);
+  assert.equal(lifetimeCalls, 1);
+  assert.equal(activationCalls, 1);
+
+  world.setComponentEnabled("owned-component", false);
+  assert.equal(activationSignals[0]?.aborted, true);
+  bus.emit("tick", 2);
+  assert.equal(lifetimeCalls, 2);
+  assert.equal(activationCalls, 1);
+
+  world.setComponentEnabled("owned-component", true);
+  assert.equal(activationSignals.length, 2);
+  assert.equal(activationSignals[1]?.aborted, false);
+  bus.emit("tick", 3);
+  assert.equal(lifetimeCalls, 3);
+  assert.equal(activationCalls, 2);
+
+  world.destroyNode("node-owner");
+  assert.equal(lifetimeSignal?.aborted, true);
+  assert.equal(activationSignals[1]?.aborted, true);
+  bus.emit("tick", 4);
+  assert.equal(lifetimeCalls, 3);
+  assert.equal(activationCalls, 2);
+  assert.deepEqual(observed, [
+    "disable-signal-aborted:true",
+    "disable-signal-aborted:true",
+    "lifetime-signal-aborted:true",
+  ]);
+  world.dispose();
+  bus.dispose();
+});
 
 test("runs deterministic lifecycle only on explicit host ticks", () => {
   const log: string[] = [];

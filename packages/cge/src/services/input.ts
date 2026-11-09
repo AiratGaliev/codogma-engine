@@ -1,4 +1,5 @@
 import type { RuntimeDisposable } from "./common.js";
+import { assertSynchronousResult } from "./sync-callback.js";
 
 export type InputRoute = "ui" | "world";
 export type InputKeyPhase = "down" | "up" | "cancel";
@@ -350,12 +351,11 @@ class InputServiceImpl implements InputService {
   private dispatch(route: InputRoute, event: InputEvent): void {
     const errors: unknown[] = [];
     const listeners = [...this.listeners].filter((listener) => listener.route === route);
-    try {
-      for (const listener of listeners) {
-        if (listener.disposed || !this.listeners.has(listener)) continue;
-        try { listener.handler(event); } catch (error) { errors.push(error); }
-      }
-    } finally {
+    for (const listener of listeners) {
+      if (listener.disposed || !this.listeners.has(listener)) continue;
+      try {
+        assertSynchronousResult(listener.handler(event), "Input handlers");
+      } catch (error) { errors.push(error); }
     }
     if (errors.length > 0) throw new AggregateError(errors, "One or more input handlers failed.");
   }

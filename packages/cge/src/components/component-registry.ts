@@ -8,9 +8,14 @@ export interface ComponentNodeContext {
   readonly active: boolean;
 }
 
+/** Owner signal for resources that exist only while this Component is enabled. */
+export interface ComponentActivationContext {
+  readonly signal: AbortSignal;
+}
+
 export interface ComponentBehavior {
   onCreate?(): void;
-  onEnable?(): void;
+  onEnable?(context: ComponentActivationContext): void;
   onStart?(): void;
   onUpdate?(deltaSeconds: number): void;
   onDisable?(): void;
@@ -21,11 +26,15 @@ export interface ComponentBehavior {
  * Factory input is a per-instance immutable JSON snapshot. Component factories
  * must be side-effect-free: acquire external resources in onCreate(), where
  * the returned behavior can participate in the normal cleanup lifecycle.
+ * The optional factory signal is aborted before onDestroy; onEnable receives
+ * a fresh signal for each enabled period, aborted before onDisable.
  */
 export interface ComponentFactoryContext {
   readonly instanceId: string;
   readonly node: ComponentNodeContext;
   readonly properties: Readonly<JsonObject>;
+  /** Aborted before onDestroy; use for resources that live for the instance lifetime. */
+  readonly signal?: AbortSignal;
 }
 
 /**

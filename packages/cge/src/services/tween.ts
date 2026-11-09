@@ -1,5 +1,6 @@
 import type { RuntimeDisposable, RuntimeTimeFrame, RuntimeTimeDomain } from "./common.js";
 import { assertRuntimeTimeFrame } from "./frame-validation.js";
+import { assertSynchronousResult } from "./sync-callback.js";
 
 type IfEquals<X, Y, Then = X, Else = never> = (
   <T>() => T extends X ? 1 : 2
@@ -110,6 +111,7 @@ class HostTween implements TweenHandle {
     this.state = "cancelled";
     this.release();
   }
+  dispose(): void { this.cancel(); }
   pause(): void {
     if (this.state === "running" || this.state === "delayed") this.state = "paused";
   }
@@ -136,8 +138,12 @@ class HostTween implements TweenHandle {
       const lastReverse = this.options.yoyo === true && repeat % 2 === 1;
       this.applyProgress(lastReverse ? 0 : 1);
       this.finish();
-      this.options.onUpdate?.(1);
-      this.options.onComplete?.();
+      if (this.options.onUpdate) {
+        assertSynchronousResult(this.options.onUpdate(1), "Tween onUpdate callback");
+      }
+      if (this.options.onComplete) {
+        assertSynchronousResult(this.options.onComplete(), "Tween onComplete callback");
+      }
       return;
     }
 

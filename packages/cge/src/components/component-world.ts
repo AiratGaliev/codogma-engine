@@ -4,6 +4,7 @@ import { isValidStableId } from "../project-model/contracts.js";
 import { validateComponentProperties, type ComponentSchemaContext } from "./component-schema.js";
 import {
   ComponentRegistry,
+  type ComponentActivationContext,
   type ComponentBehavior,
   type ComponentNodeContext,
   type ComponentTypeDefinition,
@@ -52,6 +53,8 @@ interface ComponentRecord {
   started: boolean;
   activeNotified: boolean;
   destroyed: boolean;
+  readonly lifetimeController: AbortController;
+  activationController?: AbortController;
 }
 
 type Mutation = () => void;
@@ -368,16 +371,26 @@ export class ComponentWorld {
     if (!validation.valid || !validation.value) {
       throw new ComponentWorldError("COMPONENT_INVALID_VALUE", "Properties for component " + typeId + " are invalid.", validation.diagnostics);
     }
-    const factoryResult: unknown = definition.create({
-      instanceId,
-      node,
-      properties: freezeJsonValue(cloneJsonValue(validation.value)),
-    });
+    const lifetimeController = new AbortController();
+    let factoryResult: unknown;
+    try {
+      factoryResult = definition.create({
+        instanceId,
+        node,
+        properties: freezeJsonValue(cloneJsonValue(validation.value)),
+        signal: lifetimeController.signal,
+      });
+    } catch (error) {
+      lifetimeController.abort(error);
+      throw error;
+    }
     if (isThenable(factoryResult)) {
+      lifetimeController.abort(new TypeError("Component factories must complete synchronously."));
       void Promise.resolve(factoryResult).catch(() => undefined);
       throw new TypeError("Component factories must complete synchronously; Promise results are not supported.");
     }
     if (!factoryResult || typeof factoryResult !== "object") {
+      lifetimeController.abort(new TypeError("Component factory returned an invalid behavior."));
       throw new TypeError("Factory for component " + typeId + " did not return a behavior object.");
     }
     const behavior = factoryResult as ComponentBehavior;
@@ -392,6 +405,7 @@ export class ComponentWorld {
       started: false,
       activeNotified: false,
       destroyed: false,
+      lifetimeController,
     };
     this.components.set(instanceId, record);
     this.componentsByNode.get(nodeId)?.push(instanceId);
@@ -401,12 +415,9 @@ export class ComponentWorld {
       this.removeComponentNow(instanceId, errors);
       throw new AggregateError(errors, "Component " + typeId + " failed during creation.");
     }
-    if (this.isEffectivelyEnabled(record)) {
-      if (this.invoke(behavior, behavior.onEnable, errors)) record.activeNotified = true;
-      else {
-        this.removeComponentNow(instanceId, errors);
-        throw new AggregateError(errors, "Component " + typeId + " failed during enable.");
-      }
+    if (this.isEffectivelyEnabled(record) && !this.enableComponent(record, errors)) {
+      this.removeComponentNow(instanceId, errors);
+      throw new AggregateError(errors, "Component " + typeId + " failed during enable.");
     }
   }
 
@@ -415,9 +426,12 @@ export class ComponentWorld {
     const component = this.components.get(instanceId);
     if (!component || component.destroyed) return;
     if (component.activeNotified) {
+      component.activationController?.abort();
+      component.activationController = undefined;
       this.invoke(component.behavior, component.behavior.onDisable, errors);
       component.activeNotified = false;
     }
+    component.lifetimeController.abort();
     component.destroyed = true;
     this.invoke(component.behavior, component.behavior.onDestroy, errors);
     this.components.delete(instanceId);
@@ -439,11 +453,36 @@ export class ComponentWorld {
     const nextActive = this.isEffectivelyEnabled(component);
     if (component.activeNotified === nextActive) return;
     const errors: unknown[] = [];
-    const callback = nextActive ? component.behavior.onEnable : component.behavior.onDisable;
-    const success = this.invoke(component.behavior, callback, errors);
-    component.activeNotified = nextActive && success;
-    if (!success) this.removeComponentNow(component.id, errors);
+    if (nextActive) {
+      if (!this.enableComponent(component, errors)) this.removeComponentNow(component.id, errors);
+    } else {
+      // Abort enabled-scope resources before invoking the user's disable hook.
+      component.activationController?.abort();
+      component.activationController = undefined;
+      component.activeNotified = false;
+      if (!this.invoke(component.behavior, component.behavior.onDisable, errors)) {
+        this.removeComponentNow(component.id, errors);
+      }
+    }
     if (errors.length > 0) throw new AggregateError(errors, "Component " + component.typeId + " could not change enabled state.");
+  }
+
+  private enableComponent(component: ComponentRecord, errors: unknown[]): boolean {
+    const controller = new AbortController();
+    component.activationController = controller;
+    const success = this.invoke(
+      component.behavior,
+      component.behavior.onEnable,
+      errors,
+      undefined,
+      { signal: controller.signal },
+    );
+    component.activeNotified = success;
+    if (!success) {
+      controller.abort();
+      component.activationController = undefined;
+    }
+    return success;
   }
 
   private schedule(mutation: Mutation): void {
@@ -511,15 +550,22 @@ export class ComponentWorld {
 
   private invoke(
     receiver: object,
-    callback: (() => void) | ((deltaSeconds: number) => void) | undefined,
+    callback:
+      | (() => void)
+      | ((deltaSeconds: number) => void)
+      | ((context: ComponentActivationContext) => void)
+      | undefined,
     errors: unknown[],
     deltaSeconds?: number,
+    activationContext?: ComponentActivationContext,
   ): boolean {
     if (!callback) return true;
     try {
-      const result = deltaSeconds === undefined
-        ? (callback as () => unknown).call(receiver)
-        : (callback as (deltaSeconds: number) => unknown).call(receiver, deltaSeconds);
+      const result = activationContext !== undefined
+        ? (callback as (context: ComponentActivationContext) => unknown).call(receiver, activationContext)
+        : deltaSeconds === undefined
+          ? (callback as () => unknown).call(receiver)
+          : (callback as (deltaSeconds: number) => unknown).call(receiver, deltaSeconds);
       return this.assertSynchronous(result, errors, "Component lifecycle callbacks");
     } catch (error) {
       errors.push(error);

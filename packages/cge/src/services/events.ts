@@ -1,4 +1,5 @@
 import type { RuntimeDisposable } from "./common.js";
+import { assertSynchronousResult } from "./sync-callback.js";
 
 export interface EventSubscription extends RuntimeDisposable {
   unsubscribe(): void;
@@ -41,7 +42,6 @@ implements EventSubscription {
 class TypedEventBusImpl<TEvents extends object> implements TypedEventBus<TEvents> {
   private readonly listeners = new Map<keyof TEvents, Set<EventListener<unknown>>>();
   private disposed = false;
-  private emitting = false;
 
   get isDisposed(): boolean { return this.disposed; }
 
@@ -77,16 +77,13 @@ class TypedEventBusImpl<TEvents extends object> implements TypedEventBus<TEvents
     const bucket = this.listeners.get(type);
     if (!bucket || bucket.size === 0) return;
     const errors: unknown[] = [];
-    this.emitting = true;
-    try {
-      // Snapshot semantics: subscriptions added during emit begin on the next emit.
-      for (const candidate of [...bucket]) {
-        const listener = candidate as EventListener<TEvents[TKey]>;
-        if (listener.disposed || !bucket.has(candidate)) continue;
-        try { listener.handler(payload); } catch (error) { errors.push(error); }
-      }
-    } finally {
-      this.emitting = false;
+    // Snapshot semantics: subscriptions added during emit begin on the next emit.
+    for (const candidate of [...bucket]) {
+      const listener = candidate as EventListener<TEvents[TKey]>;
+      if (listener.disposed || !bucket.has(candidate)) continue;
+      try {
+        assertSynchronousResult(listener.handler(payload), "Event handlers");
+      } catch (error) { errors.push(error); }
     }
     if (errors.length > 0) throw new AggregateError(errors, "One or more event handlers failed.");
   }
@@ -104,15 +101,12 @@ class TypedEventBusImpl<TEvents extends object> implements TypedEventBus<TEvents
 
   clear<TKey extends keyof TEvents>(type?: TKey): void {
     this.assertUsable();
-    const entries = type === undefined
-      ? [...this.listeners.entries()]
-      : [[type, this.listeners.get(type) ?? new Set<EventListener<unknown>>()] as const];
+    const entries = [...this.listeners.entries()].filter(([key]) => type === undefined || key === type);
     for (const [key, bucket] of entries) {
       for (const listener of [...bucket]) {
-        const typed = listener as EventListener<TEvents[keyof TEvents]>;
-        if (typed.disposed) continue;
-        typed.disposed = true;
-        if (typed.signal && typed.onAbort) typed.signal.removeEventListener("abort", typed.onAbort);
+        if (listener.disposed) continue;
+        listener.disposed = true;
+        if (listener.signal && listener.onAbort) listener.signal.removeEventListener("abort", listener.onAbort);
       }
       bucket.clear();
       this.listeners.delete(key);
@@ -121,12 +115,7 @@ class TypedEventBusImpl<TEvents extends object> implements TypedEventBus<TEvents
 
   dispose(): void {
     if (this.disposed) return;
-    if (this.emitting) {
-      // Mark terminal first; emit() still completes its current snapshot.
-      this.disposed = true;
-      this.clearDisposedListeners();
-      return;
-    }
+    // Disposing from a listener clears the remaining snapshot before dispatch continues.
     this.disposed = true;
     this.clearDisposedListeners();
   }

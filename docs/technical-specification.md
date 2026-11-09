@@ -363,6 +363,7 @@ Runtime Input API различает **физические device inputs** и *
 - Typed Event Bus имеет локальную instance ownership, snapshot dispatch и `AbortSignal` cleanup. Listener failures агрегируются после обхода остальных активных listeners.
 - Scene Manager не выполняет hydration и не владеет host tick: он принимает только injected `SceneLoader` и управляет session lifecycle. Host передаёт активный `ComponentWorld` callback в runtime update; Loader остаётся отдельным владельцем Project Model parsing и rollback.
 - Для Scheduler/Tween/Input/Event Bus освобождение owner выполняется через idempotent handle или `AbortSignal`. Ошибки отдельных callbacks не отменяют cleanup других ресурсов.
+- `ComponentFactoryContext.signal` (optional для source compatibility) представляет lifetime конкретного Component instance; `ComponentBehavior.onEnable({ signal })` получает новый signal на каждый enabled период. ComponentWorld abort-ит enabled signal до `onDisable` и lifetime signal до `onDestroy`; старые callbacks без параметров продолжают работать.
 
 ### 6.8. Сохранения и локальное пользовательское состояние
 

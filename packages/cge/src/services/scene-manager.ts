@@ -185,6 +185,7 @@ class HostSceneManager implements SceneManager {
     options: SceneSwitchOptions,
     previous: SwitchOperation | undefined,
   ): Promise<SceneSwitchResult> {
+    let cleanupFailed = false;
     try {
       // A newer request arriving during an activation commit waits for that commit.
       if (previous?.commitStarted) {
@@ -209,11 +210,21 @@ class HostSceneManager implements SceneManager {
         throw new TypeError("SceneLoader returned an invalid RuntimeSceneSession.");
       }
       if (candidate.sceneId !== sceneId) {
-        await this.disposeSession(candidate);
+        try {
+          await this.disposeSession(candidate);
+        } catch (cleanupError) {
+          cleanupFailed = true;
+          throw new AggregateError([cleanupError], "A mismatched Scene candidate could not be disposed.");
+        }
         throw new Error("SceneLoader returned a session for a different Scene ID.");
       }
       if (operation.controller.signal.aborted || this.disposed || this.pending !== operation) {
-        await this.disposeSession(candidate);
+        try {
+          await this.disposeSession(candidate);
+        } catch (cleanupError) {
+          cleanupFailed = true;
+          throw new AggregateError([cleanupError], "A cancelled Scene candidate could not be disposed.");
+        }
         return { status: "cancelled", sceneId };
       }
 
@@ -225,7 +236,7 @@ class HostSceneManager implements SceneManager {
       }
       return { status: "activated", sceneId };
     } catch (error) {
-      if (!operation.commitStarted && operation.controller.signal.aborted) {
+      if (!cleanupFailed && !operation.commitStarted && operation.controller.signal.aborted) {
         return { status: "cancelled", sceneId };
       }
       throw error;

@@ -1,5 +1,6 @@
 import type { RuntimeDisposable, RuntimeTimeFrame, RuntimeTimeDomain } from "./common.js";
 import { assertRuntimeTimeFrame } from "./frame-validation.js";
+import { assertSynchronousResult } from "./sync-callback.js";
 
 export interface TimeService extends RuntimeDisposable {
   readonly currentFrame: RuntimeTimeFrame;
@@ -130,6 +131,7 @@ class HostScheduledTask implements ScheduledTask {
     this.state = "cancelled";
     this.release();
   }
+  dispose(): void { this.cancel(); }
   pause(): void { if (this.state === "scheduled") this.state = "paused"; }
   resume(): void { if (this.state === "paused") this.state = "scheduled"; }
 
@@ -139,7 +141,7 @@ class HostScheduledTask implements ScheduledTask {
     if (this.remainingSeconds > 0) return;
     this.state = "completed";
     this.release();
-    this.callback();
+    assertSynchronousResult(this.callback(), "Scheduled callbacks");
   }
 
   private release(): void {
