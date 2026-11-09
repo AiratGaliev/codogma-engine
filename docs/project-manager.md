@@ -85,6 +85,6 @@ On startup/reload, Project Manager scans the configured root with bounded depth 
 
 ## Editor Host ownership
 
-The server has one active project directory. Successful Create/Open validates the project, changes the active project root, invalidates the project content hash and rebinds the first-party MCP server to the same root. Existing Editor file APIs and consumers continue to resolve against that active project. AI Chat and project MCP operations require an active project; the Project Manager API remains available without one.
+The server has one active project directory. Successful Create/Open validates the project, changes the active project root, invalidates the project content hash and rebinds the first-party MCP server to the same root. Existing Editor file APIs and consumers continue to resolve against that active project. AI Chat and project MCP operations require an active project; the Project Manager API remains available without one. Before the switch, Project Manager blocks while a save, scene load or native document mutation is in flight. On activation, the SolidJS Host invalidates outstanding document/script/schema requests, clears the previous TypeScript source session and opens the first registered Scene without prompting a second time for changes the user already chose to discard.
 
 No new project state is written into the Project Model beyond the native fields already defined by ADR-0007.

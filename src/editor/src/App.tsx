@@ -804,6 +804,7 @@ function App() {
     path: string,
     reloadCurrent = false,
     allowDuringProjectMutation = false,
+    skipUnsavedChangesConfirmation = false,
   ): Promise<boolean> {
     const loadDecision = beginSceneLoadRequest(sceneLoadSequence, path, scenePath(), reloadCurrent);
     sceneLoadSequence = loadDecision.sequence;
@@ -812,11 +813,13 @@ function App() {
       log("warning", "A native document operation is in progress; opening another document is temporarily blocked.");
       return false;
     }
-    if (animationDirty() || scriptDirty()) {
-      if (!window.confirm("The active animation or TypeScript source has unsaved changes. Discard them and open the document?")) return false;
-    }
-    if (dirty() || projectDirty()) {
-      if (!window.confirm("The active native document or Project manifest has unsaved changes. Discard them and open the requested document?")) return false;
+    if (!skipUnsavedChangesConfirmation) {
+      if (animationDirty() || scriptDirty()) {
+        if (!window.confirm("The active animation or TypeScript source has unsaved changes. Discard them and open the document?")) return false;
+      }
+      if (dirty() || projectDirty()) {
+        if (!window.confirm("The active native document or Project manifest has unsaved changes. Discard them and open the requested document?")) return false;
+      }
     }
 
     const request = sceneLoadSequence;
@@ -885,6 +888,20 @@ function App() {
         return;
       }
       setProjectManagerVisible(false);
+
+      // Invalidate asynchronous work that may still reference the previous
+      // project's root before loading any documents from the newly active one.
+      sceneLoadSequence += 1;
+      documentLoadSequence += 1;
+      scriptCheckSequence += 1;
+      componentSchemaRefreshSequence += 1;
+      setScriptSourcePath("");
+      setScriptSource("");
+      setSavedScriptSource("");
+      setScriptDiagnostics([]);
+      setScriptChecking(false);
+      setSelectedProjectPath("");
+      setSelectedPrefabPath("");
       const result = await getProjectDirectorySnapshot();
       setProjectTree(result.root);
       setProjectName(result.root.name);
@@ -937,7 +954,7 @@ function App() {
       const firstScene = project.scenes[0];
       if (!firstScene) throw new Error("The native Project manifest does not register an openable Scene.");
       const sceneAsset = resolveSceneAsset(project, firstScene.id);
-      const opened = await loadScene(sceneAsset.path);
+      const opened = await loadScene(sceneAsset.path, false, false, true);
       if (!opened) throw new Error(`The registered Scene "${sceneAsset.path}" could not be opened.`);
       log("info", `Native Project loaded · ${result.entryCount} files and folders`);
     } catch (error) {
@@ -950,6 +967,11 @@ function App() {
   }
 
   function showProjectManager() {
+    if (saving() || projectSaving() || animationSaving() || scriptSaving()
+      || nativeProjectMutationInProgress || activeSceneLoads > 0) {
+      log("warning", "Finish the active save or document operation before opening Project Manager.");
+      return;
+    }
     if (documentDirty() && !window.confirm("There are unsaved changes. Open Project Manager and discard the current editor session?")) return;
     stopAnimationPreview(true);
     setProjectManagerVisible(true);
