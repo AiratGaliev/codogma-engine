@@ -32,8 +32,12 @@ test("the E2E workflow is promotion-only and contains the complete current E2E s
 
 
 test("release archive builds and packages only the native SolidJS Editor Host", () => {
-  assert.ok(releaseWorkflow.includes("working-directory: src/editor"));
+  assert.ok(releaseWorkflow.includes("run: npm ci"));
   assert.ok(releaseWorkflow.includes("npm run build:editor-host"));
+  assert.ok(releaseWorkflow.includes("npm run build:game-test-bridge-contract"));
+  assert.ok(releaseWorkflow.includes("npm run test:workspace-consumer"));
+  assert.ok(releaseWorkflow.includes("packages/game-test-bridge-contract src/editor"));
+  assert.doesNotMatch(releaseWorkflow, /working-directory: src\/editor/);
   assert.ok(releaseWorkflow.includes("PROJECT_DIR=packages/cge/tests/fixtures/acceptance-project"));
   assert.ok(releaseWorkflow.includes("src/editor/dist/index.html"));
   assert.doesNotMatch(
