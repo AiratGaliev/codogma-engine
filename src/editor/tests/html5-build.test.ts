@@ -53,8 +53,7 @@ function normalizeModuleId(sourceId: string): string {
 function mapModuleId(moduleId: string): readonly string[] {
   if (moduleId.includes("packages/cge/dist/") || moduleId.includes("node_modules/@codogma/cge/dist/")) return ["package:pkg-cge"];
   if (moduleId.includes("packages/runtime-phaser/dist/") || moduleId.includes("node_modules/@codogma/runtime-phaser/")) return ["package:pkg-runtime-phaser"];
-  if (moduleId.includes("node_modules/phaser/")) return ["package:pkg-phaser-engine"];
-  if (moduleId.includes("node_modules/eventemitter3/")) return ["package:pkg-eventemitter3"];
+  if (moduleId.endsWith("scripts/phaser.min.js")) return ["package:pkg-phaser-vendor"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts")) return ["module:follow-target"];
   if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts")) return ["module:runtime-entry"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/scenes/Level.cge-scene.json")) return ["asset:asset-scene-level"];
@@ -209,16 +208,17 @@ function createCoreAnalysisInput(
       name: string; version: string; dependencies?: Record<string,string>; peerDependencies?: Record<string,string>;
     },
   }));
-  const lockfile = JSON.parse(readFileSync(resolve(repositoryRoot, "package-lock.json"), "utf8")) as {
-    packages: Record<string, { version?: string; dependencies?: Record<string,string> }>;
-  };
+  const runtimePhaserManifest = JSON.parse(
+    readFileSync(resolve(repositoryRoot, "packages/runtime-phaser/package.json"), "utf8"),
+  ) as { peerDependencies?: Record<string,string> };
+  const vendorVersion = runtimePhaserManifest.peerDependencies?.phaser;
+  if (!vendorVersion) throw new Error("Runtime Phaser package does not declare its pinned Phaser peer version.");
   const externalDefinitions = [
-    { id: "pkg-phaser-engine", name: "phaser", scope: "runtime" as const, lockPath: "node_modules/phaser" },
-    { id: "pkg-eventemitter3", name: "eventemitter3", scope: "runtime" as const, lockPath: "node_modules/eventemitter3" },
+    { id: "pkg-phaser-vendor", packageName: "phaser", name: "phaser-vendor", version: vendorVersion, scope: "runtime" as const },
   ];
   const packageIdByName = new Map<string,string>();
   for (const item of workspaceManifests) packageIdByName.set(item.manifest.name, item.id);
-  for (const item of externalDefinitions) packageIdByName.set(item.name, item.id);
+  for (const item of externalDefinitions) packageIdByName.set(item.packageName, item.id);
   const packages = workspaceManifests.map(({ id, scope, manifest }) => ({
     id, name: manifest.name, version: manifest.version, scope,
     dependencies: Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).flatMap((name) => {
@@ -227,14 +227,12 @@ function createCoreAnalysisInput(
     }),
   }));
   for (const definition of externalDefinitions) {
-    const record = lockfile.packages[definition.lockPath];
-    if (!record?.version) throw new Error("Lockfile is missing " + definition.name);
     packages.push({
-      id: definition.id, name: definition.name, version: record.version, scope: definition.scope,
-      dependencies: Object.keys(record.dependencies ?? {}).flatMap((name) => {
-        const dependencyId = packageIdByName.get(name);
-        return dependencyId ? [dependencyId] : [];
-      }),
+      id: definition.id,
+      name: definition.name,
+      version: definition.version,
+      scope: definition.scope,
+      dependencies: [],
     });
   }
   return {
@@ -308,7 +306,8 @@ describe("independent HTML5 Vite artifact fixture", () => {
       expect(first.files.some((file) => file.path.endsWith(".svg"))).toBe(true);
       if (kind === "release") {
         expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-runtime-phaser"))).toBe(true);
-        expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-phaser-engine"))).toBe(true);
+        expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-phaser-vendor"))).toBe(true);
+        expect(first.files.some((file) => file.path.endsWith(".js") && file.path.includes("phaser.min"))).toBe(true);
       }
       expect(first.files.some((file) =>
         file.sourceModuleIds.some((id) => id.endsWith("packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts"))
@@ -334,7 +333,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.output.status).toBe("measured");
     expect(analysis.report.includedPackages).toContain("@codogma/cge@0.1.0");
     expect(analysis.report.includedPackages).toContain("@codogma/runtime-phaser@0.1.0");
-    expect(analysis.report.includedPackages).toContain("phaser@4.2.1");
+    expect(analysis.report.includedPackages).toContain("phaser-vendor@4.2.1");
     for (const excludedPackage of [
       "@codogma/editor-host",
       "@codogma/html5-build",
