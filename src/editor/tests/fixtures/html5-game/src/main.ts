@@ -89,7 +89,7 @@ class AcceptanceScene extends Phaser.Scene {
 const root = document.querySelector<HTMLElement>("#app");
 if (!root) throw new Error("HTML5 fixture root element is missing.");
 
-root.dataset.buildProfile = String(import.meta.env.MODE) + "|" + String(import.meta.env.DEV) + "|" + String(import.meta.env.PROD);
+root.dataset.buildProfile = `${import.meta.env.MODE}|${import.meta.env.DEV}|${import.meta.env.PROD}`;
 root.replaceChildren();
 
 new Phaser.Game({
