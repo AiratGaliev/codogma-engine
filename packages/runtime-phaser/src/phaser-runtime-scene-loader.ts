@@ -64,6 +64,17 @@ type NodeComponentDocument = {
   readonly component: ComponentInstanceDocument;
 };
 
+type PhaserComponentSyncRecord = {
+  readonly instanceId: string;
+  readonly view: Phaser.GameObjects.GameObject;
+};
+
+type PhaserNodeSyncRecord = {
+  readonly node: RuntimeSceneGraphNode;
+  readonly view: Phaser.GameObjects.Container;
+  readonly components: PhaserComponentSyncRecord[];
+};
+
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return value !== null &&
     (typeof value === "object" || typeof value === "function") &&
@@ -165,8 +176,8 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   private readonly componentNodeIds = new Map<string, string>();
   private readonly nodeIds = new WeakMap<Phaser.GameObjects.GameObject, string>();
   private readonly componentIds = new WeakMap<Phaser.GameObjects.GameObject, string>();
-  private readonly graphNodes = new Map<string, RuntimeSceneGraphNode>();
   private readonly nodeSnapshots = new Map<string, PhaserRuntimeNodeSnapshot>();
+  private readonly syncRecords: PhaserNodeSyncRecord[] = [];
   private readonly rootViews: Phaser.GameObjects.Container[] = [];
   private readonly ownedObjects = new Set<Phaser.GameObjects.GameObject>();
   private disposePromise: Promise<void> | undefined;
@@ -191,7 +202,6 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
     private readonly factories: ReadonlyMap<string, PhaserComponentViewFactory>,
   ) {
     for (const root of coreSession.graph.rootNodes) {
-      this.indexGraphNode(root);
       createNodeSnapshot(root, this.nodeSnapshots);
     }
     this.buildViews();
@@ -265,11 +275,6 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
     this.listenersAttached = true;
   }
 
-  private indexGraphNode(node: RuntimeSceneGraphNode): void {
-    this.graphNodes.set(node.id, node);
-    for (const child of node.children) this.indexGraphNode(child);
-  }
-
 
   private buildViews(): void {
     const componentDocuments = new Map<string, NodeComponentDocument>();
@@ -309,6 +314,12 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
       this.applyNodeTransform(node, nodeView);
       nodeView.setActive(false);
       nodeView.setVisible(false);
+      const syncRecord: PhaserNodeSyncRecord = {
+        node,
+        view: nodeView,
+        components: [],
+      };
+      this.syncRecords.push(syncRecord);
 
       for (const componentInstanceId of node.componentInstanceIds) {
         const component = components.get(componentInstanceId);
@@ -351,8 +362,8 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
           setGameObjectVisible(view, false);
           nodeView.add(view);
           this.componentViews.set(componentInstanceId, view);
-          this.componentNodeIds.set(componentInstanceId, node.id);
           this.componentIds.set(view, componentInstanceId);
+          syncRecord.components.push({ instanceId: componentInstanceId, view });
           view.active = false;
           this.setViewOrigin(view, node.transform.originX, node.transform.originY);
         } catch (error) {
@@ -431,23 +442,26 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
     if (this.isDisposed) return;
 
     const active = this.coreSession.isActive;
-    for (const [nodeId, view] of this.nodeViews) {
-      const node = this.graphNodes.get(nodeId);
-      if (!node || isDestroyed(view)) continue;
+    const world = this.coreSession.world;
+    for (const record of this.syncRecords) {
+      const { node, view } = record;
+      if (isDestroyed(view)) continue;
+
       this.applyNodeTransform(node, view);
       const nodeActive = active && node.active;
       if (view.active !== nodeActive) view.active = nodeActive;
       if (view.visible !== nodeActive) view.visible = nodeActive;
-    }
 
-    for (const [instanceId, view] of this.componentViews) {
-      if (isDestroyed(view)) continue;
-      const nodeId = this.componentNodeIds.get(instanceId);
-      const node = nodeId ? this.graphNodes.get(nodeId) : undefined;
-      const enabled = active && node?.active === true && this.coreSession.world.isComponentEnabled(instanceId);
-      if (view.active !== enabled) view.active = enabled;
-      if (getGameObjectVisible(view) !== enabled) setGameObjectVisible(view, enabled);
-      if (node) this.setViewOrigin(view, node.transform.originX, node.transform.originY);
+      for (const component of record.components) {
+        const componentView = component.view;
+        if (isDestroyed(componentView)) continue;
+        const enabled = nodeActive && world.isComponentEnabled(component.instanceId);
+        if (componentView.active !== enabled) componentView.active = enabled;
+        if (getGameObjectVisible(componentView) !== enabled) {
+          setGameObjectVisible(componentView, enabled);
+        }
+        if (nodeActive) this.setViewOrigin(componentView, node.transform.originX, node.transform.originY);
+      }
     }
   }
 
@@ -563,8 +577,7 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
     this.ownedObjects.clear();
     this.nodeViews.clear();
     this.componentViews.clear();
-    this.componentNodeIds.clear();
-    this.graphNodes.clear();
+    this.syncRecords.length = 0;
     this.nodeSnapshots.clear();
     return errors;
   }
