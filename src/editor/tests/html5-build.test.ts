@@ -15,12 +15,12 @@ import {
   createHtml5BuildManifest, toProjectBuildOutputManifest,
   type Html5BuildArtifactFileInput, type Html5BuildManifestV1, type Html5BuildProfileV1,
 } from "@codogma/html5-build";
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { componentDefinition } from "../../../../packages/cge/tests/fixtures/acceptance-project/src/FollowTarget";
+import { componentDefinition } from "../../../packages/cge/tests/fixtures/acceptance-project/src/FollowTarget";
 
 interface CapturedChunk {
   readonly moduleIds: readonly string[];
