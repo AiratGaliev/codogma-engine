@@ -20,7 +20,8 @@ test("production artifact loads the native Scene through the selected Phaser run
     if (/\.svg$/.test(path) && !contentType.includes("svg+xml")) invalidMimeResponses.push(response.url() + " => " + contentType);
   });
 
-  const response = await page.goto("/");
+  const basePath = process.env.CODOGMA_HTML5_BASE_PATH ?? "/promotion/";
+  const response = await page.goto(basePath);
   expect(response?.ok()).toBe(true);
   const canvas = page.locator("canvas[data-codogma-runtime='phaser']");
   await expect(canvas).toBeVisible();
