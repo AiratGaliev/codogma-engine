@@ -117,7 +117,7 @@ async function collectFiles(outputDirectory: string, captured: ReadonlyMap<strin
 
 async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleGraph?: Map<string, CapturedModuleImports>, inputHtml = "index.html"): Promise<Html5BuildManifestV1> {
   const temporaryRoot = await temporaryRootPromise;
-  const outputDirectory = resolve(temporaryRoot, label);
+  const outputDirectory = resolve(temporaryRoot, inputHtml === "index-arcade.html" ? "arcade-candidate" : profile.kind);
   const captured = new Map<string, CapturedChunk>();
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = profile.kind === "development" ? "development" : "production";
@@ -508,12 +508,12 @@ describe("independent HTML5 Vite artifact fixture", () => {
     const fullArtifactPath = process.env.CODOGMA_HTML5_BUILD_OUTPUT;
     if (fullArtifactPath) {
       await rm(fullArtifactPath, { recursive: true, force: true });
-      await cp(resolve(artifactRoot, "release-first"), fullArtifactPath, { recursive: true });
+      await cp(resolve(artifactRoot, "release"), fullArtifactPath, { recursive: true });
     }
     const arcadeArtifactPath = process.env.CODOGMA_HTML5_ARCADE_OUTPUT;
     if (arcadeArtifactPath) {
       await rm(arcadeArtifactPath, { recursive: true, force: true });
-      await cp(resolve(artifactRoot, "arcade-candidate-first"), arcadeArtifactPath, { recursive: true });
+      await cp(resolve(artifactRoot, "arcade-candidate"), arcadeArtifactPath, { recursive: true });
     }
 
     generatedEvidence.featureSelection = featureReport;
