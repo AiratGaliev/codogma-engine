@@ -9,6 +9,7 @@ export interface Html5BuildToolchainV1 {
 export interface Html5BuildArtifactFileInput {
   readonly path: string;
   readonly contents: Uint8Array;
+  readonly brotliBytes?: number;
   readonly sourceModuleIds?: readonly string[];
   readonly includedNodeIds?: readonly string[];
 }
@@ -18,6 +19,7 @@ export interface Html5BuildArtifactFileV1 {
   readonly sizeBytes: number;
   readonly sha256: string;
   readonly gzipBytes: number;
+  readonly brotliBytes?: number;
   readonly sourceModuleIds: readonly string[];
   readonly includedNodeIds: readonly string[];
 }
@@ -32,6 +34,7 @@ export interface Html5BuildManifestV1 {
     readonly fileCount: number;
     readonly rawBytes: number;
     readonly gzipBytes: number;
+    readonly brotliBytes?: number;
   };
 }
 
@@ -108,6 +111,9 @@ export async function createHtml5BuildManifest(input: {
       throw new TypeError("Build output contents must be Uint8Array values: " + path);
     }
 
+    if (file.brotliBytes !== undefined && (!Number.isSafeInteger(file.brotliBytes) || file.brotliBytes < 0)) {
+      throw new TypeError("Brotli byte count must be a non-negative safe integer: " + path);
+    }
     const contents = new Uint8Array(file.contents);
     const [hash, compressedBytes] = await Promise.all([sha256(contents), gzipSize(contents)]);
     files.push(Object.freeze({
@@ -115,6 +121,7 @@ export async function createHtml5BuildManifest(input: {
       sizeBytes: contents.byteLength,
       sha256: hash,
       gzipBytes: compressedBytes,
+      ...(file.brotliBytes === undefined ? {} : { brotliBytes: file.brotliBytes }),
       sourceModuleIds: normalizeIdentityList(file.sourceModuleIds, "sourceModuleIds"),
       includedNodeIds: normalizeIdentityList(file.includedNodeIds, "includedNodeIds"),
     }));
@@ -168,6 +175,7 @@ export function compareHtml5BuildManifests(
     if (
       first.sizeBytes !== second.sizeBytes || first.sha256 !== second.sha256 ||
       first.gzipBytes !== second.gzipBytes ||
+      first.brotliBytes !== second.brotliBytes ||
       JSON.stringify(first.sourceModuleIds) !== JSON.stringify(second.sourceModuleIds) ||
       JSON.stringify(first.includedNodeIds) !== JSON.stringify(second.includedNodeIds)
     ) differences.push({ kind: "file-changed", path, detail: "Output bytes or module composition differ." });
@@ -185,6 +193,7 @@ export function toProjectBuildOutputManifest(manifest: Html5BuildManifestV1): Pr
       path: file.path,
       sizeBytes: file.sizeBytes,
       gzipBytes: file.gzipBytes,
+      ...(file.brotliBytes === undefined ? {} : { brotliBytes: file.brotliBytes }),
       includesNodeIds: file.includedNodeIds,
     })),
   };
