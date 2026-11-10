@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload HTML5 build artifact and reproducibility evidence
         if: steps.scope.outputs.run_code_checks == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: html5-build-evidence
           path: |
