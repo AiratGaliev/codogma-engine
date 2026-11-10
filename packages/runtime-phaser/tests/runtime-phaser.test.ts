@@ -16,7 +16,7 @@ import {
   PhaserRuntimeAdapterError,
   type RuntimeGraphSceneLoader,
 } from "../src/index.js";
-import { createMockPhaserHost, MockGameObject } from "./support/mock-phaser.js";
+import { createMockPhaserHost, MockContainer, MockGameObject } from "./support/mock-phaser.js";
 
 const fixtureRoot = resolve(process.cwd(), "../cge/tests/fixtures/acceptance-project");
 const projectText = readFileSync(resolve(fixtureRoot, "project.json"), "utf8");
