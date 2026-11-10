@@ -17,9 +17,9 @@ The fixture does not import the Editor Host UI, Node server, editor compiler, or
 
 ## Profiles and evidence
 
-Development and Release profiles pin the HTML5 target, ES2022 syntax/module baseline, output directory, minification and source-map policy. The emitted artifact manifest records normalized output paths, SHA-256, raw/gzip/Brotli byte counts, source module IDs and Core graph node identities. Repeated clean builds are compared by file path, content hashes, compressed sizes and module composition.
+Development and Release profiles pin the HTML5 target, ES2022 syntax/module baseline, output directory, minification and source-map policy. The active builder inventory is the workspace's Vite 8.x toolchain; the exact installed Vite version is read from node_modules and recorded in the evidence manifest. The emitted artifact manifest records normalized output paths, SHA-256, raw/gzip/Brotli byte counts, source module IDs and Core graph node identities. Repeated clean builds are compared by file path, content hashes, compressed sizes and module composition.
 
-CI Fast runs the package contract checks and repeated Vite fixture builds, then uploads the Release artifact and evidence. The promotion workflow (dev to test) serves the emitted artifact independently and runs a Chromium smoke that verifies the native Scene has loaded through the Phaser adapter and that no Vite/Editor requests occur.
+CI Fast runs the package contract checks and repeated Vite fixture builds, then uploads the Release artifact and evidence. The promotion workflow (dev to test) serves each emitted candidate independently and runs a Chromium smoke that verifies the native Scene has loaded through the Phaser adapter, confirms the Arcade/Matter API surface, records time-to-first-frame and ensures no Vite/Editor requests occur. The declared browser baseline is Chromium 94+, Edge 94+, Firefox 93+, Safari 27+, iOS Safari 27+ and Chrome Android 94+; only Chromium is automated by this smoke, so other engines remain an explicit compatibility-validation gap.
 
 ## Package composition
 
@@ -27,4 +27,4 @@ The fixture's Feature Registry and project feature selection are persisted JSON 
 
 ## Remaining comparison work
 
-The current fixture establishes the real full Phaser 4.2.1 path and reports actual Codogma artifact sizes. A full-vs-Arcade-only/custom ESM comparison must be treated as a separate controlled experiment: each candidate must pass the same API-coverage, Scene/Component behavior and browser smoke before size or startup measurements are considered comparable. Do not treat upstream package-size references as Codogma artifact measurements.
+The fixture builds both full and Arcade-only UMD candidates from the same Project/Scene, Component module, Core loader and Phaser adapter. Both candidates receive identical module/asset analysis and the same bare-browser smoke; evidence records raw/gzip/Brotli totals and browser time-to-first-frame. The browser smoke additionally verifies that Arcade Physics exists in both and Matter is absent from the Arcade-only candidate. A custom tree-shaken ESM build is not selected: Phaser exposes no public Arcade-only ESM export, and an undocumented subpath is not used.
