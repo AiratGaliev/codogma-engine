@@ -220,7 +220,7 @@ function createCoreAnalysisInput(
   const sceneAsset = project.assets.find((asset) => asset.kind === "scene");
   if (!sceneAsset) throw new Error("Acceptance Project fixture must register a Scene asset.");
   const scene = JSON.parse(readFileSync(resolve(projectRoot, sceneAsset.path), "utf8")) as SceneDocumentV1;
-  const files = project.assets.map((asset) => ({
+  const files: Array<ProjectBuildAnalysisInput["files"][number]> = project.assets.map((asset) => ({
     path: asset.path, kind: "file" as const,
     sizeBytes: readFileSync(resolve(projectRoot, asset.path)).byteLength,
   }));
