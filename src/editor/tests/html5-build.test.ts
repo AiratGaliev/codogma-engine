@@ -318,16 +318,32 @@ function createCoreAnalysisInput(
       dependencies: [],
     });
   }
-  const dynamicEntryPoints: NonNullable<ProjectBuildAnalysisInput["dynamicEntryPoints"]> = modules.flatMap((module) =>
-    (module.imports ?? []).flatMap((entry) => {
-      if (entry.kind !== "dynamic" || !entry.resolvedModuleId) return [];
-      return [{
+  const dynamicEntryPoints: NonNullable<ProjectBuildAnalysisInput["dynamicEntryPoints"]> = [];
+  for (const module of modules) {
+    for (const entry of module.imports ?? []) {
+      if (entry.kind !== "dynamic") continue;
+      if (!entry.resolvedModuleId) {
+        throw new Error(
+          "Dynamic imports must resolve to a Project manifest Component module: " +
+          module.id + " -> " + entry.specifier,
+        );
+      }
+      const target = projectModules.find(
+        (candidate) => candidate.descriptor.id === entry.resolvedModuleId,
+      );
+      if (!target || target.descriptor.entryPoint !== "component") {
+        throw new Error(
+          "Dynamic import target is not a declared Project Component module: " +
+          module.id + " -> " + entry.specifier,
+        );
+      }
+      dynamicEntryPoints.push({
         sourceModuleId: module.id,
         specifier: entry.specifier,
         targetModuleId: entry.resolvedModuleId,
-      }];
-    }),
-  );
+      });
+    }
+  }
 
   return {
     project, target: "html5", files,
