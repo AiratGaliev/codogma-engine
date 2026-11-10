@@ -65,6 +65,7 @@ jobs:
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
           CODOGMA_HTML5_ENTRY: index.html
           CODOGMA_HTML5_EXPECT_VARIANT: full
+          CODOGMA_HTML5_PLAYWRIGHT_OUTPUT: test-results-html5/full
         run: npm run test:html5-build:browser
         working-directory: src/editor
 
@@ -73,6 +74,7 @@ jobs:
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
           CODOGMA_HTML5_ENTRY: index-arcade.html
           CODOGMA_HTML5_EXPECT_VARIANT: arcade-only
+          CODOGMA_HTML5_PLAYWRIGHT_OUTPUT: test-results-html5/arcade-only
         run: npm run test:html5-build:browser
         working-directory: src/editor
 
