@@ -35,6 +35,66 @@ const temporaryRootPromise = import("node:fs/promises").then(({ mkdtemp }) =>
   mkdtemp(resolve(tmpdir(), "codogma-html5-build-")));
 const generatedEvidence: Record<string, unknown> = {};
 
+const sourceMapsByBuildLabel = new Map<string, string>();
+
+function summarizeSourceMapDifference(firstLabel: string, secondLabel: string): Record<string, unknown> {
+  const firstText = sourceMapsByBuildLabel.get(firstLabel);
+  const secondText = sourceMapsByBuildLabel.get(secondLabel);
+  if (!firstText || !secondText) return { available: false };
+  const first = JSON.parse(firstText) as {
+    file?: string;
+    sourceRoot?: string;
+    sources?: string[];
+    names?: string[];
+    mappings?: string;
+    sourcesContent?: Array<string | null>;
+  };
+  const second = JSON.parse(secondText) as typeof first;
+  const contentChanges = (first.sourcesContent ?? []).flatMap((left, index) => {
+    const right = second.sourcesContent?.[index];
+    if (left === right) return [];
+    const a = left ?? "";
+    const b = right ?? "";
+    let offset = 0;
+    while (offset < a.length && offset < b.length && a[offset] === b[offset]) offset += 1;
+    return [{
+      source: first.sources?.[index] ?? String(index),
+      firstLength: a.length,
+      secondLength: b.length,
+      firstDifference: offset,
+      firstContext: a.slice(Math.max(0, offset - 80), offset + 120),
+      secondContext: b.slice(Math.max(0, offset - 80), offset + 120),
+    }];
+  });
+  const firstMappings = first.mappings ?? "";
+  const secondMappings = second.mappings ?? "";
+  let mappingOffset = 0;
+  while (
+    mappingOffset < firstMappings.length
+    && mappingOffset < secondMappings.length
+    && firstMappings[mappingOffset] === secondMappings[mappingOffset]
+  ) mappingOffset += 1;
+  return {
+    firstBytes: firstText.length,
+    secondBytes: secondText.length,
+    fileEqual: first.file === second.file,
+    sourceRootEqual: first.sourceRoot === second.sourceRoot,
+    sourcesEqual: JSON.stringify(first.sources) === JSON.stringify(second.sources),
+    firstSources: first.sources,
+    secondSources: second.sources,
+    namesEqual: JSON.stringify(first.names) === JSON.stringify(second.names),
+    firstNamesCount: first.names?.length ?? 0,
+    secondNamesCount: second.names?.length ?? 0,
+    mappingsEqual: firstMappings === secondMappings,
+    firstMappingsLength: firstMappings.length,
+    secondMappingsLength: secondMappings.length,
+    mappingOffset,
+    firstMappingContext: firstMappings.slice(Math.max(0, mappingOffset - 80), mappingOffset + 120),
+    secondMappingContext: secondMappings.slice(Math.max(0, mappingOffset - 80), mappingOffset + 120),
+    contentChanges,
+  };
+}
+
 const featureRegistry = JSON.parse(readFileSync(resolve(fixtureRoot, "feature-registry.json"), "utf8")) as FeatureRegistryDocumentV1;
 const projectFeatures = JSON.parse(readFileSync(resolve(fixtureRoot, "project-features.json"), "utf8")) as ProjectFeatureConfigurationV1;
 const runtimePhaserManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "packages/runtime-phaser/package.json"), "utf8")) as { name: string; version: string };
@@ -219,6 +279,8 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   const rolldownVersion = toolchainLock.packages["src/editor/node_modules/rolldown"]?.version;
   if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
   const artifactFiles = await collectFiles(outputDirectory, captured, inputHtml);
+  const sourceMapFile = artifactFiles.find((file) => file.path.endsWith(".js.map"));
+  if (sourceMapFile) sourceMapsByBuildLabel.set(label, Buffer.from(sourceMapFile.contents).toString("utf8"));
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
     files: artifactFiles,
@@ -476,7 +538,10 @@ describe("independent HTML5 Vite artifact fixture", () => {
       };
       expect(
         comparison.reproducible,
-        JSON.stringify(comparison.differences),
+        JSON.stringify({
+          differences: comparison.differences,
+          sourceMap: summarizeSourceMapDifference(kind + "-first", kind + "-second"),
+        }),
       ).toBe(true);
       expect(
         comparison.differences.filter((difference) => difference.path?.endsWith(".map") === true),
