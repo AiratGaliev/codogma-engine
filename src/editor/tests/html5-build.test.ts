@@ -405,7 +405,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
       deltaArcadeMinusFull: {
         rawBytes: arcadeFirst.totals.rawBytes - release.totals.rawBytes,
         gzipBytes: arcadeFirst.totals.gzipBytes - release.totals.gzipBytes,
-        brotliBytes: arcadeFirst.totals.brotliBytes - release.totals.brotliBytes,
+        brotliBytes: (arcadeFirst.totals.brotliBytes ?? 0) - (release.totals.brotliBytes ?? 0),
       },
       reproducibility: {
         full: reproducibilityByProfile.release === true,
