@@ -48,12 +48,19 @@ A Release manifest converts to ProjectBuildOutputManifest and is passed to analy
 
 The repository pins Vite 8.3.5 in the Editor Host workspace; its lockfile resolves Rolldown 1.2.16. Vite is the initial bundler candidate for the isolated fixture because it is already present, supports programmatic builds and exposes generated chunk module IDs through the output hook. Use build.rolldownOptions; Vite 8.3.5 documents build.rollupOptions as a deprecated alias. Vite's built-in manifest maps source entry names to hashed output files, but does not itself provide the module-to-Core-node proof required by COD-35. The fixture captures OutputChunk.modules separately.
 
-Pinned Phaser 4.2.1 source confirms three relevant candidates:
-1. Full minified UMD: dist/phaser.min.js.
-2. Arcade-only minified UMD: dist/phaser-arcade-physics.min.js, built from src/phaser-arcade-physics.js and explicitly excluding Matter.js.
-3. Full ESM distribution: dist/phaser.esm.min.js.
+Pinned Phaser 4.2.1 source confirms three relevant candidates. GitHub's pinned release tree reports these exact raw file sizes:
 
-The upstream Phaser 4.2.1 README reports approximately 1.29 MB raw / 345 KB gzip for full minified Phaser and 1.18 MB raw / 313 KB gzip for Arcade-only. The package exports map exposes only "." and "./package.json"; there is no public phaser/arcade export. Do not invent a subpath import. An ESM distribution is not evidence of tree shaking by itself.
+| Candidate | Raw file bytes | Upstream gzip reference | Root API coverage |
+|---|---:|---:|---|
+| Full minified UMD, `dist/phaser.min.js` | 1,375,976 | about 345 KB | Arcade + Matter physics |
+| Arcade-only minified UMD, `dist/phaser-arcade-physics.min.js` | 1,266,396 | about 313 KB | Same top-level API groups except `Physics`, which exposes only `Arcade` and omits Matter |
+| Full minified ESM, `dist/phaser.esm.min.js` | 1,377,611 | Not reported in the upstream README table | Full ESM distribution; the package does not expose a public Arcade-only ESM subpath |
+
+The full and Arcade-only source entry points were compared directly at tag `v4.2.1`: their top-level namespace lists are the same apart from the `Physics` construction. Full uses `require('./physics')`; the Arcade-only entry constructs `Physics: { Arcade: require('./physics/arcade') }` and its source comment explicitly says Matter.js is excluded. Both entries retain the same conditional `Sound` namespace and assign `global.Phaser`. The upstream README's gzip figures are rounded reference values, not local measurements. The raw UMD difference is 109,580 bytes; gzip difference is approximately 32 KB based on those rounded figures.
+
+References: [full Phaser entry](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser.js), [Arcade-only entry](https://github.com/phaserjs/phaser/blob/v4.2.1/src/phaser-arcade-physics.js), [Phaser 4.2.1 distribution files](https://github.com/phaserjs/phaser/tree/v4.2.1/dist), [package exports](https://github.com/phaserjs/phaser/blob/v4.2.1/package.json), [upstream size notes](https://github.com/phaserjs/phaser/blob/v4.2.1/README.md).
+
+The package `exports` map exposes only `.` and `./package.json`; there is no public `phaser/arcade` export. Do not invent a subpath import. The full ESM distribution is not evidence of tree shaking by itself.
 
 These upstream size figures are reference measurements, not measurements from a Codogma game artifact. The active repository does not yet contain the @codogma/runtime-phaser adapter or an active standalone game bundle that consumes Phaser. API coverage, exact Codogma raw/gzip/Brotli size, parse/startup/first-frame cost and Phaser browser smoke therefore remain unmeasured. Do not select an artifact solely by upstream size.
 
