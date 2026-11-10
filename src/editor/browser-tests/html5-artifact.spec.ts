@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("production artifact loads the native Scene through the Phaser adapter without editor or Vite services", async ({ page }, testInfo) => {
+test("production artifact loads the native Scene through the selected Phaser runtime without editor or Vite services", async ({ page }, testInfo) => {
   const pageErrors: string[] = [];
   const forbiddenRequests: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -16,6 +16,13 @@ test("production artifact loads the native Scene through the Phaser adapter with
   await expect(canvas).toHaveAttribute("data-codogma-scene-id", "scene-level");
   await expect(canvas).toHaveAttribute("data-codogma-node-count", "2");
   await expect(canvas).toHaveAttribute("data-codogma-component-count", "2");
+  const expectedVariant = process.env.CODOGMA_HTML5_EXPECT_VARIANT ?? "full";
+  const app = page.locator("#app");
+  await expect(app).toHaveAttribute("data-phaser-variant", expectedVariant);
+  await expect(app).toHaveAttribute("data-phaser-arcade", "true");
+  if (expectedVariant === "arcade-only") {
+    await expect(app).toHaveAttribute("data-phaser-matter", "false");
+  }
   await expect(page.locator("canvas[data-codogma-runtime-error]")).toHaveCount(0);
   const firstFrameMs = await page.evaluate(() => performance.getEntriesByName("codogma-first-frame")[0]?.startTime ?? null);
   expect(firstFrameMs).not.toBeNull();
