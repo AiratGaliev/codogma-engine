@@ -34,6 +34,59 @@ const acceptanceProject = JSON.parse(readFileSync(resolve(projectRoot, "project.
 const temporaryRootPromise = import("node:fs/promises").then(({ mkdtemp }) =>
   mkdtemp(resolve(tmpdir(), "codogma-html5-build-")));
 const generatedEvidence: Record<string, unknown> = {};
+
+const sourceMapsByBuildLabel = new Map<string, string>();
+
+function summarizeSourceMapDifference(firstLabel: string, secondLabel: string): Record<string, unknown> {
+  const firstText = sourceMapsByBuildLabel.get(firstLabel);
+  const secondText = sourceMapsByBuildLabel.get(secondLabel);
+  if (!firstText || !secondText) return { available: false };
+  const first = JSON.parse(firstText) as {
+    file?: string; sourceRoot?: string; sources?: string[]; names?: string[];
+    mappings?: string; sourcesContent?: Array<string | null>;
+  };
+  const second = JSON.parse(secondText) as typeof first;
+  const sourceContentChanges = (first.sourcesContent ?? []).flatMap((content, index) => {
+    const next = second.sourcesContent?.[index];
+    if (content === next) return [];
+    const left = content ?? "";
+    const right = next ?? "";
+    let offset = 0;
+    while (offset < left.length && offset < right.length && left[offset] === right[offset]) offset += 1;
+    return [{
+      source: first.sources?.[index] ?? String(index),
+      firstLength: left.length,
+      secondLength: right.length,
+      firstDifference: offset,
+      firstContext: left.slice(Math.max(0, offset - 60), offset + 100),
+      secondContext: right.slice(Math.max(0, offset - 60), offset + 100),
+    }];
+  });
+  const firstMappings = first.mappings ?? "";
+  const secondMappings = second.mappings ?? "";
+  let mappingOffset = 0;
+  while (mappingOffset < firstMappings.length && mappingOffset < secondMappings.length
+    && firstMappings[mappingOffset] === secondMappings[mappingOffset]) mappingOffset += 1;
+  return {
+    firstBytes: firstText.length,
+    secondBytes: secondText.length,
+    fileEqual: first.file === second.file,
+    sourceRootEqual: first.sourceRoot === second.sourceRoot,
+    sourcesEqual: JSON.stringify(first.sources) === JSON.stringify(second.sources),
+    firstSources: first.sources,
+    secondSources: second.sources,
+    namesEqual: JSON.stringify(first.names) === JSON.stringify(second.names),
+    firstNameCount: first.names?.length ?? 0,
+    secondNameCount: second.names?.length ?? 0,
+    mappingsEqual: firstMappings === secondMappings,
+    firstMappingsLength: firstMappings.length,
+    secondMappingsLength: secondMappings.length,
+    mappingOffset,
+    firstMappingContext: firstMappings.slice(Math.max(0, mappingOffset - 60), mappingOffset + 100),
+    secondMappingContext: secondMappings.slice(Math.max(0, mappingOffset - 60), mappingOffset + 100),
+    sourceContentChanges,
+  };
+}
 const featureRegistry = JSON.parse(readFileSync(resolve(fixtureRoot, "feature-registry.json"), "utf8")) as FeatureRegistryDocumentV1;
 const projectFeatures = JSON.parse(readFileSync(resolve(fixtureRoot, "project-features.json"), "utf8")) as ProjectFeatureConfigurationV1;
 const runtimePhaserManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "packages/runtime-phaser/package.json"), "utf8")) as { name: string; version: string };
@@ -221,6 +274,8 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   const rolldownVersion = toolchainLock.packages["src/editor/node_modules/rolldown"]?.version;
   if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
   const artifactFiles = await collectFiles(outputDirectory, captured, inputHtml);
+  const mapFile = artifactFiles.find((file) => file.path.endsWith(".js.map"));
+  if (mapFile) sourceMapsByBuildLabel.set(label, Buffer.from(mapFile.contents).toString("utf8"));
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
     files: artifactFiles,
@@ -478,7 +533,10 @@ describe("independent HTML5 Vite artifact fixture", () => {
       };
       expect(
         comparison.reproducible,
-        JSON.stringify(comparison.differences),
+        JSON.stringify({
+          differences: comparison.differences,
+          sourceMap: summarizeSourceMapDifference(kind + "-first", kind + "-second"),
+        }),
       ).toBe(true);
       expect(
         comparison.differences.filter((difference) => difference.path?.endsWith(".map") === true),
