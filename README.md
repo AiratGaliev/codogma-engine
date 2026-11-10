@@ -624,3 +624,7 @@ Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integrati
 ## MCP native contract
 
 The engine-owned get-system-instructions response and MCP package tests describe the supported Project Model v1 Scene/Node/Prefab/Component/FX workflows. The registry exposes native document operations through the single connected Editor Host and external asset inspection through project services. Phaser Asset Pack, animation JSON, Tiled tilemap and Spine skeleton/atlas metadata remain separate asset workflows; a Spine skin screenshot is not exposed until the Editor Host has a renderer/handler.
+
+### HTML5 production build
+
+The versioned build profiles, emitted-artifact manifest and independent Phaser runtime fixture are documented in [the HTML5 build pipeline](docs/html5-build-pipeline.md). The build fixture consumes the native Project Model Scene through ProjectSceneLoader and renders it through the @codogma/runtime-phaser adapter; browser smoke is reserved for the dev-to-test promotion gate.
