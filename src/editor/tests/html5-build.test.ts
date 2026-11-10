@@ -314,8 +314,8 @@ describe("independent HTML5 Vite artifact fixture", () => {
       const first = await buildProfile(profile, kind + "-first", kind === "release" ? releaseModuleGraph : undefined);
       const second = await buildProfile(profile, kind + "-second");
       const rawComparison = compareHtml5BuildManifests(first, second);
-      const debugMapDifferences = rawComparison.differences.filter((difference) => difference.path.endsWith(".map"));
-      const runtimeDifferences = rawComparison.differences.filter((difference) => !difference.path.endsWith(".map"));
+      const debugMapDifferences = rawComparison.differences.filter((difference) => difference.path?.endsWith(".map") === true);
+      const runtimeDifferences = rawComparison.differences.filter((difference) => difference.path?.endsWith(".map") !== true);
       const comparison = {
         ...rawComparison,
         reproducible: runtimeDifferences.length === 0,
