@@ -595,11 +595,15 @@ describe("independent HTML5 Vite artifact fixture", () => {
         full: reproducibilityByProfile.release === true,
         arcadeOnly: arcadeReproducibility.reproducible,
       },
-      apiCoverage: {
+      fixtureCompositionCoverage: {
         sameProjectModules: arcadeAnalysis.report.includedModules,
         sameFeatureSet: arcadeAnalysis.report.includedFeatures,
         sameAssets: arcadeAnalysis.report.includedAssets,
       },
+      runtimeApiContract: [
+        "Game", "Scene", "AUTO", "Scene.load.svg", "Scene.add.image",
+        "Arcade.add.existing", "Arcade.Body",
+      ],
     };
 
     const originalScene = analysisInput.scenes[0];
