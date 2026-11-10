@@ -136,7 +136,7 @@ test("uses the Phaser Scene UPDATE event as the only frame source and syncs Core
     projectId: "acceptance-project",
     update(deltaSeconds, session) {
       observedDeltas.push(deltaSeconds);
-      const player = session.coreSession.graph.getNode("node-player");
+      const player = session.graph.getNode("node-player");
       assert.ok(player);
       player.transform.x += 10;
     },
