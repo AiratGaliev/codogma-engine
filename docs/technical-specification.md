@@ -59,7 +59,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Работа с файлами | `server/server.mjs` предоставляет loopback HTTP API для операций с файлами и native project documents; доступ ограничен выбранным `PROJECT_DIR` |
 | Расширения | Внутренние feature modules принадлежат Editor Host; публичный/versioned Extension API является отдельным будущим решением и не предполагается готовым |
 | Сервер | `server/server.mjs` обслуживает production build Host, native project/runtime files, AI Chat и engine-owned MCP HTTP endpoint |
-| Runtime | Phaser 4.2.1 — выбранный HTML5 runtime target. Native Project Model/Core не зависят от Phaser; host-neutral ProjectSceneLoader реализован в packages/cge/, а Phaser adapter и Preview/Build pipeline остаются отдельными implementation stages |
+| Runtime | Phaser 4.2.1 — выбранный HTML5 runtime target. Native Project Model/Core не зависят от Phaser; host-neutral ProjectSceneLoader находится в `packages/cge/`, минимальный view/lifecycle adapter реализован в `packages/runtime-phaser/`; полный browser Preview и HTML5 Build остаются отдельными stages |
 | AI/MCP | Engine-owned MCP registry и `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует engine schemas/calls. AI Chat service необязателен |
 | CI | `fast-checks` выполняет build/typecheck, unit/contract/security и server-smoke проверки; MCP и Playwright E2E выполняются на promotion workflow начиная с PR `dev → test`, затем на release-promotion PR |
 | TypeScript / lint baseline | Native Host, Core и first-party TypeScript packages используют строгие проверки, зафиксированные в ADR-0002; актуальные install/build/test команды выполняются CI |
@@ -76,8 +76,8 @@ Phaser 4.2.1 выбран как HTML5 runtime target. Native Project Model, Cor
 Следующие направления описывают целевой продукт, а не подтверждённые функции текущей версии:
 
 - завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, validation/serialization, component schema/registry/world), но не является законченным runtime;
-- data-driven загрузчик сцен из сериализуемой Project Model с разрешением зарегистрированных TypeScript modules, rollback и связью с Phaser adapter (не реализован как завершённый workflow);
-- завершённая object/component runtime-модель Core, интегрированная с Editor Inspector, Project Model loader и базовым Phaser adapter; текущие Core lifecycle tests пока изолированы от UI/runtime. Optional Data-Oriented ECS и его Phaser adapter не реализованы и развиваются отдельными package tasks COD-111/112;
+- полный data-driven Preview workflow из Project Model через Phaser runtime: Core Scene Loader и минимальный `@codogma/runtime-phaser` graph-to-view adapter реализованы, но полноценный Preview Host, asset resolution, real-browser Phaser runtime, physics и HTML5 Build остаются незавершёнными;
+- полная end-to-end object/component runtime-модель, интегрированная с Editor Inspector и browser Preview: `@codogma/cge` и минимальный `@codogma/runtime-phaser` реализуют host-neutral graph → Phaser view slice, но live Inspector/real-browser Preview/physics acceptance не завершены. Optional Data-Oriented ECS и его Phaser adapter остаются отдельными package tasks COD-111/112;
 - синхронизация Inspector с реальными экземплярами компонентов работающей игры;
 - полноценный Game Preview Host с embedded, standalone и внешним browser preview;
 - специализированный runtime debugger и профайлер с измерениями CPU/кадра/ресурсов;
@@ -292,7 +292,7 @@ Codogma должен давать разработчику удобную ком
 
 Базовый `@codogma/cge` предоставляет host-neutral object/component модель для Project Model, Scene/Node/Transform, Component Schema, Inspector, сериализации и lifecycle. Это основной путь для обычных игровых объектов и не обязательная data-oriented модель для каждой игры.
 
-Data-Oriented ECS — отдельная optional runtime capability; Phaser integration также остаётся отдельной optional capability. Они не входят в обязательные dependencies Core или базового Phaser runtime. Пакеты ещё не реализованы и принадлежат отдельным задачам COD-111/112.
+Data-Oriented ECS и его Phaser adapter — отдельные optional runtime capabilities COD-111/112; они не входят в обязательные dependencies Core или базового `@codogma/runtime-phaser`. Базовый Phaser adapter реализован самостоятельно и не зависит от ECS.
 
 Все нормативные требования к ECS — разделение authoring schema и runtime storage, identity mapping, ownership, package/API/lifecycle contract, Phaser adapter, EVA.js reuse, feature IDs/providers, production build exclusion и performance acceptance — определяются только [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md). Этот раздел сохраняет product scope и границу Core, но не дублирует ECS-спецификацию.
 
@@ -910,7 +910,7 @@ codogma-engine/
 #### Репозиторные команды и зависимости
 
 - Инструменты статического анализа и форматирования регистрируются в devDependencies того workspace/package, чей код они проверяют, а не в production dependencies игры.
-- Фактически существуют отдельные npm roots/lockfiles для root, Editor Host в `src/editor/` и отдельных mini-services/packages. npm Workspaces и объединение lockfiles остаются отдельным инфраструктурным PoC, который должен проверить package scripts, TypeScript references, server routes, CI/cache и release archive.
+- Root npm Workspaces охватывает `packages/*` и `src/editor/` с одним корневым `package-lock.json`. `mini-services/ai-chat/` остаётся отдельным install root со своим lifecycle. Для нового workspace проверяются package scripts, dependency graph, CI и release archive.
 - Целевой набор команд (названия могут быть уточнены при внедрении): npm run typecheck, npm run lint, npm run format:check, npm run knip, npm run deps:check, npm run test:unit и агрегирующая npm run check. Это **планируемые команды**, пока они не реализованы и не добавлены в package scripts.
 - Версии инструментов фиксируются в lockfiles; CI использует npm ci, чтобы локальный и CI наборы совпадали. Новые dev dependencies должны быть обновляемы независимо от runtime dependency graph и не увеличивать production bundle.
 - Для конфигураций, entry points, генераторов кода, MCP schemas и динамических plugins нужно поддерживать allowlist/entry annotations с комментариями и ревизией. Игнорирование предупреждений должно быть узким и объяснённым; blanket ignores запрещены.
@@ -988,7 +988,7 @@ Tool schemas и протоколы должны быть versioned, иметь �
 
 #### Исходники пакетов, Workspaces и пользовательские проекты
 
-- Целевая структура исходников: `packages/*` для самостоятельных пакетов и `src/editor` для Editor Host. Корневой `package.json` в целевой модели использует npm Workspaces для локальной разработки и связывания этих пакетов; точная конфигурация внедряется после аудита manifests, scripts, lockfiles и успешного PoC.
+- Активная структура исходников использует `packages/*` для самостоятельных пакетов и `src/editor` для Editor Host. Root `package.json` уже использует npm Workspaces для локальной разработки и linking; root `package-lock.json` фиксирует общий graph.
 - Текущее состояние: в репозитории есть root npm project
 - В пользовательский игровой проект устанавливаются **только прямо выбранные пакеты и их транзитивные зависимости**, а не весь monorepo Codogma. Его manifest и `package-lock.json` принадлежат пользовательскому проекту; `node_modules` — результат установки, а не место разработки и хранения исходников пакетов.
 - Пакеты по назначению могут быть Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter или tooling. Названия не обязаны содержать `plugin-`; смысл пакета задаётся его ответственностью, public exports и проверяемыми engine-specific metadata.
@@ -1054,7 +1054,7 @@ Profiler должен сначала собирать воспроизводим
 
 ### 13.2. Обязательные проверки по изменяемому слою
 
-- Editor TypeScript/compiler: native Host в `src/editor/` имеет отдельные `npm run typecheck`, `npm run build`, `npm run test` и `npm run test:browser`; root shortcuts — `build:editor-host`, `test:editor-host` и `test:editor-host:browser`. CI job `editor-host` проверяет Host отдельно. npm Workspaces не включены. Core/API packages проходят собственные strict typechecks.
+- Editor TypeScript/compiler: native Host в `src/editor/` имеет отдельные `npm run typecheck`, `npm run build`, `npm run test` и `npm run test:browser`; root shortcuts — `build:editor-host`, `test:editor-host` и `test:editor-host:browser`. Root npm Workspaces связывает Host и `packages/*` через единый `package-lock.json`; Core/runtime packages проходят собственные strict typechecks.
 - TypeScript quality: ESLint/typescript-eslint, Prettier --check, Knip и dependency boundary checks — в пределах уже включённого/ratcheted scope; конфиги и команды должны быть реализованы, прежде чем CI на них ссылается.
 - Server/MCP: серверный smoke, быстрые package contract/schema tests и security checks. E2E-сценарии для сквозных MCP workflows поддерживаются вместе с соответствующей подсистемой; полный MCP E2E suite выполняется в обязательном promotion gate.
 - Project Model/serialization + Scene Loader: тесты schema, migrations, asset refs, открытие/сохранение/повторное открытие и compile fixtures. `packages/cge/tests/scene-loader.test.ts` проверяет загрузку нативной Scene без генерируемого файла класса, hierarchy и stable-ID mappings, independent Component values, missing module/property/reference diagnostics, unsupported versions, cancellation, partial-allocation rollback и idempotent cleanup.

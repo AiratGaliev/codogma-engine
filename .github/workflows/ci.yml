@@ -108,7 +108,7 @@ jobs:
             echo "audit_${name}=${enabled}" >> "$GITHUB_OUTPUT"
           }
 
-          emit_audit_scope workspace package.json package-lock.json packages/cge/package.json packages/editor-mcp-server/package.json packages/game-test-bridge-contract/package.json packages/localization/package.json src/editor/package.json
+          emit_audit_scope workspace package.json package-lock.json packages/cge/package.json packages/runtime-phaser/package.json packages/editor-mcp-server/package.json packages/game-test-bridge-contract/package.json packages/localization/package.json src/editor/package.json
           emit_audit_scope ai_chat mini-services/ai-chat/package.json mini-services/ai-chat/package-lock.json
 
       - name: Set up Node.js
@@ -240,6 +240,14 @@ jobs:
         run: npm run benchmark
         working-directory: packages/cge
 
+      - name: Build, typecheck and test Phaser runtime adapter (COD-28)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run quality:check --workspace=@codogma/runtime-phaser
+
+      - name: Measure synthetic Core vs Phaser adapter bridge baseline
+        if: steps.scope.outputs.run_code_checks == 'true'
+        run: npm run benchmark --workspace=@codogma/runtime-phaser
+
       - name: Build, typecheck and test Feature Registry (COD-34)
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run quality:check --workspace=@codogma/feature-registry
@@ -267,16 +275,19 @@ jobs:
           set -euo pipefail
           archive="$RUNNER_TEMP/codogma-engine-release-check.zip"
           zip -qr "$archive" \
-            server packages/cge packages/feature-registry packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
+            server packages/cge packages/runtime-phaser packages/feature-registry packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
             -x "src/editor/node_modules/*" \
             "packages/*/node_modules/*" \
+            "*/.test-dist/*" \
             "*.log"
 
           for entry in \
             package-lock.json \
             packages/cge/package.json \
             packages/cge/dist/index.js \
+            packages/runtime-phaser/package.json \
+            packages/runtime-phaser/dist/index.js \
             packages/feature-registry/package.json \
             packages/feature-registry/dist/index.js \
             packages/localization/package.json \

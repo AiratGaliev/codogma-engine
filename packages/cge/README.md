@@ -23,7 +23,7 @@ Host-neutral contracts and the first component-object Core slice.
 
 ### Node and component lifecycle
 
-- A `ComponentWorld` owns one scene-local Node/component lifetime. Node identity and activation are read-only through `getNode()` / `listNodes()`; update activation through `setNodeActive()`. Transform values remain mutable runtime state.
+- A `ComponentWorld` owns one scene-local Node/component lifetime. Node identity and activation are read-only through `getNode()` / `listNodes()`; update activation through `setNodeActive()`. `isComponentEnabled(instanceId)` reads an instance's enabled flag without allocating a `listComponents()` snapshot; it returns `false` when the instance is absent. Transform values remain mutable runtime state.
 - Components are created in Node insertion and attachment order. For each active/enabled instance the Core invokes `onCreate`, `onEnable`, then on the first host update `onStart` followed by `onUpdate`; disabling/removing invokes `onDisable` when active and then `onDestroy`.
 - A failed `onEnable`, `onDisable`, `onStart` or `onUpdate` removes the affected instance, attempts the remaining cleanup callbacks, continues processing siblings and aggregates errors. Failed activation never advances to start/update.
 - Factories and lifecycle callbacks are synchronous. Promise-like results are rejected; perform asynchronous loading in an explicit host/service phase before attaching or activating components.
