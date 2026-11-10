@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { build, type Plugin } from "vite";
 import { brotliCompressSync } from "node:zlib";
 import {
-  analyzeProjectBuild, ProjectSceneLoader,
+  analyzeProjectBuild, ProjectSceneLoader, resolveProjectComponentRegistry,
   type ProjectBuildAnalysisInput, type ProjectBuildModuleImport, type ProjectBuildModuleSnapshot,
   type ProjectBuildOutputManifest, type ProjectDocumentV1, type SceneDocumentV1,
 } from "@codogma/cge";
@@ -12,7 +12,7 @@ import {
 } from "@codogma/feature-registry";
 import {
   compareHtml5BuildManifests, createDefaultHtml5BuildProfile,
-  createHtml5BuildManifest, resolveProjectComponentRegistry, toProjectBuildOutputManifest,
+  createHtml5BuildManifest, toProjectBuildOutputManifest,
   type Html5BuildArtifactFileInput, type Html5BuildManifestV1, type Html5BuildProfileV1,
 } from "@codogma/html5-build";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -30,6 +30,7 @@ interface CapturedChunk {
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixtureRoot = resolve(repositoryRoot, "src/editor/tests/fixtures/html5-game");
 const projectRoot = resolve(repositoryRoot, "packages/cge/tests/fixtures/acceptance-project");
+const acceptanceProject = JSON.parse(readFileSync(resolve(projectRoot, "project.json"), "utf8")) as ProjectDocumentV1;
 const temporaryRootPromise = import("node:fs/promises").then(({ mkdtemp }) =>
   mkdtemp(resolve(tmpdir(), "codogma-html5-build-")));
 const generatedEvidence: Record<string, unknown> = {};
@@ -55,7 +56,13 @@ function mapModuleId(moduleId: string): readonly string[] {
   if (moduleId.includes("packages/runtime-phaser/dist/") || moduleId.includes("node_modules/@codogma/runtime-phaser/")) return ["package:pkg-runtime-phaser"];
   if (moduleId.endsWith("node_modules/phaser/dist/phaser.min.js")) return ["package:pkg-phaser-full-umd"];
   if (moduleId.endsWith("node_modules/phaser/dist/phaser-arcade-physics.min.js")) return ["package:pkg-phaser-arcade-umd"];
-  if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts")) return ["module:follow-target"];
+  const componentModule = acceptanceProject.componentModules.find((reference) => {
+    const asset = acceptanceProject.assets.find((candidate) => candidate.id === reference.moduleAssetId);
+    return asset !== undefined && moduleId.endsWith(
+      "packages/cge/tests/fixtures/acceptance-project/" + asset.path,
+    );
+  });
+  if (componentModule) return ["module:component-" + componentModule.typeId];
   if (
     moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts") ||
     moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main-arcade.ts") ||
@@ -227,7 +234,21 @@ function createCoreAnalysisInput(
     { sourceId: entrySourceId, descriptor: { id: "runtime-entry", path: entryPath, entryPoint: "runtime" as const } },
     { sourceId: "src/editor/tests/fixtures/html5-game/src/runtime.ts", descriptor: { id: "runtime-scene", path: "src/runtime.ts", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/project.json", descriptor: { id: "project-document", path: "project.json", entryPoint: "runtime" as const } },
-    { sourceId: "packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts", descriptor: { id: "follow-target", path: "src/FollowTarget.ts", assetId: "asset-follow-target-module", entryPoint: "component" as const } },
+    ...project.componentModules.map((moduleReference) => {
+      const asset = project.assets.find((candidate) => candidate.id === moduleReference.moduleAssetId);
+      if (!asset || asset.kind !== "script") {
+        throw new Error("Project Component module " + moduleReference.typeId + " has no registered script Asset.");
+      }
+      return {
+        sourceId: normalizeModuleId(resolve(projectRoot, asset.path)),
+        descriptor: {
+          id: "component-" + moduleReference.typeId,
+          path: asset.path,
+          assetId: moduleReference.moduleAssetId,
+          entryPoint: "component" as const,
+        },
+      };
+    }),
   ];
   const assetReferences: Array<NonNullable<ProjectBuildAnalysisInput["assetReferences"]>[number]> = [];
   const modules: ProjectBuildModuleSnapshot[] = projectModules.map(({ sourceId, descriptor }) => {
@@ -297,11 +318,26 @@ function createCoreAnalysisInput(
       dependencies: [],
     });
   }
+  const dynamicEntryPoints: NonNullable<ProjectBuildAnalysisInput["dynamicEntryPoints"]> = modules.flatMap((module) =>
+    (module.imports ?? []).flatMap((entry) => {
+      if (entry.kind !== "dynamic" || !entry.resolvedModuleId) return [];
+      return [{
+        sourceModuleId: module.id,
+        specifier: entry.specifier,
+        targetModuleId: entry.resolvedModuleId,
+      }];
+    }),
+  );
+
   return {
     project, target: "html5", files,
     scenes: [{ assetId: sceneAsset.id, document: scene }], prefabs: [],
-    componentSchemas: [componentDefinition.schema], modules, packages, features: featureSnapshots,
+    componentSchemas: projectModules
+      .filter((item) => item.descriptor.entryPoint === "component")
+      .map(() => componentDefinition.schema),
+    modules, packages, features: featureSnapshots,
     assetReferences,
+    dynamicEntryPoints,
     coverage: { resourceReferences: true, moduleImports: true, packageDependencies: true, dynamicImports: true, externalRuntimeFiles: true },
     outputManifest,
   };
