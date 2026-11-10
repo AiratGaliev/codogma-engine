@@ -22,6 +22,8 @@ test("production artifact loads the native Scene through the selected Phaser run
   await expect(app).toHaveAttribute("data-phaser-arcade", "true");
   if (expectedVariant === "arcade-only") {
     await expect(app).toHaveAttribute("data-phaser-matter", "false");
+  } else {
+    await expect(app).toHaveAttribute("data-phaser-matter", "true");
   }
   await expect(page.locator("canvas[data-codogma-runtime-error]")).toHaveCount(0);
   const firstFrameMs = await page.evaluate(() => performance.getEntriesByName("codogma-first-frame")[0]?.startTime ?? null);
