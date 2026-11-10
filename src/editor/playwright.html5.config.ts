@@ -1,5 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
+const configuredBasePath = process.env.CODOGMA_HTML5_BASE_PATH ?? "/promotion/";
+const normalizedBasePath = configuredBasePath.startsWith("/") ? configuredBasePath : "/" + configuredBasePath;
+const basePath = normalizedBasePath.endsWith("/") ? normalizedBasePath : normalizedBasePath + "/";
+
 export default defineConfig({
   testDir: "./browser-tests",
   testMatch: "**/html5-artifact.spec.ts",
@@ -18,12 +22,13 @@ export default defineConfig({
   },
   webServer: [{
     command: "node scripts/serve-html5-artifact.mjs",
-    url: "http://127.0.0.1:4179/",
+    url: "http://127.0.0.1:4179" + basePath,
     timeout: 30_000,
     reuseExistingServer: false,
     env: {
       CODOGMA_HTML5_BUILD_OUTPUT: process.env.CODOGMA_HTML5_BUILD_OUTPUT ?? "",
       CODOGMA_HTML5_ENTRY: process.env.CODOGMA_HTML5_ENTRY ?? "index.html",
+      CODOGMA_HTML5_BASE_PATH: basePath,
       PORT: "4179",
     },
   }],
