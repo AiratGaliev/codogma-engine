@@ -176,9 +176,13 @@ test("pause keeps views visible but stops updates; deactivate hides them", async
   await session.activate();
   assert.equal((view as unknown as MockGameObject).visible, true);
   await session.pause();
+  const pausedNode = session.coreSession.graph.getNode("node-player");
+  assert.ok(pausedNode);
+  pausedNode.transform.x = 175;
   host.events.emit("update", 16, 16);
   assert.equal(updates, 0);
   assert.equal((view as unknown as MockGameObject).visible, true);
+  assert.equal((view as unknown as MockGameObject).x, 175);
 
   await session.resume();
   host.events.emit("update", 32, 16);

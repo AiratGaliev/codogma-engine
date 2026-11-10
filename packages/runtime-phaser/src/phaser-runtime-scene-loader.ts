@@ -74,16 +74,24 @@ function isDestroyed(gameObject: Phaser.GameObjects.GameObject): boolean {
   return (gameObject as Phaser.GameObjects.GameObject & { isDestroyed?: boolean }).isDestroyed === true;
 }
 
-function createNodeSnapshot(node: RuntimeSceneGraphNode): PhaserRuntimeNodeSnapshot {
-  return Object.freeze({
+function createNodeSnapshot(
+  node: RuntimeSceneGraphNode,
+  snapshots: Map<string, PhaserRuntimeNodeSnapshot>,
+): PhaserRuntimeNodeSnapshot {
+  const existing = snapshots.get(node.id);
+  if (existing) return existing;
+
+  const snapshot: PhaserRuntimeNodeSnapshot = Object.freeze({
     id: node.id,
     name: node.name,
     active: node.active,
     transform: Object.freeze({ ...node.transform }),
     ...(node.parentId === undefined ? {} : { parentId: node.parentId }),
-    children: Object.freeze(node.children.map(createNodeSnapshot)),
+    children: Object.freeze(node.children.map((child) => createNodeSnapshot(child, snapshots))),
     componentInstanceIds: Object.freeze([...node.componentInstanceIds]),
   });
+  snapshots.set(node.id, snapshot);
+  return snapshot;
 }
 
 function cloneComponentDocument(document: ComponentInstanceDocument): ComponentInstanceDocument {
@@ -147,11 +155,11 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   };
 
   private readonly shutdownListener = (): void => {
-    void this.dispose().catch((error: unknown) => this.reportCleanupError(error));
+    void this.dispose().catch(() => undefined);
   };
 
   private readonly destroyListener = (): void => {
-    void this.dispose().catch((error: unknown) => this.reportCleanupError(error));
+    void this.dispose().catch(() => undefined);
   };
 
   constructor(
@@ -162,7 +170,7 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   ) {
     for (const root of coreSession.graph.rootNodes) {
       this.indexGraphNode(root);
-      this.indexNodeSnapshot(root);
+      createNodeSnapshot(root, this.nodeSnapshots);
     }
     this.buildViews();
   }
@@ -172,7 +180,8 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
 
   getNodeView(nodeId: string): Phaser.GameObjects.Container | undefined {
     if (this.isDisposed) return undefined;
-    return this.nodeViews.get(nodeId);
+    const view = this.nodeViews.get(nodeId);
+    return view && !isDestroyed(view) ? view : undefined;
   }
 
   getComponentView(instanceId: string): Phaser.GameObjects.GameObject | undefined {
@@ -182,12 +191,12 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   }
 
   getNodeId(view: Phaser.GameObjects.GameObject): string | undefined {
-    if (this.isDisposed) return undefined;
+    if (this.isDisposed || isDestroyed(view)) return undefined;
     return this.nodeIds.get(view);
   }
 
   getComponentInstanceId(view: Phaser.GameObjects.GameObject): string | undefined {
-    if (this.isDisposed) return undefined;
+    if (this.isDisposed || isDestroyed(view)) return undefined;
     return this.componentIds.get(view);
   }
 
@@ -218,7 +227,10 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
 
   dispose(): Promise<void> {
     if (this.disposePromise) return this.disposePromise;
-    this.disposePromise = this.disposeInternal();
+    this.disposePromise = this.disposeInternal().catch((error: unknown) => {
+      this.reportCleanupError(error);
+      throw error;
+    });
     return this.disposePromise;
   }
 
@@ -236,10 +248,6 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
     for (const child of node.children) this.indexGraphNode(child);
   }
 
-  private indexNodeSnapshot(node: RuntimeSceneGraphNode): void {
-    this.nodeSnapshots.set(node.id, createNodeSnapshot(node));
-    for (const child of node.children) this.indexNodeSnapshot(child);
-  }
 
   private buildViews(): void {
     const componentDocuments = new Map<string, NodeComponentDocument>();
@@ -428,7 +436,7 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   }
 
   private onSceneUpdate(deltaMilliseconds: number): void {
-    if (this.isDisposed || !this.coreSession.isActive || this.coreSession.isPaused) return;
+    if (this.isDisposed || !this.coreSession.isActive) return;
     if (!Number.isFinite(deltaMilliseconds) || deltaMilliseconds < 0) {
       this.emitDiagnostic(createDiagnostic(
         "RUNTIME_UPDATE_FAILED",
@@ -439,23 +447,27 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
       return;
     }
 
-    try {
-      const deltaSeconds = deltaMilliseconds / 1000;
-      const result: unknown = this.options.update
-        ? this.options.update(deltaSeconds, this.coreSession)
-        : this.coreSession.world.update(deltaSeconds);
-      if (isThenable(result)) {
-        void Promise.resolve(result).catch(() => undefined);
-        throw new TypeError("The Phaser runtime update callback must be synchronous.");
+    // A paused Core session stops simulation but still projects host/Inspector
+    // Transform changes into Phaser views.
+    if (!this.coreSession.isPaused) {
+      try {
+        const deltaSeconds = deltaMilliseconds / 1000;
+        const result: unknown = this.options.update
+          ? this.options.update(deltaSeconds, this.coreSession)
+          : this.coreSession.world.update(deltaSeconds);
+        if (isThenable(result)) {
+          void Promise.resolve(result).catch(() => undefined);
+          throw new TypeError("The Phaser runtime update callback must be synchronous.");
+        }
+      } catch (error) {
+        this.emitDiagnostic(createDiagnostic(
+          "RUNTIME_UPDATE_FAILED",
+          "Core runtime update failed for Scene " + this.sceneId + ": " + this.errorMessage(error),
+          this.options.projectId,
+          this.sceneId,
+        ));
+        this.reportObserverError(error);
       }
-    } catch (error) {
-      this.emitDiagnostic(createDiagnostic(
-        "RUNTIME_UPDATE_FAILED",
-        "Core runtime update failed for Scene " + this.sceneId + ": " + this.errorMessage(error),
-        this.options.projectId,
-        this.sceneId,
-      ));
-      this.reportObserverError(error);
     }
 
     try {
@@ -505,7 +517,6 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
         this.options.projectId,
         this.sceneId,
       );
-      this.emitDiagnostic(diagnostic);
       throw new PhaserRuntimeAdapterError(diagnostic, new AggregateError(errors, diagnostic.message));
     }
   }
@@ -631,8 +642,10 @@ export class PhaserRuntimeSceneLoader implements SceneLoader {
         }
       }
 
+      const adapterError = this.findAdapterError(error);
+      if (!runtimeSession && adapterError) this.emitDiagnostic(adapterError.diagnostic);
+
       if (error instanceof PhaserRuntimeAdapterError && cleanupErrors.length === 0) {
-        this.emitDiagnostic(error.diagnostic);
         throw error;
       }
       if (cleanupErrors.length > 0) {
@@ -640,6 +653,17 @@ export class PhaserRuntimeSceneLoader implements SceneLoader {
       }
       throw error;
     }
+  }
+
+  private findAdapterError(error: unknown): PhaserRuntimeAdapterError | undefined {
+    if (error instanceof PhaserRuntimeAdapterError) return error;
+    if (error instanceof AggregateError) {
+      for (const nested of error.errors) {
+        const adapterError = this.findAdapterError(nested);
+        if (adapterError) return adapterError;
+      }
+    }
+    return undefined;
   }
 
   private emitDiagnostic(diagnostic: PhaserRuntimeDiagnostic): void {
