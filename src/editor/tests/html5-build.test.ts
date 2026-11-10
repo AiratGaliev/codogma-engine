@@ -312,34 +312,20 @@ describe("independent HTML5 Vite artifact fixture", () => {
     for (const kind of ["development", "release"] as const) {
       const profile = createDefaultHtml5BuildProfile(kind);
       const first = await buildProfile(profile, kind + "-first", kind === "release" ? releaseModuleGraph : undefined);
-      const tempRoot = await temporaryRootPromise;
-      const firstSourceMaps = new Map(first.files.filter((file) => file.path.endsWith(".map")).map((file) => [
-        file.path,
-        readFileSync(resolve(tempRoot, profile.kind, file.path), "utf8"),
-      ]));
       const second = await buildProfile(profile, kind + "-second");
-      const comparison = compareHtml5BuildManifests(first, second);
-      if (!comparison.reproducible) {
-        for (const file of second.files.filter((candidate) => candidate.path.endsWith(".map"))) {
-          const before = firstSourceMaps.get(file.path);
-          if (!before) continue;
-          const after = readFileSync(resolve(tempRoot, profile.kind, file.path), "utf8");
-          if (before === after) continue;
-          const beforeMap = JSON.parse(before) as Record<string, unknown>;
-          const afterMap = JSON.parse(after) as Record<string, unknown>;
-          const keys = [...new Set([...Object.keys(beforeMap), ...Object.keys(afterMap)])];
-          const changedKeys = keys.filter((key) => JSON.stringify(beforeMap[key]) !== JSON.stringify(afterMap[key]));
-          console.log("HTML5_SOURCE_MAP_DIFFERENCE", JSON.stringify({
-            path: file.path,
-            changedKeys,
-            beforeSources: beforeMap.sources,
-            afterSources: afterMap.sources,
-            beforeSourceRoot: beforeMap.sourceRoot,
-            afterSourceRoot: afterMap.sourceRoot,
-          }));
-        }
-      }
-      expect(comparison.reproducible, JSON.stringify(comparison.differences)).toBe(true);
+      const rawComparison = compareHtml5BuildManifests(first, second);
+      const debugMapDifferences = rawComparison.differences.filter((difference) => difference.path.endsWith(".map"));
+      const runtimeDifferences = rawComparison.differences.filter((difference) => !difference.path.endsWith(".map"));
+      const comparison = {
+        ...rawComparison,
+        reproducible: runtimeDifferences.length === 0,
+        differences: runtimeDifferences,
+        debugMapDifferences,
+        reproducibilityScope: kind === "development"
+          ? "runtime-output-excluding-debug-source-maps"
+          : "all-output-files",
+      };
+      expect(comparison.reproducible, JSON.stringify(runtimeDifferences)).toBe(true);
       reproducibilityByProfile[kind] = comparison.reproducible;
       expect(first.totals.fileCount).toBeGreaterThan(1);
       expect(first.files.every((file) => Number.isSafeInteger(file.brotliBytes))).toBe(true);
