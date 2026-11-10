@@ -67,7 +67,7 @@ function normalizeIdentityList(values: readonly string[] | undefined, label: str
     typeof value !== "string" || value.length === 0 || value.length > 512 ||
     /[\u0000-\u001f]/.test(value)
   )) throw new TypeError(label + " must contain non-empty stable identities.");
-  return Object.freeze([...new Set(list)].sort((left, right) => left.localeCompare(right)));
+  return Object.freeze([...new Set(list)].sort((left, right) => left < right ? -1 : left > right ? 1 : 0));
 }
 
 function copyBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -127,7 +127,7 @@ export async function createHtml5BuildManifest(input: {
     }));
   }
 
-  files.sort((left, right) => left.path.localeCompare(right.path));
+  files.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
   const rawBytes = files.reduce((total, file) => total + file.sizeBytes, 0);
   const gzipBytes = files.reduce((total, file) => total + file.gzipBytes, 0);
   const brotliComplete = files.every((file) => file.brotliBytes !== undefined);
@@ -172,7 +172,7 @@ export function compareHtml5BuildManifests(
 
   const leftFiles = new Map(left.files.map((file) => [file.path, file] as const));
   const rightFiles = new Map(right.files.map((file) => [file.path, file] as const));
-  const paths = [...new Set([...leftFiles.keys(), ...rightFiles.keys()])].sort((a, b) => a.localeCompare(b));
+  const paths = [...new Set([...leftFiles.keys(), ...rightFiles.keys()])].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 
   for (const path of paths) {
     const first = leftFiles.get(path);
