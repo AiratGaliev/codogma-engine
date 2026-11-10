@@ -68,6 +68,7 @@ test("artifact manifests sort files and record stable content and gzip hashes", 
   assert.equal(first.files[0].path, "assets/main.js");
   assert.equal(first.files[0].sha256.length, 64);
   assert.ok(first.files[0].gzipBytes > 0);
+  assert.equal(first.files[0].brotliBytes, undefined);
   assert.deepEqual(first.files[0].sourceModuleIds, ["module:a", "module:b"]);
   assert.deepEqual(compareHtml5BuildManifests(first, second), { reproducible: true, differences: [] });
 });

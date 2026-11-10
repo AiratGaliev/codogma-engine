@@ -6,7 +6,7 @@ Versioned HTML5 build-profile and artifact-evidence contracts for Codogma Engine
 
 - Define independent Development and Release HTML5 profile defaults and validate project-relative output paths.
 - Pin the initial ES2022 browser syntax/module baseline used by the HTML5 target.
-- Build deterministic manifests from files the bundler actually emitted: normalized paths, SHA-256, gzip sizes, source-module identities and exact Core Build Analysis node IDs.
+- Build deterministic manifests from files the bundler actually emitted: normalized paths, SHA-256, gzip and Brotli sizes, source-module identities and exact Core Build Analysis node IDs.
 - Compare clean builds and report added, removed or changed files and module composition.
 - Convert a real Release manifest to the existing @codogma/cge ProjectBuildOutputManifest contract.
 
@@ -18,7 +18,7 @@ html5-es2022-tla-v1 records the initial ES2022 module baseline: Chrome 89+, Edge
 
 ## Artifact evidence
 
-The manifest is built from emitted bytes. It contains no timestamp, temporary output directory or absolute machine path. File paths and identity lists are sorted. Gzip size is measured from emitted bytes with the Compression Streams API. The manifest sidecar is not included in its own file list.
+The manifest is built from emitted bytes. It contains no timestamp, temporary output directory or absolute machine path. File paths and identity lists are sorted. Gzip size is measured from emitted bytes with the Compression Streams API. The Node build host supplies Brotli sizes from the emitted bytes using the Node standard library. The manifest sidecar is not included in its own file list.
 
 Only a Release manifest is accepted as production evidence by Core Build Analysis. Development manifests are useful for clean-build comparison but are not reported as production output.
 

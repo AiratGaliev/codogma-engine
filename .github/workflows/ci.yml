@@ -244,6 +244,24 @@ jobs:
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm run quality:check --workspace=@codogma/feature-registry
 
+      - name: Build, typecheck and test HTML5 build contracts (COD-35)
+        if: steps.scope.outputs.run_code_checks == 'true'
+        env:
+          CODOGMA_HTML5_BUILD_EVIDENCE: ${{ runner.temp }}/html5-build-evidence.json
+          CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
+        run: npm run test:html5-build
+
+      - name: Upload HTML5 build artifact and reproducibility evidence
+        if: steps.scope.outputs.run_code_checks == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: html5-build-evidence
+          path: |
+            ${{ runner.temp }}/html5-build-evidence.json
+            ${{ runner.temp }}/html5-game-artifact/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build and test Codogma MCP stdio package
         if: steps.scope.outputs.run_code_checks == 'true'
         run: npm test --workspace=@codogma/editor-mcp-server
