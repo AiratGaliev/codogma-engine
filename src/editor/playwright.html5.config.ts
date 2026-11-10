@@ -11,7 +11,7 @@ export default defineConfig({
   outputDir: process.env.CODOGMA_HTML5_PLAYWRIGHT_OUTPUT ?? "test-results-html5",
   use: {
     baseURL: "http://127.0.0.1:4179",
-    browserName: "chromium",
+    browserName: (process.env.CODOGMA_HTML5_BROWSER ?? "chromium") as "chromium" | "firefox" | "webkit",
     viewport: { width: 960, height: 640 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
