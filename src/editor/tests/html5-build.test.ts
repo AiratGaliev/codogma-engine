@@ -142,13 +142,13 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
     ? "src/editor/tests/fixtures/html5-game/src/main-arcade.ts"
     : "src/editor/tests/fixtures/html5-game/src/main.ts";
   const runtimeEntry = [...captured.entries()].find(([, chunk]) => chunk.moduleIds.includes(expectedEntryModule));
-  if (!runtimeEntry) throw new Error("Bundler did not emit the native runtime entry module.");
+  if (!runtimeEntry) throw new Error("Bundler did not emit the native runtime entry module for " + label + ".");
   const runtimeEntryCode = await readFile(resolve(outputDirectory, runtimeEntry[0]), "utf8");
   const expectedProfileMarker = profile.kind === "development"
     ? "development|true|false"
     : "production|false|true";
   if (!runtimeEntryCode.includes(expectedProfileMarker)) {
-    throw new Error("Bundled Vite environment does not match " + profile.kind + " profile: expected " + expectedProfileMarker);
+    throw new Error("Bundled Vite environment does not match " + profile.kind + " profile (" + label + "): expected " + expectedProfileMarker);
   }
   const toolchainLock = JSON.parse(readFileSync(resolve(repositoryRoot, "package-lock.json"), "utf8")) as {
     packages: Record<string, { version?: string }>;
