@@ -229,6 +229,7 @@ function createCoreAnalysisInput(
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/project.json", descriptor: { id: "project-document", path: "project.json", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts", descriptor: { id: "follow-target", path: "src/FollowTarget.ts", assetId: "asset-follow-target-module", entryPoint: "component" as const } },
   ];
+  const assetReferences: NonNullable<ProjectBuildAnalysisInput["assetReferences"]> = [];
   const modules: ProjectBuildModuleSnapshot[] = projectModules.map(({ sourceId, descriptor }) => {
     const captured = moduleGraph.get(sourceId);
     if (!captured) throw new Error("Vite module graph omitted required Project module " + sourceId);
@@ -239,7 +240,15 @@ function createCoreAnalysisInput(
       const moduleId = mapped.find((id) => id.startsWith("module:"));
       if (moduleId) return [{ specifier, kind, resolvedModuleId: moduleId.slice("module:".length) }];
       const assetId = mapped.find((id) => id.startsWith("asset:"));
-      if (assetId) return [{ specifier, kind, resolvedModuleId: assetId.slice("asset:".length) }];
+      if (assetId) {
+        assetReferences.push({
+          assetId: assetId.slice("asset:".length),
+          sourceNodeId: "module:" + descriptor.id,
+          reason: kind + " import " + specifier,
+          path: specifier,
+        });
+        return [];
+      }
       throw new Error("Project module import has no stable Project Build Analysis mapping: " + descriptor.id + " -> " + specifier);
     });
     return { ...descriptor, imports: [
@@ -292,6 +301,7 @@ function createCoreAnalysisInput(
     project, target: "html5", files,
     scenes: [{ assetId: sceneAsset.id, document: scene }], prefabs: [],
     componentSchemas: [componentDefinition.schema], modules, packages, features: featureSnapshots,
+    assetReferences,
     coverage: { resourceReferences: true, moduleImports: true, packageDependencies: true, dynamicImports: true, externalRuntimeFiles: true },
     outputManifest,
   };
