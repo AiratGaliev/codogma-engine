@@ -82,6 +82,7 @@ export function startRuntime(
 
     private async loadProjectScene(): Promise<void> {
       const project = projectDocumentJson as ProjectDocumentV1;
+      let arcadeBodyCreated = false;
       const sceneReference = project.scenes.find((scene) => scene.id === "scene-level");
       if (!sceneReference) throw new Error("Acceptance Project has no registered Scene.");
       const sceneDocument = JSON.parse(sceneDocumentText) as SceneDocumentV1;
@@ -133,7 +134,15 @@ export function startRuntime(
             ) {
               throw new Error("Follow Target requires the registered player sprite asset.");
             }
-            return scene.add.image(0, 0, PLAYER_TEXTURE_KEY);
+            const image = scene.add.image(0, 0, PLAYER_TEXTURE_KEY);
+            scene.physics.add.existing(image);
+            arcadeBodyCreated = Boolean(
+              (image as unknown as { body?: unknown }).body,
+            );
+            if (!arcadeBodyCreated) {
+              throw new Error("The selected Phaser distribution did not attach an Arcade Physics Body.");
+            }
+            return image;
           },
         },
       });
@@ -150,6 +159,20 @@ export function startRuntime(
       canvas.dataset.codogmaNodeCount = String(countNodes(session.coreSession.graph.rootNodes));
       canvas.dataset.codogmaComponentCount = String(session.coreSession.world.listComponents().length);
       canvas.dataset.codogmaResolvedComponentTypes = moduleResolution.loadedTypeIds.join(",");
+      const apiCoverage = [
+        ["Game", typeof PhaserRuntime.Game === "function"],
+        ["Scene", typeof PhaserRuntime.Scene === "function"],
+        ["AUTO", typeof PhaserRuntime.AUTO === "number"],
+        ["Scene.load.svg", typeof this.load.svg === "function"],
+        ["Scene.add.image", typeof this.add.image === "function"],
+        ["Arcade.add.existing", typeof this.physics?.add?.existing === "function"],
+        ["Arcade.Body", arcadeBodyCreated],
+      ] as const;
+      const missingApi = apiCoverage.filter(([, available]) => !available).map(([name]) => name);
+      if (missingApi.length > 0) {
+        throw new Error("The selected Phaser distribution is missing runtime APIs: " + missingApi.join(", "));
+      }
+      canvas.dataset.codogmaRuntimeApiCoverage = apiCoverage.map(([name]) => name).join(",");
       performance.mark("codogma-scene-ready");
       requestAnimationFrame(() => requestAnimationFrame(() => performance.mark("codogma-first-frame")));
     }
@@ -161,6 +184,10 @@ export function startRuntime(
     width: 480,
     height: 320,
     backgroundColor: "#20242b",
+    physics: {
+      default: "arcade",
+      arcade: { gravity: { y: 0 } },
+    },
     scene: [AcceptanceScene],
   });
 }
