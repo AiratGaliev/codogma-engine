@@ -364,6 +364,8 @@ describe("independent HTML5 Vite artifact fixture", () => {
       expect(first.totals.fileCount).toBeGreaterThan(1);
       expect(first.files.every((file) => Number.isSafeInteger(file.brotliBytes))).toBe(true);
       expect(first.files.some((file) => file.path.endsWith(".js"))).toBe(true);
+      expect(first.files.some((file) => file.path === "manifest.json")).toBe(false);
+      expect(first.files.find((file) => file.path === "index.html" || file.path === "index-arcade.html")?.includedNodeIds).toContain("module:runtime-entry");
       expect(first.files.some((file) => file.path.endsWith(".svg"))).toBe(true);
       if (kind === "release") {
         expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-runtime-phaser"))).toBe(true);
@@ -396,6 +398,10 @@ describe("independent HTML5 Vite artifact fixture", () => {
     const analysis = analyzeProjectBuild(analysisInput);
     expect(analysis.valid, JSON.stringify(analysis.diagnostics)).toBe(true);
     expect(analysis.report.output.status).toBe("measured");
+    if (analysis.report.output.status !== "measured") throw new Error("Release output manifest was not measured.");
+    const fullPhaserFile = analysis.report.output.files.find((file) => file.path.includes("phaser.min-"));
+    expect(fullPhaserFile?.includesNodeIds).toContain("package:pkg-phaser-full-umd");
+    expect(fullPhaserFile?.sizeBytes).toBeGreaterThan(1_000_000);
     expect(analysis.report.includedPackages).toContain("@codogma/cge@0.1.0");
     expect(analysis.report.includedPackages).toContain("@codogma/runtime-phaser@0.1.0");
     expect(analysis.report.includedPackages).toContain("phaser-full-umd@4.2.1");
@@ -431,6 +437,10 @@ describe("independent HTML5 Vite artifact fixture", () => {
     );
     const arcadeAnalysis = analyzeProjectBuild(arcadeAnalysisInput);
     expect(arcadeAnalysis.valid, JSON.stringify(arcadeAnalysis.diagnostics)).toBe(true);
+    if (arcadeAnalysis.report.output.status !== "measured") throw new Error("Arcade-only output manifest was not measured.");
+    const arcadePhaserFile = arcadeAnalysis.report.output.files.find((file) => file.path.includes("phaser-arcade-physics.min-"));
+    expect(arcadePhaserFile?.includesNodeIds).toContain("package:pkg-phaser-arcade-umd");
+    expect(arcadePhaserFile?.sizeBytes).toBeGreaterThan(1_000_000);
     expect(arcadeAnalysis.report.includedPackages).toContain("@codogma/runtime-phaser@0.1.0");
     expect(arcadeAnalysis.report.includedPackages).toContain("phaser-arcade-umd@4.2.1");
     expect(arcadeAnalysis.report.includedPackages.some((name) => name.startsWith("phaser-full-umd@"))).toBe(false);
