@@ -230,12 +230,18 @@ test("adapter failures carry Project, Scene, Node and Component identity and rol
     },
   };
   const diagnostics: unknown[] = [];
+  const createdViews: MockGameObject[] = [];
+  let factoryCalls = 0;
   const adapter = createPhaserRuntimeSceneLoader(host.scene, observingLoader, {
     projectId: "acceptance-project",
     onDiagnostic(diagnostic) { diagnostics.push(diagnostic); },
     componentViewFactories: {
       [componentTypeId]() {
-        throw new Error("Synthetic view construction failure.");
+        factoryCalls += 1;
+        if (factoryCalls === 2) throw new Error("Synthetic view construction failure.");
+        const view = new MockGameObject(host.scene as unknown as object);
+        createdViews.push(view);
+        return view as unknown as import("phaser").GameObjects.GameObject;
       },
     },
   });
@@ -247,13 +253,17 @@ test("adapter failures carry Project, Scene, Node and Component identity and rol
       assert.equal(error.diagnostic.code, "VIEW_CREATION_FAILED");
       assert.equal(error.diagnostic.projectId, "acceptance-project");
       assert.equal(error.diagnostic.sceneId, "scene-level");
-      assert.equal(error.diagnostic.nodeId, "node-player");
-      assert.equal(error.diagnostic.componentInstanceId, "component-follow-player");
+      assert.equal(error.diagnostic.nodeId, "node-enemy");
+      assert.equal(error.diagnostic.componentInstanceId, "component-follow-enemy");
       assert.equal(error.diagnostic.causeMessage, "Synthetic view construction failure.");
       return true;
     },
   );
   assert.equal(loadedCoreSession?.world.isDisposed, true);
+  assert.equal(createdViews.length, 1);
+  assert.equal(createdViews[0]?.destroyCount, 1);
+  assert.equal(host.containers.length, 2);
+  assert.ok(host.containers.every((container) => container.destroyCount === 1));
   assert.equal(diagnostics.length, 1);
   assert.equal(host.events.listenerCount("update"), 0);
 });

@@ -40,7 +40,7 @@ const runtimeLoader = createPhaserRuntimeSceneLoader(this, sceneLoader, {
 });
 ```
 
-Factories are explicit and type-specific. Factory-created GameObjects use Node-local coordinates (normally starting at 0, 0). Each factory receives a frozen Node/Transform/Component snapshot and an isolated JSON copy of its validated Component document, so mutating factory input cannot alter the Core graph or source document. The adapter does not assume that every Core Component renders an object. Each returned Phaser GameObject must belong to the supplied Scene; one GameObject cannot be owned by multiple Components.
+Factories are explicit and type-specific. Factory-created GameObjects use Node-local coordinates (normally starting at 0, 0). Each factory receives a frozen Node/Transform/Component snapshot and an isolated JSON copy of its validated Component document, so mutating factory input cannot alter the Core graph or source document. The adapter does not assume that every Core Component renders an object. Each returned Phaser GameObject must belong to the supplied Scene; one GameObject cannot be owned by multiple Components. A factory that throws before returning remains responsible for releasing resources it created but did not return.
 
 Use the returned loader as the SceneLoader passed to Core's existing Scene Manager/runtime composition. The adapter wraps each loaded Core session; the Scene Manager remains responsible for transitions and lifecycle ordering.
 
