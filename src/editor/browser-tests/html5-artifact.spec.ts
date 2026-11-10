@@ -3,10 +3,21 @@ import { expect, test } from "@playwright/test";
 test("production artifact loads the native Scene through the selected Phaser runtime without editor or Vite services", async ({ page }, testInfo) => {
   const pageErrors: string[] = [];
   const forbiddenRequests: string[] = [];
+  const crossOriginRequests: string[] = [];
+  const invalidMimeResponses: string[] = [];
+  const artifactOrigin = new URL("http://127.0.0.1:4179").origin;
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
-    const path = new URL(request.url()).pathname;
-    if (/\/(?:@vite\/client|src\/main\.ts)(?:\?|$)/.test(path) || path.startsWith("/editor/")) forbiddenRequests.push(request.url());
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (url.origin !== artifactOrigin) crossOriginRequests.push(request.url());
+    if (/\/(?:@vite|@fs|src\/|node_modules\/|editor\/)/.test(path)) forbiddenRequests.push(request.url());
+  });
+  page.on("response", (response) => {
+    const path = new URL(response.url()).pathname;
+    const contentType = response.headers()["content-type"] ?? "";
+    if (/\.m?js$/.test(path) && !contentType.includes("javascript")) invalidMimeResponses.push(response.url() + " => " + contentType);
+    if (/\.svg$/.test(path) && !contentType.includes("svg+xml")) invalidMimeResponses.push(response.url() + " => " + contentType);
   });
 
   const response = await page.goto("/");
@@ -35,5 +46,7 @@ test("production artifact loads the native Scene through the selected Phaser run
   });
   console.log("HTML5_ARTIFACT_TIME_TO_FIRST_FRAME_MS=" + firstFrameMs);
   expect(forbiddenRequests).toEqual([]);
+  expect(crossOriginRequests).toEqual([]);
+  expect(invalidMimeResponses).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
