@@ -12,7 +12,7 @@ import {
 } from "@codogma/feature-registry";
 import {
   compareHtml5BuildManifests, createDefaultHtml5BuildProfile,
-  createHtml5BuildManifest, toProjectBuildOutputManifest,
+  createHtml5BuildManifest, resolveProjectComponentRegistry, toProjectBuildOutputManifest,
   type Html5BuildArtifactFileInput, type Html5BuildManifestV1, type Html5BuildProfileV1,
 } from "@codogma/html5-build";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -312,10 +312,32 @@ async function loadNativeAcceptanceScene(): Promise<void> {
   const sceneAsset = project.assets.find((asset) => asset.kind === "scene");
   if (!sceneAsset) throw new Error("Acceptance Project fixture must register a Scene asset.");
   const sceneText = readFileSync(resolve(projectRoot, sceneAsset.path), "utf8");
-  const registry = new ComponentRegistry();
-  registry.register(componentDefinition);
+  const scene = JSON.parse(sceneText) as SceneDocumentV1;
+  const requiredTypeIds = [...new Set(
+    (function collect(nodes: SceneDocumentV1["rootNodes"]): string[] {
+      return nodes.flatMap((node) => [
+        ...node.components.map((component) => component.typeId),
+        ...collect(node.children),
+      ]);
+    })(scene.rootNodes),
+  )].sort((left, right) => left.localeCompare(right));
+  const controller = new AbortController();
+  const moduleResolution = await resolveProjectComponentRegistry({
+    project,
+    requiredTypeIds,
+    signal: controller.signal,
+    loadModule: async (asset) => {
+      if (asset.path !== "src/FollowTarget.ts") {
+        throw new Error("No pinned fixture module loader is registered for " + asset.path);
+      }
+      return componentDefinition;
+    },
+  });
+  expect(moduleResolution.valid, JSON.stringify(moduleResolution.diagnostics)).toBe(true);
+  if (!moduleResolution.registry) throw new Error("Project Component resolver did not return a complete Registry.");
+  expect(moduleResolution.loadedTypeIds).toEqual(requiredTypeIds);
   const loader = new ProjectSceneLoader({
-    project, registry,
+    project, registry: moduleResolution.registry,
     readAssetDocument: async (asset) => {
       if (asset.id !== sceneAsset.id) throw new Error("Unexpected Scene asset requested by fixture loader.");
       return sceneText;
