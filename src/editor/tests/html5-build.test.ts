@@ -54,7 +54,7 @@ function mapModuleId(moduleId: string): readonly string[] {
   if (moduleId.includes("packages/cge/dist/") || moduleId.includes("node_modules/@codogma/cge/dist/")) return ["package:pkg-cge"];
   if (moduleId.includes("packages/runtime-phaser/dist/") || moduleId.includes("node_modules/@codogma/runtime-phaser/")) return ["package:pkg-runtime-phaser"];
   if (moduleId.endsWith("node_modules/phaser/dist/phaser.min.js")) return ["package:pkg-phaser-full-umd"];
-  if (moduleId.endsWith("node_modules/phaser/dist/phaser-arcade.min.js")) return ["package:pkg-phaser-arcade-umd"];
+  if (moduleId.endsWith("node_modules/phaser/dist/phaser-arcade-physics.min.js")) return ["package:pkg-phaser-arcade-umd"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts")) return ["module:follow-target"];
   if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts") || moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main-arcade.ts")) return ["module:runtime-entry"];
   if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/runtime.ts")) return ["module:runtime-scene"];
