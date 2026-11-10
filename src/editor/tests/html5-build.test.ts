@@ -560,6 +560,8 @@ describe("independent HTML5 Vite artifact fixture", () => {
         JSON.stringify({
           differences: comparison.differences,
           sourceMap: summarizeSourceMapDifference(kind + "-first", kind + "-second"),
+          firstMapManifest: first.files.find((file) => file.path.endsWith(".js.map")),
+          secondMapManifest: second.files.find((file) => file.path.endsWith(".js.map")),
         }),
       ).toBe(true);
       expect(
