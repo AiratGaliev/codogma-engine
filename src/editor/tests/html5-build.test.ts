@@ -73,7 +73,7 @@ function mapModuleId(moduleId: string): readonly string[] {
   if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts")) return ["module:runtime-entry"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/scenes/Level.cge-scene.json")) return ["asset:asset-scene-level"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/assets/player.svg")) return ["asset:asset-player-sprite"];
-  if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/project.json")) return ["project:acceptance-project"];
+  // The Project manifest is a build-time input, not a runtime graph node.
   return [];
 }
 
