@@ -40,7 +40,7 @@ The manifest is built from files the bundler actually emitted. It records, per f
 - normalized source-module identities from bundler output metadata;
 - exact Core Build Analysis graph node IDs represented by that output file.
 
-The manifest contains no timestamp, temporary output directory or absolute machine path. File paths and identity lists are sorted. The manifest sidecar is not included in its own file list. Gzip is measured in the host-neutral manifest package; the Node build host supplies Brotli sizes using the Node standard library.
+The Vite host sets both `mode` and `process.env.NODE_ENV` for each profile. Vite documents them as separate concepts: `vite build --mode development` still sets `NODE_ENV=production` unless explicitly overridden. The fixture asserts the emitted `import.meta.env.MODE`, `DEV` and `PROD` marker so Development is not accidentally a production-mode bundle. The manifest contains no timestamp, temporary output directory or absolute machine path. File paths and identity lists are sorted. The manifest sidecar is not included in its own file list. Gzip is measured in the host-neutral manifest package; the Node build host supplies Brotli sizes using the Node standard library.
 
 A Release manifest converts to ProjectBuildOutputManifest and is passed to analyzeProjectBuild. Core rejects unknown graph identities, output nodes not selected for the target and non-runtime package nodes. Development manifests can be compared but are not reported as production output.
 

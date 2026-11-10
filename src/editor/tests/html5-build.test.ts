@@ -15,7 +15,7 @@ import {
   createHtml5BuildManifest, toProjectBuildOutputManifest,
   type Html5BuildArtifactFileInput, type Html5BuildManifestV1, type Html5BuildProfileV1,
 } from "@codogma/html5-build";
-import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
@@ -120,16 +120,35 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string): Promis
   const temporaryRoot = await temporaryRootPromise;
   const outputDirectory = resolve(temporaryRoot, label);
   const captured = new Map<string, CapturedChunk>();
-  await build({
-    configFile: false, root: fixtureRoot, base: "./",
-    mode: profile.kind === "release" ? "production" : "development",
-    logLevel: "silent", plugins: [createCapturePlugin(captured)],
-    build: {
-      outDir: outputDirectory, emptyOutDir: true, target: profile.ecmaTarget,
-      minify: profile.minify, sourcemap: profile.sourceMaps, manifest: "manifest.json",
-      assetsInlineLimit: 0,
-    },
-  });
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = profile.kind === "development" ? "development" : "production";
+  try {
+    await build({
+      configFile: false, root: fixtureRoot, base: "./",
+      mode: profile.kind === "release" ? "production" : "development",
+      logLevel: "silent", plugins: [createCapturePlugin(captured)],
+      build: {
+        outDir: outputDirectory, emptyOutDir: true, target: profile.ecmaTarget,
+        minify: profile.minify, sourcemap: profile.sourceMaps, manifest: "manifest.json",
+        assetsInlineLimit: 0,
+      },
+    });
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+
+  const runtimeEntry = [...captured.entries()].find(([, chunk]) =>
+    chunk.moduleIds.includes("src/editor/tests/fixtures/html5-game/src/main.ts")
+  );
+  if (!runtimeEntry) throw new Error("Bundler did not emit the native runtime entry module.");
+  const runtimeEntryCode = await readFile(resolve(outputDirectory, runtimeEntry[0]), "utf8");
+  const expectedProfileMarker = profile.kind === "development"
+    ? "development|true|false"
+    : "production|false|true";
+  if (!runtimeEntryCode.includes(expectedProfileMarker)) {
+    throw new Error("Bundled Vite environment does not match " + profile.kind + " profile: expected " + expectedProfileMarker);
+  }
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite", version: "8.3.5" },
     files: await collectFiles(outputDirectory, captured),

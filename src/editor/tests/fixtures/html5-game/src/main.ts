@@ -8,6 +8,7 @@ async function startFixture(): Promise<void> {
   const app = document.querySelector<HTMLElement>("#app");
   if (!app) throw new Error("HTML5 fixture root element is missing.");
   const project = projectDocumentJson as ProjectDocumentV1;
+  const profileMarker = `${import.meta.env.MODE}|${import.meta.env.DEV}|${import.meta.env.PROD}`;
   const sceneReference = project.scenes[0];
   if (!sceneReference) throw new Error("Acceptance Project has no registered Scene.");
   const registry = new ComponentRegistry();
@@ -36,6 +37,7 @@ async function startFixture(): Promise<void> {
     const sprite = document.createElement("img");
     sprite.src = playerSpriteUrl;
     sprite.alt = "Acceptance project player sprite";
+    app.dataset.buildProfile = profileMarker;
     app.replaceChildren(heading, detail, sprite);
   } finally {
     await session.dispose();
