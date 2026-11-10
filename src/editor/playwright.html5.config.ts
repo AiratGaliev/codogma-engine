@@ -8,7 +8,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   ...(process.env.CI ? { workers: 1 } : {}),
   reporter: [["list"]],
-  outputDir: "test-results-html5",
+  outputDir: process.env.CODOGMA_HTML5_PLAYWRIGHT_OUTPUT ?? "test-results-html5",
   use: {
     baseURL: "http://127.0.0.1:4179",
     browserName: "chromium",
