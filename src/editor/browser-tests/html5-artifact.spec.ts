@@ -27,6 +27,7 @@ test("production artifact loads the native Scene through the selected Phaser run
   await expect(canvas).toHaveAttribute("data-codogma-scene-id", "scene-level");
   await expect(canvas).toHaveAttribute("data-codogma-node-count", "2");
   await expect(canvas).toHaveAttribute("data-codogma-component-count", "2");
+  await expect(canvas).toHaveAttribute("data-codogma-resolved-component-types", "com.codogma.acceptance.follow-target");
   const expectedVariant = process.env.CODOGMA_HTML5_EXPECT_VARIANT ?? "full";
   const app = page.locator("#app");
   await expect(app).toHaveAttribute("data-phaser-variant", expectedVariant);
