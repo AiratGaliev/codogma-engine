@@ -50,6 +50,19 @@ function summarizeSourceMapDifference(firstLabel: string, secondLabel: string): 
     sourcesContent?: Array<string | null>;
   };
   const second = JSON.parse(secondText) as typeof first;
+  let rawOffset = 0;
+  while (rawOffset < firstText.length && rawOffset < secondText.length
+    && firstText[rawOffset] === secondText[rawOffset]) rawOffset += 1;
+  const firstRaw = JSON.parse(firstText) as Record<string, unknown>;
+  const secondRaw = JSON.parse(secondText) as Record<string, unknown>;
+  const extraKeys = [...new Set([...Object.keys(firstRaw), ...Object.keys(secondRaw)])]
+    .filter((key) => !["file", "sourceRoot", "sources", "names", "mappings", "sourcesContent"].includes(key))
+    .sort();
+  const extraKeyDifferences = extraKeys.flatMap((key) =>
+    JSON.stringify(firstRaw[key]) === JSON.stringify(secondRaw[key])
+      ? []
+      : [{ key, first: firstRaw[key], second: secondRaw[key] }],
+  );
   const contentChanges = (first.sourcesContent ?? []).flatMap((left, index) => {
     const right = second.sourcesContent?.[index];
     if (left === right) return [];
@@ -77,6 +90,12 @@ function summarizeSourceMapDifference(firstLabel: string, secondLabel: string): 
   return {
     firstBytes: firstText.length,
     secondBytes: secondText.length,
+    rawOffset,
+    firstRawContext: firstText.slice(Math.max(0, rawOffset - 120), rawOffset + 180),
+    secondRawContext: secondText.slice(Math.max(0, rawOffset - 120), rawOffset + 180),
+    firstKeys: Object.keys(firstRaw),
+    secondKeys: Object.keys(secondRaw),
+    extraKeyDifferences,
     fileEqual: first.file === second.file,
     sourceRootEqual: first.sourceRoot === second.sourceRoot,
     sourcesEqual: JSON.stringify(first.sources) === JSON.stringify(second.sources),
