@@ -21,7 +21,8 @@ const server = createServer(async (request, response) => {
       return;
     }
     const requestPath = decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname);
-    const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
+    const entryFile = process.env.CODOGMA_HTML5_ENTRY ?? "index.html";
+    const relativePath = requestPath === "/" ? entryFile : requestPath.replace(/^\/+/, "");
     const filePath = resolve(root, relativePath);
     if (filePath !== root && !filePath.startsWith(root + sep)) {
       response.writeHead(403).end("Forbidden");
