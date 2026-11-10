@@ -66,6 +66,7 @@ jobs:
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
           CODOGMA_HTML5_ENTRY: index.html
           CODOGMA_HTML5_EXPECT_VARIANT: full
+          CODOGMA_HTML5_BASE_PATH: /promotion/full/
         run: |
           for browser in chromium firefox webkit; do
             export CODOGMA_HTML5_BROWSER="$browser"
@@ -80,6 +81,7 @@ jobs:
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
           CODOGMA_HTML5_ENTRY: index-arcade.html
           CODOGMA_HTML5_EXPECT_VARIANT: arcade-only
+          CODOGMA_HTML5_BASE_PATH: /promotion/arcade/
         run: |
           for browser in chromium firefox webkit; do
             export CODOGMA_HTML5_BROWSER="$browser"
