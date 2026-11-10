@@ -110,6 +110,14 @@ interface ViteManifestEntry {
   readonly isEntry?: boolean;
 }
 
+function assertOutputAttribution(path: string, attribution: CapturedChunk | undefined): void {
+  // Development source maps are diagnostic sidecars, not runtime Project graph inputs.
+  if (path.endsWith(".map")) return;
+  if (!attribution || attribution.includedNodeIds.length === 0) {
+    throw new Error("Emitted runtime output has no Project Build Analysis attribution: " + path);
+  }
+}
+
 async function collectFiles(
   outputDirectory: string,
   captured: ReadonlyMap<string, CapturedChunk>,
@@ -150,6 +158,7 @@ async function collectFiles(
         ?? (path === inputHtml
           ? { moduleIds: [htmlEntrySourceId], includedNodeIds: ["module:runtime-entry"] }
           : undefined);
+      assertOutputAttribution(path, chunk);
       result.push({
         path, contents, brotliBytes: brotliCompressSync(contents).byteLength,
         sourceModuleIds: chunk?.moduleIds ?? [], includedNodeIds: chunk?.includedNodeIds ?? [],
@@ -423,6 +432,16 @@ afterAll(async () => {
 });
 
 describe("independent HTML5 Vite artifact fixture", () => {
+  it("rejects unclassified runtime output while allowing Development source-map sidecars", () => {
+    expect(() => assertOutputAttribution("assets/unknown-runtime.js", undefined))
+      .toThrow(/no Project Build Analysis attribution/);
+    expect(() => assertOutputAttribution("assets/unknown-runtime.js", {
+      moduleIds: ["unknown-module"],
+      includedNodeIds: [],
+    })).toThrow(/no Project Build Analysis attribution/);
+    expect(() => assertOutputAttribution("assets/index.js.map", undefined)).not.toThrow();
+  });
+
   it("repeats Development and Release builds with stable output hashes and module composition", async () => {
     await loadNativeAcceptanceScene();
     const featureInput = {
@@ -461,6 +480,10 @@ describe("independent HTML5 Vite artifact fixture", () => {
       expect(first.files.some((file) => file.path === "manifest.json")).toBe(false);
       expect(first.files.find((file) => file.path === "index.html" || file.path === "index-arcade.html")?.includedNodeIds).toContain("module:runtime-entry");
       expect(first.files.some((file) => file.path.endsWith(".svg"))).toBe(true);
+      expect(
+        first.files.filter((file) => !file.path.endsWith(".map"))
+          .every((file) => file.includedNodeIds.length > 0),
+      ).toBe(true);
       if (kind === "release") {
         expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-runtime-phaser"))).toBe(true);
         expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-phaser-full-umd"))).toBe(true);
