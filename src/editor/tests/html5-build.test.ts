@@ -150,8 +150,9 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   if (!runtimeEntryCode.includes(expectedProfileMarker)) {
     throw new Error("Bundled Vite environment does not match " + profile.kind + " profile: expected " + expectedProfileMarker);
   }
+  const viteManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "node_modules/vite/package.json"), "utf8")) as { version: string };
   const manifest = await createHtml5BuildManifest({
-    profile, toolchain: { name: "vite", version: "8.3.5" },
+    profile, toolchain: { name: "vite", version: viteManifest.version },
     files: await collectFiles(outputDirectory, captured),
   });
   const artifactPath = process.env.CODOGMA_HTML5_BUILD_OUTPUT;
@@ -311,6 +312,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(featureReport.excludedFeatureIds).toEqual(["runtime.ecs", "runtime.ecs-phaser"]);
 
     const releaseModuleGraph = new Map<string, CapturedModuleImports>();
+    const reproducibilityByProfile: Record<string, boolean> = {};
     const results: Record<string, Html5BuildManifestV1> = {};
     for (const kind of ["development", "release"] as const) {
       const profile = createDefaultHtml5BuildProfile(kind);
@@ -318,6 +320,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
       const second = await buildProfile(profile, kind + "-second");
       const comparison = compareHtml5BuildManifests(first, second);
       expect(comparison.reproducible, JSON.stringify(comparison.differences)).toBe(true);
+      reproducibilityByProfile[kind] = comparison.reproducible;
       expect(first.totals.fileCount).toBeGreaterThan(1);
       expect(first.files.every((file) => Number.isSafeInteger(file.brotliBytes))).toBe(true);
       expect(first.files.some((file) => file.path.endsWith(".js"))).toBe(true);
@@ -343,6 +346,11 @@ describe("independent HTML5 Vite artifact fixture", () => {
 
     const release = results.release;
     if (!release) throw new Error("Release profile did not produce an HTML5 artifact manifest.");
+    const unclassifiedNodeModules = [...releaseModuleGraph.keys()].filter(
+      (moduleId) => moduleId.includes("node_modules/") && mapModuleId(moduleId).length === 0,
+    );
+    expect(unclassifiedNodeModules, "emitted node_modules entries must be attributed to a package").toEqual([]);
+
     const releaseManifest = toProjectBuildOutputManifest(release);
     const analysisInput = createCoreAnalysisInput(releaseManifest, featureReport.buildAnalysisFeatures, releaseModuleGraph, "full");
     const analysis = analyzeProjectBuild(analysisInput);
@@ -409,7 +417,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
         brotliBytes: arcadeFirst.totals.brotliBytes - release.totals.brotliBytes,
       },
       reproducibility: {
-        full: results.release ? true : false,
+        full: reproducibilityByProfile.release === true,
         arcadeOnly: arcadeReproducibility.reproducible,
       },
       apiCoverage: {
