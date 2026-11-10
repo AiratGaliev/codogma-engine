@@ -5,12 +5,13 @@ Versioned HTML5 build-profile and artifact-evidence contracts for Codogma Engine
 ## Responsibilities in v1
 
 - Define independent Development and Release HTML5 profile defaults and validate project-relative output paths.
+- Resolve only the required Project.componentModules through a host-provided script-asset importer; reject missing modules and type/version mismatches with Core diagnostics before Scene loading.
 - Pin the initial ES2022 browser syntax/module baseline used by the HTML5 target.
 - Build deterministic manifests from files the bundler actually emitted: normalized paths, SHA-256, gzip and Brotli sizes, source-module identities and exact Core Build Analysis node IDs.
 - Compare clean builds and report added, removed or changed files and module composition.
 - Convert a real Release manifest to the existing @codogma/cge ProjectBuildOutputManifest contract.
 
-The package does not run a bundler, resolve/install npm dependencies, discover TypeScript imports, generate a Phaser adapter, render a Scene or implement the SolidJS Build Profiles UI. Those are separate host/runtime responsibilities. The Vite fixture lives in the Editor Host test workspace because Vite 8.3.5 is already pinned there; the generated artifact itself does not use the Editor server or Tauri.
+The package does not own the editor's TS compiler or decide executable import specifiers. A build host supplies the asset importer to `resolveProjectComponentRegistry`; Project data remains declarative. Vite/Rolldown bundling, Phaser rendering and the SolidJS Build Profiles UI remain host/runtime responsibilities. Those are separate host/runtime responsibilities. The Vite fixture lives in the Editor Host test workspace because Vite 8.3.5 is already pinned there; the generated artifact itself does not use the Editor server or Tauri.
 
 ## Browser baseline
 
