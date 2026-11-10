@@ -6,7 +6,7 @@ test("production artifact loads the native Scene through the Phaser adapter with
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (/\/(?:@vite\/client|src\/main\.ts)(?:\?|$)/.test(path)) forbiddenRequests.push(request.url());
+    if (/\/(?:@vite\/client|src\/main\.ts)(?:\?|$)/.test(path) || path.startsWith("/editor/")) forbiddenRequests.push(request.url());
   });
 
   const response = await page.goto("/");
