@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { build, type Plugin } from "vite";
 import { brotliCompressSync } from "node:zlib";
 import {
-  analyzeProjectBuild, ComponentRegistry, ProjectSceneLoader,
+  analyzeProjectBuild, ProjectSceneLoader,
   type ProjectBuildAnalysisInput, type ProjectBuildModuleImport, type ProjectBuildModuleSnapshot,
   type ProjectBuildOutputManifest, type ProjectDocumentV1, type SceneDocumentV1,
 } from "@codogma/cge";
