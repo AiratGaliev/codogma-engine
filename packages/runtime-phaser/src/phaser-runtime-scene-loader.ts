@@ -74,6 +74,22 @@ function isDestroyed(gameObject: Phaser.GameObjects.GameObject): boolean {
   return (gameObject as Phaser.GameObjects.GameObject & { isDestroyed?: boolean }).isDestroyed === true;
 }
 
+function setGameObjectVisible(gameObject: Phaser.GameObjects.GameObject, visible: boolean): void {
+  const visibility = gameObject as Phaser.GameObjects.GameObject & {
+    visible?: boolean;
+    setVisible?: (value: boolean) => unknown;
+  };
+  if (typeof visibility.setVisible === "function") {
+    visibility.setVisible(visible);
+    return;
+  }
+  if ("visible" in gameObject) {
+    visibility.visible = visible;
+    return;
+  }
+  throw new TypeError("A Component view must support Phaser visibility.");
+}
+
 function createNodeSnapshot(
   node: RuntimeSceneGraphNode,
   snapshots: Map<string, PhaserRuntimeNodeSnapshot>,
@@ -326,11 +342,11 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
             throw new TypeError("A Phaser GameObject cannot be owned by more than one Node or Component view.");
           }
           this.ownedObjects.add(view);
+          setGameObjectVisible(view, false);
           nodeView.add(view);
           this.componentViews.set(componentInstanceId, view);
           this.componentIds.set(view, componentInstanceId);
           view.active = false;
-          view.visible = false;
           this.setViewOrigin(view, node.transform.originX, node.transform.originY);
         } catch (error) {
           throw new PhaserRuntimeAdapterError(
@@ -423,7 +439,7 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
       const node = nodeId ? this.graphNodes.get(nodeId) : undefined;
       const enabled = active && Boolean(node?.active) && component?.enabled === true;
       view.active = enabled;
-      view.visible = enabled;
+      setGameObjectVisible(view, enabled);
       if (node) this.setViewOrigin(view, node.transform.originX, node.transform.originY);
     }
   }

@@ -219,6 +219,46 @@ test("disabled Component views stop updating and rendering after Core commits th
   await session.dispose();
 });
 
+test("rejects a factory result without visibility support and rolls it back", async () => {
+  const host = createMockPhaserHost();
+  let coreSession: ProjectRuntimeSceneSession | undefined;
+  let destroyCount = 0;
+  const baseLoader = coreLoader();
+  const observingLoader: RuntimeGraphSceneLoader = {
+    async load(loadRequest) {
+      coreSession = await baseLoader.load(loadRequest);
+      return coreSession;
+    },
+  };
+  const adapter = createPhaserRuntimeSceneLoader(host.scene, observingLoader, {
+    projectId: "acceptance-project",
+    componentViewFactories: {
+      [componentTypeId]() {
+        return {
+          scene: host.scene,
+          active: true,
+          destroy() { destroyCount += 1; },
+        } as unknown as import("phaser").GameObjects.GameObject;
+      },
+    },
+  });
+
+  await assert.rejects(
+    adapter.load(request()),
+    (error: unknown) => {
+      assert.ok(error instanceof PhaserRuntimeAdapterError);
+      assert.equal(error.diagnostic.code, "VIEW_CREATION_FAILED");
+      assert.equal(error.diagnostic.causeMessage, "A Component view must support Phaser visibility.");
+      return true;
+    },
+  );
+  assert.equal(destroyCount, 1);
+  assert.equal(host.containers.length, 1);
+  assert.equal(host.containers[0]?.destroyCount, 1);
+  assert.equal(coreSession?.world.isDisposed, true);
+  assert.equal(host.events.listenerCount("update"), 0);
+});
+
 test("adapter failures carry Project, Scene, Node and Component identity and roll Core back", async () => {
   const host = createMockPhaserHost();
   let loadedCoreSession: ProjectRuntimeSceneSession | undefined;
