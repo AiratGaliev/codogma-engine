@@ -59,7 +59,7 @@ function mapModuleId(moduleId: string): readonly string[] {
   if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts")) return ["module:runtime-entry"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/scenes/Level.cge-scene.json")) return ["asset:asset-scene-level"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/assets/player.svg")) return ["asset:asset-player-sprite"];
-  if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/project.json")) return ["project:acceptance-project"];
+  if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/project.json")) return ["module:project-document"];
   return [];
 }
 
@@ -174,9 +174,12 @@ function createCoreAnalysisInput(
   }));
   const runtimeEntryPath = resolve(fixtureRoot, "src/main.ts");
   files.push({ path: "src/main.ts", kind: "file", sizeBytes: readFileSync(runtimeEntryPath).byteLength });
+  const projectDocumentPath = resolve(projectRoot, "project.json");
+  files.push({ path: "project.json", kind: "file", sizeBytes: readFileSync(projectDocumentPath).byteLength });
 
   const projectModules = [
     { sourceId: "src/editor/tests/fixtures/html5-game/src/main.ts", descriptor: { id: "runtime-entry", path: "src/main.ts", entryPoint: "runtime" as const } },
+    { sourceId: "packages/cge/tests/fixtures/acceptance-project/project.json", descriptor: { id: "project-document", path: "project.json", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts", descriptor: { id: "follow-target", path: "src/FollowTarget.ts", assetId: "asset-follow-target-module", entryPoint: "component" as const } },
   ];
   const modules = projectModules.map(({ sourceId, descriptor }) => {
@@ -351,6 +354,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.includedFeatures).not.toContain("runtime.ecs-phaser");
     expect(analysis.report.includedAssets).toContain("asset-player-sprite");
     expect(analysis.report.includedModules).toContain("runtime-entry");
+    expect(analysis.report.includedModules).toContain("project-document");
     expect(analysis.report.includedModules).toContain("follow-target");
 
     const originalScene = analysisInput.scenes[0];
