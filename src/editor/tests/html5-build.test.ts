@@ -163,7 +163,7 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string): Promis
 
 function createCoreAnalysisInput(
   outputManifest: ProjectBuildOutputManifest,
-  featureSnapshots: ProjectBuildAnalysisInput["features"],
+  featureSnapshots: NonNullable<ProjectBuildAnalysisInput["features"]>,
 ): ProjectBuildAnalysisInput {
   const project = JSON.parse(readFileSync(resolve(projectRoot, "project.json"), "utf8")) as ProjectDocumentV1;
   const sceneAsset = project.assets.find((asset) => asset.kind === "scene");
@@ -277,7 +277,9 @@ describe("independent HTML5 Vite artifact fixture", () => {
       generatedEvidence[kind] = { manifest: first, comparison };
     }
 
-    const releaseManifest = toProjectBuildOutputManifest(results.release);
+    const release = results.release;
+    if (!release) throw new Error("Release profile did not produce an HTML5 artifact manifest.");
+    const releaseManifest = toProjectBuildOutputManifest(release);
     const analysis = analyzeProjectBuild(createCoreAnalysisInput(releaseManifest, featureReport.buildAnalysisFeatures));
     expect(analysis.valid, JSON.stringify(analysis.diagnostics)).toBe(true);
     expect(analysis.report.output.status).toBe("measured");
