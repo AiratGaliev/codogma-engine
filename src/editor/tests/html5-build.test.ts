@@ -229,7 +229,7 @@ function createCoreAnalysisInput(
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/project.json", descriptor: { id: "project-document", path: "project.json", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts", descriptor: { id: "follow-target", path: "src/FollowTarget.ts", assetId: "asset-follow-target-module", entryPoint: "component" as const } },
   ];
-  const assetReferences: NonNullable<ProjectBuildAnalysisInput["assetReferences"]> = [];
+  const assetReferences: Array<NonNullable<ProjectBuildAnalysisInput["assetReferences"]>[number]> = [];
   const modules: ProjectBuildModuleSnapshot[] = projectModules.map(({ sourceId, descriptor }) => {
     const captured = moduleGraph.get(sourceId);
     if (!captured) throw new Error("Vite module graph omitted required Project module " + sourceId);
