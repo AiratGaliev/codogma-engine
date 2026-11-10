@@ -8,10 +8,11 @@ The HTML5 build package owns versioned profile and artifact-evidence contracts. 
 
 The fixture uses the same runtime contracts as Preview:
 
-1. ProjectSceneLoader validates the persisted Project/Scene documents and resolves the registered Component module.
-2. createPhaserRuntimeSceneLoader from @codogma/runtime-phaser adapts the loaded Core session to a real Phaser Scene.
-3. A fixture Component view factory resolves the Scene's registered sprite asset and creates Phaser GameObjects.
-4. Phaser owns the browser canvas and frame loop; Core owns Scene/Component state.
+1. Core validates the persisted Project document and resolves only the Scene's required Component type IDs through `Project.componentModules` and their registered script Assets; the host supplies a controlled module importer and Core checks stable `typeId`/version before returning a complete ComponentRegistry.
+2. ProjectSceneLoader validates and hydrates the persisted Scene using that same Registry contract.
+3. `createPhaserRuntimeSceneLoader` from `@codogma/runtime-phaser` adapts the loaded Core session to a real Phaser Scene.
+4. A fixture Component view factory resolves the Scene's registered sprite asset and creates Phaser GameObjects.
+5. Phaser owns the browser canvas and frame loop; Core owns Scene/Component state.
 
 The fixture does not import the Editor Host UI, Node server, editor compiler, or Tauri. It loads the pinned Phaser 4.2.1 full UMD distribution file or the upstream Arcade Physics UMD distribution file as a static asset; the package does not expose a public Arcade-only ESM subpath, so no unsupported module import is invented. The generated output is served by a minimal static HTTP server for promotion browser smoke; no Vite dev server or Editor endpoint is involved.
 
