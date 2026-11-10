@@ -494,6 +494,12 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.includedModules).toContain("runtime-scene");
     expect(analysis.report.includedModules).toContain("project-document");
     expect(analysis.report.includedModules).toContain("component-com.codogma.acceptance.follow-target");
+    expect(analysisInput.dynamicEntryPoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceModuleId: "runtime-scene",
+        targetModuleId: "component-com.codogma.acceptance.follow-target",
+      }),
+    ]));
 
     const arcadeModuleGraph = new Map<string, CapturedModuleImports>();
     const arcadeProfile = createDefaultHtml5BuildProfile("release");
