@@ -1,4 +1,3 @@
-import type Phaser from "phaser";
 import { loadPhaserUmd, startRuntime } from "./runtime";
 import fullBundleUrl from "../../../../../../node_modules/phaser/dist/phaser.min.js?url";
 
