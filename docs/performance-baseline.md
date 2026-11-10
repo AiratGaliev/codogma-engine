@@ -16,7 +16,7 @@
 | PERF-03 | Native Scene authoring | Native Project/Scene v1 fixture plus a fixed transform/Inspector/Undo/Redo scenario | p50/p95 frame duration, input-to-paint latency, save/reopen time | Not measured |
 | PERF-04 | Native Asset import/preview | Fixed set of images, spritesheets, fonts and video; record file counts and sizes | Import duration, preview first-frame time, peak memory, errors and cleanup | Not measured |
 | PERF-05 | Native runtime Scene | Phaser 4.2.1 fixture with fixed Nodes/Components/FX; record browser/GPU and Build revision | Startup time, frame-time p50/p95, long tasks, output raw/gzip size | Not measured (browser/runtime) |
-| PERF-05A | Core ↔ Phaser adapter bridge (synthetic) | `packages/runtime-phaser/benchmarks/runtime-phaser.bench.ts`; Node.js; mock Phaser host; 100/1,000/10,000 Nodes + one Component/view per Node | Core-only vs adapter startup, update/frame median+p95, teardown; 5 samples × 30 frames | Benchmark implemented; CI numbers pending; not browser evidence |
+| PERF-05A | Core ↔ Phaser adapter bridge (synthetic) | `packages/runtime-phaser/benchmarks/runtime-phaser.bench.ts`; Node.js; mock Phaser host; 100/1,000/10,000 Nodes + one Component/view per Node | Core-only vs adapter startup, update/frame median+p95, teardown; 5 samples × 30 frames | CI results captured in runs #1052/#1053; post-optimization result below; not browser evidence |
 | PERF-06 | Core vertical slice | Project → Scene → Node/Transform → component → save/reopen → preview/build fixture | Время сериализации, round-trip, start/stop/restart, build duration | Частично измерено: native Scene serialization/hydration/update/disposal ниже; Project save/reopen, Preview и Build не измерены |
 | PERF-07 | Web host lifecycle and recovery | Release fixture в foreground/background и target iframe/WebView; отдельный прогон с WEBGL_lose_context | Восстановление ресурсов/состояния, дубликаты listeners, CPU после hidden tab | Не измерено |
 | PERF-08 | Low-end mobile and first load | Зафиксированные Android/iOS device/browser/host, стабильные assets и cold cache | compressed/raw initial download, time-to-first-frame, first input, memory high-water mark, long tasks, asset failures | Не измерено |
@@ -40,6 +40,26 @@
 The adapter workspace contains `npm run benchmark --workspace=@codogma/runtime-phaser`. It consumes the native Project fixture shape, measures Core-only and adapter-backed sessions at 100, 1,000 and 10,000 Nodes, each with one Core Component (and one adapter Phaser view) per Node, and records startup, per-frame update median/p95 and teardown over five samples of 30 frames. Raw samples are emitted with the summary. The adapter path uses a structural mock Phaser host so the measurement isolates Core graph/view creation and projection overhead.
 
 **Interpretation boundary:** these are Node.js synthetic measurements. They do not include a real Phaser renderer, WebGL/Canvas, browser event loop, GPU, asset decoding, physics, input or mobile device behaviour. They cannot establish browser FPS or an ECS speed-up. The actual Phaser browser/runtime PERF-05 remains unmeasured until a browser acceptance run records the target environment and evidence.
+
+### PERF-05A CI results — before/after synchronization optimization (10.11.2026)
+
+Both runs used the same workload shape (100/1,000/10,000 Nodes, one Component and one mock view per Node, five samples × 30 update frames) and the same benchmark implementation. The before run measured the initial two-pass adapter synchronization with a per-frame Component snapshot/Map; the after run includes the Core `isComponentEnabled()` read API, prebuilt per-Node sync records, a single synchronization pass and guards that skip unchanged Phaser setters.
+
+| Nodes + Components | Adapter frame median before (ms) | Adapter frame p95 before (ms) | Adapter frame median after (ms) | Adapter frame p95 after (ms) | Median change |
+|---:|---:|---:|---:|---:|---:|
+| 100 | 0.03065 | 0.10923 | 0.01438 | 0.08651 | −53.1% |
+| 1,000 | 0.96758 | 1.30623 | 0.59206 | 0.62729 | −38.8% |
+| 10,000 | 30.19739 | 34.82187 | 11.84561 | 18.83466 | −60.8% |
+
+| Nodes + Components | Adapter startup median before → after (ms) | Adapter cleanup median before → after (ms) |
+|---:|---:|---:|
+| 100 | 5.28 → 4.29 | 1.15 → 1.03 |
+| 1,000 | 36.46 → 31.37 | 11.58 → 11.63 |
+| 10,000 | 461.77 → 408.99 | 152.25 → 137.74 |
+
+**Evidence:** before — [CI Fast run #1052](https://github.com/AiratGaliev/codogma-engine/actions/runs/42795500879), head `0479573a262ae03550268ef709fcae52bd9ffa2b`; after — [CI Fast run #1053](https://github.com/AiratGaliev/codogma-engine/actions/runs/42795949708), head `19044dffa1d259609b10b6e859909248bb301f0f`. Both runs completed successfully.
+
+**Interpretation:** the 10,000-view synthetic median dropped by approximately 60.8%, but its post-optimization p95 is still 18.83 ms. These runs are separate GitHub-hosted CI executions, not a controlled same-process A/B measurement, and the structural mock does not model Phaser rendering, browser scheduling, GPU, assets, physics or input. Do not infer 60 FPS or publish a performance budget from these results. Real Phaser/browser PERF-05 remains unmeasured and requires a pinned browser/device/renderer acceptance run.
 
 ## PERF-06 — частичный baseline Core native Scene (CI)
 

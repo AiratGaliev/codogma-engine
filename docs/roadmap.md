@@ -202,7 +202,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Этап 2 — Project Model и host-neutral TypeScript Component Core
 
-**Реализационный baseline (10.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization находятся в `packages/cge/`; host-neutral `ProjectSceneLoader` завершён в COD-103. В COD-28 реализован отдельный `@codogma/runtime-phaser` adapter: Node Container hierarchy, explicit Component views, immutable Core snapshots, Core-owned Transform projection, external Phaser Scene UPDATE, identity mappings и idempotent cleanup. Реальный браузерный Phaser smoke, полный browser Preview, asset/physics integration и независимый HTML5 Build остаются отдельными этапами.
+**Реализационный baseline (10.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization находятся в `packages/cge/`; host-neutral `ProjectSceneLoader` завершён в COD-103. В COD-28 реализован отдельный `@codogma/runtime-phaser` adapter: Node Container hierarchy, explicit Component views, immutable Core snapshots, Core-owned Transform projection, external Phaser Scene UPDATE, identity mappings, idempotent cleanup и allocation-free per-frame Component state queries. CI Fast/adapter tests/benchmark and release archive validation passed on PR #74. Реальный браузерный Phaser smoke, полный browser Preview, asset/physics integration и независимый HTML5 Build остаются отдельными этапами.
 
 
 **Цель:** создать основу собственного движка над существующим runtime — не подключать второй game runtime поверх Phaser, а связать editor model и игру через общий API.
