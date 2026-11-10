@@ -16,3 +16,4 @@ export * from "./services/scene-manager.js";
 export * from "./services/scene-types.js";
 export * from "./services/scene-loader.js";
 export * from "./services/runtime.js";
+export * from "./services/component-module-resolver.js";
