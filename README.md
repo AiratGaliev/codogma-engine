@@ -22,6 +22,7 @@ The root npm workspace owns the active first-party package graph:
 
 - `packages/cge/` — `@codogma/cge`;
 - `packages/runtime-phaser/` — `@codogma/runtime-phaser`, the optional Phaser 4.2.1 view/lifecycle adapter for Core sessions;
+- `packages/html5-build/` — `@codogma/html5-build`, versioned HTML5 profiles and reproducible emitted-artifact evidence;
 - `packages/feature-registry/` — `@codogma/feature-registry`;
 - `packages/localization/` — `@codogma/localization`;
 - `packages/editor-mcp-server/` — `@codogma/editor-mcp-server`;
@@ -74,7 +75,7 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Animation and components | The Host has basic animation clip/frame operations and initial Component surfaces. Full Timeline/tracks/keyframes/curves/events belong to COD-84; native Script Asset + manifest-backed User Components belong to COD-91 (using Core contracts COD-26/COD-27); native Prefab overrides remain in COD-8. |
 | Phaser runtime integration | `@codogma/runtime-phaser` provides the first host-neutral Core → Phaser 4.2.1 view/lifecycle adapter: Node hierarchy and Transform projection, explicit Component view factories, session identity and Scene UPDATE/cleanup. Full Preview, asset resolution, physics and HTML5 Build remain separate capabilities. |
 | Core and ECS | `@codogma/cge` provides the host-neutral Project Model, `ComponentWorld` and executable Engine Services v1: Time/Scheduler, Tween, normalized Input, typed events and Scene Manager. `createEngineRuntime()` composes one host-owned frame in deterministic Time → Scheduler → Tween → active `ComponentWorld` order; ComponentWorld exposes instance/enabled lifetime signals for cleanup. Core remains independent of Phaser, DOM, Editor UI, Node-only APIs and platform SDKs. Optional Data-Oriented ECS and its Phaser adapter are **not implemented**; their architecture and acceptance source is [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), with implementation owned by COD-111/112. |
-| HTML5 build optimization | The current Phaser delivery uses a vendored full Phaser 4.2.1 bundle. A verified selective Phaser build, physical feature pruning and complete Feature/Capability Registry are **not yet implemented**. Upstream Arcade-only UMD and custom/ESM paths must be compared on reproducible generated-game fixtures before making bundle-size or tree-shaking claims. |
+| HTML5 build optimization | The COD-35 implementation branch builds the real Project Model Scene through the COD-103 loader and COD-28 Phaser adapter, compares full and Arcade-only Phaser 4.2.1 UMD artifacts, records hashes/raw/gzip/Brotli/module composition and time-to-first-frame, and adds promotion-only bare-browser smokes. CI evidence is pending; promotion smoke is configured for Chromium, Firefox and WebKit, while real Safari/iOS Safari and Chrome Android device acceptance remains outside this CI environment. |
 | Scene effects and objects | SolidJS Host implements Circle/Bloom/Gradient/Shine Inspector controls and Phaser-backed preview. Persisted Project Model integration and Preview/Build runtime parity remain separate capabilities; independent UX/reference review is tracked by CODQA-19. |
 | Spine authoring and preview | A complete native SolidJS Host authoring/preview workflow is not yet implemented. See COD-90, session-aware routing COD-85 and browser/runtime acceptance CODQA-20 (live MCP checks also CODQA-8). |
 | Audio groups and particle preview | Native SolidJS authoring/preview controls are not yet implemented. See COD-61 and CODQA-13. |
@@ -624,3 +625,7 @@ Codogma Engine uses Phaser 4.2.1 as its current game framework/runtime integrati
 ## MCP native contract
 
 The engine-owned get-system-instructions response and MCP package tests describe the supported Project Model v1 Scene/Node/Prefab/Component/FX workflows. The registry exposes native document operations through the single connected Editor Host and external asset inspection through project services. Phaser Asset Pack, animation JSON, Tiled tilemap and Spine skeleton/atlas metadata remain separate asset workflows; a Spine skin screenshot is not exposed until the Editor Host has a renderer/handler.
+
+### HTML5 production build
+
+The versioned build profiles, emitted-artifact manifest and independent Phaser runtime fixture are documented in [the HTML5 build pipeline](docs/html5-build-pipeline.md). The build fixture consumes the native Project Model Scene through ProjectSceneLoader and renders it through the @codogma/runtime-phaser adapter; browser smoke is reserved for the dev-to-test promotion gate.

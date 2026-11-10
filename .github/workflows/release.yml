@@ -43,6 +43,7 @@ jobs:
         run: |
           npm run build:cge
           npm run build:runtime-phaser
+          npm run build:html5-build
           npm run build:feature-registry
           npm run build:localization
           npm run build:mcp
@@ -89,7 +90,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           zip -qr release/codogma-engine.zip \
-            server packages/cge packages/runtime-phaser packages/feature-registry packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
+            server packages/cge packages/runtime-phaser packages/html5-build packages/feature-registry packages/localization packages/editor-mcp-server packages/game-test-bridge-contract src/editor \
             package.json package-lock.json README.md BUILD.md LICENSE CHANGELOG.MD \
             -x "src/editor/node_modules/*" \
             -x "packages/*/node_modules/*" \
@@ -100,6 +101,8 @@ jobs:
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/cge/dist/index.js"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/runtime-phaser/package.json"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/runtime-phaser/dist/index.js"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/html5-build/package.json"
+          unzip -Z1 release/codogma-engine.zip | grep -qx "packages/html5-build/dist/index.js"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/feature-registry/package.json"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/feature-registry/dist/index.js"
           unzip -Z1 release/codogma-engine.zip | grep -qx "packages/editor-mcp-server/dist/cli.js"
