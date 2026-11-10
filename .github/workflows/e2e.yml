@@ -43,6 +43,7 @@ jobs:
         env:
           CODOGMA_HTML5_BUILD_EVIDENCE: ${{ runner.temp }}/html5-build-evidence.json
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
+          CODOGMA_HTML5_ARCADE_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
         run: npm run test:html5-build
 
       - name: Build and typecheck SolidJS Host and Core workspace dependency
@@ -59,9 +60,19 @@ jobs:
         run: npm run test:browser
         working-directory: src/editor
 
-      - name: Run bare-browser production HTML5 artifact smoke (COD-35)
+      - name: Run bare-browser full Phaser production artifact smoke (COD-35)
         env:
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
+          CODOGMA_HTML5_ENTRY: index.html
+          CODOGMA_HTML5_EXPECT_VARIANT: full
+        run: npm run test:html5-build:browser
+        working-directory: src/editor
+
+      - name: Run bare-browser Arcade-only UMD production artifact smoke (COD-35)
+        env:
+          CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
+          CODOGMA_HTML5_ENTRY: index-arcade.html
+          CODOGMA_HTML5_EXPECT_VARIANT: arcade-only
         run: npm run test:html5-build:browser
         working-directory: src/editor
 
@@ -73,6 +84,7 @@ jobs:
           path: |
             ${{ runner.temp }}/html5-build-evidence.json
             ${{ runner.temp }}/html5-game-artifact/
+            ${{ runner.temp }}/html5-arcade-artifact/
             src/editor/test-results-html5/
           if-no-files-found: ignore
           retention-days: 14
