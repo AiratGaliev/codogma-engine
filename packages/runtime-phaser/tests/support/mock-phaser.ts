@@ -26,6 +26,8 @@ export class MockEvents {
 
 export class MockGameObject {
   readonly scene: object;
+  parentContainer: MockContainer | null = null;
+  ignoreDestroy = false;
   active = true;
   visible = true;
   isDestroyed = false;
@@ -76,7 +78,8 @@ export class MockGameObject {
   }
 
   destroy(): void {
-    if (this.isDestroyed) return;
+    if (this.isDestroyed || this.ignoreDestroy) return;
+    this.parentContainer?.remove(this);
     this.isDestroyed = true;
     this.destroyCount += 1;
   }
@@ -88,7 +91,20 @@ export class MockContainer extends MockGameObject {
 
   add(child: MockGameObject | MockGameObject[]): this {
     for (const item of Array.isArray(child) ? child : [child]) {
+      if (this.exclusive) {
+        item.parentContainer?.remove(item);
+        item.parentContainer = this;
+      }
       this.list.push(item);
+    }
+    return this;
+  }
+
+  remove(child: MockGameObject): this {
+    const index = this.list.indexOf(child);
+    if (index >= 0) {
+      this.list.splice(index, 1);
+      if (this.exclusive && child.parentContainer === this) child.parentContainer = null;
     }
     return this;
   }
@@ -99,9 +115,12 @@ export class MockContainer extends MockGameObject {
   }
 
   override destroy(): void {
-    if (this.isDestroyed) return;
+    if (this.isDestroyed || this.ignoreDestroy) return;
     if (this.exclusive) {
-      for (const child of [...this.list]) child.destroy();
+      for (const child of [...this.list]) {
+        this.remove(child);
+        child.destroy();
+      }
     }
     this.list.length = 0;
     super.destroy();

@@ -358,6 +358,21 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
           if (this.ownedObjects.has(view)) {
             throw new TypeError("A Phaser GameObject cannot be owned by more than one Node or Component view.");
           }
+
+          const viewOwnership = view as Phaser.GameObjects.GameObject & {
+            parentContainer?: Phaser.GameObjects.Container | null;
+            ignoreDestroy?: boolean;
+          };
+          if (isDestroyed(view)) {
+            throw new TypeError("A Component view factory must return a live Phaser GameObject.");
+          }
+          if (viewOwnership.parentContainer != null) {
+            throw new TypeError("A Component view must not already belong to a Phaser Container.");
+          }
+          if (viewOwnership.ignoreDestroy === true) {
+            throw new TypeError("A Component view must allow adapter-owned destruction (ignoreDestroy must be false).");
+          }
+
           this.ownedObjects.add(view);
           setGameObjectVisible(view, false);
           nodeView.add(view);
@@ -568,6 +583,10 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
     for (const object of objects) {
       if (isDestroyed(object)) continue;
       try {
+        // The adapter owns adopted views. Do not let Phaser's caller-managed
+        // ignoreDestroy opt-out bypass the loaded session's cleanup boundary.
+        const lifecycle = object as Phaser.GameObjects.GameObject & { ignoreDestroy?: boolean };
+        if (lifecycle.ignoreDestroy === true) lifecycle.ignoreDestroy = false;
         object.destroy();
       } catch (error) {
         errors.push(error);

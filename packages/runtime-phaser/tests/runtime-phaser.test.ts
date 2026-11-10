@@ -219,6 +219,121 @@ test("disabled Component views stop updating and rendering after Core commits th
   await session.dispose();
 });
 
+test("rejects a Component view already parented by another Container without stealing or destroying it", async () => {
+  const host = createMockPhaserHost();
+  const externalParent = new MockContainer(host.scene as unknown as object);
+  const externalView = new MockGameObject(host.scene as unknown as object);
+  externalParent.add(externalView);
+
+  const adapter = createPhaserRuntimeSceneLoader(host.scene, coreLoader(), {
+    projectId: "acceptance-project",
+    componentViewFactories: {
+      [componentTypeId]() {
+        return externalView as unknown as import("phaser").GameObjects.GameObject;
+      },
+    },
+  });
+
+  await assert.rejects(
+    adapter.load(request()),
+    (error: unknown) => {
+      assert.ok(error instanceof PhaserRuntimeAdapterError);
+      assert.equal(error.diagnostic.code, "VIEW_CREATION_FAILED");
+      assert.equal(error.diagnostic.causeMessage, "A Component view must not already belong to a Phaser Container.");
+      return true;
+    },
+  );
+
+  assert.equal(externalView.parentContainer, externalParent);
+  assert.deepEqual(externalParent.list, [externalView]);
+  assert.equal(externalView.destroyCount, 0);
+  assert.equal(host.events.listenerCount("update"), 0);
+});
+
+test("rejects already-destroyed and ignoreDestroy Component views before adopting them", async (t) => {
+  await t.test("already-destroyed view", async () => {
+    const host = createMockPhaserHost();
+    const destroyedView = new MockGameObject(host.scene as unknown as object);
+    destroyedView.destroy();
+
+    const adapter = createPhaserRuntimeSceneLoader(host.scene, coreLoader(), {
+      projectId: "acceptance-project",
+      componentViewFactories: {
+        [componentTypeId]() {
+          return destroyedView as unknown as import("phaser").GameObjects.GameObject;
+        },
+      },
+    });
+
+    await assert.rejects(
+      adapter.load(request()),
+      (error: unknown) => {
+        assert.ok(error instanceof PhaserRuntimeAdapterError);
+        assert.equal(error.diagnostic.causeMessage, "A Component view factory must return a live Phaser GameObject.");
+        return true;
+      },
+    );
+    assert.equal(destroyedView.destroyCount, 1);
+    assert.equal(host.events.listenerCount("update"), 0);
+  });
+
+  await t.test("ignoreDestroy view", async () => {
+    const host = createMockPhaserHost();
+    const ignoredView = new MockGameObject(host.scene as unknown as object);
+    ignoredView.ignoreDestroy = true;
+
+    const adapter = createPhaserRuntimeSceneLoader(host.scene, coreLoader(), {
+      projectId: "acceptance-project",
+      componentViewFactories: {
+        [componentTypeId]() {
+          return ignoredView as unknown as import("phaser").GameObjects.GameObject;
+        },
+      },
+    });
+
+    await assert.rejects(
+      adapter.load(request()),
+      (error: unknown) => {
+        assert.ok(error instanceof PhaserRuntimeAdapterError);
+        assert.equal(
+          error.diagnostic.causeMessage,
+          "A Component view must allow adapter-owned destruction (ignoreDestroy must be false).",
+        );
+        return true;
+      },
+    );
+    assert.equal(ignoredView.ignoreDestroy, true);
+    assert.equal(ignoredView.destroyCount, 0);
+    assert.equal(host.events.listenerCount("update"), 0);
+  });
+});
+
+test("disposal destroys adopted views even if a caller later enables ignoreDestroy", async () => {
+  const host = createMockPhaserHost();
+  const componentObjects: MockGameObject[] = [];
+  const adapter = createPhaserRuntimeSceneLoader(host.scene, coreLoader(), {
+    projectId: "acceptance-project",
+    componentViewFactories: {
+      [componentTypeId]() {
+        const view = new MockGameObject(host.scene as unknown as object);
+        componentObjects.push(view);
+        return view as unknown as import("phaser").GameObjects.GameObject;
+      },
+    },
+  });
+
+  const session = await adapter.load(request());
+  const adoptedView = componentObjects[0];
+  assert.ok(adoptedView);
+  adoptedView.ignoreDestroy = true;
+
+  await session.dispose();
+
+  assert.equal(adoptedView.isDestroyed, true);
+  assert.equal(adoptedView.destroyCount, 1);
+  assert.equal(adoptedView.ignoreDestroy, false);
+});
+
 test("rejects a factory result without visibility support and rolls it back", async () => {
   const host = createMockPhaserHost();
   let coreSession: ProjectRuntimeSceneSession | undefined;
