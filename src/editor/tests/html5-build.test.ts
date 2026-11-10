@@ -90,7 +90,34 @@ function createCapturePlugin(captured: Map<string, CapturedChunk>, moduleGraph?:
   };
 }
 
-async function collectFiles(outputDirectory: string, captured: ReadonlyMap<string, CapturedChunk>): Promise<Html5BuildArtifactFileInput[]> {
+interface ViteManifestEntry {
+  readonly file?: string;
+  readonly src?: string;
+  readonly isEntry?: boolean;
+}
+
+async function collectFiles(
+  outputDirectory: string,
+  captured: ReadonlyMap<string, CapturedChunk>,
+  inputHtml: string,
+): Promise<Html5BuildArtifactFileInput[]> {
+  const viteManifestPath = resolve(outputDirectory, "manifest.json");
+  const viteManifest = JSON.parse(await readFile(viteManifestPath, "utf8")) as Record<string, ViteManifestEntry>;
+  const assetAttribution = new Map<string, CapturedChunk>();
+  for (const entry of Object.values(viteManifest)) {
+    if (!entry.file || !entry.src || entry.isEntry) continue;
+    const sourceModuleId = normalizeModuleId(resolve(fixtureRoot, entry.src));
+    const includedNodeIds = mapModuleId(sourceModuleId);
+    if (includedNodeIds.length === 0) {
+      throw new Error("Vite emitted asset has no Project Build Analysis attribution: " + entry.src);
+    }
+    assetAttribution.set(entry.file, {
+      moduleIds: [sourceModuleId],
+      includedNodeIds,
+    });
+  }
+
+  const htmlEntrySourceId = normalizeModuleId(resolve(fixtureRoot, inputHtml));
   const result: Html5BuildArtifactFileInput[] = [];
   async function visit(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -101,17 +128,22 @@ async function collectFiles(outputDirectory: string, captured: ReadonlyMap<strin
       if (entry.isDirectory()) { await visit(absolutePath); continue; }
       if (!entry.isFile()) throw new Error("Build output contains an unsupported filesystem entry: " + absolutePath);
       const path = relative(outputDirectory, absolutePath).split(String.fromCharCode(92)).join("/");
+      // Vite's internal manifest is only a build-host index; it is not a game runtime dependency.
+      if (path === "manifest.json") continue;
       const contents = new Uint8Array(await readFile(absolutePath));
-      const chunk = captured.get(path);
-      const includedNodeIds = new Set(chunk?.includedNodeIds ?? []);
-      if (path.endsWith(".svg")) includedNodeIds.add("asset:asset-player-sprite");
+      const chunk = captured.get(path)
+        ?? assetAttribution.get(path)
+        ?? (path === inputHtml
+          ? { moduleIds: [htmlEntrySourceId], includedNodeIds: ["module:runtime-entry"] }
+          : undefined);
       result.push({
         path, contents, brotliBytes: brotliCompressSync(contents).byteLength,
-        sourceModuleIds: chunk?.moduleIds ?? [], includedNodeIds: [...includedNodeIds],
+        sourceModuleIds: chunk?.moduleIds ?? [], includedNodeIds: chunk?.includedNodeIds ?? [],
       });
     }
   }
   await visit(outputDirectory);
+  await rm(viteManifestPath, { force: true });
   return result;
 }
 
@@ -158,7 +190,7 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
-    files: await collectFiles(outputDirectory, captured),
+    files: await collectFiles(outputDirectory, captured, inputHtml),
   });
   return manifest;
 }
@@ -201,7 +233,9 @@ function createCoreAnalysisInput(
       if (packageId) return [{ specifier, kind, resolvedPackageId: packageId.slice("package:".length) }];
       const moduleId = mapped.find((id) => id.startsWith("module:"));
       if (moduleId) return [{ specifier, kind, resolvedModuleId: moduleId.slice("module:".length) }];
-      return [];
+      const assetId = mapped.find((id) => id.startsWith("asset:"));
+      if (assetId) return [{ specifier, kind, resolvedModuleId: assetId.slice("asset:".length) }];
+      throw new Error("Project module import has no stable Project Build Analysis mapping: " + descriptor.id + " -> " + specifier);
     });
     return { ...descriptor, imports: [
       ...resolveImports(captured.staticImports, "static"),
@@ -352,10 +386,10 @@ describe("independent HTML5 Vite artifact fixture", () => {
 
     const release = results.release;
     if (!release) throw new Error("Release profile did not produce an HTML5 artifact manifest.");
-    const unclassifiedNodeModules = [...releaseModuleGraph.keys()].filter(
-      (moduleId) => moduleId.includes("node_modules/") && mapModuleId(moduleId).length === 0,
+    const unclassifiedRuntimeModules = [...releaseModuleGraph.keys()].filter(
+      (moduleId) => !moduleId.startsWith("virtual:") && mapModuleId(moduleId).length === 0,
     );
-    expect(unclassifiedNodeModules, "emitted node_modules entries must be attributed to a package").toEqual([]);
+    expect(unclassifiedRuntimeModules, "every emitted runtime module must be mapped to a Project Build Analysis node").toEqual([]);
 
     const releaseManifest = toProjectBuildOutputManifest(release);
     const analysisInput = createCoreAnalysisInput(releaseManifest, featureReport.buildAnalysisFeatures, releaseModuleGraph, "full");
