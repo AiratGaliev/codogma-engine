@@ -8,12 +8,12 @@
 | Package root | Прямые зависимости / инструмент | Версия в manifest | Назначение / scope | Следствие для разработки |
 |---|---|---|---|---|
 | Корень репозитория | dotenv, @codogma/localization; ESLint, Prettier, Knip, dependency-cruiser и TypeScript tooling | См. package.json и package-lock.json | Native Node server, root scripts, repository quality gates | Root build/watch направлены на единственный native Editor Host; не устанавливает UI runtime другого приложения |
-| src/editor | solid-js | 1.9.16 | Единственный SolidJS Editor Host | UI/reactivity layer; отдельный package root и lockfile |
-| src/editor | vite, vite-plugin-solid, tailwindcss, @tailwindcss/vite, typescript, @playwright/test, vitest | См. src/editor/package.json | Host development/build/typecheck, domain tests and browser acceptance | CI Editor Host job checks this package; tests/build stay separate from root/server scopes |
+| src/editor | solid-js | 1.9.16 | Единственный SolidJS Editor Host | UI/reactivity layer; root workspace package, dependencies resolved from root lockfile |
+| src/editor | vite, vite-plugin-solid, tailwindcss, @tailwindcss/vite, typescript, @playwright/test, vitest | См. src/editor/package.json | Host development/build/typecheck, domain tests and browser acceptance | Root workspace package; Editor Host checks remain a separate CI job |
 | packages/cge | TypeScript toolchain | См. packages/cge/package.json | Host-neutral Project Model v1, validation/serialization, Component Schema/Registry/World | Core remains independent of UI framework, browser DOM and Phaser-specific runtime objects |
-| packages/editor-mcp-server | @modelcontextprotocol/server, ajv | 2.4.0, 8.20.0 | First-party stdio adapter and Ajv validation against engine-owned native JSON Schemas | Own package/lockfile; tool registry, system instructions and execution remain in server/mcp.mjs |
-| packages/game-test-bridge-contract | ajv | 8.20.0 | Versioned transport-neutral JSON contract and schema package for Game Test Bridge | Own package/lockfile and public schema subpath; package scripts exist, but current CI has no dedicated install/test/audit step |
-| packages/localization | Localization package dependencies | См. package manifest/lockfile | Versioned localization tables, fallback, validation and CLI | Optional engine tooling; does not introduce a second Editor UI |
+| packages/editor-mcp-server | @modelcontextprotocol/server, ajv | 2.4.0, 8.20.0 | First-party stdio adapter and Ajv validation against engine-owned native JSON Schemas | Root workspace package and root lockfile; tool registry, system instructions and execution remain in server/mcp.mjs |
+| packages/game-test-bridge-contract | ajv | 8.20.0 | Versioned transport-neutral JSON contract and schema package for Game Test Bridge | Root workspace package and root lockfile; CI runs dedicated build/typecheck/test and consumer checks |
+| packages/localization | Localization package dependencies | См. package manifest | Versioned localization tables, fallback, validation and CLI | Root workspace package and root lockfile; does not introduce a second Editor UI |
 | mini-services/ai-chat | z-ai-web-dev-sdk | ^0.0.18 | Optional standalone LLM backend | Separate loopback service; not required to boot the Editor Host; independent security/privacy/dependency review before external exposure |
 | Native Phaser runtime | Phaser 4.2.1 | Runtime target | HTML5 game runtime and Scene/Preview integration | Runtime adapter, artifact provenance, selected build variant and external runtime dependencies must be explicit and verified on native project fixtures; a TypeScript declaration alone does not provide runtime code |
 | Native Physics integration | @phaserjs/phaser-box2d / selected runtime helper modules | Target/provider versions owned by Physics integration | Native Physics Component and Phaser adapter | Provider/version must be explicit in the native Project/Build dependency graph; browser acceptance is required |
@@ -40,9 +40,9 @@
 
 ## Lockfiles и установка
 
-- Активные npm roots имеют отдельные manifests/lockfiles: root, src/editor/, packages/cge/, packages/editor-mcp-server/, packages/game-test-bridge-contract/, packages/localization/ и mini-services/ai-chat/.
-- npm Workspaces в текущей архитектуре не объявлены. Единый workspace graph и консолидация lockfiles — отдельный PoC/migration, а не текущая реализация.
-- CI Fast устанавливает зависимости и запускает checks для native Host/Core/server/MCP/localization/service scopes, затронутых PR. `packages/game-test-bridge-contract/` пока не имеет отдельного install/test/audit шага в CI. Scope-specific audits запускаются, когда меняются соответствующие manifests, lockfiles или применимые .npmrc.
+- Активные first-party workspaces используют manifests в root + `packages/*` + `src/editor/` и единый root `package-lock.json`; `mini-services/ai-chat/` остаётся отдельным install root со своим lockfile.
+- npm Workspaces объявлены для `packages/*` и `src/editor/`; root `package-lock.json` фиксирует общий workspace graph.
+- CI Fast устанавливает root workspace graph и запускает scoped checks для native Host/Core/runtime/server/MCP/localization/service packages. Workspace dependency audit включается при изменении root/package manifests, lockfile или `.npmrc`.
 - npm audit не заменяет лицензионный/provenance review.
 - Direct dependencies перечислены по текущим manifests. Транзитивные версии и integrity hashes находятся в lockfiles; перед публикацией и крупными dependency upgrades требуется отдельная SBOM/license/provenance проверка с результатом в PR.
 
@@ -52,5 +52,5 @@
 2. Не подменять npm audit лицензионным/provenance review: это разные проверки.
 3. Проверить root override Zod на все используемые MCP schemas прежде, чем обновлять официальный MCP пакет или Zod.
 4. Перед решением о Phaser modularization сделать воспроизводимый build fixture: сравнить API coverage, runtime dependencies и raw/gzip размер, проверить generated game без Editor Host.
-5. Перед npm Workspaces отдельно проверить TypeScript references, root/Host scripts, server paths, release ZIP, CI/cache paths и чистую установку; не удалять отдельные lockfiles до зелёного PoC.
+5. Перед изменением workspace topology повторно проверить TypeScript references, root/Host scripts, server paths, release ZIP, CI/cache paths и clean install; `mini-services/ai-chat/` остаётся отдельным install root, а workspace package locks не должны дублироваться.
 6. Не передавать Package Manager файловые операции до закрытия остаточного filesystem TOCTOU: нужны OS-aware mutation design и adversarial concurrent-race tests либо документированная модель угроз с ограничением экспозиции.

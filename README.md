@@ -21,6 +21,8 @@ npm ci
 The root npm workspace owns the active first-party package graph:
 
 - `packages/cge/` — `@codogma/cge`;
+- `packages/runtime-phaser/` — `@codogma/runtime-phaser`, the optional Phaser 4.2.1 view/lifecycle adapter for Core sessions;
+- `packages/feature-registry/` — `@codogma/feature-registry`;
 - `packages/localization/` — `@codogma/localization`;
 - `packages/editor-mcp-server/` — `@codogma/editor-mcp-server`;
 - `packages/game-test-bridge-contract/` — `@codogma/game-test-bridge-contract`;
@@ -30,6 +32,8 @@ The root `package-lock.json` is the only lockfile for these workspaces. Run pack
 
 ```bash
 npm run quality:check --workspace=@codogma/cge
+npm run test:runtime-phaser
+npm run quality:check --workspace=@codogma/feature-registry
 npm run quality:check --workspace=@codogma/game-test-bridge-contract
 npm run quality:check --workspace=@codogma/localization
 npm test --workspace=@codogma/editor-mcp-server
@@ -65,10 +69,10 @@ Web Runtime is a first-class target: browser lifecycle/audio activation, WebGL l
 | Area | Available today |
 |---|---|
 | Browser-based IDE | The Node.js server serves the native SolidJS Editor Host at <code>/editor/</code>; Vite serves the same application during development. |
-| Scene authoring | The SolidJS Host provides the initial Phaser-backed Scene Canvas, selection and Transform interactions. The complete native Project/Scene save/reopen workflow and data-driven Preview are being integrated through the Project Model and Scene Loader. |
+| Scene authoring | The SolidJS Host provides the initial Phaser-backed Scene Canvas, selection and Transform interactions. Native Project Model/Core and Scene Loader are implemented; the initial `@codogma/runtime-phaser` graph-to-view adapter is a separate package. Complete Editor save/reopen workflow and browser Preview remain in progress. |
 | Project assets | Native Asset Library, Sprite metadata, import and reimport workflows are being implemented for the SolidJS Host in [COD-86](https://linear.app/codogma-engine/issue/COD-86/sozdat-native-asset-library-i-realizovat-sprite-authoring-v-solidjs). See [Sprite asset metadata](docs/sprite-asset-metadata.md) for the target metadata contract. |
 | Animation and components | The Host has basic animation clip/frame operations and initial Component surfaces. Full Timeline/tracks/keyframes/curves/events belong to COD-84; native Script Asset + manifest-backed User Components belong to COD-91 (using Core contracts COD-26/COD-27); native Prefab overrides remain in COD-8. |
-| Phaser integration | Phaser 4.2.1 is vendored in the editor plugin: production loads `scripts/phaser.min.js`, while development loads `scripts/phaser.js`. TypeScript definitions and code-generation/API adaptations are included; feature-based selection of Phaser runtime code is not implemented. |
+| Phaser runtime integration | `@codogma/runtime-phaser` provides the first host-neutral Core → Phaser 4.2.1 view/lifecycle adapter: Node hierarchy and Transform projection, explicit Component view factories, session identity and Scene UPDATE/cleanup. Full Preview, asset resolution, physics and HTML5 Build remain separate capabilities. |
 | Core and ECS | `@codogma/cge` provides the host-neutral Project Model, `ComponentWorld` and executable Engine Services v1: Time/Scheduler, Tween, normalized Input, typed events and Scene Manager. `createEngineRuntime()` composes one host-owned frame in deterministic Time → Scheduler → Tween → active `ComponentWorld` order; ComponentWorld exposes instance/enabled lifetime signals for cleanup. Core remains independent of Phaser, DOM, Editor UI, Node-only APIs and platform SDKs. Optional Data-Oriented ECS and its Phaser adapter are **not implemented**; their architecture and acceptance source is [ADR-0004](docs/decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md), with implementation owned by COD-111/112. |
 | HTML5 build optimization | The current Phaser delivery uses a vendored full Phaser 4.2.1 bundle. A verified selective Phaser build, physical feature pruning and complete Feature/Capability Registry are **not yet implemented**. Upstream Arcade-only UMD and custom/ESM paths must be compared on reproducible generated-game fixtures before making bundle-size or tree-shaking claims. |
 | Scene effects and objects | SolidJS Host implements Circle/Bloom/Gradient/Shine Inspector controls and Phaser-backed preview. Persisted Project Model integration and Preview/Build runtime parity remain separate capabilities; independent UX/reference review is tracked by CODQA-19. |
@@ -311,10 +315,10 @@ Start the editor server:
 npm start
 ~~~
 
-In another terminal, install and build the package dependencies:
+In another terminal, build the package from the already-installed root workspace:
 
 ~~~bash
-npm --prefix packages/editor-mcp-server ci
+npm run build:mcp
 ~~~
 
 Configure the MCP host to launch the package-backed launcher from this checkout

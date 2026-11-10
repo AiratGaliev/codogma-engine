@@ -51,12 +51,15 @@ The fixture and tests cover:
 
 ## 4. Preview and runtime acceptance
 
-- [ ] Phaser adapter creates actual runtime views for the loaded graph.
-- [ ] Runtime identity maps to Project/Scene/Node/Component IDs.
-- [ ] Start/stop/restart and scene replacement clean up objects, listeners, systems and resources.
-- [ ] Runtime mutations operate on the Preview snapshot and do not silently rewrite persisted Project files.
-- [ ] Live Inspector reads state through an explicit runtime message/selection contract.
-- [ ] Runtime diagnostics identify the source Project entity and module.
+- [ ] Run the native fixture in a real Phaser 4.2.1 Game/Scene in a browser and record renderer/runtime evidence on the integrated `test` branch.
+- [x] The initial `@codogma/runtime-phaser` engineering slice creates one Phaser Container per Core Node and explicit GameObject views for registered Component factories; automated tests consume the native COD-103 fixture through the Core Scene Loader. The exact Phaser 4.2.1 API is compile-checked; runtime tests use a structural Phaser host double.
+- [x] Session-scoped runtime identity maps Node and Component instance IDs to their Phaser views and back.
+- [x] Core owns Node Transform and Component state; adapter projection does not mutate the persisted Scene snapshot or create a second source of truth. Factories receive immutable Node/Transform/Component snapshots and an isolated Component document.
+- [x] Phaser Scene UPDATE is the only adapter frame source; no adapter-owned RAF, ticker or game loop is created.
+- [x] Adapter dispose, Phaser Scene shutdown/destroy, abort-after-Core-load and partial view-construction failure release adapter-owned views/listeners and dispose the Core session; repeated disposal is idempotent.
+- [ ] Physics/body integration is intentionally not included until a verified Physics slice has an explicit body ownership and cleanup contract.
+- [ ] Asset resolution, live Inspector transport and complete Preview/Build parity remain separate acceptance slices.
+- [x] View-construction diagnostics identify Project/Scene/Node/Component; cleanup diagnostics retain Project/Scene context.
 
 ## 5. Independent HTML5 Build
 

@@ -17,4 +17,5 @@ tool-results/
 .idea/
 worklog.md
 **/dist/
+**/.test-dist/
 /.env
