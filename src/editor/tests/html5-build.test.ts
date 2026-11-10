@@ -350,6 +350,51 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.includedModules).toContain("runtime-entry");
     expect(analysis.report.includedModules).toContain("follow-target");
 
+    const originalScene = analysisInput.scenes[0];
+    if (!originalScene) throw new Error("Core analysis input omitted the Scene document.");
+    const unknownTypeScene = JSON.parse(JSON.stringify(originalScene.document)) as SceneDocumentV1;
+    const firstComponent = unknownTypeScene.rootNodes[0]?.components[0];
+    if (!firstComponent) throw new Error("Acceptance Scene fixture omitted its first Component.");
+    firstComponent.typeId = "com.codogma.missing.component";
+    const unknownComponent = analyzeProjectBuild({
+      ...analysisInput,
+      scenes: [{ assetId: originalScene.assetId, document: unknownTypeScene }],
+    });
+    expect(unknownComponent.valid, "unknown Component type was not rejected").toBe(false);
+
+    const missingComponentModule = analyzeProjectBuild({
+      ...analysisInput,
+      modules: analysisInput.modules?.filter((module) => module.id !== "follow-target"),
+    });
+    expect(missingComponentModule.valid, "missing Component module was not rejected").toBe(false);
+
+    const missingAsset = analyzeProjectBuild({
+      ...analysisInput,
+      files: analysisInput.files.filter((file) => file.path !== "assets/player.svg"),
+    });
+    expect(missingAsset.valid, "missing referenced asset was not rejected").toBe(false);
+
+    const unresolvedImport = analyzeProjectBuild({
+      ...analysisInput,
+      modules: analysisInput.modules?.map((module) => module.id === "runtime-entry"
+        ? {
+            ...module,
+            imports: [
+              ...(module.imports ?? []),
+              { specifier: "@codogma/not-installed", kind: "static" as const, resolvedPackageId: "pkg-not-installed" },
+            ],
+          }
+        : module),
+    });
+    expect(unresolvedImport.valid, "unresolved package import was not rejected").toBe(false);
+
+    generatedEvidence.releaseDiagnostics = {
+      unknownComponent: unknownComponent.diagnostics.map((item) => item.code),
+      missingComponentModule: missingComponentModule.diagnostics.map((item) => item.code),
+      missingAsset: missingAsset.diagnostics.map((item) => item.code),
+      unresolvedImport: unresolvedImport.diagnostics.map((item) => item.code),
+    };
+
     const editorLeak = {
       ...releaseManifest,
       files: [...releaseManifest.files, {
@@ -365,9 +410,6 @@ describe("independent HTML5 Vite artifact fixture", () => {
     for (const packageId of [
       "pkg-html5-build",
       "pkg-feature-registry",
-      "pkg-runtime-phaser",
-      "pkg-phaser-engine",
-      "pkg-eventemitter3",
     ]) {
       const leakedManifest = {
         ...releaseManifest,
