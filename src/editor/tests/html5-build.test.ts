@@ -3,8 +3,8 @@ import { build, type Plugin } from "vite";
 import { brotliCompressSync } from "node:zlib";
 import {
   analyzeProjectBuild, ComponentRegistry, ProjectSceneLoader,
-  type ProjectBuildAnalysisInput, type ProjectBuildOutputManifest,
-  type ProjectDocumentV1, type SceneDocumentV1,
+  type ProjectBuildAnalysisInput, type ProjectBuildModuleImport, type ProjectBuildModuleSnapshot,
+  type ProjectBuildOutputManifest, type ProjectDocumentV1, type SceneDocumentV1,
 } from "@codogma/cge";
 import {
   resolveFeatureSelection, type FeatureRegistryDocumentV1,
@@ -182,10 +182,10 @@ function createCoreAnalysisInput(
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/project.json", descriptor: { id: "project-document", path: "project.json", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts", descriptor: { id: "follow-target", path: "src/FollowTarget.ts", assetId: "asset-follow-target-module", entryPoint: "component" as const } },
   ];
-  const modules = projectModules.map(({ sourceId, descriptor }) => {
+  const modules: ProjectBuildModuleSnapshot[] = projectModules.map(({ sourceId, descriptor }) => {
     const captured = moduleGraph.get(sourceId);
     if (!captured) throw new Error("Vite module graph omitted required Project module " + sourceId);
-    const resolveImports = (values: readonly string[], kind: "static" | "dynamic") => values.flatMap((specifier) => {
+    const resolveImports = (values: readonly string[], kind: "static" | "dynamic"): ProjectBuildModuleImport[] => values.flatMap((specifier): ProjectBuildModuleImport[] => {
       const mapped = mapModuleId(specifier);
       const packageId = mapped.find((id) => id.startsWith("package:"));
       if (packageId) return [{ specifier, kind, resolvedPackageId: packageId.slice("package:".length) }];
@@ -371,7 +371,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
 
     const missingComponentModule = analyzeProjectBuild({
       ...analysisInput,
-      modules: analysisInput.modules?.filter((module) => module.id !== "follow-target"),
+      modules: (analysisInput.modules ?? []).filter((module) => module.id !== "follow-target"),
     });
     expect(missingComponentModule.valid, "missing Component module was not rejected").toBe(false);
 
@@ -383,7 +383,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
 
     const unresolvedImport = analyzeProjectBuild({
       ...analysisInput,
-      modules: analysisInput.modules?.map((module) => module.id === "runtime-entry"
+      modules: (analysisInput.modules ?? []).map((module) => module.id === "runtime-entry"
         ? {
             ...module,
             imports: [
