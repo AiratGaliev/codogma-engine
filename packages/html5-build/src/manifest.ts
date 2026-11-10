@@ -130,7 +130,15 @@ export async function createHtml5BuildManifest(input: {
   files.sort((left, right) => left.path.localeCompare(right.path));
   const rawBytes = files.reduce((total, file) => total + file.sizeBytes, 0);
   const gzipBytes = files.reduce((total, file) => total + file.gzipBytes, 0);
-  if (!Number.isSafeInteger(rawBytes) || !Number.isSafeInteger(gzipBytes)) {
+  const brotliComplete = files.every((file) => file.brotliBytes !== undefined);
+  const brotliBytes = brotliComplete
+    ? files.reduce((total, file) => total + (file.brotliBytes ?? 0), 0)
+    : undefined;
+  if (
+    !Number.isSafeInteger(rawBytes) ||
+    !Number.isSafeInteger(gzipBytes) ||
+    (brotliBytes !== undefined && !Number.isSafeInteger(brotliBytes))
+  ) {
     throw new RangeError("HTML5 build artifact totals exceed the safe integer range.");
   }
 
@@ -140,7 +148,12 @@ export async function createHtml5BuildManifest(input: {
     profile: validation.value,
     toolchain: Object.freeze({ name: input.toolchain.name.trim(), version: input.toolchain.version.trim() }),
     files: Object.freeze(files),
-    totals: Object.freeze({ fileCount: files.length, rawBytes, gzipBytes }),
+    totals: Object.freeze({
+      fileCount: files.length,
+      rawBytes,
+      gzipBytes,
+      ...(brotliBytes === undefined ? {} : { brotliBytes }),
+    }),
   });
 }
 

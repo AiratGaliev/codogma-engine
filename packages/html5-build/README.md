@@ -14,7 +14,7 @@ The package does not run a bundler, resolve/install npm dependencies, discover T
 
 ## Browser baseline
 
-html5-es2022-tla-v1 records the initial ES2022 module baseline: Chrome 89+, Edge 89+, Firefox 89+, Safari 27+, iOS Safari 27+ and Chrome for Android 89+. Safari 27 is required for full top-level-await module-loader compliance; Safari 15–26.6 has partial support for concurrent imports of top-level-await modules. This matrix is a syntax/module baseline only. It does not guarantee WebGL, Web Audio, storage, input, SDK or device capability; those require feature detection and separate acceptance.
+html5-es2022-tla-v1 records the initial ES2022 module baseline: Chrome 94+, Edge 94+, Firefox 93+, Safari 27+, iOS Safari 27+ and Chrome for Android 94+. The ES2022 class static-block syntax floor is Chrome/Edge 94, Firefox 93 and Safari 16.4; Safari 27 is the stricter floor for full top-level-await module-loader compliance; Safari 15–26.6 has partial support for concurrent imports of top-level-await modules. See MDN's [static initialization block compatibility data](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/Static_initialization_blocks) and [top-level await compatibility data](https://github.com/mdn/browser-compat-data/blob/main/javascript/operators/await.json). This matrix is a syntax/module baseline only. It does not guarantee WebGL, Web Audio, storage, input, SDK or device capability; those require feature detection and separate acceptance.
 
 ## Artifact evidence
 

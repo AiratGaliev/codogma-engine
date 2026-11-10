@@ -20,17 +20,17 @@ Both profiles are project build configurations, not Editor Preferences or worksp
 | HTML5 Development | Off | On | build/html5/development |
 | HTML5 Release | On | Off | build/html5/release |
 
-Both target ECMAScript 2022. The html5-es2022-tla-v1 matrix records the initial module syntax/browser baseline:
+Both target ECMAScript 2022. The browser floor accounts for ES2022 class static initialization blocks (Chrome/Edge 94, Firefox 93, Safari 16.4) and raises Safari to 27 for full top-level-await module-loader compliance. The html5-es2022-tla-v1 matrix records this stricter combined baseline:
 
 | Browser | Minimum |
 |---|---:|
-| Chrome | 89 |
-| Edge | 89 |
-| Firefox | 89 |
+| Chrome | 94 |
+| Edge | 94 |
+| Firefox | 93 |
 | Safari / iOS Safari | 27.0 |
-| Chrome for Android | 89 |
+| Chrome for Android | 94 |
 
-Safari 27 is required for full top-level-await module-loader compliance; Safari 15–26.6 has a partial implementation for concurrent imports of modules containing top-level await. This matrix is a syntax/module baseline only; it does not guarantee WebGL, Web Audio, storage, input, SDK or device capability. Those require feature detection and separate acceptance.
+Safari 27 is required for full top-level-await module-loader compliance; Safari 15–26.6 has a partial implementation for concurrent imports of modules containing top-level await. See [MDN browser compatibility data for class static blocks](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/Static_initialization_blocks), [MDN browser compatibility data for top-level await](https://github.com/mdn/browser-compat-data/blob/main/javascript/operators/await.json) and [WebKit's Safari 27 module-loader update](https://webkit.org/blog/18227/fixing-top-level-await-in-safari/). This matrix is a syntax/module baseline only; it does not guarantee WebGL, Web Audio, storage, input, SDK or device capability. Those require feature detection and separate acceptance.
 
 ## Artifact manifest
 

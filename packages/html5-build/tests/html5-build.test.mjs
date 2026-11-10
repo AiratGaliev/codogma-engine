@@ -94,6 +94,40 @@ test("manifest creation rejects traversal and duplicate output paths", async () 
   );
 });
 
+test("records and compares host-measured Brotli sizes", async () => {
+  const profile = createDefaultHtml5BuildProfile("release");
+  const first = await createHtml5BuildManifest({
+    profile,
+    toolchain,
+    files: [{
+      path: "index.html",
+      contents: encoder.encode("<html>same</html>"),
+      brotliBytes: 21,
+    }],
+  });
+  const changed = await createHtml5BuildManifest({
+    profile,
+    toolchain,
+    files: [{
+      path: "index.html",
+      contents: encoder.encode("<html>same</html>"),
+      brotliBytes: 22,
+    }],
+  });
+
+  assert.equal(first.files[0].brotliBytes, 21);
+  assert.equal(first.totals.brotliBytes, 21);
+  assert.equal(compareHtml5BuildManifests(first, changed).reproducible, false);
+  await assert.rejects(
+    createHtml5BuildManifest({
+      profile,
+      toolchain,
+      files: [{ path: "index.html", contents: encoder.encode("bad"), brotliBytes: -1 }],
+    }),
+    /Brotli byte count/,
+  );
+});
+
 test("comparison detects changed output bytes and Core receives measured release metadata", async () => {
   const first = await manifestFor("<html>first</html>");
   const changed = await manifestFor("<html>second</html>");

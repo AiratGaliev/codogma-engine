@@ -2,12 +2,12 @@ export const HTML5_TARGET_ID = "html5" as const;
 export const HTML5_BROWSER_MATRIX_ID = "html5-es2022-tla-v1" as const;
 
 export const HTML5_BROWSER_MATRIX_V1 = Object.freeze([
-  Object.freeze({ browser: "chrome", minimumVersion: "89" }),
-  Object.freeze({ browser: "edge", minimumVersion: "89" }),
-  Object.freeze({ browser: "firefox", minimumVersion: "89" }),
+  Object.freeze({ browser: "chrome", minimumVersion: "94" }),
+  Object.freeze({ browser: "edge", minimumVersion: "94" }),
+  Object.freeze({ browser: "firefox", minimumVersion: "93" }),
   Object.freeze({ browser: "safari", minimumVersion: "27.0" }),
   Object.freeze({ browser: "ios-safari", minimumVersion: "27.0" }),
-  Object.freeze({ browser: "chrome-android", minimumVersion: "89" }),
+  Object.freeze({ browser: "chrome-android", minimumVersion: "94" }),
 ] as const);
 
 export type Html5BuildProfileKind = "development" | "release";
