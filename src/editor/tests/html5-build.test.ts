@@ -493,7 +493,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.includedModules).toContain("runtime-entry");
     expect(analysis.report.includedModules).toContain("runtime-scene");
     expect(analysis.report.includedModules).toContain("project-document");
-    expect(analysis.report.includedModules).toContain("follow-target");
+    expect(analysis.report.includedModules).toContain("component-com.codogma.acceptance.follow-target");
 
     const arcadeModuleGraph = new Map<string, CapturedModuleImports>();
     const arcadeProfile = createDefaultHtml5BuildProfile("release");
@@ -564,7 +564,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
 
     const missingComponentModule = analyzeProjectBuild({
       ...analysisInput,
-      modules: (analysisInput.modules ?? []).filter((module) => module.id !== "follow-target"),
+      modules: (analysisInput.modules ?? []).filter((module) => module.id !== "component-com.codogma.acceptance.follow-target"),
     });
     expect(missingComponentModule.valid, "missing Component module was not rejected").toBe(false);
 
