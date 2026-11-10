@@ -443,19 +443,17 @@ describe("independent HTML5 Vite artifact fixture", () => {
       const profile = createDefaultHtml5BuildProfile(kind);
       const first = await buildProfile(profile, kind + "-first", kind === "release" ? releaseModuleGraph : undefined);
       const second = await buildProfile(profile, kind + "-second");
-      const rawComparison = compareHtml5BuildManifests(first, second);
-      const debugMapDifferences = rawComparison.differences.filter((difference) => difference.path?.endsWith(".map") === true);
-      const runtimeDifferences = rawComparison.differences.filter((difference) => difference.path?.endsWith(".map") !== true);
       const comparison = {
-        ...rawComparison,
-        reproducible: runtimeDifferences.length === 0,
-        differences: runtimeDifferences,
-        debugMapDifferences,
-        reproducibilityScope: kind === "development"
-          ? "runtime-output-excluding-debug-source-maps"
-          : "all-output-files",
+        ...compareHtml5BuildManifests(first, second),
+        reproducibilityScope: "all-output-files",
       };
-      expect(comparison.reproducible, JSON.stringify(runtimeDifferences)).toBe(true);
+      expect(
+        comparison.reproducible,
+        JSON.stringify(comparison.differences),
+      ).toBe(true);
+      expect(
+        comparison.differences.filter((difference) => difference.path?.endsWith(".map") === true),
+      ).toEqual([]);
       reproducibilityByProfile[kind] = comparison.reproducible;
       expect(first.totals.fileCount).toBeGreaterThan(1);
       expect(first.files.every((file) => Number.isSafeInteger(file.brotliBytes))).toBe(true);
