@@ -127,7 +127,7 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
       mode: profile.kind === "release" ? "production" : "development",
       logLevel: "silent", plugins: [createCapturePlugin(captured, moduleGraph)],
       build: {
-        rollupOptions: { input: resolve(fixtureRoot, inputHtml) },
+        rolldownOptions: { input: resolve(fixtureRoot, inputHtml) },
         outDir: outputDirectory, emptyOutDir: true, target: profile.ecmaTarget,
         minify: profile.minify, sourcemap: profile.sourceMaps, manifest: "manifest.json",
         assetsInlineLimit: 0,
@@ -151,8 +151,9 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
     throw new Error("Bundled Vite environment does not match " + profile.kind + " profile: expected " + expectedProfileMarker);
   }
   const viteManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "node_modules/vite/package.json"), "utf8")) as { version: string };
+  const rolldownManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "node_modules/rolldown/package.json"), "utf8")) as { version: string };
   const manifest = await createHtml5BuildManifest({
-    profile, toolchain: { name: "vite", version: viteManifest.version },
+    profile, toolchain: { name: "vite+rolldown", version: `${viteManifest.version}/${rolldownManifest.version}` },
     files: await collectFiles(outputDirectory, captured),
   });
   return manifest;
