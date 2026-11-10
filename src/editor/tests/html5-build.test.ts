@@ -35,11 +35,11 @@ const temporaryRootPromise = import("node:fs/promises").then(({ mkdtemp }) =>
   mkdtemp(resolve(tmpdir(), "codogma-html5-build-")));
 const generatedEvidence: Record<string, unknown> = {};
 
-const sourceMapsByBuildLabel = new Map<string, string>();
+const sourceMapsByBuildLabel = new Map<string, Map<string, string>>();
 
-function summarizeSourceMapDifference(firstLabel: string, secondLabel: string): Record<string, unknown> {
-  const firstText = sourceMapsByBuildLabel.get(firstLabel);
-  const secondText = sourceMapsByBuildLabel.get(secondLabel);
+function summarizeSourceMapDifference(firstLabel: string, secondLabel: string, path: string): Record<string, unknown> {
+  const firstText = sourceMapsByBuildLabel.get(firstLabel)?.get(path);
+  const secondText = sourceMapsByBuildLabel.get(secondLabel)?.get(path);
   if (!firstText || !secondText) return { available: false };
   const first = JSON.parse(firstText) as {
     file?: string;
@@ -298,8 +298,14 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   const rolldownVersion = toolchainLock.packages["src/editor/node_modules/rolldown"]?.version;
   if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
   const artifactFiles = await collectFiles(outputDirectory, captured, inputHtml);
-  const sourceMapFile = artifactFiles.find((file) => file.path.endsWith(".js.map"));
-  if (sourceMapFile) sourceMapsByBuildLabel.set(label, Buffer.from(sourceMapFile.contents).toString("utf8"));
+  sourceMapsByBuildLabel.set(
+    label,
+    new Map(
+      artifactFiles
+        .filter((file) => file.path.endsWith(".js.map"))
+        .map((file) => [file.path, Buffer.from(file.contents).toString("utf8")]),
+    ),
+  );
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
     files: artifactFiles,
@@ -559,9 +565,20 @@ describe("independent HTML5 Vite artifact fixture", () => {
         comparison.reproducible,
         JSON.stringify({
           differences: comparison.differences,
-          sourceMap: summarizeSourceMapDifference(kind + "-first", kind + "-second"),
-          firstMapManifest: first.files.find((file) => file.path.endsWith(".js.map")),
-          secondMapManifest: second.files.find((file) => file.path.endsWith(".js.map")),
+          changedMapPath: comparison.differences.find((difference) => difference.path?.endsWith(".map"))?.path,
+          sourceMap: comparison.differences.find((difference) => difference.path?.endsWith(".map"))?.path
+            ? summarizeSourceMapDifference(
+                kind + "-first",
+                kind + "-second",
+                comparison.differences.find((difference) => difference.path?.endsWith(".map"))!.path!,
+              )
+            : null,
+          firstChangedMapManifest: comparison.differences.find((difference) => difference.path?.endsWith(".map"))?.path
+            ? first.files.find((file) => file.path === comparison.differences.find((difference) => difference.path?.endsWith(".map"))?.path)
+            : undefined,
+          secondChangedMapManifest: comparison.differences.find((difference) => difference.path?.endsWith(".map"))?.path
+            ? second.files.find((file) => file.path === comparison.differences.find((difference) => difference.path?.endsWith(".map"))?.path)
+            : undefined,
         }),
       ).toBe(true);
       expect(
