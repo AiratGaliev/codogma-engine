@@ -238,6 +238,9 @@ export default function ProjectManager(props: ProjectManagerProps) {
                             <Show when={project.status === "invalid"}>
                               <span class="pm-project-diagnostic">{displayDiagnostics(project.diagnostics) || "The project manifest is invalid."}</span>
                             </Show>
+                            <Show when={project.status === "available" && project.diagnostics.length > 0}>
+                              <span class="pm-inline-warning">{displayDiagnostics(project.diagnostics)}</span>
+                            </Show>
                             <Show when={project.status === "missing"}>
                               <span class="pm-project-diagnostic">Project folder is missing. It may have been moved outside the configured Projects location or deleted.</span>
                             </Show>

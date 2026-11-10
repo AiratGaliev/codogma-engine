@@ -18,6 +18,7 @@ import prettier from "eslint-config-prettier"
 const nodeSources = [
     "server/server.mjs",
     "server/project-manager.mjs",
+    "server/component-schema-source.mjs",
     "server/path-security.mjs",
     "server/mcp.mjs",
     "mini-services/ai-chat/index.mjs",

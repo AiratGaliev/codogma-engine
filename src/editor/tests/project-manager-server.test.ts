@@ -121,7 +121,10 @@ test("Project Manager creates, opens and restores a validated project after serv
     });
     assert.equal(unopenedMcp.status, 409);
 
-    const created = await callProjectManager<{ activeProject: { projectId: string; name: string; relativePath: string } }>(
+    const created = await callProjectManager<{
+      activeProject: { projectId: string; name: string; relativePath: string };
+      recentWarning: string;
+    }>(
       server.origin,
       "projectManager.create",
       { name: "Demo Project", folderName: "Demo-Project", templateId: "empty-2d" },
@@ -129,6 +132,7 @@ test("Project Manager creates, opens and restores a validated project after serv
     assert.equal(created.response.status, 200);
     assert.equal(created.payload.activeProject.name, "Demo Project");
     assert.equal(created.payload.activeProject.relativePath, "Demo-Project");
+    assert.match(created.payload.recentWarning, /incomplete build-reference coverage/i);
 
     const manifestText = await readFile(path.join(projectsRoot, "Demo-Project", "project.json"), "utf8");
     const manifest = JSON.parse(manifestText) as { id: string; scenes: Array<{ id: string; assetId: string }>; assets: Array<{ path: string }> };
@@ -142,6 +146,23 @@ test("Project Manager creates, opens and restores a validated project after serv
 
     const sceneText = await readFile(path.join(projectsRoot, "Demo-Project", sceneAsset.path), "utf8");
     assert.equal((JSON.parse(sceneText) as { id: string }).id, sceneReference.id);
+
+    const developmentProfile = JSON.parse(await readFile(
+      path.join(projectsRoot, "Demo-Project", "build/profiles/html5.development.json"),
+      "utf8",
+    )) as { schemaVersion: number; id: string; kind: string; target: string; outputDirectory: string };
+    const releaseProfile = JSON.parse(await readFile(
+      path.join(projectsRoot, "Demo-Project", "build/profiles/html5.release.json"),
+      "utf8",
+    )) as { schemaVersion: number; id: string; kind: string; target: string; outputDirectory: string };
+    assert.deepEqual(
+      [developmentProfile.schemaVersion, developmentProfile.id, developmentProfile.kind, developmentProfile.target, developmentProfile.outputDirectory],
+      [1, "html5.development", "development", "html5", "build/html5/development"],
+    );
+    assert.deepEqual(
+      [releaseProfile.schemaVersion, releaseProfile.id, releaseProfile.kind, releaseProfile.target, releaseProfile.outputDirectory],
+      [1, "html5.release", "release", "html5", "build/html5/release"],
+    );
 
     const duplicate = await callProjectManager(server.origin, "projectManager.create", {
       name: "Another Name",
@@ -170,7 +191,12 @@ test("Project Manager creates, opens and restores a validated project after serv
   try {
     const restored = await callProjectManager<{
       activeProject: { projectId: string; relativePath: string } | null;
-      recentProjects: Array<{ projectId: string; relativePath: string; status: string }>;
+      recentProjects: Array<{
+        projectId: string;
+        relativePath: string;
+        status: string;
+        diagnostics: Array<{ code: string; severity: string }>;
+      }>;
     }>(
       server.origin,
       "projectManager.getSnapshot",
@@ -182,7 +208,7 @@ test("Project Manager creates, opens and restores a validated project after serv
     assert.equal(recentProject.projectId, createdProjectId);
     assert.equal(recentProject.relativePath, "Demo-Project");
     assert.equal(recentProject.status, "available");
-
+    assert.ok(recentProject.diagnostics.some((item) => item.code === "PROJECT_BUILD_REFERENCE_SCAN_INCOMPLETE"));
     const reopened = await callProjectManager<{
       activeProject: { projectId: string; relativePath: string };
     }>(

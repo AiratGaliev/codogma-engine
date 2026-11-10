@@ -34,7 +34,6 @@ const acceptanceProject = JSON.parse(readFileSync(resolve(projectRoot, "project.
 const temporaryRootPromise = import("node:fs/promises").then(({ mkdtemp }) =>
   mkdtemp(resolve(tmpdir(), "codogma-html5-build-")));
 const generatedEvidence: Record<string, unknown> = {};
-
 const featureRegistry = JSON.parse(readFileSync(resolve(fixtureRoot, "feature-registry.json"), "utf8")) as FeatureRegistryDocumentV1;
 const projectFeatures = JSON.parse(readFileSync(resolve(fixtureRoot, "project-features.json"), "utf8")) as ProjectFeatureConfigurationV1;
 const runtimePhaserManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "packages/runtime-phaser/package.json"), "utf8")) as { name: string; version: string };
@@ -172,26 +171,36 @@ async function collectFiles(
 
 async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleGraph?: Map<string, CapturedModuleImports>, inputHtml = "index.html"): Promise<Html5BuildManifestV1> {
   const temporaryRoot = await temporaryRootPromise;
-  const outputDirectory = resolve(temporaryRoot, inputHtml === "index-arcade.html" ? "arcade-candidate" : profile.kind);
+  const buildLabel = label.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+  const outputDirectory = resolve(
+    temporaryRoot,
+    inputHtml === "index-arcade.html" ? "arcade-candidate-" + buildLabel : buildLabel,
+  );
+  const isDevelopment = profile.kind === "development";
   const captured = new Map<string, CapturedChunk>();
-  const previousNodeEnv = process.env.NODE_ENV;
-  process.env.NODE_ENV = profile.kind === "development" ? "development" : "production";
-  try {
-    await build({
-      configFile: false, root: fixtureRoot, base: "./",
-      mode: profile.kind === "release" ? "production" : "development",
-      logLevel: "silent", plugins: [createCapturePlugin(captured, moduleGraph)],
-      build: {
-        rolldownOptions: { input: resolve(fixtureRoot, inputHtml) },
-        outDir: outputDirectory, emptyOutDir: true, target: profile.ecmaTarget,
-        minify: profile.minify, sourcemap: profile.sourceMaps, manifest: "manifest.json",
-        assetsInlineLimit: 0,
-      },
-    });
-  } finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previousNodeEnv;
-  }
+  await build({
+    configFile: false,
+    root: fixtureRoot,
+    base: "./",
+    mode: isDevelopment ? "development" : "production",
+    logLevel: "silent",
+    plugins: [createCapturePlugin(captured, moduleGraph)],
+    define: {
+      "process.env.NODE_ENV": JSON.stringify(isDevelopment ? "development" : "production"),
+      "import.meta.env.DEV": JSON.stringify(isDevelopment),
+      "import.meta.env.PROD": JSON.stringify(!isDevelopment),
+    },
+    build: {
+      rolldownOptions: { input: resolve(fixtureRoot, inputHtml) },
+      outDir: outputDirectory,
+      emptyOutDir: true,
+      target: profile.ecmaTarget,
+      minify: profile.minify,
+      sourcemap: profile.sourceMaps,
+      manifest: "manifest.json",
+      assetsInlineLimit: 0,
+    },
+  });
 
   const expectedEntryModule = inputHtml === "index-arcade.html"
     ? "src/editor/tests/fixtures/html5-game/src/main-arcade.ts"
@@ -211,9 +220,10 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   const viteVersion = toolchainLock.packages["src/editor/node_modules/vite"]?.version;
   const rolldownVersion = toolchainLock.packages["src/editor/node_modules/rolldown"]?.version;
   if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
+  const artifactFiles = await collectFiles(outputDirectory, captured, inputHtml);
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
-    files: await collectFiles(outputDirectory, captured, inputHtml),
+    files: artifactFiles,
   });
   return manifest;
 }

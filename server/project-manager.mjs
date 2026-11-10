@@ -3,12 +3,18 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
+  analyzeProjectBuild,
   parseProjectDocument,
   parseSceneDocument,
   parsePrefabDocument,
   serializeProjectDocument,
   serializeSceneDocument,
 } from "../packages/cge/dist/index.js";
+import {
+  createDefaultHtml5BuildProfile,
+  validateHtml5BuildProfile,
+} from "../packages/html5-build/dist/index.js";
+import { parseComponentSchemaSource } from "./component-schema-source.mjs";
 import {
   ensureProjectDirectorySafely,
   readFileSafely,
@@ -70,6 +76,13 @@ function normalizeRelativeDirectory(value, { allowEmpty = false } = {}) {
   if (segments.some((segment) => !segment || segment === "." || segment === "..")) return null;
   return segments.join("/");
 }
+function hasControlCharacters(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) <= 0x1f) return true;
+  }
+  return false;
+}
+
 function normalizeFolderName(value) {
   if (typeof value !== "string") return null;
   const name = value.trim();
@@ -80,7 +93,8 @@ function normalizeFolderName(value) {
     || name === "."
     || name === ".."
     || name.includes("/")
-    || /[<>:"\\|?*\u0000-\u001f]/.test(name)
+    || /[<>:"\\|?*]/.test(name)
+    || hasControlCharacters(name)
     || /[. ]$/.test(name)
     || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)
   ) return null;
@@ -124,6 +138,87 @@ function appendCoreDiagnostics(target, diagnostics, relativePath) {
   }
 }
 
+function validateBuildProfiles(projectDirectory) {
+  const diagnostics = [];
+  const profileDirectory = path.join(projectDirectory, "build", "profiles");
+  let directoryStat;
+  try {
+    directoryStat = fs.lstatSync(profileDirectory);
+  } catch (error) {
+    if (isNotFound(error)) return diagnostics;
+    return [diagnostic(
+      "PROJECT_BUILD_PROFILE_DIRECTORY_UNREADABLE",
+      error instanceof Error ? error.message : String(error),
+      "build/profiles",
+    )];
+  }
+
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+    return [diagnostic(
+      "PROJECT_BUILD_PROFILE_DIRECTORY_UNSAFE",
+      "build/profiles must be a regular directory, not a symbolic link.",
+      "build/profiles",
+    )];
+  }
+
+  const entries = readProjectDirectoryEntriesSafelySync(projectDirectory, profileDirectory);
+  if (!entries) {
+    return [diagnostic(
+      "PROJECT_BUILD_PROFILE_DIRECTORY_UNREADABLE",
+      "Build profile directory cannot be read safely.",
+      "build/profiles",
+    )];
+  }
+
+  const profileIds = new Set();
+  for (const entry of entries) {
+    if (!entry.name.toLowerCase().endsWith(".json")) continue;
+    const relativePath = "build/profiles/" + entry.name;
+    if (!entry.isFile || entry.isSymbolicLink) {
+      diagnostics.push(diagnostic(
+        "PROJECT_BUILD_PROFILE_UNSAFE",
+        "Build profile documents must be regular files, not directories or symbolic links.",
+        relativePath,
+      ));
+      continue;
+    }
+
+    const fullPath = safeJoin(projectDirectory, relativePath);
+    if (!fullPath) {
+      diagnostics.push(diagnostic("PROJECT_BUILD_PROFILE_UNSAFE", "Build profile path is outside the project.", relativePath));
+      continue;
+    }
+
+    try {
+      const content = readFileSafely(projectDirectory, fullPath, "utf8", MAX_DOCUMENT_BYTES);
+      const parsed = JSON.parse(content);
+      const validation = validateHtml5BuildProfile(parsed);
+      if (!validation.valid || !validation.value) {
+        for (const message of validation.diagnostics) {
+          diagnostics.push(diagnostic("PROJECT_BUILD_PROFILE_INVALID", message, relativePath));
+        }
+        continue;
+      }
+      if (profileIds.has(validation.value.id)) {
+        diagnostics.push(diagnostic(
+          "PROJECT_BUILD_PROFILE_DUPLICATE",
+          "Build profile id " + validation.value.id + " is declared more than once.",
+          relativePath,
+        ));
+      } else {
+        profileIds.add(validation.value.id);
+      }
+    } catch (error) {
+      diagnostics.push(diagnostic(
+        "PROJECT_BUILD_PROFILE_UNREADABLE",
+        error instanceof Error ? error.message : String(error),
+        relativePath,
+      ));
+    }
+  }
+  return diagnostics;
+}
+
 /**
  * Read-only validation for Project Manager open/recovery. Project Model
  * validation and serialization are delegated to @codogma/cge; this module
@@ -159,6 +254,11 @@ export async function validateProjectDirectory(projectDirectory) {
 
   const project = manifest.value;
   const diagnostics = [];
+  const fileSnapshots = [];
+  const sceneSnapshots = [];
+  const prefabSnapshots = [];
+  const componentSchemas = [];
+  const moduleSnapshots = [];
   if (project.scenes.length === 0) {
     diagnostics.push(diagnostic("PROJECT_NO_STARTER_SCENE", "The project does not register a Scene that the Editor Host can open.", PROJECT_MANIFEST));
   }
@@ -178,6 +278,7 @@ export async function validateProjectDirectory(projectDirectory) {
       continue;
     }
     assetsByPath.set(asset.id, fullPath);
+    fileSnapshots.push({ path: asset.path, kind: "file", sizeBytes: stat.size });
   }
 
   const prefabIds = new Set(project.prefabs.map((prefab) => prefab.id));
@@ -196,6 +297,7 @@ export async function validateProjectDirectory(projectDirectory) {
         diagnostics.push(diagnostic("PROJECT_PREFAB_ID_MISMATCH", `Prefab document id "${parsed.value.id}" does not match manifest id "${reference.id}".`, asset.path));
       } else {
         prefabs.set(reference.id, parsed.value);
+        prefabSnapshots.push({ assetId: reference.assetId, document: parsed.value });
       }
     } catch (error) {
       diagnostics.push(diagnostic(
@@ -219,6 +321,8 @@ export async function validateProjectDirectory(projectDirectory) {
         appendCoreDiagnostics(diagnostics, parsed.diagnostics, asset.path);
       } else if (parsed.value.id !== reference.id) {
         diagnostics.push(diagnostic("PROJECT_SCENE_ID_MISMATCH", `Scene document id "${parsed.value.id}" does not match manifest id "${reference.id}".`, asset.path));
+      } else {
+        sceneSnapshots.push({ assetId: reference.assetId, document: parsed.value });
       }
     } catch (error) {
       diagnostics.push(diagnostic(
@@ -229,11 +333,77 @@ export async function validateProjectDirectory(projectDirectory) {
     }
   }
 
+  for (const reference of project.componentModules) {
+    const asset = assets.get(reference.moduleAssetId);
+    const fullPath = assetsByPath.get(reference.moduleAssetId);
+    if (!asset || asset.kind !== "script" || !fullPath) {
+      diagnostics.push(diagnostic(
+        "PROJECT_BUILD_COMPONENT_MODULE_MISSING",
+        `Component module "${reference.typeId}" must resolve to a registered script asset.`,
+        reference.moduleAssetId,
+      ));
+      continue;
+    }
+
+    try {
+      const source = readFileSafely(root, fullPath, "utf8", MAX_DOCUMENT_BYTES);
+      const parsed = parseComponentSchemaSource(source, asset.path, reference.typeId, reference.version);
+      if (!parsed.valid || !parsed.value) {
+        appendCoreDiagnostics(diagnostics, parsed.diagnostics, asset.path);
+        continue;
+      }
+      componentSchemas.push(parsed.value);
+      moduleSnapshots.push({
+        id: reference.typeId,
+        path: asset.path,
+        assetId: asset.id,
+        entryPoint: "component",
+      });
+    } catch (error) {
+      diagnostics.push(diagnostic(
+        "PROJECT_BUILD_COMPONENT_MODULE_UNREADABLE",
+        error instanceof Error ? error.message : String(error),
+        asset.path,
+      ));
+    }
+  }
+
+  diagnostics.push(...validateBuildProfiles(root));
+
+  let buildAnalysis;
+  if (!diagnostics.some((item) => item.severity === "error")) {
+    buildAnalysis = analyzeProjectBuild({
+      project,
+      target: "html5",
+      files: fileSnapshots,
+      scenes: sceneSnapshots,
+      prefabs: prefabSnapshots,
+      componentSchemas,
+      modules: moduleSnapshots,
+      coverage: {
+        resourceReferences: true,
+        moduleImports: false,
+        packageDependencies: false,
+        dynamicImports: false,
+        externalRuntimeFiles: false,
+      },
+    });
+    for (const item of buildAnalysis.diagnostics) {
+      diagnostics.push({
+        ...item,
+        path: item.path ?? item.source?.path ?? PROJECT_MANIFEST,
+      });
+    }
+  }
+
   return {
-    valid: diagnostics.length === 0,
+    valid: !diagnostics.some((item) => item.severity === "error"),
     project,
     projectDirectory: root,
     diagnostics,
+    warnings: diagnostics.filter((item) => item.severity === "warning"),
+    buildAnalysis: buildAnalysis?.report,
+    buildGraph: buildAnalysis?.graph,
   };
 }
 
@@ -427,11 +597,16 @@ export async function openProjectDirectory({ projectsRoot, userDataDirectory, re
   }
 
   const recentWarning = await rememberProject(userDataDirectory, validation.project, target.relativePath);
+  const validationWarning = validation.warnings?.length
+    ? `Project opened with incomplete build-reference coverage: ${formatDiagnostics(validation.warnings)}`
+    : "";
   return {
     projectDirectory: validation.projectDirectory,
     relativePath: target.relativePath,
     project: validation.project,
-    recentWarning,
+    recentWarning: [recentWarning, validationWarning].filter(Boolean).join("\n"),
+    validationWarnings: validation.warnings ?? [],
+    buildAnalysis: validation.buildAnalysis,
   };
 }
 
@@ -484,6 +659,8 @@ function createEmptyTemplate(projectName) {
     rootNodes: [],
     settings: {},
   };
+  const developmentProfile = createDefaultHtml5BuildProfile("development");
+  const releaseProfile = createDefaultHtml5BuildProfile("release");
 
   return {
     project,
@@ -494,7 +671,9 @@ function createEmptyTemplate(projectName) {
       ["README.md", `# ${projectName}\n\nAn empty 2D Codogma Engine project.\n\nThe project uses the native Project Model v1 and the phaser runtime adapter. Its starter scene is scenes/Main.cge-scene.json.\n`],
       ["assets/README.md", "# Assets\n\nPlace project-owned images, audio, fonts and other source assets here.\n"],
       ["scripts/README.md", "# Scripts\n\nPlace project-owned TypeScript scripts here. No game-specific code or optional packages are included in this template.\n"],
-      ["build/README.md", "# Build\n\nBuild profiles are configured through the dedicated build workflow when that contract is available. This template does not invent or serialize a build-profile schema.\n"],
+      ["build/README.md", "# Build\n\nVersioned HTML5 Development and Release profiles live in profiles/. They use the official @codogma/html5-build profile schema. Build output is written to the outputDirectory declared by each profile.\n"],
+      ["build/profiles/html5.development.json", `${JSON.stringify(developmentProfile, null, 2)}\n`],
+      ["build/profiles/html5.release.json", `${JSON.stringify(releaseProfile, null, 2)}\n`],
     ]),
   };
 }
@@ -525,6 +704,8 @@ async function publishStagedProject({ projectsRoot, parent, finalPath, stagePath
     projectDirectory: published.projectDirectory,
     relativePath: path.relative(projectsRoot, finalPath).split(path.sep).join("/"),
     project: published.project,
+    validationWarnings: published.warnings ?? [],
+    buildAnalysis: published.buildAnalysis,
     stageName,
     parent,
   };
@@ -541,7 +722,7 @@ export async function createEmptyProject({
   if (templateId !== "empty-2d") {
     throw new ProjectManagerError(`Unknown project template "${templateId}".`, 400);
   }
-  if (typeof name !== "string" || !name.trim() || name.trim().length > 128 || /[\u0000-\u001f]/.test(name)) {
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 128 || hasControlCharacters(name)) {
     throw new ProjectManagerError("Project name must contain between 1 and 128 printable characters.", 400);
   }
   const projectName = name.trim();
@@ -630,7 +811,13 @@ export async function createEmptyProject({
     published = true;
 
     const recentWarning = await rememberProject(userDataDirectory, result.project, result.relativePath);
-    return { ...result, recentWarning };
+    const validationWarning = result.validationWarnings?.length
+      ? `Project created with incomplete build-reference coverage: ${formatDiagnostics(result.validationWarnings)}`
+      : "";
+    return {
+      ...result,
+      recentWarning: [recentWarning, validationWarning].filter(Boolean).join("\n"),
+    };
   } catch (error) {
     if (error instanceof ProjectManagerError) throw error;
     const statusCode = error?.code === "EACCES" || error?.code === "EPERM" ? 403 : 500;
@@ -687,7 +874,7 @@ export async function getProjectManagerSnapshot({
         const sameProject = validation.project?.id === record.projectId;
         if (validation.valid && sameProject) {
           status = "available";
-          diagnostics = [];
+          diagnostics = validation.warnings ?? [];
         } else {
           diagnostics = validation.diagnostics.length
             ? validation.diagnostics

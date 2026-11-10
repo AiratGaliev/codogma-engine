@@ -1,6 +1,6 @@
 # Project Manager
 
-Project Manager is the entry point for the native SolidJS Editor Host. It owns project onboarding and activation; it does not define another project format or implement Preview, Build, Package Manager, or project-resource validation semantics of its own.
+Project Manager is the entry point for the native SolidJS Editor Host. It owns project onboarding, safe activation and the initial project-validation gate; it consumes the native Core Project Build Analysis and HTML5 Build Profile contracts without implementing another project format, production builder or Package Manager.
 
 ## Startup and project locations
 
@@ -37,14 +37,15 @@ The built-in Empty 2D Project template contains:
 - a Project Model v1 manifest with stable project/scene/asset IDs;
 - one empty Main Scene registered as a native scene asset;
 - the phaser runtime adapter identifier with empty adapter settings;
-- starter assets/, scripts/ and build/ folders with short usage notes;
+- starter assets/ and scripts/ folders with short usage notes;
+- official HTML5 Development and Release profiles in build/profiles/, serialized from @codogma/html5-build defaults;
 - a project README and .gitignore.
 
 The template does not add a game-specific script, game mechanics, external package dependency, second serializer, or editor state to project.json.
 
 ### Build configuration boundary
 
-The current repository does not yet define a stable build-profile/default-configuration schema. The build pipeline/target contract is owned by COD-35; the SolidJS Build Profiles UI is a separate workflow. The Empty template creates a build/ working folder but deliberately does not invent a manifest or profile format. Project Manager will consume the official build contract when it exists.
+The HTML5 profile contract is owned by @codogma/html5-build and is versioned as Html5BuildProfileV1. Empty 2D persists two canonical files: build/profiles/html5.development.json and build/profiles/html5.release.json. They are created with createDefaultHtml5BuildProfile("development"|"release") and validated with validateHtml5BuildProfile before staging is published and every time the project is opened. Their target, ES2022/browser matrix, output directories, minification and source-map policy are owned by that package; Project Manager does not duplicate those defaults or invent a second schema. The full interactive Build Profiles editing workflow is a separate Editor Host concern.
 
 ### Validation boundary
 
@@ -54,9 +55,12 @@ Opening a project performs read-only checks before activation:
 - each registered asset resolves to a regular file inside the project;
 - registered Prefab and Scene documents parse through Core with the project asset and prefab context;
 - document IDs match their manifest references;
-- a project has at least one registered Scene so the current Editor Host can open its first scene.
+- a project has at least one registered Scene so the current Editor Host can open its first scene;
+- registered Component script assets expose a statically declared componentDefinition.schema whose typeId/version match the Project manifest; source files are parsed as TypeScript AST and never executed;
+- Core analyzeProjectBuild validates the Project/Scene/Prefab snapshots, component schemas, registered resource references and the resulting resource dependency graph;
+- any persisted HTML5 build profiles validate against Html5BuildProfileV1 and have unique profile IDs.
 
-This is a safe-open gate, not the full dependency graph/resource validator owned by COD-33. It never silently upgrades an older schema, rewrites a broken manifest, or repairs project files. Invalid, unsupported, and incomplete projects remain on disk and are shown with diagnostics.
+The Project Manager provides an open-time Core validation snapshot, not a production build. The available filesystem snapshot proves registered resource paths and serialized Component asset references. Package lock resolution, module import traversal, dynamic import discovery and external runtime-file attribution require the dedicated build host inputs; when those inputs are unavailable, Core returns PROJECT_BUILD_REFERENCE_SCAN_INCOMPLETE as a warning and the UI surfaces it. That warning does not silently become a successful claim of complete production bundle validation. A Release build still runs the full build pipeline validation owned by COD-35/COD-33. The open gate never silently upgrades an older schema, rewrites a broken manifest, or repairs project files. Invalid, unsupported, and incomplete projects remain on disk and are shown with diagnostics.
 
 ## Create transaction
 
@@ -65,7 +69,7 @@ Creation is scoped to a directory under PROJECTS_DIR:
 1. Validate the project name, one-segment folder name, template ID and parent directory.
 2. Acquire an exclusive sibling lock so concurrent Project Manager instances cannot create the same destination.
 3. Write the complete template into a unique hidden staging directory through the existing path-security helpers.
-4. Validate the staged Project and Scene through Core and verify registered files.
+4. Validate the staged Project/Scene/Prefab documents, Component module schemas, resource references and HTML5 profiles through Core plus the official profile validator; verify all registered files.
 5. Publish the staging directory by renaming it to the final destination.
 6. Validate the published project and add it to Recent Projects.
 
