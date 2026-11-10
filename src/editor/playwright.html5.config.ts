@@ -23,6 +23,7 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       CODOGMA_HTML5_BUILD_OUTPUT: process.env.CODOGMA_HTML5_BUILD_OUTPUT ?? "",
+      CODOGMA_HTML5_ENTRY: process.env.CODOGMA_HTML5_ENTRY ?? "index.html",
       PORT: "4179",
     },
   }],
