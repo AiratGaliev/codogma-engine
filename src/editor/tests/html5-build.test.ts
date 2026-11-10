@@ -45,19 +45,35 @@ const featureRegistry: FeatureRegistryDocumentV1 = {
       }],
     },
     {
+      id: "runtime.phaser", scopes: ["runtime"], targets: ["html5"], policy: "optional",
+      providers: [{
+        id: "provider.phaser", kind: "package", packageName: "@codogma/runtime-phaser",
+        scopes: ["runtime"], targets: ["html5"], entryPoints: { runtime: "." },
+      }],
+    },
+    {
       id: "runtime.ecs", scopes: ["runtime"], targets: ["html5"], policy: "optional",
       providers: [{
         id: "provider.ecs", kind: "package", packageName: "@codogma/ecs",
         scopes: ["runtime"], targets: ["html5"], entryPoints: { runtime: "." },
       }],
     },
+    {
+      id: "runtime.ecs-phaser", scopes: ["runtime"], targets: ["html5"], policy: "optional",
+      providers: [{
+        id: "provider.ecs-phaser", kind: "package", packageName: "@codogma/ecs-phaser",
+        scopes: ["runtime"], targets: ["html5"], entryPoints: { runtime: "." },
+      }],
+      requires: ["runtime.ecs", "runtime.phaser"],
+    },
   ],
 };
 const projectFeatures: ProjectFeatureConfigurationV1 = { schemaVersion: 1, enabledFeatureIds: [] };
-const installedFeaturePackages: readonly InstalledFeaturePackage[] = [{
-  id: "pkg-ecs", name: "@codogma/ecs", version: "0.1.0",
-  scopes: ["runtime"], targets: ["html5"], compatible: true,
-}];
+const installedFeaturePackages: readonly InstalledFeaturePackage[] = [
+  { id: "pkg-phaser", name: "@codogma/runtime-phaser", version: "0.1.0", scopes: ["runtime"], targets: ["html5"], compatible: true },
+  { id: "pkg-ecs", name: "@codogma/ecs", version: "0.1.0", scopes: ["runtime"], targets: ["html5"], compatible: true },
+  { id: "pkg-ecs-phaser", name: "@codogma/ecs-phaser", version: "0.1.0", scopes: ["runtime"], targets: ["html5"], compatible: true },
+];
 
 function normalizeModuleId(sourceId: string): string {
   const withoutQuery = sourceId.split("?")[0] ?? sourceId;
@@ -192,7 +208,11 @@ function createCoreAnalysisInput(
     packages: [
       { id: "pkg-cge", name: "@codogma/cge", version: "0.1.0", scope: "runtime", dependencies: [] },
       { id: "pkg-editor-host", name: "@codogma/editor-host", version: "1.0.0", scope: "editor", dependencies: [] },
+      { id: "pkg-html5-build", name: "@codogma/html5-build", version: "0.1.0", scope: "build", dependencies: ["pkg-cge"] },
+      { id: "pkg-feature-registry", name: "@codogma/feature-registry", version: "0.1.0", scope: "build", dependencies: [] },
+      { id: "pkg-phaser", name: "@codogma/runtime-phaser", version: "0.1.0", scope: "runtime", dependencies: [] },
       { id: "pkg-ecs", name: "@codogma/ecs", version: "0.1.0", scope: "runtime", dependencies: [] },
+      { id: "pkg-ecs-phaser", name: "@codogma/ecs-phaser", version: "0.1.0", scope: "runtime", dependencies: ["pkg-ecs", "pkg-phaser"] },
     ],
     features: featureSnapshots,
     coverage: {
@@ -249,7 +269,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(featureReport.valid, JSON.stringify(featureReport.diagnostics)).toBe(true);
     expect(featureReport).toEqual(repeatedFeatureReport);
     expect(featureReport.includedFeatureIds).toEqual(["runtime.core"]);
-    expect(featureReport.excludedFeatureIds).toEqual(["runtime.ecs"]);
+    expect(featureReport.excludedFeatureIds).toEqual(["runtime.ecs", "runtime.ecs-phaser", "runtime.phaser"]);
 
     const results: Record<string, Html5BuildManifestV1> = {};
     for (const kind of ["development", "release"] as const) {
@@ -284,10 +304,20 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.valid, JSON.stringify(analysis.diagnostics)).toBe(true);
     expect(analysis.report.output.status).toBe("measured");
     expect(analysis.report.includedPackages).toContain("@codogma/cge@0.1.0");
-    expect(analysis.report.includedPackages.some((name) => name.includes("editor-host"))).toBe(false);
-    expect(analysis.report.includedPackages.some((name) => name.includes("@codogma/ecs"))).toBe(false);
+    for (const excludedPackage of [
+      "@codogma/editor-host",
+      "@codogma/html5-build",
+      "@codogma/feature-registry",
+      "@codogma/runtime-phaser",
+      "@codogma/ecs",
+      "@codogma/ecs-phaser",
+    ]) {
+      expect(analysis.report.includedPackages.some((name) => name.startsWith(excludedPackage + "@"))).toBe(false);
+    }
     expect(analysis.report.includedFeatures).toContain("runtime.core");
+    expect(analysis.report.includedFeatures).not.toContain("runtime.phaser");
     expect(analysis.report.includedFeatures).not.toContain("runtime.ecs");
+    expect(analysis.report.includedFeatures).not.toContain("runtime.ecs-phaser");
     expect(analysis.report.includedAssets).toContain("asset-player-sprite");
     expect(analysis.report.includedModules).toContain("runtime-entry");
     expect(analysis.report.includedModules).toContain("follow-target");
@@ -303,15 +333,27 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(rejectedEditorLeak.valid).toBe(false);
     expect(rejectedEditorLeak.diagnostics.some((item) => item.code === "PROJECT_BUILD_OUTPUT_SCOPE_LEAK")).toBe(true);
 
-    const ecsLeak = {
-      ...releaseManifest,
-      files: [...releaseManifest.files, {
-        path: "assets/ecs-leak.js", sizeBytes: 1, gzipBytes: 1,
-        includesNodeIds: ["package:pkg-ecs"],
-      }],
-    };
-    const rejectedEcsLeak = analyzeProjectBuild(createCoreAnalysisInput(ecsLeak, featureReport.buildAnalysisFeatures));
-    expect(rejectedEcsLeak.valid).toBe(false);
+    const excludedPackageLeakResults = new Map<string, ReturnType<typeof analyzeProjectBuild>>();
+    for (const packageId of [
+      "pkg-html5-build",
+      "pkg-feature-registry",
+      "pkg-phaser",
+      "pkg-ecs",
+      "pkg-ecs-phaser",
+    ]) {
+      const leakedManifest = {
+        ...releaseManifest,
+        files: [...releaseManifest.files, {
+          path: "assets/" + packageId + "-leak.js",
+          sizeBytes: 1,
+          gzipBytes: 1,
+          includesNodeIds: ["package:" + packageId],
+        }],
+      };
+      const result = analyzeProjectBuild(createCoreAnalysisInput(leakedManifest, featureReport.buildAnalysisFeatures));
+      expect(result.valid, packageId + " was not rejected").toBe(false);
+      excludedPackageLeakResults.set(packageId, result);
+    }
 
     generatedEvidence.featureSelection = featureReport;
     generatedEvidence.releaseCoreAnalysis = analysis.report;
@@ -319,9 +361,11 @@ describe("independent HTML5 Vite artifact fixture", () => {
       rejected: !rejectedEditorLeak.valid,
       diagnosticCodes: rejectedEditorLeak.diagnostics.map((item) => item.code),
     };
-    generatedEvidence.unselectedEcsLeakNegativeCase = {
-      rejected: !rejectedEcsLeak.valid,
-      diagnosticCodes: rejectedEcsLeak.diagnostics.map((item) => item.code),
-    };
+    generatedEvidence.excludedPackageLeakNegativeCases = Object.fromEntries(
+      [...excludedPackageLeakResults.entries()].map(([id, result]) => [
+        id,
+        { rejected: !result.valid, diagnosticCodes: result.diagnostics.map((item) => item.code) },
+      ])
+    );
   }, 60000);
 });
