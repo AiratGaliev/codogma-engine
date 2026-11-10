@@ -83,6 +83,7 @@ class AcceptanceScene extends Phaser.Scene {
     canvas.dataset.codogmaNodeCount = String(countNodes(session.coreSession.graph.rootNodes));
     canvas.dataset.codogmaComponentCount = String(session.coreSession.world.listComponents().length);
     performance.mark("codogma-scene-ready");
+    requestAnimationFrame(() => requestAnimationFrame(() => performance.mark("codogma-first-frame")));
   }
 }
 
