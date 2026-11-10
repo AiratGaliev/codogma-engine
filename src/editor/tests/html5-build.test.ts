@@ -318,7 +318,7 @@ function createCoreAnalysisInput(
       dependencies: [],
     });
   }
-  const dynamicEntryPoints: NonNullable<ProjectBuildAnalysisInput["dynamicEntryPoints"]> = [];
+  const dynamicEntryPoints: Array<NonNullable<ProjectBuildAnalysisInput["dynamicEntryPoints"]>[number]> = [];
   for (const module of modules) {
     for (const entry of module.imports ?? []) {
       if (entry.kind !== "dynamic") continue;
