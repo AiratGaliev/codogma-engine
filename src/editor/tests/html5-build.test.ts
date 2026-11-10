@@ -150,10 +150,14 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   if (!runtimeEntryCode.includes(expectedProfileMarker)) {
     throw new Error("Bundled Vite environment does not match " + profile.kind + " profile: expected " + expectedProfileMarker);
   }
-  const viteManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "node_modules/vite/package.json"), "utf8")) as { version: string };
-  const rolldownManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "node_modules/rolldown/package.json"), "utf8")) as { version: string };
+  const toolchainLock = JSON.parse(readFileSync(resolve(repositoryRoot, "package-lock.json"), "utf8")) as {
+    packages: Record<string, { version?: string }>;
+  };
+  const viteVersion = toolchainLock.packages["src/editor/node_modules/vite"]?.version;
+  const rolldownVersion = toolchainLock.packages["src/editor/node_modules/rolldown"]?.version;
+  if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
   const manifest = await createHtml5BuildManifest({
-    profile, toolchain: { name: "vite+rolldown", version: `${viteManifest.version}/${rolldownManifest.version}` },
+    profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
     files: await collectFiles(outputDirectory, captured),
   });
   return manifest;
