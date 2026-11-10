@@ -53,10 +53,11 @@ function normalizeModuleId(sourceId: string): string {
 function mapModuleId(moduleId: string): readonly string[] {
   if (moduleId.includes("packages/cge/dist/") || moduleId.includes("node_modules/@codogma/cge/dist/")) return ["package:pkg-cge"];
   if (moduleId.includes("packages/runtime-phaser/dist/") || moduleId.includes("node_modules/@codogma/runtime-phaser/")) return ["package:pkg-runtime-phaser"];
-  if (moduleId.includes("node_modules/phaser/")) return ["package:pkg-phaser-engine"];
-  if (moduleId.includes("node_modules/eventemitter3/")) return ["package:pkg-eventemitter3"];
+  if (moduleId.endsWith("node_modules/phaser/dist/phaser.min.js")) return ["package:pkg-phaser-full-umd"];
+  if (moduleId.endsWith("node_modules/phaser/dist/phaser-arcade.min.js")) return ["package:pkg-phaser-arcade-umd"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts")) return ["module:follow-target"];
-  if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts")) return ["module:runtime-entry"];
+  if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main.ts") || moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/main-arcade.ts")) return ["module:runtime-entry"];
+  if (moduleId.endsWith("src/editor/tests/fixtures/html5-game/src/runtime.ts")) return ["module:runtime-scene"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/scenes/Level.cge-scene.json")) return ["asset:asset-scene-level"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/assets/player.svg")) return ["asset:asset-player-sprite"];
   if (moduleId.endsWith("packages/cge/tests/fixtures/acceptance-project/project.json")) return ["module:project-document"];
@@ -114,7 +115,7 @@ async function collectFiles(outputDirectory: string, captured: ReadonlyMap<strin
   return result;
 }
 
-async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleGraph?: Map<string, CapturedModuleImports>): Promise<Html5BuildManifestV1> {
+async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleGraph?: Map<string, CapturedModuleImports>, inputHtml = "index.html"): Promise<Html5BuildManifestV1> {
   const temporaryRoot = await temporaryRootPromise;
   const outputDirectory = resolve(temporaryRoot, label);
   const captured = new Map<string, CapturedChunk>();
@@ -126,6 +127,7 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
       mode: profile.kind === "release" ? "production" : "development",
       logLevel: "silent", plugins: [createCapturePlugin(captured, moduleGraph)],
       build: {
+        rollupOptions: { input: resolve(fixtureRoot, inputHtml) },
         outDir: outputDirectory, emptyOutDir: true, target: profile.ecmaTarget,
         minify: profile.minify, sourcemap: profile.sourceMaps, manifest: "manifest.json",
         assetsInlineLimit: 0,
@@ -136,9 +138,10 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
     else process.env.NODE_ENV = previousNodeEnv;
   }
 
-  const runtimeEntry = [...captured.entries()].find(([, chunk]) =>
-    chunk.moduleIds.includes("src/editor/tests/fixtures/html5-game/src/main.ts")
-  );
+  const expectedEntryModule = inputHtml === "index-arcade.html"
+    ? "src/editor/tests/fixtures/html5-game/src/main-arcade.ts"
+    : "src/editor/tests/fixtures/html5-game/src/main.ts";
+  const runtimeEntry = [...captured.entries()].find(([, chunk]) => chunk.moduleIds.includes(expectedEntryModule));
   if (!runtimeEntry) throw new Error("Bundler did not emit the native runtime entry module.");
   const runtimeEntryCode = await readFile(resolve(outputDirectory, runtimeEntry[0]), "utf8");
   const expectedProfileMarker = profile.kind === "development"
@@ -156,6 +159,11 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
     await rm(artifactPath, { recursive: true, force: true });
     await cp(outputDirectory, artifactPath, { recursive: true });
   }
+  const arcadeArtifactPath = process.env.CODOGMA_HTML5_ARCADE_OUTPUT;
+  if (profile.kind === "release" && label === "arcade-candidate-first" && arcadeArtifactPath) {
+    await rm(arcadeArtifactPath, { recursive: true, force: true });
+    await cp(outputDirectory, arcadeArtifactPath, { recursive: true });
+  }
   return manifest;
 }
 
@@ -163,6 +171,8 @@ function createCoreAnalysisInput(
   outputManifest: ProjectBuildOutputManifest,
   featureSnapshots: NonNullable<ProjectBuildAnalysisInput["features"]>,
   moduleGraph: ReadonlyMap<string, CapturedModuleImports>,
+  phaserVariant: "full" | "arcade-only" = "full",
+  entrySourceId = "src/editor/tests/fixtures/html5-game/src/main.ts",
 ): ProjectBuildAnalysisInput {
   const project = JSON.parse(readFileSync(resolve(projectRoot, "project.json"), "utf8")) as ProjectDocumentV1;
   const sceneAsset = project.assets.find((asset) => asset.kind === "scene");
@@ -172,13 +182,17 @@ function createCoreAnalysisInput(
     path: asset.path, kind: "file" as const,
     sizeBytes: readFileSync(resolve(projectRoot, asset.path)).byteLength,
   }));
-  const runtimeEntryPath = resolve(fixtureRoot, "src/main.ts");
-  files.push({ path: "src/main.ts", kind: "file", sizeBytes: readFileSync(runtimeEntryPath).byteLength });
+  const entryPath = entrySourceId.endsWith("main-arcade.ts") ? "src/main-arcade.ts" : "src/main.ts";
+  const runtimeEntryPath = resolve(fixtureRoot, entryPath);
+  files.push({ path: entryPath, kind: "file", sizeBytes: readFileSync(runtimeEntryPath).byteLength });
+  const runtimeScenePath = resolve(fixtureRoot, "src/runtime.ts");
+  files.push({ path: "src/runtime.ts", kind: "file", sizeBytes: readFileSync(runtimeScenePath).byteLength });
   const projectDocumentPath = resolve(projectRoot, "project.json");
   files.push({ path: "project.json", kind: "file", sizeBytes: readFileSync(projectDocumentPath).byteLength });
 
   const projectModules = [
-    { sourceId: "src/editor/tests/fixtures/html5-game/src/main.ts", descriptor: { id: "runtime-entry", path: "src/main.ts", entryPoint: "runtime" as const } },
+    { sourceId: entrySourceId, descriptor: { id: "runtime-entry", path: entryPath, entryPoint: "runtime" as const } },
+    { sourceId: "src/editor/tests/fixtures/html5-game/src/runtime.ts", descriptor: { id: "runtime-scene", path: "src/runtime.ts", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/project.json", descriptor: { id: "project-document", path: "project.json", entryPoint: "runtime" as const } },
     { sourceId: "packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts", descriptor: { id: "follow-target", path: "src/FollowTarget.ts", assetId: "asset-follow-target-module", entryPoint: "component" as const } },
   ];
@@ -215,13 +229,14 @@ function createCoreAnalysisInput(
   const lockfile = JSON.parse(readFileSync(resolve(repositoryRoot, "package-lock.json"), "utf8")) as {
     packages: Record<string, { version?: string; dependencies?: Record<string,string> }>;
   };
-  const externalDefinitions = [
-    { id: "pkg-phaser-engine", name: "phaser", scope: "runtime" as const, lockPath: "node_modules/phaser" },
-    { id: "pkg-eventemitter3", name: "eventemitter3", scope: "runtime" as const, lockPath: "node_modules/eventemitter3" },
-  ];
+  const phaserLockRecord = lockfile.packages["node_modules/phaser"];
+  if (!phaserLockRecord?.version) throw new Error("Lockfile is missing the pinned Phaser package.");
+  const externalDefinitions = phaserVariant === "full"
+    ? [{ id: "pkg-phaser-full-umd", packageName: "phaser", name: "phaser-full-umd", version: phaserLockRecord.version, scope: "runtime" as const }]
+    : [{ id: "pkg-phaser-arcade-umd", packageName: "phaser", name: "phaser-arcade-umd", version: phaserLockRecord.version, scope: "runtime" as const }];
   const packageIdByName = new Map<string,string>();
   for (const item of workspaceManifests) packageIdByName.set(item.manifest.name, item.id);
-  for (const item of externalDefinitions) packageIdByName.set(item.name, item.id);
+  for (const item of externalDefinitions) packageIdByName.set(item.packageName, item.id);
   const packages = workspaceManifests.map(({ id, scope, manifest }) => ({
     id, name: manifest.name, version: manifest.version, scope,
     dependencies: Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }).flatMap((name) => {
@@ -230,17 +245,12 @@ function createCoreAnalysisInput(
     }),
   }));
   for (const definition of externalDefinitions) {
-    const record = lockfile.packages[definition.lockPath];
-    if (!record?.version) throw new Error("Lockfile is missing " + definition.name);
     packages.push({
       id: definition.id,
       name: definition.name,
-      version: record.version,
+      version: definition.version,
       scope: definition.scope,
-      dependencies: Object.keys(record.dependencies ?? {}).flatMap((name) => {
-        const dependencyId = packageIdByName.get(name);
-        return dependencyId ? [dependencyId] : [];
-      }),
+      dependencies: [],
     });
   }
   return {
@@ -314,7 +324,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
       expect(first.files.some((file) => file.path.endsWith(".svg"))).toBe(true);
       if (kind === "release") {
         expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-runtime-phaser"))).toBe(true);
-        expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-phaser-engine"))).toBe(true);
+        expect(first.files.some((file) => file.includedNodeIds.includes("package:pkg-phaser-full-umd"))).toBe(true);
       }
       expect(first.files.some((file) =>
         file.sourceModuleIds.some((id) => id.endsWith("packages/cge/tests/fixtures/acceptance-project/src/FollowTarget.ts"))
@@ -334,13 +344,13 @@ describe("independent HTML5 Vite artifact fixture", () => {
     const release = results.release;
     if (!release) throw new Error("Release profile did not produce an HTML5 artifact manifest.");
     const releaseManifest = toProjectBuildOutputManifest(release);
-    const analysisInput = createCoreAnalysisInput(releaseManifest, featureReport.buildAnalysisFeatures, releaseModuleGraph);
+    const analysisInput = createCoreAnalysisInput(releaseManifest, featureReport.buildAnalysisFeatures, releaseModuleGraph, "full");
     const analysis = analyzeProjectBuild(analysisInput);
     expect(analysis.valid, JSON.stringify(analysis.diagnostics)).toBe(true);
     expect(analysis.report.output.status).toBe("measured");
     expect(analysis.report.includedPackages).toContain("@codogma/cge@0.1.0");
     expect(analysis.report.includedPackages).toContain("@codogma/runtime-phaser@0.1.0");
-    expect(analysis.report.includedPackages).toContain("phaser@4.2.1");
+    expect(analysis.report.includedPackages).toContain("phaser-full-umd@4.2.1");
     for (const excludedPackage of [
       "@codogma/editor-host",
       "@codogma/html5-build",
@@ -354,6 +364,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.includedFeatures).not.toContain("runtime.ecs-phaser");
     expect(analysis.report.includedAssets).toContain("asset-player-sprite");
     expect(analysis.report.includedModules).toContain("runtime-entry");
+    expect(analysis.report.includedModules).toContain("runtime-scene");
     expect(analysis.report.includedModules).toContain("project-document");
     expect(analysis.report.includedModules).toContain("follow-target");
 
