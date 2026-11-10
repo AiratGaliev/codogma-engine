@@ -155,16 +155,6 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
     profile, toolchain: { name: "vite", version: viteManifest.version },
     files: await collectFiles(outputDirectory, captured),
   });
-  const artifactPath = process.env.CODOGMA_HTML5_BUILD_OUTPUT;
-  if (profile.kind === "release" && label === "release-first" && artifactPath) {
-    await rm(artifactPath, { recursive: true, force: true });
-    await cp(outputDirectory, artifactPath, { recursive: true });
-  }
-  const arcadeArtifactPath = process.env.CODOGMA_HTML5_ARCADE_OUTPUT;
-  if (profile.kind === "release" && label === "arcade-candidate-first" && arcadeArtifactPath) {
-    await rm(arcadeArtifactPath, { recursive: true, force: true });
-    await cp(outputDirectory, arcadeArtifactPath, { recursive: true });
-  }
   return manifest;
 }
 
@@ -502,8 +492,21 @@ describe("independent HTML5 Vite artifact fixture", () => {
       excludedPackageLeakResults.set(packageId, result);
     }
 
+    const artifactRoot = await temporaryRootPromise;
+    const fullArtifactPath = process.env.CODOGMA_HTML5_BUILD_OUTPUT;
+    if (fullArtifactPath) {
+      await rm(fullArtifactPath, { recursive: true, force: true });
+      await cp(resolve(artifactRoot, "release-first"), fullArtifactPath, { recursive: true });
+    }
+    const arcadeArtifactPath = process.env.CODOGMA_HTML5_ARCADE_OUTPUT;
+    if (arcadeArtifactPath) {
+      await rm(arcadeArtifactPath, { recursive: true, force: true });
+      await cp(resolve(artifactRoot, "arcade-candidate-first"), arcadeArtifactPath, { recursive: true });
+    }
+
     generatedEvidence.featureSelection = featureReport;
     generatedEvidence.releaseCoreAnalysis = analysis.report;
+    generatedEvidence.arcadeCoreAnalysis = arcadeAnalysis.report;
     generatedEvidence.editorOnlyLeakNegativeCase = {
       rejected: !rejectedEditorLeak.valid,
       diagnosticCodes: rejectedEditorLeak.diagnostics.map((item) => item.code),
