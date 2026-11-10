@@ -121,7 +121,7 @@ interface ViteManifestEntry {
 function normalizeRolldownSourceMap(contents: Uint8Array): Uint8Array {
   const source = Buffer.from(contents).toString("utf8");
   const normalized = source.replace(
-    /(import\\.meta\\.ROLLDOWN_FILE_URL_)([A-Za-z0-9]+)/g,
+    /(import\.meta\.ROLLDOWN_FILE_URL_)([A-Za-z0-9]+)/g,
     (_match, prefix: string, token: string) => {
       if (token.length !== 22) {
         throw new Error("Unexpected Rolldown file URL placeholder length in source map: " + token.length);
