@@ -296,6 +296,12 @@ export class ComponentWorld {
     }));
   }
 
+  /** Reads the current enabled flag without allocating a Component snapshot. */
+  isComponentEnabled(instanceId: string): boolean {
+    this.assertUsable();
+    return this.components.get(instanceId)?.enabled === true;
+  }
+
   update(deltaSeconds: number): void {
     this.assertUsable();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {

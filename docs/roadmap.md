@@ -51,7 +51,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 - Завершение полной инвентаризации всех TypeScript-файлов, транзитивных лицензий и существующих engine/editor configuration roots. Эти сведения пополняются по мере работы и до публикации/массового обновления инфраструктуры; они не должны задерживать изолированную исправимую задачу.
 - Реализация Project Model/Core и runtime adapter; optional Data-Oriented ECS остаётся отдельной возможностью, не является предусловием Scene Editor, Inspector или Asset Library и не входит в обязательный `@codogma/cge` ([ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md)).
-- SolidJS Editor Host уже является единственным приложением редактора в `src/editor/`. npm Workspaces и консолидация lockfiles остаются отдельными инфраструктурными решениями.
+- SolidJS Editor Host уже является единственным приложением редактора в `src/editor/`. npm Workspaces и единый root lockfile реализованы в COD-107; отдельные runtime пакеты подключаются в тот же workspace graph по мере появления.
 - Реализация нового Project Model/Core, runtime adapter, Preview Host и HTML5 build pipeline. Они могут идти отдельными потоками, если сохраняются совместимые contracts; готовность Core не является предварительным условием для первого нового Editor Host slice.
 - Фактические performance budgets. Сначала нужны воспроизводимые измерения; при этом исправлять подтверждённые блокировки, утечки или грубые регрессии можно сразу с тестом/замером дефекта.
 - Tauri, замена Phaser на PixiJS, второй независимый Game/Scene/Ticker loop, дополнительные physics backends и public package registry не входят в основной scope UI migration. ECS ведётся как отдельный optional workstream COD-111/112 вне UI migration; нормативные границы заданы [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
@@ -113,7 +113,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 6. Native MCP commands адресуются единственному подключённому Editor Host через server-issued session ID; command/result correlation, disconnect/reconnect cleanup и stale/duplicate response rejection проверяются в COD-85. Multiple simultaneous Host clients, active-window selection и multi-Host write ownership не поддерживаются; один PROJECT_DIR имеет одного Editor Host writer.
 7. После принятия capability inventory, browser/runtime acceptance, MCP/Preview и project write ownership завершить интегрированную приёмку native Host на promotion candidate. COD-88 может отдельно удалить неиспользуемые historical repository artifacts после consumer/provenance/license review.
 
-Для каждого workflow фиксируются пользовательская цель, Editor Host status, native Codogma contract, owner issue, native fixtures и browser/runtime acceptance. UI reference выбирается из утверждённых Unity/Cocos/Godot источников. npm Workspaces и lockfile consolidation остаются отдельными инфраструктурными решениями.
+Для каждого workflow фиксируются пользовательская цель, Editor Host status, native Codogma contract, owner issue, native fixtures и browser/runtime acceptance. UI reference выбирается из утверждённых Unity/Cocos/Godot источников. npm Workspaces и единый root lockfile реализованы в COD-107.
 
 ### Подготовленные reference-документы — использовать, не пересоздавать
 
@@ -136,7 +136,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [x] Интеграция Phaser 4.2.1, типы и адаптации компилятора/редактора.
 - [x] Существующие инструменты Scene Editor, Inspector, Prefabs/Components, Assets/Pack, Animations, Tilemap и связанные с ними editor plugins.
 - [x] Контракт файлового доступа `IFileStorage`, registry расширений и базовая инфраструктура Undo/Redo в существующем клиенте.
-- [x] Private TypeScript stdio adapter `@codogma/editor-mcp-server` в `packages/editor-mcp-server/`, с собственным manifest/lockfile и проверками; публичная npm publication и npm Workspaces остаются отдельными задачами.
+- [x] Private TypeScript stdio adapter `@codogma/editor-mcp-server` в `packages/editor-mcp-server/`, с собственным manifest в root npm workspace, публичными exports и scoped checks; публичная npm publication остаётся отдельной задачей.
 - [x] CI Fast: проверка маршрута PR, install dependencies, build редактора и server smoke test.
 - [x] MCP integration workflow на PR в `test`/`main`.
 - [x] Release workflow формирует ZIP GitHub Actions artifact на `main`.
@@ -159,7 +159,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 2. **Поддерживать quality checks для native scope:** clean install, TypeScript build, targeted tests, ESLint/Prettier для first-party кода; Knip/dependency-cruiser сначала работают в report mode.
 3. **Пополнять матрицы по evidence:** фиксировать, что реализовано, что исправлено, какие тесты прошли и что осталось непроверенным. Документация обновляется вместе с соответствующим кодом и не заменяет его.
 4. **Оформлять архитектурные решения по необходимости:** ADR-0005 и `docs/editor-ui-migration.md` определяют единственную архитектуру Editor Host. Core contracts, package/Workspace migration и public Extension API развиваются отдельно и не блокируют следующий независимый Host workflow.
-5. **Отдельный gate для нового Core:** принимать Core contracts по ADR-0001/0002 и contract tests. SolidJS Host уже существует и мигрирует workflows отдельно; не объединять Host feature work с массовым Core refactor или npm Workspaces/lockfile consolidation.
+5. **Отдельный gate для нового Core:** принимать Core contracts по ADR-0001/0002 и contract tests. SolidJS Host и root npm Workspace уже существуют; не объединять Host feature work с массовым Core refactor или несвязанным изменением package topology.
 
 ### Задачи
 
@@ -202,7 +202,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ## Этап 2 — Project Model и host-neutral TypeScript Component Core
 
-**Реализационный baseline (09.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization добавлены в packages/cge/ (PR #39); host-neutral `ProjectSceneLoader` реализован в COD-103. Phaser adapter, Preview и независимый HTML5 Build остаются отдельными этапами.
+**Реализационный baseline (10.11.2026):** Project/Scene/Prefab v1 contracts, Component Schema/Registry/World и deterministic serialization находятся в `packages/cge/`; host-neutral `ProjectSceneLoader` завершён в COD-103. В COD-28 реализован отдельный `@codogma/runtime-phaser` adapter: Node Container hierarchy, explicit Component views, immutable Core snapshots, Core-owned Transform projection, external Phaser Scene UPDATE, identity mappings, idempotent cleanup и allocation-free per-frame Component state queries. CI Fast/adapter tests/benchmark and release archive validation passed on PR #74. Реальный браузерный Phaser smoke, полный browser Preview, asset/physics integration и независимый HTML5 Build остаются отдельными этапами.
 
 
 **Цель:** создать основу собственного движка над существующим runtime — не подключать второй game runtime поверх Phaser, а связать editor model и игру через общий API.
@@ -220,7 +220,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ### Задачи
 
-- [ ] Подготовить минимальный npm Workspace/package skeleton с исходниками Core в `packages/cge` и только теми самостоятельными пакетами, которые нужны первому vertical slice. После отдельной миграции добавить `src/editor` в root Workspaces при подтверждённой совместимости; package/lockfile consolidation провести отдельным проверяемым изменением. Не создавать `src/cge` как параллельный корень исходников.
+- [x] Подготовить npm Workspace/package skeleton для самостоятельных пакетов в `packages/*` и единственного Editor Host в `src/editor`; root Workspaces и общий lockfile проверены в COD-107. Не создавать `src/cge` как параллельный корень исходников.
 - [ ] Определить схему проекта и сериализованные контракты для Project, Scene, Node/Entity, Transform, Component, Prefab, Asset Reference и runtime configuration.
 - [ ] Зафиксировать инвариант: в целевом Core сцена хранится как versioned data, а не как обязательный генерируемый TypeScript-класс; стабильные IDs и явные ссылки не зависят от имён файлов/классов.
 - [ ] Реализовать explicit component registry и module manifest с предсказуемым build-time graph; не использовать runtime scanning, угадывание путей или `eval` для подключения игровых скриптов.
@@ -237,7 +237,8 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [x] Реализовать и проверить базовый object/component Core: ComponentRegistry, ComponentWorld, deterministic lifecycle, System scheduler, structural mutation boundaries и disposal (COD-26; это не Data-Oriented ECS).
 - [ ] Интегрировать runtime core в управляемые фазы Phaser tick; не заводить независимый `requestAnimationFrame`.
 - [ ] Добавить Component Schema/Metadata для полей Inspector, валидации, default values и ссылок на ресурсы.
-- [ ] Создать Phaser adapter для выбранного среза: сущность ↔ sprite/view, Transform ↔ display transform, physics body и lifecycle.
+- [x] Реализовать минимальный Phaser adapter slice: Core Node ↔ Phaser Container, Transform/hierarchy projection, explicit Component view factory, stable session-scoped identity, внешний Scene UPDATE и idempotent lifecycle/cleanup; Core остаётся единственным владельцем runtime state.
+- [ ] Добавить native asset/sprite resolution и проверенный Physics/body slice с явным ownership и cleanup; не добавлять physics в базовый adapter без отдельного контракта и acceptance.
 - [ ] Обеспечить одну точку истины для каждого значения. При переносе HP/Transform/AI-state старое поле не должно продолжать независимо изменяться.
 - [ ] Изучить EVA.js v2 как reference композиции GameObject/Component/System, lifecycle, metadata и модульных пакетов; не подключать его целиком и не переносить второй Game/Scene/Ticker, Pixi renderer или global Resource singleton.
 - [ ] Реализовать optional ECS package и adapter в рамках COD-111/112 по единственному нормативному источнику — [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md); этот workstream не блокирует Core object/component slice.
@@ -331,9 +332,9 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Добавить проверку project schema, отсутствующих ссылок, недоступных ассетов, конфликтов ID и неиспользуемых ресурсов там, где их можно определить безопасно.
 - [ ] Построить dependency graph ресурсов для проекта и отчёт о размере/составе production bundle.
 - [ ] Проверить варианты Phaser 4.2.1: текущий vendored full bundle, upstream UMD `phaser-arcade-physics(.min)` без Matter.js и допустимый custom/ESM path. Сравнить API coverage/generated code, external runtime requirements, raw/gzip size, parse/startup/time-to-first-frame и фактический output manifest. У upstream v4.2.1 нет package `exports` subpath для Arcade-only artifact; не выдумывать import path. ESM/named exports сами по себе не доказывают tree shaking; решение подтверждать fixture/browser smoke.
-- [ ] Ввести минимальный Feature/Capability Registry contract для встроенных функций и test fixture (stable feature IDs, provider, scopes/targets, declared requirements/conflicts); первая сборочная версия не должна зависеть от готовности UI Package Manager.
-- [ ] Хранить выбор необязательных features в версионируемой project/target configuration отдельно от установленного npm dependency tree; defaults и required features должны быть явными. На этапе 4A допускается встроенный registry и mock/fixture provider; интеграцию реальных package-provided descriptors через `codogma` metadata выполнить на этапе 8 после утверждения package metadata schema.
-- [ ] На основе выбранных features и target вычислять declared feature-dependency closure, проверять недостающих provider packages, конфликты и unsupported scopes/targets; выдавать machine-readable diagnostics, не устанавливая npm dependencies автоматически.
+- [x] Ввести versioned Feature/Capability Registry v1 package contract для built-in и package providers: stable IDs, scopes/targets/entry points, requirements/conflicts, selection policy и deterministic fixtures. Реализация — `@codogma/feature-registry`, архитектура — [ADR-0009](decisions/ADR-0009-feature-capability-registry.md).
+- [x] Определить `ProjectFeatureConfigurationV1` с явными project enabled/disabled IDs и per-target overrides, отдельно от npm dependency graph. Default/required/optional policy вычисляется без изменения сохранённой selection. Подключение configuration к Build Profiles persistence и ingestion `codogma` package metadata остаётся отдельной интеграцией (COD-35/COD-51/COD-95).
+- [x] Вычислять declared feature-dependency closure и проверять missing providers, exact installed package instances, conflicts, provider compatibility, scopes/targets; возвращать machine-readable diagnostics, не устанавливая npm dependencies автоматически.
 - [ ] Включить состав selected features и причины inclusion/exclusion в build report; проверить на fixture, что выключенные/неподдерживаемые и editor-only contributions не попадают в production bundle там, где это доказуемо import graph/bundler.
 - [ ] Добавить target-aware texture compression/quality profiles, atlas variants и fallback для несовместимых browser formats; отчёт должен объяснять размер выбранных вариантов и включение ресурсов.
 - [ ] Ввести версионируемые Development/Release build profiles и документировать browser/target matrix, startup size, source maps/debug tools и исключение editor-only dependencies из production; проверить возможность использования [Vite](https://vite.dev/guide/) только после сравнения с текущей сборкой.
@@ -664,12 +665,12 @@ Performance acceptance для optional ECS проводится отдельно
 
 - [ ] Сформировать taxonomy пакетов по ответственности и scope: Core/shared, editor-extension, runtime, optional-runtime capability, runtime adapter, build/CLI, platform adapter и tooling. Имя пакета не обязано начинаться с `plugin-`.
 - [ ] Поддерживать исходники самостоятельных пакетов в `packages/<name>/` с собственными manifests, публичными exports, тестами и документацией; не создавать отдельный пакет на каждый класс. Пакет можно разрабатывать в монорепозитории до публичной публикации.
-- [ ] Настроить npm Workspaces для локальной разработки пакетов и проверить, что workspace linkage не приводит к установке всех пакетов как dependencies каждого потребительского проекта. После миграции редактора включить `src/editor` в согласованную workspace-схему.
+- [x] Настроить npm Workspaces для `packages/*` и `src/editor`; проверить, что workspace linkage не добавляет все engine packages в dependency graph потребительского игрового проекта (COD-107).
 - [ ] Обеспечить Core package `@codogma/cge` в `packages/cge/` без зависимости от Editor Host UI, desktop shell, MCP или платформенных SDK; отдельная ECS package boundary определяется [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 - [ ] Определить и протестировать engine-specific metadata в namespaced поле `codogma` стандартного `package.json`: kind, scopes/targets, совместимость с Engine/Editor API, explicit entry points и предоставляемые Feature/Capability descriptors (inline или явной ссылкой на декларативное описание). Metadata не дублирует npm dependency tree и не заменяет npm resolver.
-- [ ] Утвердить versioned Feature/Capability Registry contract для встроенных и package-provided capabilities: stable IDs, provider, scopes/targets, requirements/conflicts, required/optional/default policy и build/editor entry points. Неоднозначный выбор нескольких providers должен давать diagnostic, если явная multi-provider policy не утверждена. Точная schema и место хранения подтверждаются ADR/PoC.
+- [x] Утвердить versioned Feature/Capability Registry v1 contract для built-in/package providers, включая deterministic provider selection and multi-provider policy. Схема и invariants — [ADR-0009](decisions/ADR-0009-feature-capability-registry.md); package metadata parser остаётся COD-51.
 - [ ] Не дробить Phaser-подсистемы на формальные wrapper-пакеты ради видимости модульности: сначала доказать, что выбранный runtime packaging/build path действительно позволяет независимо выбирать эти подсистемы и исключать ненужный код.
-- [ ] Связать descriptors Registry с project feature configuration и target build profiles; зафиксировать отдельно installed/provided/available/enabled/target-included/activated states и обеспечить совместную валидацию для Editor Host, CLI и build.
+- [ ] Подключить `ProjectFeatureConfigurationV1` и общие Registry descriptors к persisted Build Profiles, Editor Host, CLI и production builder; не объединять project enablement с target inclusion или runtime activation (COD-35/COD-95).
 - [ ] Разделить package dependencies и feature dependencies: npm отвечает за installation/resolution; Registry проверяет требуемые engine capabilities, предлагает диагностируемое действие для недостающего provider, но не запускает собственную установку и не дублирует npm resolver.
 - [ ] Утвердить версионируемые TypeScript contracts для Editor Extension API и extension lifecycle; точную схему и API подтвердить через ADR/PoC до обещания публичной совместимости.
 - [ ] Создать Node-side Package Manager Service с целевыми исходниками в `packages/package-manager/`: он использует npm CLI, а Editor Host UI обращается к нему через типизированный HTTP/IPC contract; headless CLI использует ту же реализацию сервиса. Структурированные результаты/ошибки и lifecycle операций общие, UI не запускает npm напрямую.
@@ -679,7 +680,7 @@ Performance acceptance для optional ECS проводится отдельно
 - [ ] Обеспечить package-level registrations для команд, меню/shortcuts, panels/views, settings, Inspector property editors, schema validators, asset import/reimport handlers, Scene Editor gizmos/brushes, profiler overlays, build hooks и target profiles.
 - [ ] Установку/обновление/удаление сопровождать проверкой metadata/API compatibility и понятной диагностикой. Добавить project-level activation/disable для editor extensions так, чтобы отключение не требовало изменения npm dependency tree и не повреждало проектные данные.
 - [ ] Проверить, что editor-only/build-only/QA зависимости не попадают в production game bundle; optional runtime packages включаются только по явному project dependency и enabled target feature. Build pipeline должен анализировать scopes/targets, imports, dynamic entry points и фактический output artifact.
-- [ ] Проверить, что выбранные в проекте features собираются только для совместимых targets, их обязательные feature dependencies включаются прозрачно, а выключенные features не подключаются скрыто. Установка/provider/enablement/target inclusion остаются разными состояниями; ECS-specific IDs/providers определены в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
+- [ ] Подключить Registry report к production builder и подтвердить target inclusion/exclusion на реальном HTML5 artifact. Package installed/provided/available/project-enabled/target-included/activated states остаются раздельными; ECS-specific IDs/providers определены только в [ADR-0004](decisions/ADR-0004-optional-data-oriented-ecs-and-runtime-performance.md).
 - [ ] Подготовить machine-readable report с feature IDs, участвующими packages/entry points, причинами включения и диагностикой; корректно обрабатывать dynamic imports и modules с side effects вместо обещаний автоматического удаления.
 - [ ] Поддержать источники по очереди: npm registry/scoped registry и local/file packages сначала; Git/tarball — с pinning ревизии, безопасной обработкой credentials и диагностикой.
 - [ ] Разделить package manifest (npm package.json + namespaced codogma metadata), registry packument/version metadata, project manifest/lockfile и optional curated catalogue record. Не складывать технические и каталожные сведения в один manifest; фиксировать provenance и приоритет источников. См. [package management reference](package-management-reference.md) и OpenUPM.

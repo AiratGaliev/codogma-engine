@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "runtime.core",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "html5"
+      ],
+      "policy": "required",
+      "providers": [
+        {
+          "id": "provider.core",
+          "kind": "builtin",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "html5"
+          ],
+          "entryPoints": {
+            "runtime": "codogma:runtime-core"
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime.phaser",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "html5"
+      ],
+      "policy": "optional",
+      "providers": [
+        {
+          "id": "provider.phaser",
+          "kind": "package",
+          "packageName": "@codogma/runtime-phaser",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "html5"
+          ],
+          "entryPoints": {
+            "runtime": "."
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime.ecs",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "html5"
+      ],
+      "policy": "optional",
+      "providers": [
+        {
+          "id": "provider.ecs",
+          "kind": "package",
+          "packageName": "@codogma/ecs",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "html5"
+          ],
+          "entryPoints": {
+            "runtime": "."
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime.ecs-phaser",
+      "scopes": [
+        "runtime"
+      ],
+      "targets": [
+        "html5"
+      ],
+      "policy": "optional",
+      "providers": [
+        {
+          "id": "provider.ecs-phaser",
+          "kind": "package",
+          "packageName": "@codogma/ecs-phaser",
+          "scopes": [
+            "runtime"
+          ],
+          "targets": [
+            "html5"
+          ],
+          "entryPoints": {
+            "runtime": "."
+          }
+        }
+      ],
+      "requires": [
+        "runtime.ecs",
+        "runtime.phaser"
+      ]
+    }
+  ]
+}

@@ -39,6 +39,13 @@ jobs:
       - name: Install root and all first-party workspace dependencies
         run: npm ci
 
+      - name: Build and measure HTML5 Release artifact (COD-35)
+        env:
+          CODOGMA_HTML5_BUILD_EVIDENCE: ${{ runner.temp }}/html5-build-evidence.json
+          CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
+          CODOGMA_HTML5_ARCADE_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
+        run: npm run test:html5-build
+
       - name: Build and typecheck SolidJS Host and Core workspace dependency
         run: npm run build --workspace=@codogma/editor-host
 
@@ -46,12 +53,55 @@ jobs:
         run: npm test --workspace=@codogma/editor-host
 
       - name: Install Chromium for Editor Host browser E2E
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
         working-directory: src/editor
 
       - name: Run Editor Host browser E2E
         run: npm run test:browser
         working-directory: src/editor
+
+      - name: Run full Phaser artifact smoke across browser engines (COD-35)
+        shell: bash
+        env:
+          CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
+          CODOGMA_HTML5_ENTRY: index.html
+          CODOGMA_HTML5_EXPECT_VARIANT: full
+          CODOGMA_HTML5_BASE_PATH: /promotion/full/
+        run: |
+          for browser in chromium firefox webkit; do
+            export CODOGMA_HTML5_BROWSER="$browser"
+            export CODOGMA_HTML5_PLAYWRIGHT_OUTPUT="test-results-html5/full/$browser"
+            npm run test:html5-build:browser
+          done
+        working-directory: src/editor
+
+      - name: Run Arcade-only UMD artifact smoke across browser engines (COD-35)
+        shell: bash
+        env:
+          CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
+          CODOGMA_HTML5_ENTRY: index-arcade.html
+          CODOGMA_HTML5_EXPECT_VARIANT: arcade-only
+          CODOGMA_HTML5_BASE_PATH: /promotion/arcade/
+        run: |
+          for browser in chromium firefox webkit; do
+            export CODOGMA_HTML5_BROWSER="$browser"
+            export CODOGMA_HTML5_PLAYWRIGHT_OUTPUT="test-results-html5/arcade-only/$browser"
+            npm run test:html5-build:browser
+          done
+        working-directory: src/editor
+
+      - name: Upload HTML5 artifact and browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codogma-html5-production-artifact
+          path: |
+            ${{ runner.temp }}/html5-build-evidence.json
+            ${{ runner.temp }}/html5-game-artifact/
+            ${{ runner.temp }}/html5-arcade-artifact/
+            src/editor/test-results-html5/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Start server and run MCP integration tests
         shell: bash

@@ -23,7 +23,7 @@ Host-neutral contracts and the first component-object Core slice.
 
 ### Node and component lifecycle
 
-- A `ComponentWorld` owns one scene-local Node/component lifetime. Node identity and activation are read-only through `getNode()` / `listNodes()`; update activation through `setNodeActive()`. Transform values remain mutable runtime state.
+- A `ComponentWorld` owns one scene-local Node/component lifetime. Node identity and activation are read-only through `getNode()` / `listNodes()`; update activation through `setNodeActive()`. `isComponentEnabled(instanceId)` reads an instance's enabled flag without allocating a `listComponents()` snapshot; it returns `false` when the instance is absent. Transform values remain mutable runtime state.
 - Components are created in Node insertion and attachment order. For each active/enabled instance the Core invokes `onCreate`, `onEnable`, then on the first host update `onStart` followed by `onUpdate`; disabling/removing invokes `onDisable` when active and then `onDestroy`.
 - A failed `onEnable`, `onDisable`, `onStart` or `onUpdate` removes the affected instance, attempts the remaining cleanup callbacks, continues processing siblings and aggregates errors. Failed activation never advances to start/update.
 - Factories and lifecycle callbacks are synchronous. Promise-like results are rejected; perform asynchronous loading in an explicit host/service phase before attaching or activating components.
@@ -121,3 +121,32 @@ Schema versions and API signatures are intentionally small and test-backed. Proj
 Project, Scene, Prefab, Asset, Node, Transform, Component-instance and Prefab-instance envelopes accept only fields declared by the current native schema. Unknown envelope fields remain blocking validation errors. Unknown JSON-compatible Component properties are retained as extension data and reported with a `COMPONENT_UNKNOWN_PROPERTY` warning; non-JSON values and values that violate a declared property schema remain blocking errors.
 
 The native extension points are explicit JSON data bags: `Project.runtime.settings` and `Scene.settings`. Component-instance `properties` remain JSON data owned by the Component; when a registered schema is present, declared `persisted` properties are validated and normalized, while `editorOnly` and `runtime` values are omitted by serialization. Asset properties use stable Project asset IDs and may select a registered sub-resource only when the schema opts in with `allowSubResource`. Node properties use stable Node IDs and can constrain targets with `nodeKinds` and `allowSelf`. JSON boundary safety rejects accessors, custom prototypes, symbols, sparse arrays, cyclic graphs and non-JSON values. Future Project, Scene and Prefab schema versions are blocking errors.
+
+## Project validation and production dependency analysis (COD-33)
+
+`analyzeProjectBuild(input)` performs deterministic, host-neutral preflight analysis for the native Project Model. It validates the Project/Scene/Prefab snapshots with the existing Core validators and combines them with explicit host-resolved inputs to build a production dependency graph.
+
+The host supplies:
+
+- a bounded project-relative file inventory, including regular files, directories, symbolic links and measured source sizes;
+- parsed Scene and Prefab documents keyed by their registered Asset IDs;
+- validated Component Schemas and an explicit Script/module import graph, including declared dynamic entry points;
+- resolved npm package-lock metadata keyed by stable installed package-instance IDs, with exact name/version, Codogma scope/targets and dependency edges to the specific instances selected by npm;
+- feature provider decisions already resolved by the Feature Registry, plus required/optional external runtime files;
+- optional final production output metadata collected from the real bundler output.
+
+Core does **not** traverse the filesystem, resolve or install npm packages, parse TypeScript imports, execute project modules, run a bundler or implement the Feature Registry. Those responsibilities stay with the Node/build host and the owning subsystems. Feature requirements/conflicts and registry semantics remain COD-34; HTML5 output generation and Build Profiles remain COD-35. Optional providers such as `@codogma/ecs` and `@codogma/ecs-phaser` are not pulled into a production graph unless the corresponding feature is explicitly selected and its provider is available and target-compatible.
+
+### Analysis guarantees
+
+- The graph uses stable project/asset/scene/Prefab/module/package/feature identities; file paths are locations, not identities.
+- npm package nodes use stable IDs for exact installed package instances. Package dependencies, module imports and Feature Providers refer to those IDs rather than package names, preserving multiple installed versions of the same package and nested lockfile instances.
+- Registered assets and script modules must resolve to regular files in the supplied snapshot. Missing files, unsafe paths, path collisions, invalid documents, unresolved imports/references, missing package dependencies and unsupported production package scopes produce structured diagnostics with a source kind/ID/path.
+- Scene and Prefab Component instances contribute only persisted Asset-property references declared by their validated Component Schema. Additional importer-discovered references are supplied through `assetReferences`; external runtime files declare their referencing graph nodes.
+- Static module/package imports and required package dependencies form transitive reachability. Dynamic imports are accepted only when the host resolves them and provides a matching explicit dynamic entry point.
+- A feature provider is an inclusion root only when the supplied feature snapshot is selected, available and target-compatible and resolves to an installed package instance. A selected feature with a missing or unavailable provider remains excluded from `includedFeatures` and produces a blocking diagnostic. Core does not change project feature settings or invoke npm.
+- `unusedAssets` is populated only when all five scanner coverage flags (resource references, module imports, package dependencies, dynamic imports and external runtime files) are complete. Otherwise Core emits a warning and labels unreachable resources as `reference-scan-incomplete`, not unused.
+- `report.output` is `not-produced` unless the input contains a production output manifest for the same target with actual per-file sizes. Raw, gzip and Brotli totals are derived only from those measured files. Output entries list graph node IDs emitted by the real build, making physical inclusion evidence distinct from a logical feature selection.
+- Diagnostics with severity `warning` (for example, unused resources or absent optional package dependencies) do not make the analysis invalid. Blocking validation, module, package, feature-provider and output errors do.
+
+The Core fixture suite tests native Project Model inputs, missing files, path/ID conflicts, complete versus incomplete reference discovery, transitive npm dependencies, dynamic-entry declarations, editor-only package exclusion, explicit feature provider selection, external runtime files and measured output manifests. No standalone HTML5 builder or editor integration is implied by these Core contracts.
