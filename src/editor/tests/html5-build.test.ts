@@ -368,6 +368,57 @@ describe("independent HTML5 Vite artifact fixture", () => {
     expect(analysis.report.includedModules).toContain("project-document");
     expect(analysis.report.includedModules).toContain("follow-target");
 
+    const arcadeModuleGraph = new Map<string, CapturedModuleImports>();
+    const arcadeProfile = createDefaultHtml5BuildProfile("release");
+    const arcadeFirst = await buildProfile(arcadeProfile, "arcade-candidate-first", arcadeModuleGraph, "index-arcade.html");
+    const arcadeSecond = await buildProfile(arcadeProfile, "arcade-candidate-second", undefined, "index-arcade.html");
+    const arcadeReproducibility = compareHtml5BuildManifests(arcadeFirst, arcadeSecond);
+    expect(arcadeReproducibility.reproducible, JSON.stringify(arcadeReproducibility.differences)).toBe(true);
+    const arcadeAnalysisInput = createCoreAnalysisInput(
+      toProjectBuildOutputManifest(arcadeFirst),
+      featureReport.buildAnalysisFeatures,
+      arcadeModuleGraph,
+      "arcade-only",
+      "src/editor/tests/fixtures/html5-game/src/main-arcade.ts",
+    );
+    const arcadeAnalysis = analyzeProjectBuild(arcadeAnalysisInput);
+    expect(arcadeAnalysis.valid, JSON.stringify(arcadeAnalysis.diagnostics)).toBe(true);
+    expect(arcadeAnalysis.report.includedPackages).toContain("@codogma/runtime-phaser@0.1.0");
+    expect(arcadeAnalysis.report.includedPackages).toContain("phaser-arcade-umd@4.2.1");
+    expect(arcadeAnalysis.report.includedPackages.some((name) => name.startsWith("phaser-full-umd@"))).toBe(false);
+    expect(arcadeAnalysis.report.includedFeatures).toEqual(analysis.report.includedFeatures);
+    expect(arcadeAnalysis.report.includedModules).toEqual(analysis.report.includedModules);
+    expect(arcadeAnalysis.report.includedAssets).toEqual(analysis.report.includedAssets);
+
+    generatedEvidence.phaserVariantComparison = {
+      full: {
+        rawBytes: release.totals.rawBytes,
+        gzipBytes: release.totals.gzipBytes,
+        brotliBytes: release.totals.brotliBytes,
+        includedPackages: analysis.report.includedPackages,
+      },
+      arcadeOnly: {
+        rawBytes: arcadeFirst.totals.rawBytes,
+        gzipBytes: arcadeFirst.totals.gzipBytes,
+        brotliBytes: arcadeFirst.totals.brotliBytes,
+        includedPackages: arcadeAnalysis.report.includedPackages,
+      },
+      deltaArcadeMinusFull: {
+        rawBytes: arcadeFirst.totals.rawBytes - release.totals.rawBytes,
+        gzipBytes: arcadeFirst.totals.gzipBytes - release.totals.gzipBytes,
+        brotliBytes: arcadeFirst.totals.brotliBytes - release.totals.brotliBytes,
+      },
+      reproducibility: {
+        full: results.release ? true : false,
+        arcadeOnly: arcadeReproducibility.reproducible,
+      },
+      apiCoverage: {
+        sameProjectModules: arcadeAnalysis.report.includedModules,
+        sameFeatureSet: arcadeAnalysis.report.includedFeatures,
+        sameAssets: arcadeAnalysis.report.includedAssets,
+      },
+    };
+
     const originalScene = analysisInput.scenes[0];
     if (!originalScene) throw new Error("Core analysis input omitted the Scene document.");
     const unknownTypeScene = JSON.parse(JSON.stringify(originalScene.document)) as SceneDocumentV1;
