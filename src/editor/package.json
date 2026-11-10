@@ -8,17 +8,18 @@
     "build:core": "tsc -p ../../packages/cge/tsconfig.json",
     "dev": "vite --host 127.0.0.1",
     "predev": "npm run build:core",
-    "typecheck": "npm run build:core && npm run build:html5-build && npm run build:feature-registry && tsc --noEmit -p tsconfig.json",
+    "typecheck": "npm run build:core && npm run build:runtime-phaser && npm run build:html5-build && npm run build:feature-registry && tsc --noEmit -p tsconfig.json",
     "build": "npm run typecheck && vite build",
-    "pretest": "npm run build:core && npm run build:html5-build && npm run build:feature-registry",
+    "pretest": "npm run build:core && npm run build:runtime-phaser && npm run build:html5-build && npm run build:feature-registry",
     "test": "vitest run",
     "test:browser": "playwright test",
-    "pretest:watch": "npm run build:core && npm run build:html5-build && npm run build:feature-registry",
+    "pretest:watch": "npm run build:core && npm run build:runtime-phaser && npm run build:html5-build && npm run build:feature-registry",
     "test:watch": "vitest",
     "build:html5-build": "npm run build --workspace=@codogma/html5-build",
     "build:feature-registry": "npm run build --workspace=@codogma/feature-registry",
-    "test:html5-build": "npm run build:core && npm run build:html5-build && npm run build:feature-registry && vitest run tests/html5-build.test.ts",
-    "test:html5-build:browser": "playwright test --config=playwright.html5.config.ts"
+    "test:html5-build": "npm run build:core && npm run build:runtime-phaser && npm run build:html5-build && npm run build:feature-registry && vitest run tests/html5-build.test.ts",
+    "test:html5-build:browser": "playwright test --config=playwright.html5.config.ts",
+    "build:runtime-phaser": "npm run build --workspace=@codogma/runtime-phaser"
   },
   "dependencies": {
     "solid-js": "1.9.16",
