@@ -16,7 +16,7 @@ import {
   PhaserRuntimeAdapterError,
   type RuntimeGraphSceneLoader,
 } from "../src/index.js";
-import { createMockPhaserHost, type MockGameObject } from "./support/mock-phaser.js";
+import { createMockPhaserHost, MockGameObject } from "./support/mock-phaser.js";
 
 const fixtureRoot = resolve(process.cwd(), "../cge/tests/fixtures/acceptance-project");
 const projectText = readFileSync(resolve(fixtureRoot, "project.json"), "utf8");
@@ -136,7 +136,7 @@ test("uses the Phaser Scene UPDATE event as the only frame source and syncs Core
     projectId: "acceptance-project",
     update(deltaSeconds, session) {
       observedDeltas.push(deltaSeconds);
-      const player = session.graph.getNode("node-player");
+      const player = session.coreSession.graph.getNode("node-player");
       assert.ok(player);
       player.transform.x += 10;
     },
@@ -152,7 +152,7 @@ test("uses the Phaser Scene UPDATE event as the only frame source and syncs Core
   host.events.emit("update", 32, 32);
 
   assert.deepEqual(observedDeltas, [0.016, 0.032]);
-  assert.equal(session.graph.getNode("node-player")?.transform.x, 100);
+  assert.equal(session.coreSession.graph.getNode("node-player")?.transform.x, 100);
   assert.equal((view as unknown as MockGameObject).x, 100);
   assert.equal(session.coreSession.graph.document.rootNodes[0]?.transform?.x, 80);
   assert.equal(host.events.listenerCount("update"), 1);
