@@ -40,7 +40,7 @@
     "build:runtime-phaser": "npm run build:cge && npm run build --workspace=@codogma/runtime-phaser",
     "test:runtime-phaser": "npm run build:cge && npm run quality:check --workspace=@codogma/runtime-phaser",
     "build:html5-build": "npm run build --workspace=@codogma/html5-build",
-    "test:html5-build": "npm run build:cge && npm run build:feature-registry && npm run quality:check --workspace=@codogma/html5-build && npm run test:html5-build --workspace=@codogma/editor-host"
+    "test:html5-build": "npm run build:cge && npm run build:runtime-phaser && npm run build:feature-registry && npm run quality:check --workspace=@codogma/html5-build && npm run test:html5-build --workspace=@codogma/editor-host"
   },
   "license": "MIT",
   "dependencies": {
