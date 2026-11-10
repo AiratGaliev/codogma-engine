@@ -257,6 +257,7 @@ jobs:
         env:
           CODOGMA_HTML5_BUILD_EVIDENCE: ${{ runner.temp }}/html5-build-evidence.json
           CODOGMA_HTML5_BUILD_OUTPUT: ${{ runner.temp }}/html5-game-artifact
+          CODOGMA_HTML5_ARCADE_OUTPUT: ${{ runner.temp }}/html5-arcade-artifact
         run: npm run test:html5-build
 
       - name: Upload HTML5 build artifact and reproducibility evidence
@@ -267,6 +268,7 @@ jobs:
           path: |
             ${{ runner.temp }}/html5-build-evidence.json
             ${{ runner.temp }}/html5-game-artifact/
+            ${{ runner.temp }}/html5-arcade-artifact/
           if-no-files-found: error
           retention-days: 14
 
