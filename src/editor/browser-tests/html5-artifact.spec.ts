@@ -26,6 +26,7 @@ test("production artifact loads the native Scene through the selected Phaser run
     await expect(app).toHaveAttribute("data-phaser-matter", "true");
   }
   await expect(page.locator("canvas[data-codogma-runtime-error]")).toHaveCount(0);
+  await page.waitForFunction(() => performance.getEntriesByName("codogma-first-frame").length > 0);
   const firstFrameMs = await page.evaluate(() => performance.getEntriesByName("codogma-first-frame")[0]?.startTime ?? null);
   expect(firstFrameMs).not.toBeNull();
   await testInfo.attach("html5-first-frame.json", {
