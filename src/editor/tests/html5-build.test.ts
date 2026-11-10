@@ -455,6 +455,13 @@ describe("independent HTML5 Vite artifact fixture", () => {
         : module),
     });
     expect(unresolvedImport.valid, "unresolved package import was not rejected").toBe(false);
+    for (const invalidResult of [unknownComponent, missingComponentModule, missingAsset, unresolvedImport]) {
+      expect(invalidResult.diagnostics.length, "Release rejection must include diagnostics").toBeGreaterThan(0);
+      expect(
+        invalidResult.diagnostics.every((diagnostic) => typeof diagnostic.code === "string" && diagnostic.code.length > 0),
+        "Release diagnostics must expose machine-readable codes",
+      ).toBe(true);
+    }
 
     generatedEvidence.releaseDiagnostics = {
       unknownComponent: unknownComponent.diagnostics.map((item) => item.code),
