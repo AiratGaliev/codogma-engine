@@ -14,6 +14,7 @@ const expectedWorkspaces = [
   "packages/editor-mcp-server",
   "packages/feature-registry",
   "packages/game-test-bridge-contract",
+  "packages/html5-build",
   "packages/localization",
   "packages/runtime-phaser",
   "src/editor",
