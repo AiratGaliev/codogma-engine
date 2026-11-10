@@ -1,15 +1,19 @@
 import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const editorDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(editorDirectory, "../../..");
-const sourceFixture = join(repositoryRoot, "tests", "workspace", "test-typescript");
+const sourceFixture = join(repositoryRoot, "packages", "cge", "tests", "fixtures", "acceptance-project");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "codogma-editor-host-"));
-const projectDirectory = join(temporaryRoot, "project");
+const projectsDirectory = join(temporaryRoot, "projects");
+const projectDirectory = join(projectsDirectory, "Acceptance-Project");
+const userDataDirectory = join(temporaryRoot, "user-data");
 
+mkdirSync(projectsDirectory, { recursive: true });
+mkdirSync(userDataDirectory, { recursive: true });
 cpSync(sourceFixture, projectDirectory, { recursive: true });
 
 const server = spawn(process.execPath, [join(repositoryRoot, "server", "server.mjs")], {
@@ -18,7 +22,9 @@ const server = spawn(process.execPath, [join(repositoryRoot, "server", "server.m
   env: {
     ...process.env,
     PORT: "3000",
+    PROJECTS_DIR: projectsDirectory,
     PROJECT_DIR: projectDirectory,
+    CODOGMA_USER_DATA_DIR: userDataDirectory,
     CODOGMA_ALLOWED_ORIGINS: "http://127.0.0.1:5173",
   },
 });

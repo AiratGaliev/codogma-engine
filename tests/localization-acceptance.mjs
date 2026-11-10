@@ -1,8 +1,8 @@
 /**
  * COD-62 runtime acceptance check: localization tables + fallback.
  *
- * Boots the local editor server on a free port with the default fixture
- * project, fetches the fixture locale files through the play-mode route
+ * Boots the local editor server on a free port with a native Project Model v1
+ * fixture project, fetches the fixture locale files through the play-mode route
  * (`/editor/external/...`) exactly as a browser game would, then runs the
  * compiled `@codogma/localization` runtime service against the real data:
  *

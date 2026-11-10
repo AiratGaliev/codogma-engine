@@ -88,8 +88,10 @@ import {
   type FxObject,
   type FxType,
 } from "./domain/fx-model.ts";
+import ProjectManager from "./ProjectManager";
 import {
   getProjectDirectorySnapshot,
+  getProjectManagerSnapshot,
   readProjectFile,
   writeProjectFile,
   deleteProjectEntries,
@@ -370,6 +372,7 @@ function App() {
     return stored === "light" ? "light" : "dark";
   })());
   const [projectName, setProjectName] = createSignal("Project");
+  const [projectManagerVisible, setProjectManagerVisible] = createSignal(true);
   const [projectTree, setProjectTree] = createSignal<ProjectTreeEntry | null>(null);
   const [projectDocument, setProjectDocument] = createSignal<import("@codogma/cge").ProjectDocumentV1 | null>(null);
   const [savedProjectContent, setSavedProjectContent] = createSignal("");
@@ -801,6 +804,7 @@ function App() {
     path: string,
     reloadCurrent = false,
     allowDuringProjectMutation = false,
+    skipUnsavedChangesConfirmation = false,
   ): Promise<boolean> {
     const loadDecision = beginSceneLoadRequest(sceneLoadSequence, path, scenePath(), reloadCurrent);
     sceneLoadSequence = loadDecision.sequence;
@@ -809,11 +813,13 @@ function App() {
       log("warning", "A native document operation is in progress; opening another document is temporarily blocked.");
       return false;
     }
-    if (animationDirty() || scriptDirty()) {
-      if (!window.confirm("The active animation or TypeScript source has unsaved changes. Discard them and open the document?")) return false;
-    }
-    if (dirty() || projectDirty()) {
-      if (!window.confirm("The active native document or Project manifest has unsaved changes. Discard them and open the requested document?")) return false;
+    if (!skipUnsavedChangesConfirmation) {
+      if (animationDirty() || scriptDirty()) {
+        if (!window.confirm("The active animation or TypeScript source has unsaved changes. Discard them and open the document?")) return false;
+      }
+      if (dirty() || projectDirty()) {
+        if (!window.confirm("The active native document or Project manifest has unsaved changes. Discard them and open the requested document?")) return false;
+      }
     }
 
     const request = sceneLoadSequence;
@@ -872,6 +878,30 @@ function App() {
     setLoading(true);
     setLoadError("");
     try {
+      const manager = await getProjectManagerSnapshot();
+      if (!manager.activeProject) {
+        setProjectTree(null);
+        setProjectDocument(null);
+        setScene(null);
+        setLoadError(manager.startupProjectError);
+        setProjectManagerVisible(true);
+        return;
+      }
+      setProjectManagerVisible(false);
+
+      // Invalidate asynchronous work that may still reference the previous
+      // project's root before loading any documents from the newly active one.
+      sceneLoadSequence += 1;
+      documentLoadSequence += 1;
+      scriptCheckSequence += 1;
+      componentSchemaRefreshSequence += 1;
+      setScriptSourcePath("");
+      setScriptSource("");
+      setSavedScriptSource("");
+      setScriptDiagnostics([]);
+      setScriptChecking(false);
+      setSelectedProjectPath("");
+      setSelectedPrefabPath("");
       const result = await getProjectDirectorySnapshot();
       setProjectTree(result.root);
       setProjectName(result.root.name);
@@ -924,7 +954,7 @@ function App() {
       const firstScene = project.scenes[0];
       if (!firstScene) throw new Error("The native Project manifest does not register an openable Scene.");
       const sceneAsset = resolveSceneAsset(project, firstScene.id);
-      const opened = await loadScene(sceneAsset.path);
+      const opened = await loadScene(sceneAsset.path, false, false, true);
       if (!opened) throw new Error(`The registered Scene "${sceneAsset.path}" could not be opened.`);
       log("info", `Native Project loaded · ${result.entryCount} files and folders`);
     } catch (error) {
@@ -936,6 +966,16 @@ function App() {
     }
   }
 
+  function showProjectManager() {
+    if (saving() || projectSaving() || animationSaving() || scriptSaving()
+      || nativeProjectMutationInProgress || activeSceneLoads > 0) {
+      log("warning", "Finish the active save or document operation before opening Project Manager.");
+      return;
+    }
+    if (documentDirty() && !window.confirm("There are unsaved changes. Open Project Manager and discard the current editor session?")) return;
+    stopAnimationPreview(true);
+    setProjectManagerVisible(true);
+  }
   function applySceneChange(
     next: EditorDocument,
     selectionAfter = selectedId(),
@@ -3100,6 +3140,7 @@ function App() {
 
   const menuItems = createMemo<Record<string, MenuItem[]>>(() => ({
     File: [
+      { label: "Project Manager…", action: showProjectManager },
       { label: "Save active document", shortcut: "Ctrl+S", action: () => void saveActiveDocument(), disabled: !scene() && !animationDocument() && !scriptSourcePath() },
       { label: "Save Animation", action: () => void saveAnimationFile(), disabled: !animationDocument() || !animationDirty() },
       { label: "New Animation file", action: () => void createAnimationFile() },
@@ -3139,6 +3180,17 @@ function App() {
   }));
 
   return (
+    <Show when={!projectManagerVisible()} fallback={
+      <ProjectManager
+        theme={theme()}
+        canClose={Boolean(projectDocument())}
+        onClose={() => setProjectManagerVisible(false)}
+        onProjectOpened={(recentWarning) => {
+          if (recentWarning) log("warning", recentWarning);
+          void loadProject();
+        }}
+      />
+    }>
     <div
       class="workbench"
       data-testid="workbench"
@@ -4493,6 +4545,7 @@ function App() {
         </div>
       </Show>
     </div>
+    </Show>
   );
 }
 

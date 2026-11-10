@@ -17,11 +17,14 @@ import prettier from "eslint-config-prettier"
 
 const nodeSources = [
     "server/server.mjs",
+    "server/project-manager.mjs",
+    "server/component-schema-source.mjs",
     "server/path-security.mjs",
     "server/mcp.mjs",
     "mini-services/ai-chat/index.mjs",
     "mini-services/phaser-editor-mcp/index.mjs",
     "tests/security-smoke-test.mjs",
+    "tests/project-manager.test.mjs",
     "tests/mini-services-security-test.mjs",
     "tests/path-security.test.mjs",
     "packages/localization/tests/*.test.mjs",
@@ -31,6 +34,8 @@ const nodeSources = [
 const localizationTypeScriptSources = ["packages/localization/src/**/*.ts"]
 
 const editorTypeScriptSources = [
+    "src/editor/src/ProjectManager.tsx",
+    "src/editor/tests/project-manager-server.test.ts",
     "source/editor/plugins/colibri/src/Plugin.ts",
     "source/editor/plugins/colibri/src/ui/controls/properties/FormBuilder.ts",
     "source/editor/plugins/colibri/src/ui/ide/actions/ColibriCommands.ts",

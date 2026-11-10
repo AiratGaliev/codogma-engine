@@ -145,7 +145,23 @@ async function main() {
     await fs.mkdir(outsideDir, { recursive: true })
     await fs.writeFile(path.join(outsideDir, "secret.txt"), "outside-project-secret", "utf8")
     await fs.writeFile(path.join(outsideDir, "project-config.json"), JSON.stringify({ outsideSecret: "outside-project-config-secret" }), "utf8")
-    await fs.writeFile(path.join(projectDir, "Level.cge-scene.json"), JSON.stringify({ nativeSceneMarker: "native-scene-attachment-is-allowed" }), "utf8")
+    await fs.writeFile(path.join(projectDir, "project.json"), JSON.stringify({
+        schemaVersion: 1,
+        id: "security-smoke-project",
+        name: "Security Smoke",
+        scenes: [{ id: "scene-security-smoke", assetId: "asset-security-smoke" }],
+        assets: [{ id: "asset-security-smoke", path: "Level.cge-scene.json", kind: "scene" }],
+        prefabs: [],
+        componentModules: [],
+        runtime: { adapterId: "phaser", settings: {} }
+    }), "utf8")
+    await fs.writeFile(path.join(projectDir, "Level.cge-scene.json"), JSON.stringify({
+        schemaVersion: 1,
+        id: "scene-security-smoke",
+        name: "Security Smoke",
+        rootNodes: [],
+        settings: { testMarker: "native-scene-attachment-is-allowed" }
+    }), "utf8")
     await fs.writeFile(path.join(projectDir, "asset-pack.json"), JSON.stringify({ assetPackMarker: "external-asset-pack-attachment-is-allowed" }), "utf8")
     const aiChatService = await startMockAiChatService()
 

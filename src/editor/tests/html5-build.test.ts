@@ -35,6 +35,7 @@ const temporaryRootPromise = import("node:fs/promises").then(({ mkdtemp }) =>
   mkdtemp(resolve(tmpdir(), "codogma-html5-build-")));
 const generatedEvidence: Record<string, unknown> = {};
 
+
 const featureRegistry = JSON.parse(readFileSync(resolve(fixtureRoot, "feature-registry.json"), "utf8")) as FeatureRegistryDocumentV1;
 const projectFeatures = JSON.parse(readFileSync(resolve(fixtureRoot, "project-features.json"), "utf8")) as ProjectFeatureConfigurationV1;
 const runtimePhaserManifest = JSON.parse(readFileSync(resolve(repositoryRoot, "packages/runtime-phaser/package.json"), "utf8")) as { name: string; version: string };
@@ -110,6 +111,27 @@ interface ViteManifestEntry {
   readonly isEntry?: boolean;
 }
 
+
+/**
+ * Rolldown assigns fresh opaque 22-character IDs to import.meta.ROLLDOWN_FILE_URL
+ * placeholders on each build. They are only diagnostic names/source contents in
+ * .map sidecars; generated JavaScript contains the resolved asset URLs. Canonicalize
+ * these IDs for manifest comparison without touching the actual emitted files.
+ */
+function normalizeRolldownSourceMap(contents: Uint8Array): Uint8Array {
+  const source = Buffer.from(contents).toString("utf8");
+  const normalized = source.replace(
+    /(import\.meta\.ROLLDOWN_FILE_URL_)([A-Za-z0-9]+)/g,
+    (_match, prefix: string, token: string) => {
+      if (token.length !== 22) {
+        throw new Error("Unexpected Rolldown file URL placeholder length in source map: " + token.length);
+      }
+      return prefix + "0".repeat(token.length);
+    },
+  );
+  return new Uint8Array(Buffer.from(normalized, "utf8"));
+}
+
 function assertOutputAttribution(path: string, attribution: CapturedChunk | undefined): void {
   // Development source maps are diagnostic sidecars, not runtime Project graph inputs.
   if (path.endsWith(".map")) return;
@@ -152,7 +174,10 @@ async function collectFiles(
       const path = relative(outputDirectory, absolutePath).split(String.fromCharCode(92)).join("/");
       // Vite's internal manifest is only a build-host index; it is not a game runtime dependency.
       if (path === "manifest.json") continue;
-      const contents = new Uint8Array(await readFile(absolutePath));
+      const rawContents = new Uint8Array(await readFile(absolutePath));
+      const contents = path.endsWith(".js.map")
+        ? normalizeRolldownSourceMap(rawContents)
+        : rawContents;
       const chunk = captured.get(path)
         ?? assetAttribution.get(path)
         ?? (path === inputHtml
@@ -172,26 +197,33 @@ async function collectFiles(
 
 async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleGraph?: Map<string, CapturedModuleImports>, inputHtml = "index.html"): Promise<Html5BuildManifestV1> {
   const temporaryRoot = await temporaryRootPromise;
-  const outputDirectory = resolve(temporaryRoot, inputHtml === "index-arcade.html" ? "arcade-candidate" : profile.kind);
+  const buildLabel = label.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+  const outputDirectory = resolve(temporaryRoot, buildLabel);
+  const isDevelopment = profile.kind === "development";
   const captured = new Map<string, CapturedChunk>();
-  const previousNodeEnv = process.env.NODE_ENV;
-  process.env.NODE_ENV = profile.kind === "development" ? "development" : "production";
-  try {
-    await build({
-      configFile: false, root: fixtureRoot, base: "./",
-      mode: profile.kind === "release" ? "production" : "development",
-      logLevel: "silent", plugins: [createCapturePlugin(captured, moduleGraph)],
-      build: {
-        rolldownOptions: { input: resolve(fixtureRoot, inputHtml) },
-        outDir: outputDirectory, emptyOutDir: true, target: profile.ecmaTarget,
-        minify: profile.minify, sourcemap: profile.sourceMaps, manifest: "manifest.json",
-        assetsInlineLimit: 0,
-      },
-    });
-  } finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previousNodeEnv;
-  }
+  await build({
+    configFile: false,
+    root: fixtureRoot,
+    base: "./",
+    mode: isDevelopment ? "development" : "production",
+    logLevel: "silent",
+    plugins: [createCapturePlugin(captured, moduleGraph)],
+    define: {
+      "process.env.NODE_ENV": JSON.stringify(isDevelopment ? "development" : "production"),
+      "import.meta.env.DEV": JSON.stringify(isDevelopment),
+      "import.meta.env.PROD": JSON.stringify(!isDevelopment),
+    },
+    build: {
+      rolldownOptions: { input: resolve(fixtureRoot, inputHtml) },
+      outDir: outputDirectory,
+      emptyOutDir: true,
+      target: profile.ecmaTarget,
+      minify: profile.minify,
+      sourcemap: profile.sourceMaps,
+      manifest: "manifest.json",
+      assetsInlineLimit: 0,
+    },
+  });
 
   const expectedEntryModule = inputHtml === "index-arcade.html"
     ? "src/editor/tests/fixtures/html5-game/src/main-arcade.ts"
@@ -211,9 +243,10 @@ async function buildProfile(profile: Html5BuildProfileV1, label: string, moduleG
   const viteVersion = toolchainLock.packages["src/editor/node_modules/vite"]?.version;
   const rolldownVersion = toolchainLock.packages["src/editor/node_modules/rolldown"]?.version;
   if (!viteVersion || !rolldownVersion) throw new Error("package-lock.json must pin the Editor Vite/Rolldown toolchain.");
+  const artifactFiles = await collectFiles(outputDirectory, captured, inputHtml);
   const manifest = await createHtml5BuildManifest({
     profile, toolchain: { name: "vite+rolldown", version: `${viteVersion}/${rolldownVersion}` },
-    files: await collectFiles(outputDirectory, captured, inputHtml),
+    files: artifactFiles,
   });
   return manifest;
 }
@@ -432,6 +465,31 @@ afterAll(async () => {
 });
 
 describe("independent HTML5 Vite artifact fixture", () => {
+  it("canonicalizes only opaque Rolldown file URL IDs in source-map sidecars", () => {
+    const prefix = "import.meta.ROLLDOWN_FILE_URL_";
+    const firstId = "A".repeat(22);
+    const secondId = "B".repeat(22);
+    const first = Buffer.from(JSON.stringify({
+      names: [prefix + firstId, prefix + secondId],
+      sourcesContent: ["export default " + prefix + firstId, "export default " + prefix + secondId],
+      mappings: "AAAA",
+    }));
+    const second = Buffer.from(JSON.stringify({
+      names: [prefix + secondId, prefix + firstId],
+      sourcesContent: ["export default " + prefix + secondId, "export default " + prefix + firstId],
+      mappings: "AAAA",
+    }));
+    const differentMappings = Buffer.from(JSON.stringify({
+      names: [prefix + secondId, prefix + firstId],
+      sourcesContent: ["export default " + prefix + secondId, "export default " + prefix + firstId],
+      mappings: "AAAB",
+    }));
+
+    expect(normalizeRolldownSourceMap(first)).toEqual(normalizeRolldownSourceMap(second));
+    expect(normalizeRolldownSourceMap(first)).not.toEqual(normalizeRolldownSourceMap(differentMappings));
+    expect(normalizeRolldownSourceMap(first)).toHaveLength(first.byteLength);
+  });
+
   it("rejects unclassified runtime output while allowing Development source-map sidecars", () => {
     expect(() => assertOutputAttribution("assets/unknown-runtime.js", undefined))
       .toThrow(/no Project Build Analysis attribution/);
@@ -464,7 +522,7 @@ describe("independent HTML5 Vite artifact fixture", () => {
       const second = await buildProfile(profile, kind + "-second");
       const comparison = {
         ...compareHtml5BuildManifests(first, second),
-        reproducibilityScope: "all-output-files",
+        reproducibilityScope: "all-output-files; canonicalized opaque RollDown file URL IDs in source maps",
       };
       expect(
         comparison.reproducible,
@@ -692,12 +750,12 @@ describe("independent HTML5 Vite artifact fixture", () => {
     const fullArtifactPath = process.env.CODOGMA_HTML5_BUILD_OUTPUT;
     if (fullArtifactPath) {
       await rm(fullArtifactPath, { recursive: true, force: true });
-      await cp(resolve(artifactRoot, "release"), fullArtifactPath, { recursive: true });
+      await cp(resolve(artifactRoot, "release-first"), fullArtifactPath, { recursive: true });
     }
     const arcadeArtifactPath = process.env.CODOGMA_HTML5_ARCADE_OUTPUT;
     if (arcadeArtifactPath) {
       await rm(arcadeArtifactPath, { recursive: true, force: true });
-      await cp(resolve(artifactRoot, "arcade-candidate"), arcadeArtifactPath, { recursive: true });
+      await cp(resolve(artifactRoot, "arcade-candidate-first"), arcadeArtifactPath, { recursive: true });
     }
 
     generatedEvidence.featureSelection = featureReport;

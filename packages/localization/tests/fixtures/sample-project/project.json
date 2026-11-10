@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "f2b4aa1e-9c32-4f72-91b8-5ab9c6e3d4f0",
+  "name": "Localization Sample Project",
+  "scenes": [
+    {
+      "id": "a9d8b7c6-5e4f-4321-9876-1234567890ab",
+      "assetId": "4a6b8c0d-1e2f-4a3b-8c5d-7e9f0a1b2c3d"
+    }
+  ],
+  "assets": [
+    {
+      "id": "4a6b8c0d-1e2f-4a3b-8c5d-7e9f0a1b2c3d",
+      "path": "scenes/Main.cge-scene.json",
+      "kind": "scene"
+    }
+  ],
+  "prefabs": [],
+  "componentModules": [],
+  "runtime": {
+    "adapterId": "phaser",
+    "settings": {}
+  }
+}

@@ -16,15 +16,28 @@ export interface ProjectDirectorySnapshot {
 
 interface ProjectOperationError {
   error?: string;
+  diagnostics?: Array<{ path?: string; message: string }>;
 }
 
 async function readJson<T>(response: Response): Promise<T> {
   const responseText = await response.text();
 
   if (!response.ok) {
-    throw new Error(
-      `Project service returned ${response.status}: ${responseText || response.statusText}`,
-    );
+    let message = `Project service returned ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = JSON.parse(responseText) as ProjectOperationError;
+      if (typeof errorData.error === "string" && errorData.error) {
+        message = errorData.error;
+        if (Array.isArray(errorData.diagnostics) && errorData.diagnostics.length > 0) {
+          message += "\n" + errorData.diagnostics
+            .map((item) => (item.path ? item.path + ": " : "") + item.message)
+            .join("\n");
+        }
+      }
+    } catch {
+      if (responseText) message += `: ${responseText}`;
+    }
+    throw new Error(message);
   }
 
   let data: unknown;
@@ -146,4 +159,81 @@ export async function renameProjectEntry(
 export async function deleteProjectEntries(relativePaths: string[]): Promise<void> {
   if (relativePaths.length === 0) return;
   await callProjectOperation("project.deleteEntries", { relativePaths });
+}
+
+
+export interface ProjectManagerDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  path?: string;
+}
+
+export interface ManagedProjectDirectory {
+  name: string;
+  relativePath: string;
+  isProject: boolean;
+  manifestValid: boolean | null;
+  projectId?: string;
+  projectName?: string;
+  runtimeAdapterId?: string;
+  diagnostics?: ProjectManagerDiagnostic[];
+}
+
+export interface ManagedRecentProject {
+  projectId: string;
+  name: string;
+  relativePath: string;
+  lastOpenedAt: string;
+  status: "available" | "invalid" | "missing";
+  diagnostics: ProjectManagerDiagnostic[];
+}
+
+export interface ProjectManagerTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface ProjectManagerSnapshot {
+  projectsRoot: string;
+  activeProject: { projectId: string; name: string; relativePath: string | null } | null;
+  templates: ProjectManagerTemplate[];
+  directories: ManagedProjectDirectory[];
+  projects: ManagedProjectDirectory[];
+  recentProjects: ManagedRecentProject[];
+  recentError: string;
+  scanLimitReached: boolean;
+  scanError: string;
+  startupProjectError: string;
+}
+
+export interface CreateManagedProjectInput {
+  name: string;
+  folderName: string;
+  parentRelativePath?: string;
+  templateId?: string;
+}
+
+export interface ManagedProjectActivation {
+  activeProject: { projectId: string; name: string; relativePath: string };
+  recentWarning: string;
+}
+
+export async function getProjectManagerSnapshot(): Promise<ProjectManagerSnapshot> {
+  return callProjectOperation<ProjectManagerSnapshot>("projectManager.getSnapshot");
+}
+
+export async function createManagedProject(
+  input: CreateManagedProjectInput,
+): Promise<ManagedProjectActivation> {
+  return callProjectOperation<ManagedProjectActivation>("projectManager.create", { ...input });
+}
+
+export async function openManagedProject(relativePath: string): Promise<ManagedProjectActivation> {
+  return callProjectOperation<ManagedProjectActivation>("projectManager.open", { relativePath });
+}
+
+export async function removeRecentManagedProject(projectId: string): Promise<void> {
+  await callProjectOperation("projectManager.removeRecent", { projectId });
 }
