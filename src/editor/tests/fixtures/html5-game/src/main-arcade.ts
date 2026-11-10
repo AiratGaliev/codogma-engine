@@ -1,4 +1,3 @@
-import type Phaser from "phaser";
 import { loadPhaserUmd, startRuntime } from "./runtime";
 // The official Arcade-only UMD distribution is a file artifact, not a public package export.
 import arcadeBundleUrl from "../../../../../../node_modules/phaser/dist/phaser-arcade.min.js?url";
