@@ -8,23 +8,18 @@ import playerSpriteUrl from "../../../../../../packages/cge/tests/fixtures/accep
 
 export type PhaserNamespace = typeof Phaser;
 
-declare global {
-  interface Window {
-    Phaser?: PhaserNamespace;
-  }
-}
-
 const SCENE_KEY = "acceptance-scene";
 const PLAYER_TEXTURE_KEY = "acceptance-player";
 
 export function loadPhaserUmd(url: string): Promise<PhaserNamespace> {
-  if (window.Phaser) return Promise.resolve(window.Phaser);
+  const phaserWindow = window as unknown as { Phaser?: PhaserNamespace };
+  if (phaserWindow.Phaser) return Promise.resolve(phaserWindow.Phaser);
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = url;
     script.async = true;
     script.addEventListener("load", () => {
-      if (window.Phaser) resolve(window.Phaser);
+      if (phaserWindow.Phaser) resolve(phaserWindow.Phaser);
       else reject(new Error("The Phaser UMD bundle did not expose window.Phaser."));
     }, { once: true });
     script.addEventListener("error", () => reject(new Error("Could not load the Phaser UMD bundle.")), { once: true });
@@ -41,7 +36,7 @@ export function startRuntime(
   root: HTMLElement,
   variant: "full" | "arcade-only",
 ): void {
-  window.Phaser = PhaserRuntime;
+  (window as unknown as { Phaser?: PhaserNamespace }).Phaser = PhaserRuntime;
   root.dataset.phaserVariant = variant;
   const physics = PhaserRuntime.Physics as unknown as { Arcade?: unknown; Matter?: unknown };
   root.dataset.phaserArcade = String(Boolean(physics?.Arcade));
