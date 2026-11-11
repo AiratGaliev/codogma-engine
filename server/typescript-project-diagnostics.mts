@@ -12,6 +12,7 @@ import {
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 const MAX_SCRIPT_ASSETS = 256;
+const MAX_PROJECT_SOURCE_FILES = 512;
 
 export interface ProjectTypeScriptDiagnostic {
   code: number;
@@ -85,6 +86,7 @@ function createProjectCompilerHost(
   const isLibraryPath = (fileName: string): boolean =>
     isWithinDirectory(libraryRoot, path.resolve(fileName));
   const host = ts.createCompilerHost(options, true);
+  const projectSourceFiles = new Set<string>();
 
   host.getCurrentDirectory = () => projectRoot;
   host.fileExists = (fileName) => {
@@ -126,6 +128,17 @@ function createProjectCompilerHost(
       : path.resolve(fileName);
   };
   host.getSourceFile = (fileName, languageVersion, onError) => {
+    const absolutePath = path.resolve(fileName);
+    if (isWithinDirectory(projectRoot, absolutePath)) {
+      const canonicalPath = host.getCanonicalFileName(absolutePath);
+      if (!projectSourceFiles.has(canonicalPath)) {
+        if (projectSourceFiles.size >= MAX_PROJECT_SOURCE_FILES) {
+          onError?.("Project TypeScript diagnostics reached the 512 Project source-file limit.");
+          return undefined;
+        }
+        projectSourceFiles.add(canonicalPath);
+      }
+    }
     const content = host.readFile(fileName);
     if (content === undefined) {
       onError?.("Unable to read a safe TypeScript source file: " + fileName);
@@ -168,7 +181,6 @@ function readCompilerOptions(projectRoot: string): {
     strict: true,
     skipLibCheck: true,
     noEmit: true,
-    types: [],
   };
   const diagnostics: ProjectTypeScriptDiagnostic[] = [];
   const configPath = safeJoin(projectRoot, "tsconfig.json");

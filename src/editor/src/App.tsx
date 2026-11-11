@@ -1271,13 +1271,13 @@ function App() {
       setActiveViewport("Source");
       return;
     }
+    if (documentDirty() && !window.confirm("The active document has unsaved changes. Discard them and open the TypeScript source?")) return;
     if (scriptCheckTimeout !== undefined) {
       window.clearTimeout(scriptCheckTimeout);
       scriptCheckTimeout = undefined;
     }
     scriptCheckSequence += 1;
     setScriptChecking(false);
-    if (documentDirty() && !window.confirm("The active document has unsaved changes. Discard them and open the TypeScript source?")) return;
     const request = ++documentLoadSequence;
     try {
       const content = sourceContent ?? await readProjectFile(path);
@@ -1406,7 +1406,7 @@ function App() {
       setProjectDocument(registration.project);
       if (!(await saveProjectManifest())) {
         setProjectDocument(project);
-        throw new Error(`The Script Asset was written to "${path}", but project.json could not be saved. The file remains unregistered; resolve the Project save error and register it again.`);
+        throw new Error(`project.json could not be saved after creating the Script Asset "${path}".`);
       }
       manifestSaved = true;
       await refreshProjectTree().catch((error) => {
@@ -1423,6 +1423,7 @@ function App() {
         try {
           await deleteProjectEntries([path]);
           scriptWritten = false;
+          reportedMessage = `${message} The newly created Script Asset was safely removed.`;
           log("info", `Removed unregistered Script Asset ${path} after Project manifest save failed.`);
         } catch (cleanupError) {
           const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
