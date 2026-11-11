@@ -40,3 +40,8 @@ Built-in runtime definitions в этой задаче обеспечивают �
 8. Прочитать сериализованный Scene JSON и убедиться, что runtime-only поля не записаны.
 
 Playwright сценарий добавлен в `src/editor/browser-tests/runtime-identity-live-inspector.spec.ts`. Он входит в promotion-gated browser acceptance и не запускается на feature PR по CI правилам репозитория. CI Fast на PR проверяет typecheck/unit/build; browser acceptance выполняется после попадания интегрированного candidate в `test`.
+
+
+## Live World membership and runtime-only entities
+
+Runtime snapshots are materialized from the current Core `ComponentWorld`, not by assuming that every entry in the immutable Scene graph is still alive. Runtime detach/destroy removes the corresponding entry without invalidating the rest of the Inspector snapshot. Runtime-created Nodes and Components are shown with their session identity and explicitly have no persisted Project Model counterpart (`null` saved values); selection of such an entry cannot silently resolve to an authoring object. If a persisted parent Node is destroyed while a child remains alive in Core, the surviving child is promoted to a root in the runtime snapshot because Core currently has no mutable parent/reparenting contract.

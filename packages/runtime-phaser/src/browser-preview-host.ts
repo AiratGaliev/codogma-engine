@@ -18,12 +18,19 @@ import {
   type RuntimeSelectionIdentity,
   type RuntimeEntityIdentity,
   type RuntimeComponentIdentity,
-  type RuntimeComponentPropertyInspection,
-  type RuntimeTransform,
-  type TransformData,
-  type NodeDocument,
-  type ComponentInstanceDocument,
-} from "@codogma/cge";
+ } from "@codogma/cge";
+import {
+  createBrowserPreviewRuntimeSnapshot,
+  resolveRuntimeIdentityInWorld,
+  type BrowserPreviewRuntimeComponentSnapshot,
+  type BrowserPreviewRuntimeNodeSnapshot,
+  type BrowserPreviewRuntimeSnapshot,
+} from "./runtime-snapshot.js";
+export type {
+  BrowserPreviewRuntimeComponentSnapshot,
+  BrowserPreviewRuntimeNodeSnapshot,
+  BrowserPreviewRuntimeSnapshot,
+} from "./runtime-snapshot.js";
 import {
   createPhaserRuntimeSceneLoader,
   type PhaserComponentViewFactory,
@@ -82,31 +89,6 @@ export interface BrowserPreviewHostEvents {
     readonly sessionId: string;
     readonly selection: RuntimeSelectionIdentity | null;
   };
-}
-
-export interface BrowserPreviewRuntimeComponentSnapshot {
-  readonly identity: RuntimeComponentIdentity;
-  readonly enabled: boolean;
-  readonly started: boolean;
-  readonly persistedEnabled: boolean;
-  readonly persistedProperties: Readonly<Record<string, unknown>>;
-  readonly properties: Readonly<Record<string, RuntimeComponentPropertyInspection>>;
-}
-
-export interface BrowserPreviewRuntimeNodeSnapshot {
-  readonly identity: RuntimeEntityIdentity;
-  readonly name: string;
-  readonly active: boolean;
-  readonly persistedActive: boolean;
-  readonly runtimeTransform: Readonly<RuntimeTransform>;
-  readonly persistedTransform: Readonly<TransformData>;
-  readonly components: readonly BrowserPreviewRuntimeComponentSnapshot[];
-  readonly children: readonly BrowserPreviewRuntimeNodeSnapshot[];
-}
-
-/** Immutable, session-scoped view; persisted and live values remain separate. */
-export interface BrowserPreviewRuntimeSnapshot extends RuntimeIdentityScope {
-  readonly nodes: readonly BrowserPreviewRuntimeNodeSnapshot[];
 }
 
 export interface BrowserPreviewModuleDiagnostic {
@@ -375,95 +357,21 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     context: BrowserPreviewRuntimeContext,
   ): RuntimeSelectionIdentity | undefined {
     if (!isRuntimeIdentityInScope(identity, context.scope)) return undefined;
-    const graph = context.runtime.session.coreSession.graph;
-    const node = graph.getNode(identity.nodeId);
-    if (!node) return undefined;
-    if (identity.kind === "node") return createRuntimeEntityIdentity(context.scope, node.id);
-
-    const component = graph.getComponent(identity.componentInstanceId);
-    if (!component || component.nodeId !== node.id || component.typeId !== identity.typeId) return undefined;
-    return createRuntimeComponentIdentity(
+    return resolveRuntimeIdentityInWorld(
+      identity,
       context.scope,
-      node.id,
-      component.id,
-      component.typeId,
+      context.runtime.session.coreSession.world,
     );
   }
 
   getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null {
     const context = this.getCurrentRuntimeContext();
     if (!context) return null;
-    const { runtime, scope } = context;
-    const sessionId = context.scope.sessionId;
-    const graph = runtime.session.coreSession.graph;
-    // RuntimeSceneGraph.getComponent currently enumerates ComponentWorld on
-    // every lookup. Build one indexed snapshot so Inspector refresh stays O(N).
-    const runtimeComponents = new Map(
-      runtime.session.coreSession.world.listComponents().map((component) => [component.id, component] as const),
+    return createBrowserPreviewRuntimeSnapshot(
+      context.scope,
+      context.runtime.session.coreSession.graph,
+      context.runtime.session.coreSession.world,
     );
-    const nodeDocuments = new Map<string, NodeDocument>();
-    const componentDocuments = new Map<string, { readonly nodeId: string; readonly document: ComponentInstanceDocument }>();
-    const indexDocuments = (nodes: readonly NodeDocument[]): void => {
-      for (const node of nodes) {
-        nodeDocuments.set(node.id, node);
-        for (const component of node.components) {
-          componentDocuments.set(component.id, { nodeId: node.id, document: component });
-        }
-        indexDocuments(node.children);
-      }
-    };
-    indexDocuments(graph.document.rootNodes);
-
-    const materialize = (node: typeof graph.rootNodes[number]): BrowserPreviewRuntimeNodeSnapshot | undefined => {
-      const persistedNode = nodeDocuments.get(node.id);
-      if (!persistedNode) return undefined;
-
-      const components: BrowserPreviewRuntimeComponentSnapshot[] = [];
-      for (const componentInstanceId of node.componentInstanceIds) {
-        const source = componentDocuments.get(componentInstanceId);
-        const runtimeComponent = runtimeComponents.get(componentInstanceId);
-        const inspected = runtime.session.coreSession.world.inspectComponent(componentInstanceId);
-        if (!source || source.nodeId !== node.id || !runtimeComponent ||
-            runtimeComponent.nodeId !== node.id || source.document.typeId !== runtimeComponent.typeId ||
-            !inspected || inspected.nodeId !== node.id || inspected.typeId !== runtimeComponent.typeId) {
-          return undefined;
-        }
-        components.push(Object.freeze({
-          identity: createRuntimeComponentIdentity(scope, node.id, componentInstanceId, runtimeComponent.typeId),
-          enabled: runtimeComponent.enabled,
-          started: runtimeComponent.started,
-          persistedEnabled: source.document.enabled,
-          persistedProperties: source.document.properties,
-          properties: inspected.properties,
-        }));
-      }
-
-      const children: BrowserPreviewRuntimeNodeSnapshot[] = [];
-      for (const child of node.children) {
-        const snapshot = materialize(child);
-        if (!snapshot) return undefined;
-        children.push(snapshot);
-      }
-
-      return Object.freeze({
-        identity: createRuntimeEntityIdentity(scope, node.id),
-        name: node.name,
-        active: node.active,
-        persistedActive: persistedNode.active,
-        runtimeTransform: Object.freeze({ ...node.transform }),
-        persistedTransform: Object.freeze({ ...persistedNode.transform }),
-        components: Object.freeze(components),
-        children: Object.freeze(children),
-      });
-    };
-
-    const nodes: BrowserPreviewRuntimeNodeSnapshot[] = [];
-    for (const root of graph.rootNodes) {
-      const snapshot = materialize(root);
-      if (!snapshot) return null;
-      nodes.push(snapshot);
-    }
-    return Object.freeze({ ...scope, nodes: Object.freeze(nodes) });
   }
 
   getRuntimeSelection(): RuntimeSelectionIdentity | null {

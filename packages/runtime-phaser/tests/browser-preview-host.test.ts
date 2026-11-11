@@ -691,7 +691,7 @@ test("maps live runtime identity to exact Project instances and rejects stale se
   assert.notEqual(playerComponent.identity.componentInstanceId, enemyComponent.identity.componentInstanceId);
   assert.equal(playerComponent.identity.componentInstanceId, "component-follow-player");
   assert.equal(playerComponent.properties.elapsedSeconds?.status, "available");
-  assert.equal(playerComponent.persistedProperties.speed, 4);
+  assert.equal(playerComponent.persistedProperties?.speed, 4);
 
   const firstGame = FakeGame.instances.at(-1);
   assert.ok(firstGame);
