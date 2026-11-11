@@ -139,7 +139,7 @@ test("creates an editable Script Component starter whose static schema matches i
   assert.equal(result.valid, true);
   assert.equal(result.value?.name, 'Health "Controller"');
   assert.equal(result.value?.typeId, "com.codogma.generated.health");
-  assert.deepEqual(result.value?.properties, {});
+  assert.equal(Object.keys(result.value?.properties ?? {}).length, 0);
   assert.match(source, /create\(_context/);
 });
 

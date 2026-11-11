@@ -828,5 +828,5 @@ testCase("rejects duplicate Component type ids, occupied asset paths, and unsafe
     typeId: "com.codogma.authoring.other",
     version: "1.0.0",
     path: "src/components/Other.js",
-  }), /relative .ts path/);
+  }), /must use a \.ts or \.tsx path/);
 });

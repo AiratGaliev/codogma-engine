@@ -90,6 +90,7 @@ export async function parseComponentSchemaSource(
       }
 
       let factoryCount = 0;
+      let factoryInvalid = false;
       for (const property of definition.properties) {
         if (!("name" in property) || !property.name || ts.isComputedPropertyName(property.name)) continue;
         const propertyName = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
@@ -110,21 +111,21 @@ export async function parseComponentSchemaSource(
           const validFactory = ts.isMethodDeclaration(property)
             ? property.body !== undefined &&
               !property.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
-            : ts.isPropertyAssignment(property) &&
-              isComponentFactoryExpression(ts, property.initializer, declarations);
+            : ts.isPropertyAssignment(property)
+              ? isComponentFactoryExpression(ts, property.initializer, declarations)
+              : ts.isShorthandPropertyAssignment(property) &&
+                isComponentFactoryExpression(ts, property.name, declarations);
           if (!validFactory || factoryCount > 1) {
-            return {
-              valid: false,
-              diagnostics: [schemaDiagnostic("componentDefinition.create must be one callable method, function, or arrow function.", fileName)],
-            };
+            factoryInvalid = true;
           }
         }
       }
-      if (factoryCount !== 1) {
-        return {
-          valid: false,
-          diagnostics: [schemaDiagnostic("componentDefinition must export a callable create factory.", fileName)],
-        };
+      // Validate the static schema before reporting an invalid factory. This
+      // keeps dangerous/dynamic schema expressions from being masked by an
+      // unrelated missing-factory diagnostic.
+      if (factoryCount > 1) factoryInvalid = true;
+      if (factoryInvalid) {
+        // The schema is parsed and validated below before this is returned.
       }
     }
   }
@@ -202,6 +203,18 @@ export async function parseComponentSchemaSource(
           ...item,
           path: item.path ?? fileName,
         })),
+      };
+    }
+    if (factoryCount !== 1) {
+      return {
+        valid: false,
+        diagnostics: [schemaDiagnostic("componentDefinition must export a callable create factory.", fileName)],
+      };
+    }
+    if (factoryInvalid) {
+      return {
+        valid: false,
+        diagnostics: [schemaDiagnostic("componentDefinition.create must be one callable method, function, or arrow function.", fileName)],
       };
     }
     if (validated.value.typeId !== expectedTypeId) {
