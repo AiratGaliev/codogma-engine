@@ -24,6 +24,9 @@ export const componentDefinition = {
       onUpdate(deltaSeconds: number) {
         elapsedSeconds += deltaSeconds;
       },
+      inspect() {
+        return { runtimeElapsedSeconds: elapsedSeconds };
+      },
       get instanceId() {
         return context.instanceId;
       },

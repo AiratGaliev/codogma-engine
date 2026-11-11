@@ -1053,3 +1053,38 @@ test("isolates Component inspection exceptions and reports them as runtime error
   assert.equal(world.inspectComponent("missing-instance"), undefined);
   world.dispose();
 });
+
+
+test("does not execute custom thenables returned by runtime inspection", () => {
+  const runtimeSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.test.custom-thenable-inspection",
+    name: "Custom Thenable Inspection",
+    version: "1.0.0",
+    properties: { elapsed: { type: "number", storage: "runtime" } },
+  };
+  const registry = new ComponentRegistry();
+  let thenCalls = 0;
+  registry.register({
+    schema: runtimeSchema,
+    create: () => ({
+      inspect: () => ({
+        then() {
+          thenCalls += 1;
+          throw new Error("custom thenable must not execute");
+        },
+      }),
+    }),
+  });
+  const world = new ComponentWorld("scene-custom-thenable", registry);
+  world.createNode({ id: "node-custom-thenable", name: "Custom Thenable" });
+  world.attachComponent("node-custom-thenable", runtimeSchema.typeId, {}, { instanceId: "instance-custom-thenable" });
+
+  const inspected = world.inspectComponent("instance-custom-thenable");
+  assert.deepEqual(inspected?.properties.elapsed, {
+    status: "error",
+    message: "Component inspect() must return synchronously.",
+  });
+  assert.equal(thenCalls, 0);
+  world.dispose();
+});

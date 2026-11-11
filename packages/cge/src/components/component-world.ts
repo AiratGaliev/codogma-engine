@@ -214,13 +214,15 @@ function consumeInspectionThenable(value: unknown): boolean {
     while (owner && depth < 8) {
       const descriptor = Object.getOwnPropertyDescriptor(owner, "then");
       if (descriptor) {
-        if (!("value" in descriptor)) return true;
-        if (typeof descriptor.value !== "function") return false;
-        try {
-          // Consume an eventual rejection without awaiting or accepting the value.
-          descriptor.value.call(value, () => undefined, () => undefined);
-        } catch {
-          // Invalid thenables are still rejected as inspection values.
+        // Never invoke a user-defined thenable. Promise.prototype.then performs
+        // a native Promise brand check before registering the rejection handler;
+        // for arbitrary objects it throws without executing their then method.
+        if ("value" in descriptor && typeof descriptor.value === "function") {
+          try {
+            Promise.prototype.then.call(value as Promise<unknown>, undefined, () => undefined);
+          } catch {
+            // A non-native thenable remains rejected without executing user code.
+          }
         }
         return true;
       }
