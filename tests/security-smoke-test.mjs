@@ -190,7 +190,7 @@ async function main() {
     const port = await freePort()
 
     let logs = ""
-    let server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
+    let server = spawn(process.execPath, ["--experimental-strip-types", path.join(ROOT, "server", "server.mjs")], {
         cwd: ROOT,
         env: {
             ...process.env,
@@ -494,7 +494,7 @@ async function main() {
         // allow-list must open exactly the listed hosts while keeping the
         // same-origin Origin enforcement.
         await stopChild(server)
-        server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
+        server = spawn(process.execPath, ["--experimental-strip-types", path.join(ROOT, "server", "server.mjs")], {
             cwd: ROOT,
             env: {
                 ...process.env,
@@ -535,7 +535,7 @@ async function main() {
         // open exactly the listed origins while the attacker-origin rejection
         // and the Host allow-list keep applying.
         await stopChild(server)
-        server = spawn(process.execPath, [path.join(ROOT, "server", "server.mjs")], {
+        server = spawn(process.execPath, ["--experimental-strip-types", path.join(ROOT, "server", "server.mjs")], {
             cwd: ROOT,
             env: {
                 ...process.env,

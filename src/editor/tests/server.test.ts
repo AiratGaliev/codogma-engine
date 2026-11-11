@@ -24,7 +24,7 @@ async function reserveLoopbackPort(): Promise<number> {
 
 async function startNativeEditorServer(): Promise<{ origin: string; stop: () => Promise<void> }> {
     const port = await reserveLoopbackPort()
-    const child = spawn(process.execPath, [join(repositoryRoot, "server", "server.mjs")], {
+    const child = spawn(process.execPath, ["--experimental-strip-types", join(repositoryRoot, "server", "server.mjs")], {
         cwd: repositoryRoot,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
