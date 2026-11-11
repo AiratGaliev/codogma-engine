@@ -78,7 +78,6 @@ function isPreviewExecutableScriptPath(path: string): boolean {
 }
 
 function diagnosticAt(
-  ts: TypeScriptApi,
   sourceFile: import("typescript").SourceFile,
   node: import("typescript").Node,
   message: string,
@@ -86,8 +85,6 @@ function diagnosticAt(
   const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
   return { message, line: location.line + 1, column: location.character + 1 };
 }
-
-type TypeScriptApi = typeof import("typescript");
 
 /**
  * Resolve only relative imports to explicitly registered Project Script Assets.
@@ -200,21 +197,18 @@ async function inspectModuleSource(
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
       diagnostics.push(diagnosticAt(
-        ts,
         sourceFile,
         node,
         "Dynamic import() and direct require() are not supported by the native Preview module loader; use a static relative import.",
       ));
     } else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) {
       diagnostics.push(diagnosticAt(
-        ts,
         sourceFile,
         node,
         "import.meta is not available in bundled Preview Component modules.",
       ));
     } else if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) {
       diagnostics.push(diagnosticAt(
-        ts,
         sourceFile,
         node,
         "JSX is not part of the runtime Component module contract; export a ComponentBehavior factory instead.",

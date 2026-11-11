@@ -18,20 +18,18 @@ test("accepts a self-contained TypeScript Component definition", async () => {
   assert.deepEqual(diagnostics, []);
 });
 
-test("rejects static, type-only and dynamic imports before module execution", async () => {
+test("accepts static module references for bounded Project graph resolution but rejects dynamic loading", async () => {
   const staticImport = await inspectPreviewModuleSource(
     'import { ComponentBehavior } from "@codogma/cge"; export const componentDefinition = {};',
     "src/Imported.ts",
   );
-  assert.equal(staticImport.length, 1);
-  assert.match(staticImport[0]?.message ?? "", /self-contained/);
+  assert.deepEqual(staticImport, []);
 
   const typeImport = await inspectPreviewModuleSource(
     'type Contract = import("@codogma/cge").ComponentBehavior; export const componentDefinition = {};',
     "src/TypeImported.ts",
   );
-  assert.equal(typeImport.length, 1);
-  assert.match(typeImport[0]?.message ?? "", /self-contained/);
+  assert.deepEqual(typeImport, []);
 
   const dynamicImport = await inspectPreviewModuleSource(
     'export const componentDefinition = { async create() { await import("./other.js"); return {}; } };',
@@ -40,7 +38,6 @@ test("rejects static, type-only and dynamic imports before module execution", as
   assert.equal(dynamicImport.length, 1);
   assert.match(dynamicImport[0]?.message ?? "", /Dynamic import/);
 });
-
 test("rejects unsupported Script Asset extensions and oversized module source", async () => {
   const unsupported = await inspectPreviewModuleSource("export const componentDefinition = {};", "src/module.js");
   assert.match(unsupported[0]?.message ?? "", /\.ts or \.tsx/);
@@ -84,13 +81,12 @@ test("adds editor built-in Component references only to Preview snapshots and re
 });
 
 
-test("rejects TypeScript import-equals require declarations", async () => {
+test("accepts statically resolvable TypeScript import-equals declarations for the Project graph", async () => {
   const diagnostics = await inspectPreviewModuleSource(
     'import Runtime = require("./runtime"); export const componentDefinition = {};',
     "src/RequireEquals.ts",
   );
-  assert.equal(diagnostics.length, 1);
-  assert.match(diagnostics[0]?.message ?? "", /self-contained/);
+  assert.deepEqual(diagnostics, []);
 });
 
 test("resolves relative Preview imports only to explicit Project Script Assets", () => {
