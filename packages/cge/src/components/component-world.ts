@@ -59,7 +59,7 @@ interface ComponentRecord {
   nodeId: string;
   definition: ComponentTypeDefinition;
   behavior: ComponentBehavior;
-  inspect?: () => unknown;
+  inspect: (() => unknown) | undefined;
   enabled: boolean;
   started: boolean;
   activeNotified: boolean;
