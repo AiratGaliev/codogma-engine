@@ -18,7 +18,7 @@
     "test:localization:project": "npm run build:localization && node packages/localization/bin/validate-localization.mjs packages/localization/tests/fixtures/sample-project --fallback en-US",
     "test:localization:acceptance": "npm run build:cge && npm run build:html5-build && npm run build:localization && node tests/localization-acceptance.mjs",
     "test:mini-services": "node tests/mini-services-security-test.mjs",
-    "test:unit": "npm run build:cge && npm run build:html5-build && node --experimental-strip-types --test \"tests/*.test.mjs\"",
+    "test:unit": "npm run build:cge && npm run build:html5-build && npm run typecheck:server && node --experimental-strip-types --test \"tests/*.test.mjs\"",
     "typecheck:server": "tsc -p server/tsconfig.json",
     "test:all": "npm run test:unit && npm run test:security && npm run test:mini-services && npm run test:localization && npm run test:localization:project && npm run test:localization:acceptance && npm run test:cge && npm run test:runtime-phaser && npm run test:feature-registry && npm run test:html5-build && npm run test:game-test-bridge-contract && npm run test:mcp-package && npm run test:workspace-consumer && npm run test:editor-host && npm run test:e2e",
     "lint": "eslint .",
