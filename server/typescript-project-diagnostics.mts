@@ -33,6 +33,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function getScriptKind(fileName: string): ts.ScriptKind {
+  const extension = path.extname(fileName).toLowerCase();
+  if (extension === ".tsx") return ts.ScriptKind.TSX;
+  if (extension === ".jsx") return ts.ScriptKind.JSX;
+  if ([".js", ".mjs", ".cjs"].includes(extension)) return ts.ScriptKind.JS;
+  if (extension === ".json") return ts.ScriptKind.JSON;
+  return ts.ScriptKind.TS;
+}
+
 function isWithinDirectory(directory: string, candidate: string): boolean {
   const relative = path.relative(directory, candidate);
   return relative === "" ||
@@ -149,7 +158,7 @@ function createProjectCompilerHost(
       content,
       languageVersion,
       true,
-      ts.getScriptKindFromFileName(fileName),
+      getScriptKind(fileName),
     );
   };
   const resolutionCache = ts.createModuleResolutionCache(
@@ -243,7 +252,7 @@ export function checkProjectTypeScript(
   if (!manifestPath) throw new Error("The native Project manifest cannot be resolved safely.");
   const manifestContent = readFileSafely(projectRoot, manifestPath, "utf8", MAX_MANIFEST_BYTES);
   const parsedProject = parseProjectDocument(manifestContent);
-  if (!parsedProject.valid || !parsedProject.value) {
+  if (!parsedProject.value) {
     throw new Error("Cannot type-check an invalid Project manifest.");
   }
   const project = parsedProject.value;
