@@ -242,7 +242,11 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   }
 
   async deactivate(): Promise<void> {
-    this.assertUsable();
+    // Phaser may shut a Scene down independently (for example, when its Game
+    // is destroyed). The Scene event has already started this session's
+    // idempotent disposal, so a later SceneManager cleanup must not attempt to
+    // deactivate a disposed adapter session again.
+    if (this.isDisposed) return;
     await this.coreSession.deactivate();
     this.syncViews();
   }

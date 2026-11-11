@@ -10,6 +10,7 @@ import {
 } from "@codogma/cge";
 import {
   createBrowserPreviewHost,
+  PhaserRuntimeAdapterError,
   type BrowserPreviewErrorEvent,
   type BrowserPreviewLogEvent,
   type PhaserComponentViewContext,
@@ -269,7 +270,13 @@ test("routes Phaser startup diagnostics to the failed run and permits a clean re
   });
   host.subscribe("error", (event) => errors.push(event));
 
-  await assert.rejects(host.play(), /Synthetic Component view failure/);
+  await assert.rejects(host.play(), (error: unknown) => {
+    assert.ok(error instanceof PhaserRuntimeAdapterError);
+    assert.match(error.diagnostic.causeMessage ?? "", /Synthetic Component view failure/);
+    assert.ok(error.originalError instanceof Error);
+    assert.match(error.originalError.message, /Synthetic Component view failure/);
+    return true;
+  });
   const failedSessionId = host.sessionId;
   assert.ok(failedSessionId);
   assert.equal(host.state, "failed");
