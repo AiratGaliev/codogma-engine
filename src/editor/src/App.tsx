@@ -8,6 +8,26 @@ import {
   onMount,
 } from "solid-js";
 import designTokens from "../design-system/tokens.json";
+import Phaser from "phaser";
+import {
+  createBrowserPreviewHost,
+  type BrowserPreviewHost,
+  type BrowserPreviewRuntimeComponentSnapshot,
+  type BrowserPreviewRuntimeNodeSnapshot,
+  type BrowserPreviewRuntimeSnapshot,
+  type BrowserPreviewState,
+} from "@codogma/runtime-phaser";
+import {
+  createRuntimeComponentIdentity,
+  createRuntimeEntityIdentity,
+  type NodeDocument,
+  type RuntimeSelectionIdentity,
+} from "@codogma/cge";
+import { resolveRuntimeAuthoringSelection } from "./domain/runtime-inspector.js";
+import {
+  createEditorPreviewProjectSnapshot,
+  resolveEditorPreviewComponentRegistry,
+} from "./services/preview-component-modules.js";
 import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue } from "@codogma/cge";
 import { NativeComponentInspector } from "./components/NativeComponentInspector.tsx";
 import { parseComponentSchemaSource } from "./domain/component-schema-source.js";
@@ -322,7 +342,7 @@ function ConsolePanel(props: {
         onPointerDown={(event) => props.onPointerDown?.(event)}
         classList={{ "console-header-draggable": Boolean(props.onPointerDown) }}
       >
-        <div class="console-title"><Icon theme={props.theme} name="script" size={13} /> Console</div>
+        <div class="console-title"><Icon theme={props.theme} name="code-2" size={13} /> Console</div>
         <select aria-label="Console message filter" value={props.level} onChange={(event) => props.onLevelChange(event.currentTarget.value)}>
           <option value="all">All</option>
           <option value="info">Info</option>
@@ -437,8 +457,11 @@ function App() {
   const [paletteQuery, setPaletteQuery] = createSignal("");
   const [focusContext, setFocusContext] = createSignal<FocusContext>("global");
   const [tool, setTool] = createSignal<"select" | "move" | "rotate" | "scale">("select");
-  const [gameInstance, setGameInstance] = createSignal(0);
-  const [gameLoaded, setGameLoaded] = createSignal(false);
+  const [runtimePreviewState, setRuntimePreviewState] = createSignal<BrowserPreviewState>("idle");
+  const [runtimeSnapshot, setRuntimeSnapshot] = createSignal<BrowserPreviewRuntimeSnapshot | null>(null);
+  const [runtimeSelection, setRuntimeSelection] = createSignal<RuntimeSelectionIdentity | null>(null);
+  const [runtimeSelectedComponentId, setRuntimeSelectedComponentId] = createSignal<string | null>(null);
+  const [runtimeError, setRuntimeError] = createSignal("");
   const [consoleLevel, setConsoleLevel] = createSignal("all");
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
   const [dockDropTarget, setDockDropTarget] = createSignal<DockDropTarget | null>(null);
@@ -459,6 +482,11 @@ function App() {
   let rightDockedContent: HTMLDivElement | undefined;
   let bottomDockedContent: HTMLDivElement | undefined;
   let sceneCanvas: HTMLCanvasElement | null = null;
+  let runtimePreviewHost: BrowserPreviewHost | null = null;
+  let runtimePreviewMount: HTMLDivElement | undefined;
+  let runtimePreviewResizeObserver: ResizeObserver | undefined;
+  let runtimePreviewPollId: number | undefined;
+  let runtimePreviewGeneration = 0;
   let disposeEditorMcpBridge: (() => void) | undefined;
   let animationPlaybackRaf = 0;
   let animationPlaybackLastTimestamp = 0;
@@ -530,6 +558,70 @@ function App() {
     const id = selectedId();
     return id ? sceneObjects().find((item) => item.id === id) : undefined;
   });
+
+  function findRuntimeNode(nodes: readonly BrowserPreviewRuntimeNodeSnapshot[], nodeId: string): BrowserPreviewRuntimeNodeSnapshot | null {
+    for (const node of nodes) {
+      if (node.identity.nodeId === nodeId) return node;
+      const child = findRuntimeNode(node.children, nodeId);
+      if (child) return child;
+    }
+    return null;
+  }
+
+  const runtimeHierarchyEntries = createMemo(() => {
+    const snapshot = runtimeSnapshot();
+    if (!snapshot) return [];
+    const entries: Array<{ node: BrowserPreviewRuntimeNodeSnapshot; depth: number }> = [];
+    const visit = (nodes: readonly BrowserPreviewRuntimeNodeSnapshot[], depth: number): void => {
+      for (const node of nodes) {
+        entries.push({ node, depth });
+        visit(node.children, depth + 1);
+      }
+    };
+    visit(snapshot.nodes, 0);
+    return entries;
+  });
+
+  const runtimeSelectedNode = createMemo(() => {
+    const snapshot = runtimeSnapshot();
+    const selection = runtimeSelection();
+    if (!snapshot || !selection ||
+        snapshot.projectId !== selection.projectId ||
+        snapshot.sceneId !== selection.sceneId ||
+        snapshot.sessionId !== selection.sessionId) return null;
+    return findRuntimeNode(snapshot.nodes, selection.nodeId);
+  });
+
+  const runtimeAuthoringSelection = createMemo(() =>
+    resolveRuntimeAuthoringSelection(runtimeSelection(), sceneObjects()),
+  );
+
+  const runtimeInspectorNode = createMemo(() => {
+    const node = runtimeSelectedNode();
+    const target = runtimeAuthoringSelection();
+    const selected = selectedObject();
+    return node && target?.status === "resolved" && selected?.id === target.node.id &&
+      node.identity.nodeId === target.node.id ? node : null;
+  });
+
+  function isRuntimeComponentSelected(instanceId: string): boolean {
+    const selection = runtimeSelection();
+    return selection?.kind === "component" && selection.componentInstanceId === instanceId;
+  }
+
+  const runtimeComponentFor = (instanceId: string): BrowserPreviewRuntimeComponentSnapshot | undefined => {
+    const node = runtimeInspectorNode();
+    const authoringNode = selectedObject();
+    if (!node || !authoringNode || node.identity.nodeId !== authoringNode.id) return undefined;
+    const persisted = authoringNode.node.components.find((item) => item.id === instanceId) ??
+      authoringNode.renderNode.components.find((item) => item.id === instanceId);
+    if (!persisted) return undefined;
+    return node.components.find((item) =>
+      item.identity.componentInstanceId === instanceId &&
+      item.identity.typeId === persisted.typeId &&
+      item.identity.nodeId === node.identity.nodeId,
+    );
+  };
 
   const selectedFxEffects = createMemo(() => {
     const selected = selectedObject();
@@ -822,6 +914,7 @@ function App() {
       }
     }
 
+    await disposeRuntimePreview();
     const request = sceneLoadSequence;
     const activeDocumentBeforeLoad = scene();
     const activeHistoryBeforeLoad = history();
@@ -860,7 +953,6 @@ function App() {
       setAnimationPath("");
       setSavedAnimationContent("");
       setActiveViewport("Scene");
-      setGameLoaded(false);
       log("success", `Opened native ${isPrefabDocument(parsed) ? "Prefab" : "Scene"} ${path}`);
       return true;
     } catch (error) {
@@ -875,6 +967,7 @@ function App() {
   }
 
   async function loadProject() {
+    await disposeRuntimePreview();
     setLoading(true);
     setLoadError("");
     try {
@@ -974,6 +1067,7 @@ function App() {
     }
     if (documentDirty() && !window.confirm("There are unsaved changes. Open Project Manager and discard the current editor session?")) return;
     stopAnimationPreview(true);
+    void disposeRuntimePreview();
     setProjectManagerVisible(true);
   }
   function applySceneChange(
@@ -2925,6 +3019,263 @@ function App() {
     "assets-get-texture-content-bounding-box": readTextureContentBounds,
   };
 
+  async function disposeRuntimePreview(): Promise<void> {
+    runtimePreviewGeneration += 1;
+    if (runtimePreviewPollId !== undefined) {
+      window.clearInterval(runtimePreviewPollId);
+      runtimePreviewPollId = undefined;
+    }
+    runtimePreviewResizeObserver?.disconnect();
+    runtimePreviewResizeObserver = undefined;
+    const previous = runtimePreviewHost;
+    runtimePreviewHost = null;
+    setRuntimeSnapshot(null);
+    setRuntimeSelection(null);
+    setRuntimeSelectedComponentId(null);
+    setRuntimeError("");
+    if (previous) {
+      try { await previous.dispose(); }
+      catch (error) { log("warning", "Preview disposal: " + (error instanceof Error ? error.message : String(error))); }
+    }
+    setRuntimePreviewState("idle");
+  }
+
+  function refreshRuntimeSnapshot(generation: number): void {
+    const host = runtimePreviewHost;
+    if (!host || generation !== runtimePreviewGeneration ||
+        (host.state !== "running" && host.state !== "paused")) return;
+    const snapshot = host.getRuntimeSnapshot();
+    if (!snapshot || snapshot.projectId !== projectDocument()?.id ||
+        snapshot.sceneId !== scene()?.id || snapshot.sessionId !== host.sessionId) {
+      setRuntimeSnapshot(null);
+      setRuntimeSelection(null);
+      setRuntimeSelectedComponentId(null);
+      return;
+    }
+    setRuntimeSnapshot(snapshot);
+    const selection = host.getRuntimeSelection();
+    if (!selection || selection.projectId !== snapshot.projectId ||
+        selection.sceneId !== snapshot.sceneId || selection.sessionId !== snapshot.sessionId) {
+      setRuntimeSelection(null);
+      setRuntimeSelectedComponentId(null);
+      return;
+    }
+    setRuntimeSelection(selection);
+    setRuntimeSelectedComponentId(selection.kind === "component" ? selection.componentInstanceId : null);
+  }
+
+  async function playRuntimePreview(): Promise<void> {
+    const initialProject = projectDocument();
+    const initialScene = scene();
+    if (!initialProject || !initialScene || isPrefabDocument(initialScene)) {
+      log("warning", "Open a native Scene before starting Runtime Preview.");
+      return;
+    }
+    if (runtimePreviewState() === "starting" || runtimePreviewState() === "running" || runtimePreviewState() === "paused") return;
+    const operationToken = runtimePreviewGeneration;
+    let generation = operationToken;
+    try {
+      if (scriptDirty()) {
+        if (!scriptSourcePath()) throw new Error("The active Script Asset has unsaved changes but no project path.");
+        await saveTypeScriptFile();
+        if (scriptDirty()) throw new Error("Save the active Script Asset before starting Preview.");
+      }
+      if (projectDirty() && !(await saveProjectManifest())) throw new Error("The Project manifest could not be saved before Preview.");
+      if (dirty() && !(await saveScene())) throw new Error("The active Scene could not be saved before Preview.");
+
+      if (operationToken !== runtimePreviewGeneration) return;
+      await disposeRuntimePreview();
+      generation = runtimePreviewGeneration;
+      setActiveViewport("Game");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      if (generation !== runtimePreviewGeneration) return;
+      const project = projectDocument();
+      const currentScene = scene();
+      const mount = runtimePreviewMount;
+      if (!project || !currentScene || isPrefabDocument(currentScene) || !mount) {
+        throw new Error("The native Game View mount or active Scene is unavailable.");
+      }
+      if (project.id !== initialProject.id || currentScene.id !== initialScene.id) {
+        throw new Error("The active Project or Scene changed while Preview was being prepared.");
+      }
+      const requiredTypeIds = new Set<string>();
+      const collectRequiredTypes = (nodes: readonly NodeDocument[]): void => {
+        for (const node of nodes) {
+          for (const component of node.components) requiredTypeIds.add(component.typeId);
+          collectRequiredTypes(node.children);
+        }
+      };
+      collectRequiredTypes(currentScene.rootNodes);
+
+      const previewProject = createEditorPreviewProjectSnapshot(project, [...requiredTypeIds]);
+      const rect = mount.getBoundingClientRect();
+      const host = createBrowserPreviewHost({
+        phaser: Phaser,
+        parent: mount,
+        project: previewProject,
+        sceneId: currentScene.id,
+        width: Math.max(1, Math.floor(rect.width || 800)),
+        height: Math.max(1, Math.floor(rect.height || 600)),
+        readAssetDocument: (asset, signal) => readProjectFile(asset.path, signal),
+        resolveComponentRegistry: (context) => resolveEditorPreviewComponentRegistry({
+          project: context.project,
+          requiredTypeIds: [...requiredTypeIds],
+          signal: context.signal,
+          readAssetDocument: context.readAssetDocument,
+        }),
+      });
+      runtimePreviewHost = host;
+      setRuntimePreviewState("starting");
+      setRuntimeError("");
+
+      host.subscribe("state-change", (event) => {
+        if (generation !== runtimePreviewGeneration || runtimePreviewHost !== host ||
+            (event.sessionId !== null && event.sessionId !== host.sessionId)) return;
+        setRuntimePreviewState(event.current);
+        if (event.current !== "running" && event.current !== "paused") {
+          setRuntimeSnapshot(null);
+          setRuntimeSelection(null);
+          setRuntimeSelectedComponentId(null);
+        } else refreshRuntimeSnapshot(generation);
+      });
+      host.subscribe("runtime-selection", (event) => {
+        if (generation !== runtimePreviewGeneration || runtimePreviewHost !== host || event.sessionId !== host.sessionId) return;
+        setRuntimeSelection(event.selection);
+        setRuntimeSelectedComponentId(event.selection?.kind === "component" ? event.selection.componentInstanceId : null);
+      });
+      host.subscribe("error", (event) => {
+        if (generation !== runtimePreviewGeneration || runtimePreviewHost !== host || event.sessionId !== host.sessionId) return;
+        setRuntimeError(event.message);
+        log("error", "Runtime Preview: " + event.message);
+      });
+      host.subscribe("log", (event) => {
+        if (generation !== runtimePreviewGeneration || runtimePreviewHost !== host || event.sessionId !== host.sessionId) return;
+        log(event.level === "warn" ? "warning" : event.level === "debug" ? "info" : event.level, event.message);
+      });
+
+      const resize = (): void => {
+        if (generation !== runtimePreviewGeneration || runtimePreviewHost !== host || !mount.isConnected) return;
+        const next = mount.getBoundingClientRect();
+        if (next.width > 0 && next.height > 0) host.resize(Math.floor(next.width), Math.floor(next.height));
+      };
+      if (typeof ResizeObserver !== "undefined") {
+        runtimePreviewResizeObserver = new ResizeObserver(resize);
+        runtimePreviewResizeObserver.observe(mount);
+      }
+      resize();
+      runtimePreviewPollId = window.setInterval(() => refreshRuntimeSnapshot(generation), 150);
+      await host.play();
+      refreshRuntimeSnapshot(generation);
+      const initialRuntimeNode = runtimeSnapshot()?.nodes[0];
+      if (initialRuntimeNode) selectRuntimeNode(initialRuntimeNode.identity.nodeId);
+      log("success", "Native Browser Preview started for Scene " + currentScene.name + ".");
+    } catch (error) {
+      if (generation !== runtimePreviewGeneration) return;
+      const message = error instanceof Error ? error.message : String(error);
+      await disposeRuntimePreview();
+      setRuntimeError(message);
+      setRuntimeSnapshot(null);
+      setRuntimeSelection(null);
+      setRuntimeSelectedComponentId(null);
+      setRuntimePreviewState("failed");
+      log("error", "Runtime Preview could not start: " + message);
+    }
+  }
+
+  async function stopRuntimePreview(): Promise<void> {
+    if (!runtimePreviewHost) return;
+    await disposeRuntimePreview();
+  }
+
+  async function restartRuntimePreview(): Promise<void> {
+    setRuntimeError("");
+    const host = runtimePreviewHost;
+    if (!host || (host.state !== "running" && host.state !== "paused" && host.state !== "stopped")) {
+      await playRuntimePreview();
+      return;
+    }
+    setRuntimeSnapshot(null);
+    setRuntimeSelection(null);
+    setRuntimeSelectedComponentId(null);
+    try {
+      await host.restart();
+      refreshRuntimeSnapshot(runtimePreviewGeneration);
+      const firstNode = runtimeSnapshot()?.nodes[0];
+      if (firstNode) selectRuntimeNode(firstNode.identity.nodeId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRuntimeError(message);
+      setRuntimeSnapshot(null);
+      setRuntimeSelection(null);
+      setRuntimeSelectedComponentId(null);
+      log("error", "Runtime Preview restart failed: " + message);
+    }
+  }
+
+  async function toggleRuntimePause(): Promise<void> {
+    const host = runtimePreviewHost;
+    if (!host) return;
+    try {
+      if (host.state === "paused") await host.resume();
+      else if (host.state === "running") await host.pause();
+      refreshRuntimeSnapshot(runtimePreviewGeneration);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRuntimeError(message);
+      log("error", "Runtime Preview pause/resume failed: " + message);
+    }
+  }
+
+  function selectRuntimeNode(nodeId: string): void {
+    const host = runtimePreviewHost;
+    const snapshot = runtimeSnapshot();
+    if (!host || !snapshot) return;
+    const identity = createRuntimeEntityIdentity(snapshot, nodeId);
+    if (!host.selectRuntimeIdentity(identity)) {
+      setRuntimeError("Runtime Node is no longer part of the active Preview session.");
+      return;
+    }
+    setRuntimeSelection(identity);
+    setRuntimeSelectedComponentId(null);
+    const target = resolveRuntimeAuthoringSelection(identity, sceneObjects());
+    if (target?.status === "resolved") {
+      setSelectedId(target.node.id);
+      setRuntimeError("");
+    } else {
+      setSelectedId(null);
+      setRuntimeError("The selected runtime Node has no exact authoring Node ID in the current Scene.");
+    }
+  }
+
+  function selectRuntimeComponent(nodeId: string, instanceId: string, typeId: string): void {
+    const host = runtimePreviewHost;
+    const snapshot = runtimeSnapshot();
+    if (!host || !snapshot) return;
+    const runtimeNode = findRuntimeNode(snapshot.nodes, nodeId);
+    const runtimeComponent = runtimeNode?.components.find((item) =>
+      item.identity.componentInstanceId === instanceId && item.identity.typeId === typeId,
+    );
+    if (!runtimeComponent) {
+      setRuntimeError("Runtime Component instance is stale or belongs to another Scene session.");
+      return;
+    }
+    const identity = createRuntimeComponentIdentity(snapshot, nodeId, instanceId, typeId);
+    if (!host.selectRuntimeIdentity(identity)) {
+      setRuntimeError("Runtime Component could not be selected in the active Preview session.");
+      return;
+    }
+    setRuntimeSelection(identity);
+    setRuntimeSelectedComponentId(instanceId);
+    const target = resolveRuntimeAuthoringSelection(identity, sceneObjects());
+    if (target?.status === "resolved" && target.component?.id === instanceId) {
+      setSelectedId(target.node.id);
+      setRuntimeError("");
+    } else {
+      setSelectedId(null);
+      setRuntimeError("The selected runtime Component has no exact authoring instance ID in the current Scene.");
+    }
+  }
+
   onMount(() => {
     syncDockPanelElements();
     window.addEventListener("keydown", handleKeyDown);
@@ -2941,6 +3292,7 @@ function App() {
   });
 
   onCleanup(() => {
+    void disposeRuntimePreview();
     disposeEditorMcpBridge?.();
     disposeEditorMcpBridge = undefined;
     sceneCanvas = null;
@@ -3322,39 +3674,18 @@ function App() {
           <span class="toolbar-divider" />
 
           <div class="toolbar-group play-group">
-            <button
-              class="play-button"
-              data-testid="open-game-view"
-              onClick={() => {
-                setActiveViewport("Game");
-                setGameLoaded(false);
-              }}
-              title="Open existing Phaser game output"
-            >
-              <Icon theme={theme()} name="play" size={15} />
-              <span>Play</span>
+            <button class="play-button" data-testid="open-game-view" onClick={() => void playRuntimePreview()}
+              title="Start native runtime preview"
+              disabled={!scene() || Boolean(scene() && isPrefabDocument(scene()!)) || runtimePreviewState() === "starting" || runtimePreviewState() === "running" || runtimePreviewState() === "paused"}>
+              <Icon theme={theme()} name="play" size={15} /><span>Play</span>
             </button>
-            <button
-              class="toolbar-icon-button"
-              aria-label="Restart Game view"
-              onClick={() => {
-                setGameInstance((value) => value + 1);
-                setActiveViewport("Game");
-                setGameLoaded(false);
-              }}
-              title="Restart Game view"
-            >
+            <button class="toolbar-icon-button" aria-label="Restart Runtime Preview" onClick={() => void restartRuntimePreview()}
+              title="Restart native runtime preview" disabled={!runtimePreviewHost}>
               <Icon theme={theme()} name="reload" />
             </button>
-            <button
-              class="toolbar-icon-button"
-              aria-label="Stop Game view"
-              onClick={() => {
-                setActiveViewport("Scene");
-                setGameLoaded(false);
-              }}
-              title="Stop and dispose Game view"
-            >
+            <button class="toolbar-icon-button" aria-label="Stop Runtime Preview"
+              onClick={() => { void stopRuntimePreview(); setActiveViewport("Scene"); }}
+              title="Stop and dispose native runtime preview" disabled={!runtimePreviewHost}>
               <Icon theme={theme()} name="stop" />
             </button>
           </div>
@@ -3615,13 +3946,13 @@ function App() {
                   classList={{ active: activeViewport() === "Source" }}
                   onClick={() => setActiveViewport("Source")}
                 >
-                  <Icon theme={theme()} name="script" size={13} />
+                  <Icon theme={theme()} name="code-2" size={13} />
                   Source
                 </button>
               </Show>
               <div class="viewport-tab-spacer" />
               <span class="viewport-resolution">{activeViewport() === "Scene" ? "800 × 600" : activeViewport() === "Source" ? "TYPESCRIPT" : "LIVE GAME"}</span>
-              <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : activeViewport() === "Source" ? (scriptDirty() ? "Unsaved source" : "Source ready") : gameLoaded() ? "Runtime loaded" : "Starting runtime"}</span>
+              <span class="viewport-status"><span class="status-led" />{activeViewport() === "Scene" ? "Edit mode" : activeViewport() === "Source" ? (scriptDirty() ? "Unsaved source" : "Source ready") : "Preview · " + runtimePreviewState()}</span>
             </div>
 
             <div class="scene-view-pane" classList={{ inactive: activeViewport() !== "Scene" }} aria-hidden={activeViewport() !== "Scene"} tabIndex={0} data-focus-context="scene" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("button, input, textarea, select, [role=button]")) event.currentTarget.focus({ preventScroll: true }); }}>
@@ -3665,28 +3996,78 @@ function App() {
               </div>
             </div>
 
-            <Show when={activeViewport() === "Game"}>
-              <div class="game-viewport" data-testid="game-viewport">
+            <div class="game-view-pane" classList={{ inactive: activeViewport() !== "Game" }} aria-hidden={activeViewport() !== "Game"}>
+              <div class="game-viewport native-runtime-game-view" data-testid="game-viewport">
                 <div class="game-view-note">
-                  <span class="runtime-dot" />
-                  Existing project output · `/editor/external/index.html`
+                  <span class="runtime-dot" classList={{ "runtime-dot-active": runtimePreviewState() === "running", "runtime-dot-paused": runtimePreviewState() === "paused" }} />
+                  <strong>Native Browser Preview</strong>
+                  <span class="runtime-state-label">{runtimePreviewState()}</span>
+                  <Show when={runtimeSnapshot()}>{(snapshot) =>
+                    <span class="runtime-session-label">Session {snapshot().sessionId.slice(-8)}</span>
+                  }</Show>
                   <span class="game-view-note-spacer" />
-                  <button class="small-square-button" onClick={() => { setGameInstance((value) => value + 1); setGameLoaded(false); }} aria-label="Reload Phaser runtime">
+                  <button class="small-square-button" data-testid="restart-runtime-preview" onClick={() => void restartRuntimePreview()} aria-label="Restart Runtime Preview" title="Restart Preview">
                     <Icon theme={theme()} name="reload" size={13} />
                   </button>
                 </div>
-                <iframe
-                  data-testid="phaser-game-frame"
-                  title="Existing Phaser game runtime"
-                  src={`/editor/external/index.html?restart=${gameInstance()}`}
-                  onLoad={() => {
-                    setGameLoaded(true);
-                    log("success", "Phaser game iframe loaded");
-                  }}
-                />
-                <div class="game-view-caption">Game View loads the existing generated game output. Scene edits are saved to .cge-scene.json and do not regenerate game.js automatically.</div>
+                <div class="runtime-preview-toolbar">
+                  <button class="subtle-button" data-testid="play-runtime-preview"
+                    disabled={runtimePreviewState() === "starting" || runtimePreviewState() === "running" || runtimePreviewState() === "paused" || !scene() || Boolean(scene() && isPrefabDocument(scene()!))}
+                    onClick={() => void playRuntimePreview()}><Icon theme={theme()} name="play" size={12} /> Play</button>
+                  <button class="subtle-button" data-testid="pause-runtime-preview"
+                    disabled={runtimePreviewState() !== "running" && runtimePreviewState() !== "paused"}
+                    onClick={() => void toggleRuntimePause()}><Icon theme={theme()} name={runtimePreviewState() === "paused" ? "play" : "pause"} size={12} />
+                    {runtimePreviewState() === "paused" ? "Resume" : "Pause"}</button>
+                  <button class="subtle-button" data-testid="stop-runtime-preview"
+                    disabled={!runtimePreviewHost || runtimePreviewState() === "stopped" || runtimePreviewState() === "idle"}
+                    onClick={() => void stopRuntimePreview()}><Icon theme={theme()} name="stop" size={12} /> Stop</button>
+                  <span class="runtime-preview-toolbar-hint">Runtime values are transient and never saved to Project Model.</span>
+                </div>
+                <div class="runtime-preview-layout">
+                  <div class="runtime-preview-canvas" data-testid="runtime-preview-canvas">
+                    <div class="runtime-preview-mount" ref={(element) => { runtimePreviewMount = element; }} />
+                    <Show when={!runtimeSnapshot() && runtimePreviewState() !== "starting"}>
+                      <div class="runtime-preview-empty"><strong>{runtimePreviewState() === "failed" ? "Preview failed" : "No active runtime session"}</strong>
+                        <span>Press Play to start the current saved Scene in the native Preview Host.</span></div>
+                    </Show>
+                    <Show when={runtimePreviewState() === "starting"}>
+                      <div class="runtime-preview-empty" role="status"><strong>Starting Preview…</strong>
+                        <span>Resolving registered Components and creating a session-scoped runtime.</span></div>
+                    </Show>
+                  </div>
+                  <aside class="runtime-hierarchy" data-testid="runtime-hierarchy">
+                    <div class="runtime-hierarchy-heading"><strong>Runtime Hierarchy</strong><span>{runtimeHierarchyEntries().length}</span></div>
+                    <Show when={runtimeSnapshot()} fallback={<div class="runtime-hierarchy-empty">Runtime hierarchy is available after Play.</div>}>
+                      <div class="runtime-hierarchy-list">
+                        <For each={runtimeHierarchyEntries()}>{(entry) => (
+                          <div class="runtime-hierarchy-node" style={{ "padding-left": `${entry.depth * 12 + 6}px` }}>
+                            <button type="button" class="runtime-hierarchy-node-button"
+                              classList={{ selected: runtimeSelection()?.kind === "node" && runtimeSelection()?.nodeId === entry.node.identity.nodeId }}
+                              data-testid={`runtime-node-${entry.node.identity.nodeId}`}
+                              onClick={() => selectRuntimeNode(entry.node.identity.nodeId)}>
+                              <Icon theme={theme()} name="box" size={12} /><span>{entry.node.name}</span>
+                              <small>{entry.node.active ? "Active" : "Inactive"}</small>
+                            </button>
+                            <For each={entry.node.components}>{(component) => (
+                              <button type="button" class="runtime-hierarchy-component"
+                                classList={{ selected: isRuntimeComponentSelected(component.identity.componentInstanceId) }}
+                                style={{ "padding-left": `${(entry.depth + 1) * 12 + 10}px` }}
+                                data-testid={`runtime-component-${component.identity.componentInstanceId}`}
+                                onClick={() => selectRuntimeComponent(component.identity.nodeId, component.identity.componentInstanceId, component.identity.typeId)}>
+                                <Icon theme={theme()} name="code-2" size={11} /><span>{component.identity.typeId}</span>
+                                <small>{component.enabled ? "Enabled" : "Disabled"}</small>
+                              </button>
+                            )}</For>
+                          </div>
+                        )}</For>
+                      </div>
+                    </Show>
+                  </aside>
+                </div>
+                <Show when={runtimeError()}><div class="runtime-preview-error" role="alert" data-testid="runtime-preview-error">{runtimeError()}</div></Show>
+                <div class="game-view-caption">Preview runs the saved Project/Scene in a new native runtime session. Restart creates a new session identity; Stop releases its runtime selection and live snapshots.</div>
               </div>
-            </Show>
+            </div>
 
             <Show when={activeViewport() === "Source"}>
               <div class="typescript-source-workspace" data-testid="typescript-source-workspace">
@@ -3794,7 +4175,7 @@ function App() {
                 : {})}
               onClose={() => closeSidePanel("Inspector")}
             />
-            <Show when={selectedObject()} fallback={<div class="inspector-empty"><Icon theme={theme()} name="node-2d" size={24} /><strong>No object selected</strong><span>Select an object in Hierarchy or Scene.</span></div>}>
+            <Show when={selectedObject()} fallback={<div class="inspector-empty"><Icon theme={theme()} name="box" size={24} /><strong>No object selected</strong><span>Select an object in Hierarchy or Scene.</span></div>}>
               <div class="inspector-scroll">
                 <div class="inspector-object-heading">
                   <div class="inspector-object-icon">
@@ -3848,6 +4229,32 @@ function App() {
                   </div>
                 </section>
 
+                <Show when={runtimeInspectorNode()}>
+                  {(runtimeNode) => (
+                    <section class="inspector-section runtime-node-inspector" data-testid="runtime-node-inspector">
+                      <div class="inspector-section-heading"><span>Live Runtime State</span><span class="runtime-live-tag">PLAY MODE · NOT SAVED</span></div>
+                      <div class="runtime-node-state">
+                        <span>Active: <strong>{runtimeNode().active ? "true" : "false"}</strong></span>
+                        <span>Saved Active: <strong>{String(runtimeNode().persistedActive ?? "—")}</strong></span>
+                      </div>
+                      <div class="runtime-transform-grid">
+                        <For each={["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"] as const}>
+                          {(key) => <div class="runtime-transform-value" data-runtime-field={key}>
+                            <span>{key}</span><strong>{String(runtimeNode().runtimeTransform[key])}</strong>
+                            <small>Saved: {String(runtimeNode().persistedTransform?.[key] ?? "—")}</small>
+                          </div>}
+                        </For>
+                      </div>
+                      <div class="runtime-inspector-footnote">Values are read from the active Core runtime graph. They are separate from editable Transform fields and are discarded on Stop.</div>
+                    </section>
+                  )}
+                </Show>
+                <Show when={runtimeSelection() && runtimeAuthoringSelection()?.status === "stale"}>
+                  <div class="runtime-stale-selection" role="status" data-testid="runtime-stale-selection">
+                    Runtime identity has no exact authoring counterpart in the current Scene. No name-based fallback was applied.
+                  </div>
+                </Show>
+
                 <Show when={selectedObject()?.type === "Image"}>
                   <section class="inspector-section">
                     <div class="inspector-section-heading"><span>Texture</span></div>
@@ -3892,9 +4299,9 @@ function App() {
                   <Show when={selectedComponentDefinitions().length > 0} fallback={<div class="component-empty">No registered native component modules are attached.</div>}>
                     <For each={selectedComponentDefinitions()}>
                       {(entry) => (
-                        <div class="attached-component-card">
+                        <div class="attached-component-card" classList={{ "runtime-selected-component": runtimeSelectedComponentId() === entry.instance.id }}>
                           <div class="component-row">
-                            <Icon theme={theme()} name="script" size={13} />
+                            <Icon theme={theme()} name="code-2" size={13} />
                             <span>{entry.module.typeId}</span>
                             <span class="component-state">v{entry.module.version}</span>
                             <button class="toolbar-icon-button tiny" aria-label={`Detach ${entry.module.typeId}`} title="Detach component" onClick={() => detachComponentFromSelected(entry.instance.id)}>
@@ -3916,6 +4323,8 @@ function App() {
                               nodes={entry.nodeOptions}
                               ownerNodeId={selectedObject()?.id ?? ""}
                               diagnostics={entry.diagnostics}
+                              runtimeState={runtimeComponentFor(entry.instance.id) ?? null}
+                              runtimeSessionActive={runtimePreviewState() === "running" || runtimePreviewState() === "paused"}
                               drafts={componentDrafts()}
                               onDraftChange={updateComponentDraft}
                               onCommit={(propertyName, value) => updateNativeComponentProperty(entry.instance.id, propertyName, value)}

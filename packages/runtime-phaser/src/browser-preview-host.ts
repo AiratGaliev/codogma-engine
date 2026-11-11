@@ -11,10 +11,23 @@ import {
   type ProjectDocumentV1,
   type ProjectSceneLoaderOptions,
   type SceneManager,
+  type RuntimeIdentityScope,
+  type RuntimeSelectionIdentity,
 } from "@codogma/cge";
+import {
+  createBrowserPreviewRuntimeSnapshot,
+  resolveRuntimeIdentityInWorld,
+  type BrowserPreviewRuntimeSnapshot,
+} from "./runtime-snapshot.js";
+export type {
+  BrowserPreviewRuntimeComponentSnapshot,
+  BrowserPreviewRuntimeNodeSnapshot,
+  BrowserPreviewRuntimeSnapshot,
+} from "./runtime-snapshot.js";
 import {
   createPhaserRuntimeSceneLoader,
   type PhaserComponentViewFactory,
+  type PhaserRuntimeSceneSession,
 } from "./phaser-runtime-scene-loader.js";
 import type { PhaserRuntimeDiagnostic } from "./errors.js";
 
@@ -65,6 +78,10 @@ export interface BrowserPreviewHostEvents {
   "state-change": BrowserPreviewStateChange;
   log: BrowserPreviewLogEvent;
   error: BrowserPreviewErrorEvent;
+  "runtime-selection": {
+    readonly sessionId: string;
+    readonly selection: RuntimeSelectionIdentity | null;
+  };
 }
 
 export interface BrowserPreviewModuleDiagnostic {
@@ -130,6 +147,12 @@ export interface BrowserPreviewHost {
   readonly sessionId: string | null;
   readonly projectId: string;
   readonly sceneId: string;
+  /** Returns the current active/paused runtime only; never falls back to authoring data. */
+  getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null;
+  getRuntimeSelection(): RuntimeSelectionIdentity | null;
+  /** Selects an exact live identity from the current Project/Scene/Preview scope. */
+  selectRuntimeIdentity(identity: RuntimeSelectionIdentity): boolean;
+  clearRuntimeSelection(): void;
   subscribe<TKey extends keyof BrowserPreviewHostEvents>(
     type: TKey,
     handler: (payload: BrowserPreviewHostEvents[TKey]) => void,
@@ -220,9 +243,16 @@ function validateViewport(width: number, height: number): void {
  * Composes the native Core Scene Loader and Phaser view adapter into one
  * browser-owned Game. Core/Phaser remain the only simulation and frame owners.
  */
+interface BrowserPreviewRuntimeContext {
+  readonly runtime: { readonly sessionId: string; readonly session: PhaserRuntimeSceneSession };
+  readonly scope: RuntimeIdentityScope;
+}
+
 class BrowserPreviewHostImpl implements BrowserPreviewHost {
   private currentState: BrowserPreviewState = "idle";
   private currentSessionId: string | null = null;
+  private runtimeSession: { readonly sessionId: string; readonly session: PhaserRuntimeSceneSession } | undefined;
+  private runtimeSelection: RuntimeSelectionIdentity | null = null;
   private readonly events = createTypedEventBus<BrowserPreviewHostEvents>();
   private readonly documentSnapshots = new Map<string, string>();
   private readonly viewFactories: Readonly<Record<string, PhaserComponentViewFactory>>;
@@ -296,6 +326,95 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     return typeof id === "string" && id.length > 0 ? id : "unknown-project";
   }
   get sceneId(): string { return this.options.sceneId; }
+
+  private getCurrentRuntimeContext(): BrowserPreviewRuntimeContext | undefined {
+    const runtime = this.runtimeSession;
+    const sessionId = this.currentSessionId;
+    if (!runtime || !sessionId || runtime.sessionId !== sessionId ||
+        !["running", "paused"].includes(this.currentState) ||
+        runtime.session.isDisposed || !runtime.session.coreSession.isActive) {
+      return undefined;
+    }
+    return {
+      runtime,
+      scope: {
+        projectId: this.projectId,
+        sceneId: this.sceneId,
+        sessionId,
+      },
+    };
+  }
+
+  private resolveRuntimeIdentity(
+    identity: RuntimeSelectionIdentity,
+    context: BrowserPreviewRuntimeContext,
+  ): RuntimeSelectionIdentity | undefined {
+    return resolveRuntimeIdentityInWorld(
+      identity,
+      context.scope,
+      context.runtime.session.coreSession.world,
+    );
+  }
+
+  getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null {
+    const context = this.getCurrentRuntimeContext();
+    if (!context) return null;
+    return createBrowserPreviewRuntimeSnapshot(
+      context.scope,
+      context.runtime.session.coreSession.graph,
+      context.runtime.session.coreSession.world,
+    );
+  }
+
+  getRuntimeSelection(): RuntimeSelectionIdentity | null {
+    const selection = this.runtimeSelection;
+    const context = this.getCurrentRuntimeContext();
+    if (!selection || !context) return null;
+    const canonical = this.resolveRuntimeIdentity(selection, context);
+    if (!canonical) {
+      this.clearRuntimeSelection();
+      return null;
+    }
+    return canonical;
+  }
+
+  selectRuntimeIdentity(identity: RuntimeSelectionIdentity): boolean {
+    const context = this.getCurrentRuntimeContext();
+    if (!context) return false;
+    const canonical = this.resolveRuntimeIdentity(identity, context);
+    if (!canonical) return false;
+    this.runtimeSelection = canonical;
+    this.emit("runtime-selection", Object.freeze({
+      sessionId: context.scope.sessionId,
+      selection: canonical,
+    }));
+    return true;
+  }
+
+  clearRuntimeSelection(): void {
+    const previous = this.runtimeSelection;
+    if (!previous) return;
+    this.runtimeSelection = null;
+    this.emit("runtime-selection", Object.freeze({
+      sessionId: previous.sessionId,
+      selection: null,
+    }));
+  }
+
+  private handleRuntimeSessionCreated(session: PhaserRuntimeSceneSession): void {
+    const sessionId = this.currentSessionId;
+    if (!sessionId || this.disposeRequested) return;
+    this.runtimeSession = { sessionId, session };
+    this.runtimeSelection = null;
+    this.emit("runtime-selection", Object.freeze({ sessionId, selection: null }));
+  }
+
+  private handleRuntimeSessionDisposed(session: PhaserRuntimeSceneSession): void {
+    const current = this.runtimeSession;
+    if (!current || current.session !== session) return;
+    this.runtimeSession = undefined;
+    this.clearRuntimeSelection();
+  }
 
   subscribe<TKey extends keyof BrowserPreviewHostEvents>(
     type: TKey,
@@ -538,6 +657,8 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
         }
       }
       this.currentSessionId = null;
+      this.runtimeSession = undefined;
+      this.clearRuntimeSelection();
       this.setState("stopped");
     } catch (error) {
       this.reportError(error, "PREVIEW_STOP_FAILED", "host");
@@ -574,6 +695,8 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     }
 
     this.currentSessionId = null;
+    this.runtimeSession = undefined;
+    this.clearRuntimeSelection();
     this.gameReadyPromise = undefined;
     this.setState("disposed");
     this.events.dispose();
@@ -632,6 +755,8 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
             projectId: host.projectId,
             componentViewFactories: host.viewFactories,
             onDiagnostic: (diagnostic) => host.handlePhaserDiagnostic(diagnostic),
+            onSessionCreated: (session) => host.handleRuntimeSessionCreated(session),
+            onSessionDisposed: (session) => host.handleRuntimeSessionDisposed(session),
           });
           const manager = createSceneManager(runtimeLoader);
           host.sceneManager = manager;

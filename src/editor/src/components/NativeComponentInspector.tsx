@@ -6,6 +6,7 @@ import type {
   CoreDiagnostic,
   JsonValue,
 } from "@codogma/cge";
+import type { BrowserPreviewRuntimeComponentSnapshot } from "@codogma/runtime-phaser";
 import type { SceneNodeEntry } from "../domain/scene-model.js";
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
   nodes: readonly SceneNodeEntry[];
   ownerNodeId: string;
   diagnostics: readonly CoreDiagnostic[];
+  runtimeState: BrowserPreviewRuntimeComponentSnapshot | null;
+  runtimeSessionActive: boolean;
   drafts: Readonly<Record<string, string>>;
   onDraftChange: (key: string, value: string | undefined) => void;
   onCommit: (propertyName: string, value: JsonValue | undefined) => boolean;
@@ -34,6 +37,36 @@ function formatValue(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
 }
 
+function formatRuntimeValue(value: JsonValue): string {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function RuntimePropertyValue(props: { state: BrowserPreviewRuntimeComponentSnapshot | null; name: string }) {
+  const inspection = () => props.state?.properties[props.name];
+  return (
+    <Show when={inspection()} fallback={<span class="runtime-property-unavailable">No runtime inspection value was returned.</span>}>
+      {(result) => {
+        const value = result();
+        if (value.status === "available") {
+          return <code class="runtime-property-value">{formatRuntimeValue(value.value)}</code>;
+        }
+        if (value.status === "unsupported") {
+          return (
+            <span class="runtime-property-unavailable">
+              {value.reason === "not-exposed"
+                ? "Component did not expose this runtime field."
+                : "Runtime value has an unsupported data type."}
+            </span>
+          );
+        }
+        return <span class="runtime-property-error">{value.message}</span>;
+      }}
+    </Show>
+  );
+}
 function PropertyMessages(props: { diagnostics: readonly CoreDiagnostic[]; propertyName: string }) {
   const messages = () => props.diagnostics.filter((item) => item.propertyName === props.propertyName);
   return (
@@ -328,31 +361,43 @@ export function NativeComponentInspector(props: Props) {
               <Show when={property.description}>
                 <div class="component-property-description">{property.description}</div>
               </Show>
-              <Show when={storage === "persisted"} fallback={
-                <div class="component-property-storage-note">
-                  {storage === "editorOnly" ? "Editor-only value is not stored in Scene documents." : "Runtime-only value is supplied by the runtime, not the persisted Scene."}
-                </div>
-              }>
-                <PropertyControl
-                  field={props}
-                  name={name}
-                  schema={property}
-                  invalid={props.diagnostics.some((item) => item.propertyName === name && item.severity === "error")}
-                />
-                <Show when={!property.required}>
-                  <button
-                    type="button"
-                    class="component-property-clear"
-                    disabled={fieldValue(props, name, property) === undefined && props.drafts[draftKey(props.instanceId, name)] === undefined}
-                    onClick={() => {
-                      const key = draftKey(props.instanceId, name);
-                      if (props.onCommit(name, undefined)) props.onDraftChange(key, undefined);
-                    }}
-                  >
-                    Reset
-                  </button>
+              <Show when={storage === "runtime"} fallback={
+                <Show when={storage === "editorOnly"} fallback={
+                  <>
+                    <span class="component-property-storage-tag">SAVED</span>
+                    <PropertyControl
+                      field={props}
+                      name={name}
+                      schema={property}
+                      invalid={props.diagnostics.some((item) => item.propertyName === name && item.severity === "error")}
+                    />
+                    <Show when={!property.required}>
+                      <button
+                        type="button"
+                        class="component-property-clear"
+                        disabled={fieldValue(props, name, property) === undefined && props.drafts[draftKey(props.instanceId, name)] === undefined}
+                        onClick={() => {
+                          const key = draftKey(props.instanceId, name);
+                          if (props.onCommit(name, undefined)) props.onDraftChange(key, undefined);
+                        }}
+                      >
+                        Reset
+                      </button>
+                    </Show>
+                    <PropertyMessages diagnostics={props.diagnostics} propertyName={name} />
+                  </>
+                }>
+                  <div class="component-property-storage-note">Editor-only value is not stored in Scene documents.</div>
                 </Show>
-                <PropertyMessages diagnostics={props.diagnostics} propertyName={name} />
+              }>
+                <div class="runtime-component-property" data-testid={`runtime-property-${props.instanceId}-${name}`}>
+                  <span class="component-property-storage-tag runtime-property-tag">LIVE · SESSION ONLY</span>
+                  <Show when={props.runtimeSessionActive} fallback={
+                    <span class="runtime-property-unavailable">Play Preview to inspect the live value.</span>
+                  }>
+                    <RuntimePropertyValue state={props.runtimeState} name={name} />
+                  </Show>
+                </div>
               </Show>
             </div>
           );

@@ -40,6 +40,15 @@ Host-neutral contracts and the first component-object Core slice.
 - Aborted or failed hydration disposes the partial world. Session `dispose()` is idempotent and attempts every Component cleanup even if a callback throws.
 - Prefab instances resolve their Project Prefab reference but are not expanded into instantiated subtrees by this slice; nested Prefab expansion, propagation and override behavior remain owned by COD-8.
 
+### Live runtime inspection and identity (COD-31)
+
+- ComponentBehavior.inspect() is an optional, synchronous, side-effect-free, explicit inspection capability. Implementations return a fresh data snapshot; the capability is not inferred from behavior fields and is never called by the simulation lifecycle.
+- ComponentWorld.inspectComponent(instanceId) returns only schema properties declared with storage: runtime. Persisted and editor-only properties are not read through this API.
+- Inspection reads own data properties only; accessors are never invoked. Returned values are copied into bounded immutable JSON snapshots. Functions, symbols, accessors, cycles, non-finite numbers, class instances, proxies that fail reflection and values exceeding depth/size budgets are reported as unsupported. An exception from the provider is isolated as an error for the corresponding fields.
+- Runtime property values must match the declared safe data type and reference shape. Persisted authoring constraints (for example min/max/integer/pattern) are not used to hide transient runtime observations. The API never traverses arbitrary behavior fields and never exposes a Component behavior object, Phaser GameObject, DOM object or other live reference.
+- Runtime Node and Component identities are scoped by Project ID, Scene ID and Preview session ID. A Component identity uses its persisted instance ID; typeId is descriptive metadata and never identifies an attachment. A Restart creates a new scope, so a previous selection cannot be reused.
+- Preview snapshots keep persisted values and live runtime values in separate fields. They are immutable reads; they do not mutate Project/Scene data. Moving runtime selection to an authoring object is an explicit Host action that must verify the exact current session identity.
+
 ### Systems, update and disposal
 
 - The host is the sole tick owner and calls `ComponentWorld.update(deltaSeconds)`. Delta must be finite and non-negative. Core creates no Game, Scene Manager, ticker or `requestAnimationFrame` loop.
