@@ -14,6 +14,21 @@ export interface ProjectDirectorySnapshot {
   root: ProjectTreeEntry;
 }
 
+export interface TypeScriptSourceDiagnostic {
+  code: number;
+  severity: "error" | "warning";
+  message: string;
+  path?: string;
+  line?: number;
+  column?: number;
+}
+
+export interface TypeScriptSourceCheckResult {
+  compilerVersion: string;
+  checkedFiles: number;
+  diagnostics: TypeScriptSourceDiagnostic[];
+}
+
 interface ProjectOperationError {
   error?: string;
   diagnostics?: Array<{ path?: string; message: string }>;
@@ -118,6 +133,35 @@ export async function writeProjectFile(
 
 export async function createProjectDirectory(relativePath: string): Promise<void> {
   await callProjectOperation("project.createDirectory", { relativePath });
+}
+
+export async function checkProjectTypeScript(
+  relativePath: string,
+  source: string,
+): Promise<TypeScriptSourceCheckResult> {
+  const result = await callProjectOperation<TypeScriptSourceCheckResult>("project.checkTypeScript", {
+    relativePath,
+    source,
+  });
+  if (
+    !result ||
+    typeof result.compilerVersion !== "string" ||
+    !Number.isInteger(result.checkedFiles) ||
+    result.checkedFiles < 0 ||
+    !Array.isArray(result.diagnostics) ||
+    result.diagnostics.some((diagnostic) =>
+      !diagnostic ||
+      !Number.isInteger(diagnostic.code) ||
+      (diagnostic.severity !== "error" && diagnostic.severity !== "warning") ||
+      typeof diagnostic.message !== "string" ||
+      (diagnostic.path !== undefined && typeof diagnostic.path !== "string") ||
+      (diagnostic.line !== undefined && (!Number.isInteger(diagnostic.line) || diagnostic.line < 1)) ||
+      (diagnostic.column !== undefined && (!Number.isInteger(diagnostic.column) || diagnostic.column < 1)),
+    )
+  ) {
+    throw new Error("The Project service returned invalid TypeScript diagnostics.");
+  }
+  return result;
 }
 
 export async function renameProjectEntry(
