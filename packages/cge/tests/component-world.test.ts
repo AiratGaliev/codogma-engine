@@ -990,6 +990,7 @@ test("marks unsupported runtime values without invoking accessors or exposing ar
       nonFinite: { type: "number", storage: "runtime" },
       dateValue: { type: "string", storage: "runtime" },
       circularValue: { type: "string", storage: "runtime" },
+      proxyValue: { type: "string", storage: "runtime" },
       accessorValue: { type: "string", storage: "runtime" },
     },
   };
@@ -1002,6 +1003,9 @@ test("marks unsupported runtime values without invoking accessors or exposing ar
           nonFinite: Number.POSITIVE_INFINITY,
           dateValue: new Date(0),
           circularValue: circular,
+          proxyValue: new Proxy({}, {
+            getPrototypeOf() { throw new Error("proxy trap"); },
+          }),
         };
         Object.defineProperty(result, "accessorValue", {
           enumerable: true,
@@ -1019,6 +1023,7 @@ test("marks unsupported runtime values without invoking accessors or exposing ar
   assert.equal(inspected?.properties.nonFinite?.status, "unsupported");
   assert.equal(inspected?.properties.dateValue?.status, "unsupported");
   assert.equal(inspected?.properties.circularValue?.status, "unsupported");
+  assert.equal(inspected?.properties.proxyValue?.status, "unsupported");
   assert.equal(inspected?.properties.accessorValue?.status, "unsupported");
   assert.equal(getterCalls, 0);
   world.dispose();

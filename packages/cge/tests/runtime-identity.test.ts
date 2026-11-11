@@ -29,6 +29,17 @@ test("rejects stale Preview sessions, other Projects and malformed IDs", () => {
   assert.equal(isRuntimeIdentityInScope({ ...identity, nodeId: "invalid/node" }, scope), false);
   assert.equal(isRuntimeIdentityInScope({ ...identity, componentInstanceId: "" }, scope), false);
   assert.equal(isRuntimeIdentityInScope({ ...identity, kind: "unknown" }, scope), false);
+  let getterCalls = 0;
+  const accessorIdentity = Object.create(null) as Record<string, unknown>;
+  for (const [key, value] of Object.entries(identity)) {
+    Object.defineProperty(accessorIdentity, key, { enumerable: true, value });
+  }
+  Object.defineProperty(accessorIdentity, "sessionId", {
+    enumerable: true,
+    get() { getterCalls += 1; return scope.sessionId; },
+  });
+  assert.equal(isRuntimeIdentityInScope(accessorIdentity, scope), false);
+  assert.equal(getterCalls, 0);
 });
 
 test("requires a Component instance ID and rejects type-only identity construction", () => {

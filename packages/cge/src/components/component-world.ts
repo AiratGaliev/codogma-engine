@@ -197,6 +197,42 @@ function captureInspectionCallback(behavior: ComponentBehavior): (() => unknown)
   return undefined;
 }
 
+function safeSnapshotInspectionValue(value: unknown, budget: InspectionBudget): JsonValue | undefined {
+  try {
+    return snapshotInspectionValue(value, budget);
+  } catch {
+    // Proxy traps and hostile object reflection must degrade to "unsupported".
+    return undefined;
+  }
+}
+
+function consumeInspectionThenable(value: unknown): boolean {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) return false;
+  try {
+    let owner: object | null = value as object;
+    let depth = 0;
+    while (owner && depth < 8) {
+      const descriptor = Object.getOwnPropertyDescriptor(owner, "then");
+      if (descriptor) {
+        if (!("value" in descriptor)) return true;
+        if (typeof descriptor.value !== "function") return false;
+        try {
+          // Consume an eventual rejection without awaiting or accepting the value.
+          descriptor.value.call(value, () => undefined, () => undefined);
+        } catch {
+          // Invalid thenables are still rejected as inspection values.
+        }
+        return true;
+      }
+      owner = Object.getPrototypeOf(owner) as object | null;
+      depth += 1;
+    }
+  } catch {
+    return true;
+  }
+  return false;
+}
+
 function inspectionErrorMessage(error: unknown): string {
   try {
     if (error instanceof Error && typeof error.message === "string" && error.message.length > 0) {
@@ -471,6 +507,9 @@ export class ComponentWorld {
     } else {
       try {
         values = component.inspect();
+        if (consumeInspectionThenable(values)) {
+          inspectionError = "Component inspect() must return synchronously.";
+        }
       } catch (error) {
         inspectionError = inspectionErrorMessage(error);
       }
@@ -510,7 +549,7 @@ export class ComponentWorld {
         continue;
       }
 
-      const safeValue = snapshotInspectionValue(descriptor.value, budget);
+      const safeValue = safeSnapshotInspectionValue(descriptor.value, budget);
       if (safeValue === undefined || !matchesRuntimePropertySchema(schema, safeValue)) {
         properties[name] = Object.freeze({ status: "unsupported", reason: "unsupported-value" });
         continue;

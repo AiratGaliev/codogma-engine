@@ -63,14 +63,18 @@ export function isRuntimeIdentityInScope(
     assertScope(scope);
     if (identity === null || typeof identity !== "object" || Array.isArray(identity)) return false;
     const candidate = identity as Record<string, unknown>;
-    if (candidate.projectId !== scope.projectId ||
-        candidate.sceneId !== scope.sceneId ||
-        candidate.sessionId !== scope.sessionId ||
-        !isValidStableId(candidate.nodeId)) return false;
-    if (candidate.kind === "node") return true;
-    return candidate.kind === "component" &&
-      isValidStableId(candidate.componentInstanceId) &&
-      isValidStableId(candidate.typeId);
+    const readOwnData = (key: string): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
+      return descriptor && "value" in descriptor ? descriptor.value : undefined;
+    };
+    if (readOwnData("projectId") !== scope.projectId ||
+        readOwnData("sceneId") !== scope.sceneId ||
+        readOwnData("sessionId") !== scope.sessionId ||
+        !isValidStableId(readOwnData("nodeId"))) return false;
+    if (readOwnData("kind") === "node") return true;
+    return readOwnData("kind") === "component" &&
+      isValidStableId(readOwnData("componentInstanceId")) &&
+      isValidStableId(readOwnData("typeId"));
   } catch {
     return false;
   }

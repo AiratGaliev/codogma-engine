@@ -11,7 +11,7 @@ The Phaser 4.2.1 runtime integration for host-neutral Codogma Core sessions: a l
 - Synchronize Core-owned Transform, Node activity and Component enabled state into Phaser views on the Phaser Scene update event.
 - Delegate activate/deactivate/pause/resume/dispose to the existing Core session and release Phaser-owned resources idempotently.
 - Compose the native Scene Loader, Phaser adapter and Core Scene Manager behind one browser-owned Phaser Game through `createBrowserPreviewHost`.
-- Expose session state, Play/Pause/Resume/Restart/Stop, viewport resize, and session-tagged log/error events to an external browser host.
+- Expose session state, Play/Pause/Resume/Restart/Stop, viewport resize, session-tagged log/error events and immutable live runtime snapshots/selection to an external browser host.
 
 The low-level adapter does **not** parse Project/Scene documents, discover modules, register Components, duplicate Core lifecycle, create a Game/Scene, install a ticker, call `requestAnimationFrame`, own physics, or import the optional ECS packages. The separate Browser Preview Host is the browser composition boundary; it owns exactly one Phaser Game and uses the existing Scene UPDATE event as the only frame source.
 
@@ -89,6 +89,14 @@ await preview.play();
 Host states are `idle`, `starting`, `running`, `paused`, `stopping`, `stopped`, `failed` and `disposed`. Repeated Play/Pause/Resume/Stop/Dispose calls are safe; Restart always requests a new session. Each run has a distinct `sessionId`. Log and error events carry `sessionId`, `projectId` and `sceneId`; runtime diagnostics retain the Phaser/Core source and relevant Node/Component identity. Event observer exceptions are isolated from the game lifecycle.
 
 The Host does not create an iframe, browser window, worker, process, RAF loop or alternate ticker. It does not resolve arbitrary TypeScript modules or download arbitrary asset paths: module registrations and document/asset providers are explicitly supplied by the embedding host. The browser renderer/focus/visibility and full user workflow remain subject to independent browser acceptance in CODQA-15; asset loading, live Inspector transport, physics and Preview/Build parity are separate capabilities.
+
+### Live runtime identity and inspection
+
+While a Preview is running or paused, getRuntimeSnapshot() returns an immutable view scoped to the current Project, Scene and Preview session. Each Node is mapped by its Project Model Node ID; each Component is mapped by its exact instance ID, with typeId retained only as descriptive type metadata. Mapping is validated against the captured Scene document and the live Core graph; missing or mismatched targets make the snapshot unavailable rather than falling back to names or paths.
+
+Every Node snapshot keeps the persisted Transform/activity beside a separate copy of its live runtime Transform/activity. Each Component snapshot keeps persisted properties beside values reported by ComponentWorld.inspectComponent(). Only schema-declared storage: runtime properties are eligible for live inspection. Providers opt in with ComponentBehavior.inspect(); the Core reads own data properties only, validates them against the schema and returns bounded immutable JSON. Unsupported values and provider exceptions are represented as per-property states, never as raw runtime references.
+
+selectRuntimeIdentity(identity) accepts only a Node/Component present in the exact current session and emits a runtime-selection event. A Restart invalidates the previous selection scope; Stop/disposal clears the mapping and selection. The Preview API does not write runtime values into authoring data. An Editor Host must explicitly map the validated Node/Component identity to its selection model; the API itself does not claim that a UI workflow is connected.
 
 ## Ownership and synchronization
 
