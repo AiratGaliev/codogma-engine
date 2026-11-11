@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { checkProjectTypeScript } from "../server/typescript-project-diagnostics.mjs";
+import { checkProjectTypeScript } from "../server/typescript-project-diagnostics.mts";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const fixtureRoot = join(repositoryRoot, "packages", "cge", "tests", "fixtures", "acceptance-project");

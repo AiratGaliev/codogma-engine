@@ -25,7 +25,7 @@ import {
     getChatSystemPrompt
 } from "./mcp.mjs"
 import { safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync, writeNewFileSafely } from "./path-security.mjs"
-import { checkProjectTypeScript } from "./typescript-project-diagnostics.mjs"
+import { checkProjectTypeScript } from "./typescript-project-diagnostics.mts"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 import { readRequestBuffer } from "./request-body.mjs"
 import {
