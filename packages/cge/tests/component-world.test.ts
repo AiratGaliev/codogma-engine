@@ -921,3 +921,130 @@ test("rolls back failed onStart and onUpdate hooks without affecting sibling com
   ]);
   world.dispose();
 });
+
+
+test("inspects only declared runtime values and reads their live state per component instance", () => {
+  const runtimeSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.test.live-inspection",
+    name: "Live Inspection",
+    version: "1.0.0",
+    properties: {
+      savedSpeed: { type: "number" },
+      elapsedSeconds: { type: "number", storage: "runtime" },
+    },
+  };
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: runtimeSchema,
+    create: ({ properties }) => {
+      let elapsedSeconds = Number(properties.savedSpeed);
+      return {
+        onUpdate: (deltaSeconds) => { elapsedSeconds += deltaSeconds; },
+        inspect: () => ({ elapsedSeconds, savedSpeed: 999, privateState: "must not be exposed" }),
+      };
+    },
+  });
+
+  const world = new ComponentWorld("scene-live-inspection", registry);
+  world.createNode({ id: "node-live-a", name: "Live A" });
+  world.createNode({ id: "node-live-b", name: "Live B" });
+  world.attachComponent("node-live-a", runtimeSchema.typeId, { savedSpeed: 2 }, { instanceId: "instance-live-a" });
+  world.attachComponent("node-live-b", runtimeSchema.typeId, { savedSpeed: 10 }, { instanceId: "instance-live-b" });
+
+  const firstBefore = world.inspectComponent("instance-live-a");
+  const secondBefore = world.inspectComponent("instance-live-b");
+  assert.equal(firstBefore?.properties.elapsedSeconds?.status, "available");
+  assert.equal(secondBefore?.properties.elapsedSeconds?.status, "available");
+  if (firstBefore?.properties.elapsedSeconds?.status !== "available" ||
+      secondBefore?.properties.elapsedSeconds?.status !== "available") {
+    assert.fail("Expected independent runtime inspection values.");
+  }
+  assert.equal(firstBefore.properties.elapsedSeconds.value, 2);
+  assert.equal(secondBefore.properties.elapsedSeconds.value, 10);
+  assert.equal("savedSpeed" in firstBefore.properties, false);
+  assert.equal("privateState" in firstBefore.properties, false);
+
+  world.update(0.5);
+  const firstAfter = world.inspectComponent("instance-live-a");
+  const secondAfter = world.inspectComponent("instance-live-b");
+  if (firstAfter?.properties.elapsedSeconds?.status !== "available" ||
+      secondAfter?.properties.elapsedSeconds?.status !== "available") {
+    assert.fail("Expected live values after update.");
+  }
+  assert.equal(firstAfter.properties.elapsedSeconds.value, 2.5);
+  assert.equal(secondAfter.properties.elapsedSeconds.value, 10.5);
+  world.dispose();
+});
+
+test("marks unsupported runtime values without invoking accessors or exposing arbitrary objects", () => {
+  let getterCalls = 0;
+  const circular: Record<string, unknown> = {};
+  circular.self = circular;
+  const runtimeSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.test.unsafe-inspection",
+    name: "Unsafe Inspection",
+    version: "1.0.0",
+    properties: {
+      nonFinite: { type: "number", storage: "runtime" },
+      dateValue: { type: "string", storage: "runtime" },
+      circularValue: { type: "string", storage: "runtime" },
+      accessorValue: { type: "string", storage: "runtime" },
+    },
+  };
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: runtimeSchema,
+    create: () => ({
+      inspect: () => {
+        const result: Record<string, unknown> = {
+          nonFinite: Number.POSITIVE_INFINITY,
+          dateValue: new Date(0),
+          circularValue: circular,
+        };
+        Object.defineProperty(result, "accessorValue", {
+          enumerable: true,
+          get() { getterCalls += 1; return "must not execute"; },
+        });
+        return result;
+      },
+    }),
+  });
+  const world = new ComponentWorld("scene-unsafe-inspection", registry);
+  world.createNode({ id: "node-unsafe", name: "Unsafe" });
+  world.attachComponent("node-unsafe", runtimeSchema.typeId, {}, { instanceId: "instance-unsafe" });
+
+  const inspected = world.inspectComponent("instance-unsafe");
+  assert.equal(inspected?.properties.nonFinite?.status, "unsupported");
+  assert.equal(inspected?.properties.dateValue?.status, "unsupported");
+  assert.equal(inspected?.properties.circularValue?.status, "unsupported");
+  assert.equal(inspected?.properties.accessorValue?.status, "unsupported");
+  assert.equal(getterCalls, 0);
+  world.dispose();
+});
+
+test("isolates Component inspection exceptions and reports them as runtime errors", () => {
+  const runtimeSchema: ComponentTypeSchemaV1 = {
+    schemaVersion: 1,
+    typeId: "com.codogma.test.inspection-error",
+    name: "Inspection Error",
+    version: "1.0.0",
+    properties: { value: { type: "number", storage: "runtime" } },
+  };
+  const registry = new ComponentRegistry();
+  registry.register({
+    schema: runtimeSchema,
+    create: () => ({ inspect: () => { throw new Error("provider unavailable"); } }),
+  });
+  const world = new ComponentWorld("scene-inspection-error", registry);
+  world.createNode({ id: "node-inspection-error", name: "Inspection Error" });
+  world.attachComponent("node-inspection-error", runtimeSchema.typeId, {}, { instanceId: "instance-inspection-error" });
+
+  assert.deepEqual(world.inspectComponent("instance-inspection-error")?.properties.value, {
+    status: "error",
+    message: "provider unavailable",
+  });
+  assert.equal(world.inspectComponent("missing-instance"), undefined);
+  world.dispose();
+});

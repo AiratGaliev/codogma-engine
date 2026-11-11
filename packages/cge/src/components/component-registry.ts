@@ -20,6 +20,11 @@ export interface ComponentBehavior {
   onUpdate?(deltaSeconds: number): void;
   onDisable?(): void;
   onDestroy?(): void;
+  /**
+   * Explicit, synchronous inspection surface for schema-declared runtime
+   * properties. This does not expose arbitrary behavior fields or objects.
+   */
+  inspect?(): Readonly<Record<string, unknown>>;
 }
 
 /**
