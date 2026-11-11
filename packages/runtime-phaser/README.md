@@ -1,6 +1,6 @@
 # @codogma/runtime-phaser
 
-The optional Phaser 4.2.1 view adapter for host-neutral Codogma Core runtime sessions.
+The Phaser 4.2.1 runtime integration for host-neutral Codogma Core sessions: a low-level view adapter plus a browser-first Preview Host composition.
 
 ## Responsibilities
 
@@ -10,8 +10,10 @@ The optional Phaser 4.2.1 view adapter for host-neutral Codogma Core runtime ses
 - Keep stable Node ID ↔ Container and Component instance ID ↔ GameObject mappings for the lifetime of one loaded session.
 - Synchronize Core-owned Transform, Node activity and Component enabled state into Phaser views on the Phaser Scene update event.
 - Delegate activate/deactivate/pause/resume/dispose to the existing Core session and release Phaser-owned resources idempotently.
+- Compose the native Scene Loader, Phaser adapter and Core Scene Manager behind one browser-owned Phaser Game through `createBrowserPreviewHost`.
+- Expose session state, Play/Pause/Resume/Restart/Stop, viewport resize, and session-tagged log/error events to an external browser host.
 
-The adapter does **not** parse Project/Scene documents, discover modules, register Components, duplicate Core lifecycle, create a Game/Scene, install a ticker, call `requestAnimationFrame`, own physics, or import the optional ECS packages.
+The low-level adapter does **not** parse Project/Scene documents, discover modules, register Components, duplicate Core lifecycle, create a Game/Scene, install a ticker, call `requestAnimationFrame`, own physics, or import the optional ECS packages. The separate Browser Preview Host is the browser composition boundary; it owns exactly one Phaser Game and uses the existing Scene UPDATE event as the only frame source.
 
 ## Install and compose
 
@@ -31,10 +33,11 @@ const sceneLoader = new ProjectSceneLoader({
 const runtimeLoader = createPhaserRuntimeSceneLoader(this, sceneLoader, {
   projectId: project.id,
   componentViewFactories: {
-    "com.example.sprite": ({ scene, document, node }) => {
-      const asset = document.properties.sprite;
-      // Resolve this reference through the host's asset service.
-      return scene.add.image(0, 0, resolveTextureKey(asset));
+    "com.example.sprite": (context) => {
+      const assetId = (context.document.properties.sprite as { assetId: string }).assetId;
+      const asset = context.getAsset(assetId);
+      if (!asset) throw new Error("Component references an unknown Project Asset.");
+      return context.scene.add.image(0, 0, resolveTextureKey(asset));
     },
   },
 });
@@ -44,9 +47,52 @@ Factories are explicit and type-specific. Factory-created GameObjects use Node-l
 
 Use the returned loader as the SceneLoader passed to Core's existing Scene Manager/runtime composition. The adapter wraps each loaded Core session; the Scene Manager remains responsible for transitions and lifecycle ordering.
 
+## Browser Preview Host
+
+Use the browser composition when an external browser host needs to run a native Project Model Scene without Tauri, Electron, the editor UI or the local HTTP server. It creates one Phaser Game for the Host lifetime and keeps the low-level adapter and Core Scene Manager as the only owners of runtime views and Scene lifecycle.
+
+```ts
+import Phaser from "phaser";
+import { ComponentRegistry } from "@codogma/cge";
+import { createBrowserPreviewHost } from "@codogma/runtime-phaser";
+
+const preview = createBrowserPreviewHost({
+  phaser: Phaser,
+  parent: document.querySelector("#preview")!,
+  project,
+  sceneId: "scene-level",
+  resolveComponentRegistry: async ({ project, sceneId, signal }) =>
+    resolvePreviewModules(project, sceneId, signal), // Core module resolver + TypeScript diagnostics
+  readAssetDocument: (asset, signal) => projectFiles.readText(asset.path, signal),
+  componentViewFactories: {
+    "com.example.sprite": (context) => {
+      const assetReference = context.getAsset("asset-player");
+      if (!assetReference) throw new Error("Sprite Asset is not declared by the Project.");
+      return createSpriteView(context.scene, assetReference, context.document);
+    },
+  },
+});
+
+preview.subscribe("error", (event) => reportPreviewError(event));
+await preview.play();
+```
+
+`BrowserPreviewHostOptions` captures and freezes the Project JSON when the Host is created. Supply either a pre-resolved `registry` or `resolveComponentRegistry`; the resolver runs after a Preview `sessionId` is allocated and before Phaser Game boot. It can compose Core `resolveProjectComponentRegistry` with the Editor's TypeScript diagnostics and return structured module/compiler diagnostics. Errors are emitted with that session ID and prevent Phaser startup; warnings/info are routed as session-scoped log events. A successful registry is snapshotted and reused on Restart. A Scene document is cached after its first successful read. Create a new Host to adopt changed authoring data or module definitions. The resolver's document provider accepts only Asset references declared by the captured Project and caches successful reads. Component factories receive `getAsset(assetId)`, which returns only frozen copies of Asset references validated from that captured Project snapshot; actual file loading/rendering stays with the host's explicit providers.
+
+- `play()` loads the selected Scene through `ProjectSceneLoader` → `PhaserRuntimeSceneLoader` → `SceneManager`.
+- `pause()` / `resume()` pause or resume Core simulation; the Phaser Game continues rendering. The Host does not pause the entire Game loop.
+- `restart()` disposes the current Scene session and starts a clean session from the captured inputs, reusing the same Game.
+- `stop()` disposes the current runtime session but keeps the Game available for another Play.
+- `resize(width, height)` validates finite positive dimensions and delegates to Phaser Scale; dimensions set before the first Play are used for the initial Game configuration.
+- `dispose()` is terminal: it disposes Core/Phaser session resources and destroys the Game. Phaser completes Game destruction asynchronously and signals `Phaser.Core.Events.DESTROY`. Phaser boot is bounded by `startupTimeoutMs` (default 15 seconds; accepted range 1–60,000 ms); a boot timeout or external pre-ready Game destruction fails the session and releases the partial Game.
+
+Host states are `idle`, `starting`, `running`, `paused`, `stopping`, `stopped`, `failed` and `disposed`. Repeated Play/Pause/Resume/Stop/Dispose calls are safe; Restart always requests a new session. Each run has a distinct `sessionId`. Log and error events carry `sessionId`, `projectId` and `sceneId`; runtime diagnostics retain the Phaser/Core source and relevant Node/Component identity. Event observer exceptions are isolated from the game lifecycle.
+
+The Host does not create an iframe, browser window, worker, process, RAF loop or alternate ticker. It does not resolve arbitrary TypeScript modules or download arbitrary asset paths: module registrations and document/asset providers are explicitly supplied by the embedding host. The browser renderer/focus/visibility and full user workflow remain subject to independent browser acceptance in CODQA-15; asset loading, live Inspector transport, physics and Preview/Build parity are separate capabilities.
+
 ## Ownership and synchronization
 
-- **Core owns mutable state.** Node Transform and Component enabled state are read from the Core runtime session. Factories receive immutable identity/state snapshots plus an isolated copy of their Component document. The adapter never copies Phaser mutations back into Core and never mutates the persisted Scene snapshot.
+- **Core owns mutable state.** Node Transform and Component enabled state are read from the Core runtime session. Factories receive immutable identity/state snapshots, an isolated copy of their Component document and a lookup for Asset references validated in the Project snapshot. The adapter never copies Phaser mutations back into Core and never mutates the persisted Scene snapshot.
 - **Phaser owns views.** Node Containers and factory-created GameObjects are adapter-owned and destroyed on session disposal, Scene shutdown or Scene destruction.
 - **Hierarchy is local-space.** Every Core Node maps to a Phaser Container. Root Containers are attached to the Scene display list; child Containers are attached to their parent. Phaser 4.2.1 Containers use a fixed local origin of `(0, 0)`; Core `originX/originY` are applied to each Component GameObject that supports `setOrigin`, not to the Container itself.
 - **Sibling order is deterministic.** Component views for a Node are inserted first in persisted component order, then child Node Containers in Scene graph order.
@@ -56,6 +102,8 @@ Use the returned loader as the SceneLoader passed to Core's existing Scene Manag
 
 ## Public API
 
+- `createBrowserPreviewHost(options)`
+- `BrowserPreviewHost` / `BrowserPreviewHostOptions` / `BrowserPreviewHostEvents`
 - `createPhaserRuntimeSceneLoader(scene, coreLoader, options)`
 - `PhaserRuntimeSceneLoader`
 - `PhaserRuntimeSceneSession`
@@ -66,7 +114,7 @@ Use the returned loader as the SceneLoader passed to Core's existing Scene Manag
 
 ## Deliberate limits
 
-This first adapter slice supports display-object hierarchy and Transform projection only. It does not create physics bodies, load assets, infer rendering from arbitrary Component properties, synchronize arbitrary Phaser-side Transform edits, update Core's persisted documents, or provide the complete Preview Host. Those capabilities require explicit owner contracts and separate acceptance.
+The low-level adapter supports display-object hierarchy and Transform projection only. It does not create physics bodies, load assets, infer rendering from arbitrary Component properties, synchronize arbitrary Phaser-side Transform edits or update Core's persisted documents. Browser Preview Host lifecycle is implemented, while concrete asset loading, physics, live Inspector transport and complete Preview/Build parity require separate owner contracts and acceptance.
 
 ## Verification and performance
 

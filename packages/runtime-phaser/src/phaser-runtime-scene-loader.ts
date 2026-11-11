@@ -1,5 +1,6 @@
 import type Phaser from "phaser";
 import type {
+  AssetReference,
   ComponentInstanceDocument,
   NodeDocument,
   ProjectRuntimeSceneSession,
@@ -38,6 +39,8 @@ export interface PhaserComponentViewContext {
   readonly component: Readonly<RuntimeComponentSnapshot>;
   /** Isolated JSON copy of validated authoring data; mutations cannot reach the Core snapshot. */
   readonly document: ComponentInstanceDocument;
+  /** Returns an immutable copy of an Asset reference validated in the native Project snapshot. */
+  readonly getAsset: (assetId: string) => AssetReference | undefined;
 }
 
 export interface PhaserRuntimeSceneLoaderOptions {
@@ -239,7 +242,11 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
   }
 
   async deactivate(): Promise<void> {
-    this.assertUsable();
+    // Phaser may shut a Scene down independently (for example, when its Game
+    // is destroyed). The Scene event has already started this session's
+    // idempotent disposal, so a later SceneManager cleanup must not attempt to
+    // deactivate a disposed adapter session again.
+    if (this.isDisposed) return;
     await this.coreSession.deactivate();
     this.syncViews();
   }
@@ -348,6 +355,10 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
             node: this.nodeSnapshots.get(node.id)!,
             component: Object.freeze({ ...component }),
             document: cloneComponentDocument(persisted.component),
+            getAsset: (assetId) => {
+              const asset = this.coreSession.graph.getAsset(assetId);
+              return asset ? Object.freeze({ ...asset }) : undefined;
+            },
           });
           if (!view || typeof view.destroy !== "function") {
             throw new TypeError("A Component view factory must return a Phaser GameObject.");

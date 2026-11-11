@@ -1,7 +1,7 @@
 {
   "name": "@codogma/runtime-phaser",
   "version": "0.1.0",
-  "description": "Phaser 4.2.1 runtime adapter for host-neutral Codogma Core scenes.",
+  "description": "Phaser 4.2.1 runtime adapter and browser-first Preview Host for host-neutral Codogma Core scenes.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
