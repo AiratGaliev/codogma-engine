@@ -88,7 +88,7 @@ await preview.play();
 
 Host states are `idle`, `starting`, `running`, `paused`, `stopping`, `stopped`, `failed` and `disposed`. Repeated Play/Pause/Resume/Stop/Dispose calls are safe; Restart always requests a new session. Each run has a distinct `sessionId`. Log and error events carry `sessionId`, `projectId` and `sceneId`; runtime diagnostics retain the Phaser/Core source and relevant Node/Component identity. Event observer exceptions are isolated from the game lifecycle.
 
-The Host does not create an iframe, browser window, worker, process, RAF loop or alternate ticker. It does not resolve arbitrary TypeScript modules or download arbitrary asset paths: module registrations and document/asset providers are explicitly supplied by the embedding host. The browser renderer/focus/visibility and full user workflow remain subject to independent browser acceptance in CODQA-15; asset loading, live Inspector transport, physics and Preview/Build parity are separate capabilities.
+The Host does not create an iframe, browser window, worker, process, RAF loop or alternate ticker. It does not resolve arbitrary TypeScript modules or download arbitrary asset paths: module registrations and document/asset providers are explicitly supplied by the embedding host. The browser renderer/focus/visibility and full user workflow remain subject to independent browser acceptance in CODQA-15; User Component module loading, asset loading, physics and Preview/Build parity are separate capabilities. The runtime snapshot/selection API is host-neutral and does not itself wire the SolidJS authoring selection or Inspector UI.
 
 ### Live runtime identity and inspection
 
