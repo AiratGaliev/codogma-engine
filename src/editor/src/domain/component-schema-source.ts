@@ -28,7 +28,9 @@ function isComponentFactoryExpression(
   resolving = new Set<string>(),
 ): boolean {
   const node = unwrapTypeExpression(ts, input);
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return true;
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+    return !node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+  }
   if (!ts.isIdentifier(node) || resolving.has(node.text)) return false;
   const declaration = declarations.get(node.text);
   if (!declaration?.initializer) return false;
@@ -106,7 +108,8 @@ export async function parseComponentSchemaSource(
         if (propertyName === "create") {
           factoryCount += 1;
           const validFactory = ts.isMethodDeclaration(property)
-            ? property.body !== undefined
+            ? property.body !== undefined &&
+              !property.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
             : ts.isPropertyAssignment(property) &&
               isComponentFactoryExpression(ts, property.initializer, declarations);
           if (!validFactory || factoryCount > 1) {

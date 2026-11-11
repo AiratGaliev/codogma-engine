@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { parseProjectDocument, type ProjectDocumentV1 } from "../packages/cge/dist/index.js";
+import { parseProjectDocument } from "../packages/cge/dist/index.js";
 import {
   readFileSafely,
   readProjectDirectoryEntriesSafelySync,
@@ -26,6 +26,10 @@ export interface ProjectTypeScriptCheckResult {
   compilerVersion: string;
   checkedFiles: number;
   diagnostics: ProjectTypeScriptDiagnostic[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isWithinDirectory(directory: string, candidate: string): boolean {
@@ -187,9 +191,7 @@ function readCompilerOptions(projectRoot: string): {
 
   const parsed = ts.parseConfigFileTextToJson(configPath, content);
   if (parsed.error) diagnostics.push(toDiagnostic(parsed.error, projectRoot));
-  const config = parsed.config && typeof parsed.config === "object"
-    ? parsed.config as Record<string, unknown>
-    : {};
+  const config: Record<string, unknown> = isRecord(parsed.config) ? parsed.config : {};
   if (config.extends) {
     diagnostics.push({
       code: 90002,
@@ -198,11 +200,7 @@ function readCompilerOptions(projectRoot: string): {
       path: "tsconfig.json",
     });
   }
-  const rawOptions = config.compilerOptions &&
-      typeof config.compilerOptions === "object" &&
-      !Array.isArray(config.compilerOptions)
-    ? config.compilerOptions as Record<string, unknown>
-    : {};
+  const rawOptions = isRecord(config.compilerOptions) ? config.compilerOptions : {};
   const converted = ts.convertCompilerOptionsFromJson(rawOptions, projectRoot, configPath);
   diagnostics.push(...converted.errors.map((item) => toDiagnostic(item, projectRoot)));
   return {
@@ -232,8 +230,11 @@ export function checkProjectTypeScript(
   const manifestPath = safeJoin(projectRoot, "project.json");
   if (!manifestPath) throw new Error("The native Project manifest cannot be resolved safely.");
   const manifestContent = readFileSafely(projectRoot, manifestPath, "utf8", MAX_MANIFEST_BYTES);
-  const project = parseProjectDocument(manifestContent).value as ProjectDocumentV1 | undefined;
-  if (!project) throw new Error("Cannot type-check an invalid Project manifest.");
+  const parsedProject = parseProjectDocument(manifestContent);
+  if (!parsedProject.valid || !parsedProject.value) {
+    throw new Error("Cannot type-check an invalid Project manifest.");
+  }
+  const project = parsedProject.value;
 
   const activeAsset = project.assets.find((asset) =>
     asset.kind === "script" && asset.path === relativePath,

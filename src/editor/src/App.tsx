@@ -4512,8 +4512,8 @@ function App() {
                         </div>
                         <Show when={entry.schema}>
                           <div class="components-definition-meta">
-                            <span>Definition: {entry.schema!.name}</span>
-                            <span>{Object.keys(entry.schema!.properties).length} schema properties</span>
+                            <span>Definition: {entry.schema?.name ?? "Unknown"}</span>
+                            <span>{Object.keys(entry.schema?.properties ?? {}).length} schema properties</span>
                           </div>
                         </Show>
                         <Show when={entry.diagnostics.length > 0}>

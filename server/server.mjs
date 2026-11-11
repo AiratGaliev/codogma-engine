@@ -460,13 +460,7 @@ async function handleProjectOperation(req, res) {
 
                 hashCache.value = ""
                 return sendJSON(res, {
-                    entry: {
-                        name: path.basename(args.relativePath),
-                        relativePath: args.relativePath,
-                        kind: "file",
-                        size: Buffer.byteLength(args.text, "utf8"),
-                        modifiedAt: Date.now()
-                    }
+                    entry: getProjectEntry(PROJECT_DIR, args.relativePath)
                 })
             }
 

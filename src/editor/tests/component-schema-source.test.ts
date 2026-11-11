@@ -142,3 +142,29 @@ test("creates an editable Script Component starter whose static schema matches i
   assert.deepEqual(result.value?.properties, {});
   assert.match(source, /create\(_context/);
 });
+
+
+test("rejects asynchronous Component factories because Core factories are synchronous", async () => {
+  const source = `
+    export const componentDefinition = {
+      schema: {
+        schemaVersion: 1 as const,
+        typeId: "com.example.async-factory",
+        name: "Async Factory",
+        version: "1.0.0",
+        properties: {},
+      },
+      async create() {
+        return {};
+      },
+    };
+  `;
+  const result = await parseComponentSchemaSource(
+    source,
+    "AsyncFactory.ts",
+    "com.example.async-factory",
+    "1.0.0",
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.diagnostics[0]?.message ?? "", /callable method, function, or arrow function/);
+});
