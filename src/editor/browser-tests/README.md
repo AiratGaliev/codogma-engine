@@ -26,3 +26,5 @@ also check that docking does not create duplicate panel or Scene Canvas nodes.
 
 The test fixture is the repository's canonical `tests/workspace/test-typescript`
 project. The tests never point the backend at a developer's project directory.
+
+The native Script Component authoring spec also creates a Script Asset from the Components panel, verifies its explicit `componentModules` manifest registration, checks semantic diagnostics against the unsaved source buffer, and confirms the persisted starter source can be reopened after a reload. Its generated files and directories are removed in `afterEach`.
