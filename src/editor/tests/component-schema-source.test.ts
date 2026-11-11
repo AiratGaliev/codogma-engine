@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "vitest";
 import { parseComponentSchemaSource } from "../src/domain/component-schema-source.js";
+import { createNativeComponentModuleSource } from "../src/domain/component-module-source.js";
 
 const fixturePath = resolve(
   process.cwd(),
@@ -77,4 +78,24 @@ test("rejects a module that does not declare an exported Component Definition", 
 
   assert.equal(result.valid, false);
   assert.match(result.diagnostics[0]?.message ?? "", /must export a componentDefinition constant/);
+});
+
+test("creates an editable Script Component starter whose static schema matches its manifest identity", async () => {
+  const source = createNativeComponentModuleSource({
+    typeId: "com.codogma.generated.health",
+    name: 'Health "Controller"',
+    version: "1.2.0",
+  });
+  const result = await parseComponentSchemaSource(
+    source,
+    "src/components/Health.ts",
+    "com.codogma.generated.health",
+    "1.2.0",
+  );
+
+  assert.equal(result.valid, true);
+  assert.equal(result.value?.name, 'Health "Controller"');
+  assert.equal(result.value?.typeId, "com.codogma.generated.health");
+  assert.deepEqual(result.value?.properties, {});
+  assert.match(source, /create\(_context/);
 });
