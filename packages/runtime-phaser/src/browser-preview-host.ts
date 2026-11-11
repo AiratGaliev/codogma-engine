@@ -268,6 +268,11 @@ function validateViewport(width: number, height: number): void {
  * Composes the native Core Scene Loader and Phaser view adapter into one
  * browser-owned Game. Core/Phaser remain the only simulation and frame owners.
  */
+interface BrowserPreviewRuntimeContext {
+  readonly runtime: { readonly sessionId: string; readonly session: PhaserRuntimeSceneSession };
+  readonly scope: RuntimeIdentityScope;
+}
+
 class BrowserPreviewHostImpl implements BrowserPreviewHost {
   private currentState: BrowserPreviewState = "idle";
   private currentSessionId: string | null = null;
@@ -347,10 +352,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
   }
   get sceneId(): string { return this.options.sceneId; }
 
-  private getCurrentRuntimeContext(): {
-    readonly runtime: { readonly sessionId: string; readonly session: PhaserRuntimeSceneSession };
-    readonly scope: RuntimeIdentityScope;
-  } | undefined {
+  private getCurrentRuntimeContext(): BrowserPreviewRuntimeContext | undefined {
     const runtime = this.runtimeSession;
     const sessionId = this.currentSessionId;
     if (!runtime || !sessionId || runtime.sessionId !== sessionId ||
@@ -370,7 +372,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
 
   private resolveRuntimeIdentity(
     identity: RuntimeSelectionIdentity,
-    context: NonNullable<ReturnType<BrowserPreviewHostImpl["getCurrentRuntimeContext"]>>,
+    context: BrowserPreviewRuntimeContext,
   ): RuntimeSelectionIdentity | undefined {
     if (!isRuntimeIdentityInScope(identity, context.scope)) return undefined;
     const graph = context.runtime.session.coreSession.graph;
