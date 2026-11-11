@@ -11,10 +11,23 @@ import {
   type ProjectDocumentV1,
   type ProjectSceneLoaderOptions,
   type SceneManager,
+  createRuntimeEntityIdentity,
+  createRuntimeComponentIdentity,
+  isRuntimeIdentityInScope,
+  type RuntimeIdentityScope,
+  type RuntimeSelectionIdentity,
+  type RuntimeEntityIdentity,
+  type RuntimeComponentIdentity,
+  type RuntimeComponentPropertyInspection,
+  type RuntimeTransform,
+  type TransformData,
+  type NodeDocument,
+  type ComponentInstanceDocument,
 } from "@codogma/cge";
 import {
   createPhaserRuntimeSceneLoader,
   type PhaserComponentViewFactory,
+  type PhaserRuntimeSceneSession,
 } from "./phaser-runtime-scene-loader.js";
 import type { PhaserRuntimeDiagnostic } from "./errors.js";
 
@@ -65,6 +78,35 @@ export interface BrowserPreviewHostEvents {
   "state-change": BrowserPreviewStateChange;
   log: BrowserPreviewLogEvent;
   error: BrowserPreviewErrorEvent;
+  "runtime-selection": {
+    readonly sessionId: string;
+    readonly selection: RuntimeSelectionIdentity | null;
+  };
+}
+
+export interface BrowserPreviewRuntimeComponentSnapshot {
+  readonly identity: RuntimeComponentIdentity;
+  readonly enabled: boolean;
+  readonly started: boolean;
+  readonly persistedEnabled: boolean;
+  readonly persistedProperties: Readonly<Record<string, unknown>>;
+  readonly properties: Readonly<Record<string, RuntimeComponentPropertyInspection>>;
+}
+
+export interface BrowserPreviewRuntimeNodeSnapshot {
+  readonly identity: RuntimeEntityIdentity;
+  readonly name: string;
+  readonly active: boolean;
+  readonly persistedActive: boolean;
+  readonly runtimeTransform: Readonly<RuntimeTransform>;
+  readonly persistedTransform: Readonly<TransformData>;
+  readonly components: readonly BrowserPreviewRuntimeComponentSnapshot[];
+  readonly children: readonly BrowserPreviewRuntimeNodeSnapshot[];
+}
+
+/** Immutable, session-scoped view; persisted and live values remain separate. */
+export interface BrowserPreviewRuntimeSnapshot extends RuntimeIdentityScope {
+  readonly nodes: readonly BrowserPreviewRuntimeNodeSnapshot[];
 }
 
 export interface BrowserPreviewModuleDiagnostic {
@@ -130,6 +172,12 @@ export interface BrowserPreviewHost {
   readonly sessionId: string | null;
   readonly projectId: string;
   readonly sceneId: string;
+  /** Returns the current active/paused runtime only; never falls back to authoring data. */
+  getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null;
+  getRuntimeSelection(): RuntimeSelectionIdentity | null;
+  /** Selects an exact live identity from the current Project/Scene/Preview scope. */
+  selectRuntimeIdentity(identity: RuntimeSelectionIdentity): boolean;
+  clearRuntimeSelection(): void;
   subscribe<TKey extends keyof BrowserPreviewHostEvents>(
     type: TKey,
     handler: (payload: BrowserPreviewHostEvents[TKey]) => void,
@@ -223,6 +271,8 @@ function validateViewport(width: number, height: number): void {
 class BrowserPreviewHostImpl implements BrowserPreviewHost {
   private currentState: BrowserPreviewState = "idle";
   private currentSessionId: string | null = null;
+  private runtimeSession: { readonly sessionId: string; readonly session: PhaserRuntimeSceneSession } | undefined;
+  private runtimeSelection: RuntimeSelectionIdentity | null = null;
   private readonly events = createTypedEventBus<BrowserPreviewHostEvents>();
   private readonly documentSnapshots = new Map<string, string>();
   private readonly viewFactories: Readonly<Record<string, PhaserComponentViewFactory>>;
@@ -296,6 +346,150 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     return typeof id === "string" && id.length > 0 ? id : "unknown-project";
   }
   get sceneId(): string { return this.options.sceneId; }
+
+  getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null {
+    const runtime = this.runtimeSession;
+    const sessionId = this.currentSessionId;
+    if (!runtime || !sessionId || runtime.sessionId !== sessionId ||
+        !["running", "paused"].includes(this.currentState) ||
+        runtime.session.isDisposed || !runtime.session.coreSession.isActive) {
+      return null;
+    }
+
+    const graph = runtime.session.coreSession.graph;
+    const nodeDocuments = new Map<string, NodeDocument>();
+    const componentDocuments = new Map<string, { readonly nodeId: string; readonly document: ComponentInstanceDocument }>();
+    const indexDocuments = (nodes: readonly NodeDocument[]): void => {
+      for (const node of nodes) {
+        nodeDocuments.set(node.id, node);
+        for (const component of node.components) {
+          componentDocuments.set(component.id, { nodeId: node.id, document: component });
+        }
+        indexDocuments(node.children);
+      }
+    };
+    indexDocuments(graph.document.rootNodes);
+
+    const scope: RuntimeIdentityScope = {
+      projectId: this.projectId,
+      sceneId: this.sceneId,
+      sessionId,
+    };
+    const materialize = (node: typeof graph.rootNodes[number]): BrowserPreviewRuntimeNodeSnapshot | undefined => {
+      const persistedNode = nodeDocuments.get(node.id);
+      if (!persistedNode) return undefined;
+
+      const components: BrowserPreviewRuntimeComponentSnapshot[] = [];
+      for (const componentInstanceId of node.componentInstanceIds) {
+        const source = componentDocuments.get(componentInstanceId);
+        const runtimeComponent = graph.getComponent(componentInstanceId);
+        const inspected = runtime.session.coreSession.world.inspectComponent(componentInstanceId);
+        if (!source || source.nodeId !== node.id || !runtimeComponent ||
+            runtimeComponent.nodeId !== node.id || source.document.typeId !== runtimeComponent.typeId ||
+            !inspected || inspected.nodeId !== node.id || inspected.typeId !== runtimeComponent.typeId) {
+          return undefined;
+        }
+        components.push(Object.freeze({
+          identity: createRuntimeComponentIdentity(scope, node.id, componentInstanceId, runtimeComponent.typeId),
+          enabled: runtimeComponent.enabled,
+          started: runtimeComponent.started,
+          persistedEnabled: source.document.enabled,
+          persistedProperties: source.document.properties,
+          properties: inspected.properties,
+        }));
+      }
+
+      const children: BrowserPreviewRuntimeNodeSnapshot[] = [];
+      for (const child of node.children) {
+        const snapshot = materialize(child);
+        if (!snapshot) return undefined;
+        children.push(snapshot);
+      }
+
+      return Object.freeze({
+        identity: createRuntimeEntityIdentity(scope, node.id),
+        name: node.name,
+        active: node.active,
+        persistedActive: persistedNode.active,
+        runtimeTransform: Object.freeze({ ...node.transform }),
+        persistedTransform: Object.freeze({ ...persistedNode.transform }),
+        components: Object.freeze(components),
+        children: Object.freeze(children),
+      });
+    };
+
+    const nodes: BrowserPreviewRuntimeNodeSnapshot[] = [];
+    for (const root of graph.rootNodes) {
+      const snapshot = materialize(root);
+      if (!snapshot) return null;
+      nodes.push(snapshot);
+    }
+    return Object.freeze({ ...scope, nodes: Object.freeze(nodes) });
+  }
+
+  getRuntimeSelection(): RuntimeSelectionIdentity | null {
+    const selection = this.runtimeSelection;
+    const snapshot = this.getRuntimeSnapshot();
+    if (!selection || !snapshot || !isRuntimeIdentityInScope(selection, snapshot)) return null;
+    return this.findRuntimeIdentity(snapshot.nodes, selection) ?? null;
+  }
+
+  selectRuntimeIdentity(identity: RuntimeSelectionIdentity): boolean {
+    const snapshot = this.getRuntimeSnapshot();
+    if (!snapshot || !isRuntimeIdentityInScope(identity, snapshot)) return false;
+    const canonical = this.findRuntimeIdentity(snapshot.nodes, identity);
+    if (!canonical) return false;
+    this.runtimeSelection = canonical;
+    this.emit("runtime-selection", Object.freeze({
+      sessionId: snapshot.sessionId,
+      selection: canonical,
+    }));
+    return true;
+  }
+
+  clearRuntimeSelection(): void {
+    const previous = this.runtimeSelection;
+    if (!previous) return;
+    this.runtimeSelection = null;
+    this.emit("runtime-selection", Object.freeze({
+      sessionId: previous.sessionId,
+      selection: null,
+    }));
+  }
+
+  private findRuntimeIdentity(
+    nodes: readonly BrowserPreviewRuntimeNodeSnapshot[],
+    candidate: RuntimeSelectionIdentity,
+  ): RuntimeSelectionIdentity | undefined {
+    for (const node of nodes) {
+      if (candidate.kind === "node" && node.identity.nodeId === candidate.nodeId) return node.identity;
+      if (candidate.nodeId === node.identity.nodeId && candidate.kind === "component") {
+        const component = node.components.find((item) =>
+          item.identity.componentInstanceId === candidate.componentInstanceId &&
+          item.identity.typeId === candidate.typeId,
+        );
+        if (component) return component.identity;
+      }
+      const nested = this.findRuntimeIdentity(node.children, candidate);
+      if (nested) return nested;
+    }
+    return undefined;
+  }
+
+  private handleRuntimeSessionCreated(session: PhaserRuntimeSceneSession): void {
+    const sessionId = this.currentSessionId;
+    if (!sessionId || this.disposeRequested) return;
+    this.runtimeSession = { sessionId, session };
+    this.runtimeSelection = null;
+    this.emit("runtime-selection", Object.freeze({ sessionId, selection: null }));
+  }
+
+  private handleRuntimeSessionDisposed(session: PhaserRuntimeSceneSession): void {
+    const current = this.runtimeSession;
+    if (!current || current.session !== session) return;
+    this.runtimeSession = undefined;
+    this.clearRuntimeSelection();
+  }
 
   subscribe<TKey extends keyof BrowserPreviewHostEvents>(
     type: TKey,
@@ -538,6 +732,8 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
         }
       }
       this.currentSessionId = null;
+      this.runtimeSession = undefined;
+      this.clearRuntimeSelection();
       this.setState("stopped");
     } catch (error) {
       this.reportError(error, "PREVIEW_STOP_FAILED", "host");
@@ -574,6 +770,8 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     }
 
     this.currentSessionId = null;
+    this.runtimeSession = undefined;
+    this.clearRuntimeSelection();
     this.gameReadyPromise = undefined;
     this.setState("disposed");
     this.events.dispose();
@@ -632,6 +830,8 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
             projectId: host.projectId,
             componentViewFactories: host.viewFactories,
             onDiagnostic: (diagnostic) => host.handlePhaserDiagnostic(diagnostic),
+            onSessionCreated: (session) => host.handleRuntimeSessionCreated(session),
+            onSessionDisposed: (session) => host.handleRuntimeSessionDisposed(session),
           });
           const manager = createSceneManager(runtimeLoader);
           host.sceneManager = manager;

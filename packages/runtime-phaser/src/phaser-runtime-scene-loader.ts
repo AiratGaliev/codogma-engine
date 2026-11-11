@@ -55,6 +55,10 @@ export interface PhaserRuntimeSceneLoaderOptions {
   readonly update?: (deltaSeconds: number, session: ProjectRuntimeSceneSession) => void;
   /** Receives adapter diagnostics; exceptions thrown by the observer are isolated. */
   readonly onDiagnostic?: (diagnostic: PhaserRuntimeDiagnostic) => void;
+  /** Lifecycle observation for the Preview Host; observer errors are isolated. */
+  readonly onSessionCreated?: (session: PhaserRuntimeSceneSession) => void;
+  /** Called once after this adapter session has released its owned resources. */
+  readonly onSessionDisposed?: (session: PhaserRuntimeSceneSession) => void;
 }
 
 /** A loader whose successful sessions expose the validated Core runtime graph. */
@@ -577,6 +581,12 @@ export class PhaserRuntimeSceneSession implements RuntimeSceneSession {
       errors.push(error);
     }
 
+    try {
+      this.options.onSessionDisposed?.(this);
+    } catch {
+      // A host observer must never interrupt runtime resource cleanup.
+    }
+
     if (errors.length > 0) {
       const diagnostic = createDiagnostic(
         "SCENE_CLEANUP_FAILED",
@@ -695,6 +705,11 @@ export class PhaserRuntimeSceneLoader implements SceneLoader {
         this.factories,
       );
       runtimeSession.attachListeners();
+      try {
+        this.options.onSessionCreated?.(runtimeSession);
+      } catch {
+        // Host observers are isolated from Scene hydration and cleanup.
+      }
       return runtimeSession;
     } catch (error) {
       const cleanupErrors: unknown[] = [];

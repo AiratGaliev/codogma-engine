@@ -40,10 +40,15 @@ function componentDefinition(): ComponentTypeDefinition {
         sprite: { type: "asset", assetKinds: ["image"], required: true },
         target: { type: "node", allowSelf: false, required: true },
         speed: { type: "number", min: 0, defaultValue: 1 },
+        elapsedSeconds: { type: "number", storage: "runtime" },
       },
     },
     create() {
-      return { onUpdate() {} };
+      let elapsedSeconds = 0;
+      return {
+        onUpdate(deltaSeconds) { elapsedSeconds += deltaSeconds; },
+        inspect() { return { elapsedSeconds }; },
+      };
     },
   };
 }
@@ -661,3 +666,81 @@ test("resolves and snapshots a host-owned Component registry before creating the
   await host.dispose();
 });
 
+
+
+test("maps live runtime identity to exact Project instances and rejects stale selections after restart", async () => {
+  FakeGame.instances = [];
+  const host = createHost();
+  const selectionEvents: Array<{ sessionId: string; selection: unknown }> = [];
+  host.subscribe("runtime-selection", (event) => selectionEvents.push(event));
+
+  await host.play();
+  const first = host.getRuntimeSnapshot();
+  assert.ok(first);
+  assert.equal(first.projectId, "acceptance-project");
+  assert.equal(first.sceneId, "scene-level");
+  const player = first.nodes.find((node) => node.identity.nodeId === "node-player");
+  const enemy = first.nodes.find((node) => node.identity.nodeId === "node-enemy");
+  assert.ok(player);
+  assert.ok(enemy);
+  assert.equal(player.components.length, 1);
+  assert.equal(enemy.components.length, 1);
+  const playerComponent = player.components[0]!;
+  const enemyComponent = enemy.components[0]!;
+  assert.equal(playerComponent.identity.typeId, enemyComponent.identity.typeId);
+  assert.notEqual(playerComponent.identity.componentInstanceId, enemyComponent.identity.componentInstanceId);
+  assert.equal(playerComponent.identity.componentInstanceId, "component-follow-player");
+  assert.equal(playerComponent.properties.elapsedSeconds?.status, "available");
+  assert.equal(playerComponent.persistedProperties.speed, 4);
+
+  const firstGame = FakeGame.instances.at(-1);
+  assert.ok(firstGame);
+  firstGame.scene.events.emit("update", 0, 500);
+  const updated = host.getRuntimeSnapshot();
+  const updatedPlayer = updated?.nodes.find((node) => node.identity.nodeId === "node-player");
+  const updatedValue = updatedPlayer?.components[0]?.properties.elapsedSeconds;
+  assert.equal(updatedValue?.status, "available");
+  if (updatedValue?.status !== "available") assert.fail("Expected current runtime value.");
+  assert.equal(updatedValue.value, 0.5);
+
+  const staleIdentity = playerComponent.identity;
+  assert.equal(host.selectRuntimeIdentity(staleIdentity), true);
+  assert.equal(host.getRuntimeSelection()?.kind, "component");
+  assert.equal(selectionEvents.at(-1)?.sessionId, first.sessionId);
+  assert.equal(
+    selectionEvents.at(-1)?.selection &&
+      (selectionEvents.at(-1)?.selection as { componentInstanceId?: string }).componentInstanceId,
+    "component-follow-player",
+  );
+
+  await host.restart();
+  const second = host.getRuntimeSnapshot();
+  assert.ok(second);
+  assert.notEqual(second.sessionId, first.sessionId);
+  assert.equal(host.getRuntimeSelection(), null);
+  assert.equal(host.selectRuntimeIdentity(staleIdentity), false);
+  assert.equal(host.selectRuntimeIdentity(second.nodes[0]!.identity), true);
+  assert.equal(host.getRuntimeSelection()?.sessionId, second.sessionId);
+
+  await host.stop();
+  assert.equal(host.getRuntimeSnapshot(), null);
+  assert.equal(host.getRuntimeSelection(), null);
+  assert.equal(host.selectRuntimeIdentity(second.nodes[0]!.identity), false);
+  assert.equal(selectionEvents.at(-1)?.selection, null);
+  assert.equal(selectionEvents.at(-1)?.sessionId, second.sessionId);
+  await host.dispose();
+});
+
+test("returns distinct persisted and live transforms without exposing mutable runtime references", async () => {
+  FakeGame.instances = [];
+  const host = createHost();
+  await host.play();
+  const snapshot = host.getRuntimeSnapshot();
+  assert.ok(snapshot);
+  const player = snapshot.nodes.find((node) => node.identity.nodeId === "node-player");
+  assert.ok(player);
+  assert.notEqual(player.runtimeTransform, player.persistedTransform);
+  assert.deepEqual(player.runtimeTransform, player.persistedTransform);
+  assert.equal(Object.isFrozen(player.runtimeTransform), true);
+  await host.dispose();
+});
