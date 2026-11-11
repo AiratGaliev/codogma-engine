@@ -131,6 +131,13 @@ export async function writeProjectFile(
   await callProjectOperation("project.writeFile", { relativePath, text });
 }
 
+export async function createProjectFile(
+  relativePath: string,
+  text: string,
+): Promise<void> {
+  await callProjectOperation("project.createFile", { relativePath, text });
+}
+
 export async function createProjectDirectory(relativePath: string): Promise<void> {
   await callProjectOperation("project.createDirectory", { relativePath });
 }

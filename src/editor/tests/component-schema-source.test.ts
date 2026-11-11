@@ -68,6 +68,49 @@ test("does not execute dynamic expressions while reading an untrusted module sch
   assert.match(result.diagnostics[0]?.message ?? "", /static JSON literals/);
 });
 
+test("rejects a Component Definition without an executable factory export", async () => {
+  const missing = await parseComponentSchemaSource(
+    'export const componentDefinition = { schema: { schemaVersion: 1 } };',
+    "MissingFactory.ts",
+    "com.example.missing-factory",
+    "1.0.0",
+  );
+  const nonCallable = await parseComponentSchemaSource(
+    'export const componentDefinition = { schema: {}, create: 42 };',
+    "InvalidFactory.ts",
+    "com.example.invalid-factory",
+    "1.0.0",
+  );
+
+  assert.equal(missing.valid, false);
+  assert.equal(nonCallable.valid, false);
+  assert.match(missing.diagnostics[0]?.message ?? "", /callable create factory/);
+  assert.match(nonCallable.diagnostics[0]?.message ?? "", /callable method, function, or arrow function/);
+});
+
+test("accepts a factory referenced through a local const without executing it", async () => {
+  const source = `
+    const create = (_context: { readonly instanceId: string }) => ({});
+    export const componentDefinition = {
+      schema: {
+        schemaVersion: 1 as const,
+        typeId: "com.example.factory-reference",
+        name: "Factory Reference",
+        version: "1.0.0",
+        properties: {},
+      },
+      create,
+    };
+  `;
+  const result = await parseComponentSchemaSource(
+    source,
+    "FactoryReference.ts",
+    "com.example.factory-reference",
+    "1.0.0",
+  );
+  assert.equal(result.valid, true);
+});
+
 test("rejects a module that does not declare an exported Component Definition", async () => {
   const result = await parseComponentSchemaSource(
     'const componentDefinition = { schema: {} };',

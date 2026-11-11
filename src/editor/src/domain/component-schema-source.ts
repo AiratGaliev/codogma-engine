@@ -21,6 +21,22 @@ function unwrapTypeExpression(ts: TypeScriptApi, input: import("typescript").Exp
   return node;
 }
 
+function isComponentFactoryExpression(
+  ts: TypeScriptApi,
+  input: import("typescript").Expression,
+  declarations: ReadonlyMap<string, import("typescript").VariableDeclaration>,
+  resolving = new Set<string>(),
+): boolean {
+  const node = unwrapTypeExpression(ts, input);
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return true;
+  if (!ts.isIdentifier(node) || resolving.has(node.text)) return false;
+  const declaration = declarations.get(node.text);
+  if (!declaration?.initializer) return false;
+  const next = new Set(resolving);
+  next.add(node.text);
+  return isComponentFactoryExpression(ts, declaration.initializer, declarations, next);
+}
+
 function schemaDiagnostic(message: string, path: string): CoreDiagnostic {
   return {
     code: "COMPONENT_INVALID_SCHEMA",
@@ -71,15 +87,41 @@ export async function parseComponentSchemaSource(
         };
       }
 
+      let factoryCount = 0;
       for (const property of definition.properties) {
-        if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name)) continue;
+        if (!("name" in property) || !property.name || ts.isComputedPropertyName(property.name)) continue;
         const propertyName = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
           ? property.name.text
           : undefined;
         if (propertyName === "schema") {
+          if (!ts.isPropertyAssignment(property) || schemaExpression) {
+            return {
+              valid: false,
+              diagnostics: [schemaDiagnostic("componentDefinition must declare exactly one static schema property.", fileName)],
+            };
+          }
           schemaExpression = property.initializer;
-          break;
+          continue;
         }
+        if (propertyName === "create") {
+          factoryCount += 1;
+          const validFactory = ts.isMethodDeclaration(property)
+            ? property.body !== undefined
+            : ts.isPropertyAssignment(property) &&
+              isComponentFactoryExpression(ts, property.initializer, declarations);
+          if (!validFactory || factoryCount > 1) {
+            return {
+              valid: false,
+              diagnostics: [schemaDiagnostic("componentDefinition.create must be one callable method, function, or arrow function.", fileName)],
+            };
+          }
+        }
+      }
+      if (factoryCount !== 1) {
+        return {
+          valid: false,
+          diagnostics: [schemaDiagnostic("componentDefinition must export a callable create factory.", fileName)],
+        };
       }
     }
   }

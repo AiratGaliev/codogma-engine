@@ -96,6 +96,7 @@ import {
   getProjectManagerSnapshot,
   readProjectFile,
   writeProjectFile,
+  createProjectFile,
   deleteProjectEntries,
   createProjectDirectory,
   type ProjectTreeEntry,
@@ -1238,8 +1239,15 @@ function App() {
         setScriptDiagnostics(result.diagnostics);
       }
     } catch (error) {
-      if (request === scriptCheckSequence) {
-        log("warning", `TypeScript diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      if (request === scriptCheckSequence && scriptSourcePath() === path && scriptSource() === content) {
+        const message = error instanceof Error ? error.message : String(error);
+        setScriptDiagnostics([{
+          code: 90000,
+          severity: "error",
+          message,
+          path,
+        }]);
+        log("warning", `TypeScript diagnostics unavailable: ${message}`);
       }
     } finally {
       if (request === scriptCheckSequence) setScriptChecking(false);
@@ -1392,7 +1400,7 @@ function App() {
         directory = directory ? directory + "/" + segment : segment;
         await ensureProjectFolder(directory);
       }
-      await writeProjectFile(path, source);
+      await createProjectFile(path, source);
       scriptWritten = true;
 
       setProjectDocument(registration.project);
@@ -1411,6 +1419,14 @@ function App() {
       const message = error instanceof Error ? error.message : String(error);
       if (scriptWritten && !manifestSaved) {
         setProjectDocument(project);
+        try {
+          await deleteProjectEntries([path]);
+          scriptWritten = false;
+          log("info", `Removed unregistered Script Asset ${path} after Project manifest save failed.`);
+        } catch (cleanupError) {
+          const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+          setComponentModuleError(`${message} The source file remains on disk because safe rollback failed: ${cleanupMessage}`);
+        }
         await refreshProjectTree().catch(() => {});
       }
       setComponentModuleError(message);
