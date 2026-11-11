@@ -16,6 +16,7 @@
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "types": ["node"],
+    "typeRoots": ["../src/editor/node_modules/@types"],
     "skipLibCheck": true,
     "noEmit": true
   },
