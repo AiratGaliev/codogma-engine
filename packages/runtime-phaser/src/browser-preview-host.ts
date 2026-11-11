@@ -347,15 +347,52 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
   }
   get sceneId(): string { return this.options.sceneId; }
 
-  getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null {
+  private getCurrentRuntimeContext(): {
+    readonly runtime: { readonly sessionId: string; readonly session: PhaserRuntimeSceneSession };
+    readonly scope: RuntimeIdentityScope;
+  } | undefined {
     const runtime = this.runtimeSession;
     const sessionId = this.currentSessionId;
     if (!runtime || !sessionId || runtime.sessionId !== sessionId ||
         !["running", "paused"].includes(this.currentState) ||
         runtime.session.isDisposed || !runtime.session.coreSession.isActive) {
-      return null;
+      return undefined;
     }
+    return {
+      runtime,
+      scope: {
+        projectId: this.projectId,
+        sceneId: this.sceneId,
+        sessionId,
+      },
+    };
+  }
 
+  private resolveRuntimeIdentity(
+    identity: RuntimeSelectionIdentity,
+    context: NonNullable<ReturnType<BrowserPreviewHostImpl["getCurrentRuntimeContext"]>>,
+  ): RuntimeSelectionIdentity | undefined {
+    if (!isRuntimeIdentityInScope(identity, context.scope)) return undefined;
+    const graph = context.runtime.session.coreSession.graph;
+    const node = graph.getNode(identity.nodeId);
+    if (!node) return undefined;
+    if (identity.kind === "node") return createRuntimeEntityIdentity(context.scope, node.id);
+
+    const component = graph.getComponent(identity.componentInstanceId);
+    if (!component || component.nodeId !== node.id || component.typeId !== identity.typeId) return undefined;
+    return createRuntimeComponentIdentity(
+      context.scope,
+      node.id,
+      component.id,
+      component.typeId,
+    );
+  }
+
+  getRuntimeSnapshot(): BrowserPreviewRuntimeSnapshot | null {
+    const context = this.getCurrentRuntimeContext();
+    if (!context) return null;
+    const { runtime, scope } = context;
+    const sessionId = context.scope.sessionId;
     const graph = runtime.session.coreSession.graph;
     const nodeDocuments = new Map<string, NodeDocument>();
     const componentDocuments = new Map<string, { readonly nodeId: string; readonly document: ComponentInstanceDocument }>();
@@ -370,11 +407,6 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     };
     indexDocuments(graph.document.rootNodes);
 
-    const scope: RuntimeIdentityScope = {
-      projectId: this.projectId,
-      sceneId: this.sceneId,
-      sessionId,
-    };
     const materialize = (node: typeof graph.rootNodes[number]): BrowserPreviewRuntimeNodeSnapshot | undefined => {
       const persistedNode = nodeDocuments.get(node.id);
       if (!persistedNode) return undefined;
@@ -429,19 +461,24 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
 
   getRuntimeSelection(): RuntimeSelectionIdentity | null {
     const selection = this.runtimeSelection;
-    const snapshot = this.getRuntimeSnapshot();
-    if (!selection || !snapshot || !isRuntimeIdentityInScope(selection, snapshot)) return null;
-    return this.findRuntimeIdentity(snapshot.nodes, selection) ?? null;
+    const context = this.getCurrentRuntimeContext();
+    if (!selection || !context) return null;
+    const canonical = this.resolveRuntimeIdentity(selection, context);
+    if (!canonical) {
+      this.clearRuntimeSelection();
+      return null;
+    }
+    return canonical;
   }
 
   selectRuntimeIdentity(identity: RuntimeSelectionIdentity): boolean {
-    const snapshot = this.getRuntimeSnapshot();
-    if (!snapshot || !isRuntimeIdentityInScope(identity, snapshot)) return false;
-    const canonical = this.findRuntimeIdentity(snapshot.nodes, identity);
+    const context = this.getCurrentRuntimeContext();
+    if (!context) return false;
+    const canonical = this.resolveRuntimeIdentity(identity, context);
     if (!canonical) return false;
     this.runtimeSelection = canonical;
     this.emit("runtime-selection", Object.freeze({
-      sessionId: snapshot.sessionId,
+      sessionId: context.scope.sessionId,
       selection: canonical,
     }));
     return true;
@@ -455,25 +492,6 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       sessionId: previous.sessionId,
       selection: null,
     }));
-  }
-
-  private findRuntimeIdentity(
-    nodes: readonly BrowserPreviewRuntimeNodeSnapshot[],
-    candidate: RuntimeSelectionIdentity,
-  ): RuntimeSelectionIdentity | undefined {
-    for (const node of nodes) {
-      if (candidate.kind === "node" && node.identity.nodeId === candidate.nodeId) return node.identity;
-      if (candidate.nodeId === node.identity.nodeId && candidate.kind === "component") {
-        const component = node.components.find((item) =>
-          item.identity.componentInstanceId === candidate.componentInstanceId &&
-          item.identity.typeId === candidate.typeId,
-        );
-        if (component) return component.identity;
-      }
-      const nested = this.findRuntimeIdentity(node.children, candidate);
-      if (nested) return nested;
-    }
-    return undefined;
   }
 
   private handleRuntimeSessionCreated(session: PhaserRuntimeSceneSession): void {

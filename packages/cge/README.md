@@ -42,7 +42,7 @@ Host-neutral contracts and the first component-object Core slice.
 
 ### Live runtime inspection and identity (COD-31)
 
-- ComponentBehavior.inspect() is an optional, synchronous, explicit inspection capability. It is not inferred from behavior fields and is never called by the simulation lifecycle.
+- ComponentBehavior.inspect() is an optional, synchronous, side-effect-free, explicit inspection capability. Implementations return a fresh data snapshot; the capability is not inferred from behavior fields and is never called by the simulation lifecycle.
 - ComponentWorld.inspectComponent(instanceId) returns only schema properties declared with storage: runtime. Persisted and editor-only properties are not read through this API.
 - Inspection reads own data properties only; accessors are never invoked. Returned values are copied into bounded immutable JSON snapshots. Functions, symbols, accessors, cycles, non-finite numbers, class instances, proxies that fail reflection and values exceeding depth/size budgets are reported as unsupported. An exception from the provider is isolated as an error for the corresponding fields.
 - Runtime property values must match the declared safe data type and reference shape. Persisted authoring constraints (for example min/max/integer/pattern) are not used to hide transient runtime observations. The API never traverses arbitrary behavior fields and never exposes a Component behavior object, Phaser GameObject, DOM object or other live reference.

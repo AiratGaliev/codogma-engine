@@ -21,8 +21,10 @@ export interface ComponentBehavior {
   onDisable?(): void;
   onDestroy?(): void;
   /**
-   * Explicit, synchronous inspection surface for schema-declared runtime
-   * properties. This does not expose arbitrary behavior fields or objects.
+   * Explicit, synchronous, side-effect-free inspection surface for
+   * schema-declared runtime properties. This does not expose arbitrary
+   * behavior fields or objects. The method must return a fresh data snapshot
+   * and must not mutate the Component or retain the returned object.
    */
   inspect?(): Readonly<Record<string, unknown>>;
 }
