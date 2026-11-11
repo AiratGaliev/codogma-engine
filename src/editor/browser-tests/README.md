@@ -15,7 +15,7 @@ The Editor Host source, domain models, unit/integration tests, Playwright specs,
 The Playwright config starts the existing Node backend against a fresh read/write fixture
 directory and starts the Vite Host at `127.0.0.1:5173`. The browser tests exercise
 scene open/edit/save/reopen, Undo/Redo, Phaser iframe lifecycle, theme persistence,
-command routing, Inspector state and splitter interaction.
+command routing, Inspector state, native Browser Preview Host session lifecycle and splitter interaction.
 
 Workspace-layout acceptance covers cross-zone panel grouping, unified pointer interaction, previews/insertion indicators, Escape/pointer cancellation, Hierarchy/Inspector/Console/Project/Animation/Components close and reopen, outside-click menu dismissal, checkable View visibility and Window active-tab states, v0/v1/v2-to-v3 workspace migration,
 Bottom Dock collapse when every tab is closed, Console default Bottom docking with reversible explicit Undock, fallback selection when Project is closed, narrow-mode Console-close fallback to transient side panels, restoration after reload, keyboard-driven tab navigation, splitter resizing and double-click size reset,
@@ -24,7 +24,15 @@ across compact/wide transitions, and narrow-screen Undock behavior while the Bot
 presentation is transient. The tests
 also check that docking does not create duplicate panel or Scene Canvas nodes.
 
-The test fixture is the repository's canonical `tests/workspace/test-typescript`
-project. The tests never point the backend at a developer's project directory.
+The baseline browser suite uses the repository's canonical `tests/workspace/test-typescript`
+project. Runtime Identity acceptance overlays the dedicated
+`packages/cge/tests/fixtures/acceptance-project` files in the same isolated backend
+fixture through the project operations API. The tests never point the backend at a
+developer's project directory.
+
+
+## Runtime Identity / Live Inspector
+
+`runtime-identity-live-inspector.spec.ts` belongs to the promotion browser-acceptance gate. It starts the native Browser Preview Host, selects two Component attachments sharing a `typeId` but having different instance IDs, verifies exact Runtime Hierarchy → authoring Inspector mapping, observes a changing runtime-only property, and confirms Restart/Stop cleanup with unchanged serialized Scene data.
 
 The native Script Component authoring spec also creates a Script Asset from the Components panel, verifies its explicit `componentModules` manifest registration, checks semantic diagnostics against the unsaved source buffer, and confirms the persisted starter source can be reopened after a reload. Its generated files and directories are removed in `afterEach`.

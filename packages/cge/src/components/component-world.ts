@@ -32,6 +32,16 @@ export interface RuntimeComponentSnapshot {
   readonly started: boolean;
 }
 
+export type RuntimeComponentPropertyInspection =
+  | { readonly status: "available"; readonly value: JsonValue }
+  | { readonly status: "unsupported"; readonly reason: "not-exposed" | "unsupported-value" }
+  | { readonly status: "error"; readonly message: string };
+
+export interface RuntimeComponentInspectionSnapshot extends RuntimeComponentSnapshot {
+  /** Contains only Component Schema properties declared with storage: "runtime". */
+  readonly properties: Readonly<Record<string, RuntimeComponentPropertyInspection>>;
+}
+
 export interface ComponentSystem {
   readonly id: string;
   update(deltaSeconds: number, world: ComponentWorld): void;
@@ -49,6 +59,7 @@ interface ComponentRecord {
   nodeId: string;
   definition: ComponentTypeDefinition;
   behavior: ComponentBehavior;
+  inspect: (() => unknown) | undefined;
   enabled: boolean;
   started: boolean;
   activeNotified: boolean;
@@ -98,6 +109,168 @@ function freezeJsonValue<T extends JsonValue>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+interface InspectionBudget {
+  nodes: number;
+  characters: number;
+}
+
+function snapshotInspectionValue(
+  value: unknown,
+  budget: InspectionBudget,
+  depth = 0,
+): JsonValue | undefined {
+  budget.nodes += 1;
+  if (budget.nodes > 2_000 || depth > 8) return undefined;
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    budget.characters += value.length;
+    return budget.characters <= 65_536 && value.length <= 8_192 ? value : undefined;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "object") return undefined;
+
+  const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value)) {
+    if (prototype !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0 ||
+        value.length > 256 || Object.getOwnPropertyNames(value).length !== value.length + 1) {
+      return undefined;
+    }
+    const result: JsonValue[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return undefined;
+      const child = snapshotInspectionValue(descriptor.value, budget, depth + 1);
+      if (child === undefined) return undefined;
+      result.push(child);
+    }
+    return result;
+  }
+
+  if ((prototype !== Object.prototype && prototype !== null) ||
+      Object.getOwnPropertySymbols(value).length > 0) {
+    return undefined;
+  }
+  const keys = Object.getOwnPropertyNames(value);
+  if (keys.length > 128) return undefined;
+  const result = Object.create(null) as JsonObject;
+  for (const key of keys) {
+    if (key.length > 128 || key === "__proto__" || key === "prototype" || key === "constructor") {
+      return undefined;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return undefined;
+    budget.characters += key.length;
+    if (budget.characters > 65_536) return undefined;
+    const child = snapshotInspectionValue(descriptor.value, budget, depth + 1);
+    if (child === undefined) return undefined;
+    Object.defineProperty(result, key, {
+      value: child,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return result;
+}
+
+function captureInspectionCallback(behavior: ComponentBehavior): (() => unknown) | undefined {
+  try {
+    let owner: object | null = behavior;
+    let depth = 0;
+    while (owner && owner !== Object.prototype && depth < 8) {
+      const descriptor = Object.getOwnPropertyDescriptor(owner, "inspect");
+      if (descriptor) {
+        if ("value" in descriptor && typeof descriptor.value === "function") {
+          const callback = descriptor.value as () => unknown;
+          return () => callback.call(behavior);
+        }
+        return undefined;
+      }
+      owner = Object.getPrototypeOf(owner) as object | null;
+      depth += 1;
+    }
+  } catch {
+    // A hostile Proxy must not make inspection capability discovery fail.
+  }
+  return undefined;
+}
+
+function safeSnapshotInspectionValue(value: unknown, budget: InspectionBudget): JsonValue | undefined {
+  try {
+    return snapshotInspectionValue(value, budget);
+  } catch {
+    // Proxy traps and hostile object reflection must degrade to "unsupported".
+    return undefined;
+  }
+}
+
+function consumeInspectionThenable(value: unknown): boolean {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) return false;
+  try {
+    let owner: object | null = value as object;
+    let depth = 0;
+    while (owner && depth < 8) {
+      const descriptor = Object.getOwnPropertyDescriptor(owner, "then");
+      if (descriptor) {
+        // Never invoke a user-defined thenable. Promise.prototype.then performs
+        // a native Promise brand check before registering the rejection handler;
+        // for arbitrary objects it throws without executing their then method.
+        if ("value" in descriptor && typeof descriptor.value === "function") {
+          try {
+            Promise.prototype.then.call(value as Promise<unknown>, undefined, () => undefined);
+          } catch {
+            // A non-native thenable remains rejected without executing user code.
+          }
+        }
+        return true;
+      }
+      owner = Object.getPrototypeOf(owner) as object | null;
+      depth += 1;
+    }
+  } catch {
+    return true;
+  }
+  return false;
+}
+
+function inspectionErrorMessage(error: unknown): string {
+  try {
+    if (error instanceof Error && typeof error.message === "string" && error.message.length > 0) {
+      return error.message.slice(0, 240);
+    }
+  } catch {
+    // Untrusted error-like objects must not break Inspector refresh.
+  }
+  return "Runtime inspection failed.";
+}
+
+function matchesRuntimePropertySchema(
+  schema: import("./component-schema.js").ComponentPropertySchema,
+  value: JsonValue,
+): boolean {
+  switch (schema.type) {
+    // Runtime values are observations, not persisted edits: retain transient
+    // values even when authoring min/max/integer/pattern/enum constraints differ.
+    case "string":
+      return typeof value === "string";
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "enum":
+      return typeof value === "string";
+    case "asset":
+      return value !== null && typeof value === "object" && !Array.isArray(value) &&
+        isValidStableId(value.assetId) &&
+        (value.subResourceId === undefined ||
+          (schema.allowSubResource === true && isValidStableId(value.subResourceId))) &&
+        Object.keys(value).every((key) => key === "assetId" || key === "subResourceId");
+    case "node":
+      return value !== null && typeof value === "object" && !Array.isArray(value) &&
+        isValidStableId(value.nodeId) && Object.keys(value).every((key) => key === "nodeId");
+  }
 }
 
 function defaultIdFactory(): () => string {
@@ -302,6 +475,97 @@ export class ComponentWorld {
     return this.components.get(instanceId)?.enabled === true;
   }
 
+  /**
+   * Reads schema-declared runtime properties through an explicit Component
+   * inspection callback. Authoring properties and private behavior fields are
+   * never read or inferred by this method.
+   */
+  inspectComponent(instanceId: string): RuntimeComponentInspectionSnapshot | undefined {
+    this.assertUsable();
+    const component = this.components.get(instanceId);
+    if (!component || component.destroyed) return undefined;
+
+    const runtimeProperties = Object.entries(component.definition.schema.properties)
+      .filter(([, property]) => (property.storage ?? "persisted") === "runtime");
+    const properties = Object.create(null) as Record<string, RuntimeComponentPropertyInspection>;
+    if (runtimeProperties.length === 0) {
+      return Object.freeze({
+        id: component.id,
+        typeId: component.typeId,
+        nodeId: component.nodeId,
+        enabled: component.enabled,
+        started: component.started,
+        properties: Object.freeze(properties),
+      });
+    }
+
+    let values: unknown;
+    let inspectionError: string | undefined;
+    if (!component.inspect) {
+      // Missing inspection capability is distinct from a provider exception.
+    } else {
+      try {
+        values = component.inspect();
+        if (consumeInspectionThenable(values)) {
+          inspectionError = "Component inspect() must return synchronously.";
+        }
+      } catch (error) {
+        inspectionError = inspectionErrorMessage(error);
+      }
+    }
+
+    let valuesAreRecord = false;
+    if (values !== null && typeof values === "object") {
+      try {
+        const prototype = Object.getPrototypeOf(values);
+        valuesAreRecord = !Array.isArray(values) &&
+          (prototype === Object.prototype || prototype === null) &&
+          Object.getOwnPropertySymbols(values).length === 0;
+      } catch {
+        valuesAreRecord = false;
+      }
+    }
+
+    const budget: InspectionBudget = { nodes: 0, characters: 0 };
+    for (const [name, schema] of runtimeProperties) {
+      if (inspectionError !== undefined) {
+        properties[name] = Object.freeze({ status: "error", message: inspectionError });
+        continue;
+      }
+      if (!component.inspect || !valuesAreRecord) {
+        properties[name] = Object.freeze({ status: "unsupported", reason: "not-exposed" });
+        continue;
+      }
+
+      let descriptor: PropertyDescriptor | undefined;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(values, name);
+      } catch {
+        descriptor = undefined;
+      }
+      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+        properties[name] = Object.freeze({ status: "unsupported", reason: "not-exposed" });
+        continue;
+      }
+
+      const safeValue = safeSnapshotInspectionValue(descriptor.value, budget);
+      if (safeValue === undefined || !matchesRuntimePropertySchema(schema, safeValue)) {
+        properties[name] = Object.freeze({ status: "unsupported", reason: "unsupported-value" });
+        continue;
+      }
+      properties[name] = Object.freeze({ status: "available", value: freezeJsonValue(safeValue) });
+    }
+
+    return Object.freeze({
+      id: component.id,
+      typeId: component.typeId,
+      nodeId: component.nodeId,
+      enabled: component.enabled,
+      started: component.started,
+      properties: Object.freeze(properties),
+    });
+  }
+
   update(deltaSeconds: number): void {
     this.assertUsable();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
@@ -407,6 +671,7 @@ export class ComponentWorld {
       nodeId,
       definition,
       behavior,
+      inspect: captureInspectionCallback(behavior),
       enabled,
       started: false,
       activeNotified: false,

@@ -104,7 +104,7 @@ export async function getProjectDirectorySnapshot(): Promise<ProjectDirectorySna
   return result;
 }
 
-export async function readProjectFile(relativePath: string): Promise<string> {
+export async function readProjectFile(relativePath: string, signal?: AbortSignal): Promise<string> {
   const encodedPath = relativePath
     .split("/")
     .map((segment) => encodeURIComponent(segment))
@@ -113,6 +113,7 @@ export async function readProjectFile(relativePath: string): Promise<string> {
     method: "GET",
     credentials: "same-origin",
     cache: "no-store",
+    ...(signal ? { signal } : {}),
   });
 
   if (!response.ok) {
