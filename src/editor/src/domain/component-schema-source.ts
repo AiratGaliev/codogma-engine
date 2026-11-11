@@ -73,6 +73,8 @@ export async function parseComponentSchemaSource(
 
   const declarations = new Map<string, import("typescript").VariableDeclaration>();
   let schemaExpression: import("typescript").Expression | undefined;
+  let factoryCount = 0;
+  let factoryInvalid = false;
   for (const statement of sourceFile.statements) {
     if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
     const isExported = statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
@@ -89,8 +91,6 @@ export async function parseComponentSchemaSource(
         };
       }
 
-      let factoryCount = 0;
-      let factoryInvalid = false;
       for (const property of definition.properties) {
         if (!("name" in property) || !property.name || ts.isComputedPropertyName(property.name)) continue;
         const propertyName = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
@@ -119,13 +119,6 @@ export async function parseComponentSchemaSource(
             factoryInvalid = true;
           }
         }
-      }
-      // Validate the static schema before reporting an invalid factory. This
-      // keeps dangerous/dynamic schema expressions from being masked by an
-      // unrelated missing-factory diagnostic.
-      if (factoryCount > 1) factoryInvalid = true;
-      if (factoryInvalid) {
-        // The schema is parsed and validated below before this is returned.
       }
     }
   }
