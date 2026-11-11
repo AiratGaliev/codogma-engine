@@ -70,13 +70,13 @@ test("does not execute dynamic expressions while reading an untrusted module sch
 
 test("rejects a Component Definition without an executable factory export", async () => {
   const missing = await parseComponentSchemaSource(
-    'export const componentDefinition = { schema: { schemaVersion: 1 } };',
+    'export const componentDefinition = { schema: { schemaVersion: 1, typeId: "com.example.missing-factory", name: "Missing Factory", version: "1.0.0", properties: {} } };',
     "MissingFactory.ts",
     "com.example.missing-factory",
     "1.0.0",
   );
   const nonCallable = await parseComponentSchemaSource(
-    'export const componentDefinition = { schema: {}, create: 42 };',
+    'export const componentDefinition = { schema: { schemaVersion: 1, typeId: "com.example.invalid-factory", name: "Invalid Factory", version: "1.0.0", properties: {} }, create: 42 };',
     "InvalidFactory.ts",
     "com.example.invalid-factory",
     "1.0.0",
