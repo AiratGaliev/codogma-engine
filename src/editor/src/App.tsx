@@ -4235,13 +4235,13 @@ function App() {
                       <div class="inspector-section-heading"><span>Live Runtime State</span><span class="runtime-live-tag">PLAY MODE · NOT SAVED</span></div>
                       <div class="runtime-node-state">
                         <span>Active: <strong>{runtimeNode().active ? "true" : "false"}</strong></span>
-                        <span>Saved Active: <strong>{runtimeNode().persistedActive === null ? "—" : runtimeNode().persistedActive ? "true" : "false"}</strong></span>
+                        <span>Saved Active: <strong>{String(runtimeNode().persistedActive ?? "—")}</strong></span>
                       </div>
                       <div class="runtime-transform-grid">
                         <For each={["x", "y", "rotation", "scaleX", "scaleY", "originX", "originY"] as const}>
                           {(key) => <div class="runtime-transform-value" data-runtime-field={key}>
                             <span>{key}</span><strong>{String(runtimeNode().runtimeTransform[key])}</strong>
-                            <small>Saved: {runtimeNode().persistedTransform ? String(runtimeNode().persistedTransform[key]) : "—"}</small>
+                            <small>Saved: {String(runtimeNode().persistedTransform?.[key] ?? "—")}</small>
                           </div>}
                         </For>
                       </div>
