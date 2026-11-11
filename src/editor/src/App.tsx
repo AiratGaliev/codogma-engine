@@ -1417,6 +1417,7 @@ function App() {
       log("success", `Created native Component module ${typeId}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      let reportedMessage = message;
       if (scriptWritten && !manifestSaved) {
         setProjectDocument(project);
         try {
@@ -1425,11 +1426,11 @@ function App() {
           log("info", `Removed unregistered Script Asset ${path} after Project manifest save failed.`);
         } catch (cleanupError) {
           const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-          setComponentModuleError(`${message} The source file remains on disk because safe rollback failed: ${cleanupMessage}`);
+          reportedMessage = `${message} The source file remains on disk because safe rollback failed: ${cleanupMessage}`;
         }
         await refreshProjectTree().catch(() => {});
       }
-      setComponentModuleError(message);
+      setComponentModuleError(reportedMessage);
       log("error", `Component module creation failed: ${message}`);
     } finally {
       setComponentModuleCreating(false);
@@ -4509,6 +4510,24 @@ function App() {
                           <span>Asset ID: {entry.module.moduleAssetId}</span>
                           <span>Path: {entry.path}</span>
                         </div>
+                        <Show when={entry.schema}>
+                          <div class="components-definition-meta">
+                            <span>Definition: {entry.schema!.name}</span>
+                            <span>{Object.keys(entry.schema!.properties).length} schema properties</span>
+                          </div>
+                        </Show>
+                        <Show when={entry.diagnostics.length > 0}>
+                          <div class="components-module-diagnostics" role="alert" data-testid={`component-module-diagnostics-${entry.module.typeId}`}>
+                            <For each={entry.diagnostics}>
+                              {(diagnostic) => (
+                                <div class="components-module-diagnostic">
+                                  <strong>{diagnostic.code}</strong>
+                                  <span>{diagnostic.path ? diagnostic.path + ": " : ""}{diagnostic.message}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
                       </section>
                     )}
                   </For>

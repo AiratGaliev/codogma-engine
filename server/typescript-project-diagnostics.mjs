@@ -190,7 +190,12 @@ export function checkProjectTypeScript(projectDirectory, relativePath, source) {
   host.readFile = (fileName) => path.resolve(fileName) === activePath ? source : readFile(fileName);
   host.fileExists = (fileName) => path.resolve(fileName) === activePath || fileExists(fileName);
   const program = ts.createProgram({ rootNames, options: compiler.options, host });
-  diagnostics.push(...ts.getPreEmitDiagnostics(program).map((item) => toDiagnostic(item, projectRoot)));
+  diagnostics.push(...ts.getPreEmitDiagnostics(program)
+    .filter((item) =>
+      item.category === ts.DiagnosticCategory.Error ||
+      item.category === ts.DiagnosticCategory.Warning,
+    )
+    .map((item) => toDiagnostic(item, projectRoot)));
   const checkedFiles = program.getSourceFiles().filter((item) => isWithinDirectory(projectRoot, path.resolve(item.fileName))).length;
   return { compilerVersion: ts.version, checkedFiles, diagnostics };
 }

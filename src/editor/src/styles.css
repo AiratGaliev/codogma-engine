@@ -3460,3 +3460,27 @@ textarea::placeholder {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 8px;
 }
+
+
+.components-module-diagnostics {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 7px 8px;
+  border-left: 2px solid var(--text-danger, #e17070);
+  background: var(--surface-workspace);
+}
+
+.components-module-diagnostic {
+  display: grid;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.components-module-diagnostic strong {
+  color: var(--text-danger, #e17070);
+  font-size: 8px;
+  font-weight: 600;
+}
