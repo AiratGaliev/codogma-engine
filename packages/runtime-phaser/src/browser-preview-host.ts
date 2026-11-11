@@ -11,19 +11,12 @@ import {
   type ProjectDocumentV1,
   type ProjectSceneLoaderOptions,
   type SceneManager,
-  createRuntimeEntityIdentity,
-  createRuntimeComponentIdentity,
-  isRuntimeIdentityInScope,
   type RuntimeIdentityScope,
   type RuntimeSelectionIdentity,
-  type RuntimeEntityIdentity,
-  type RuntimeComponentIdentity,
- } from "@codogma/cge";
+} from "@codogma/cge";
 import {
   createBrowserPreviewRuntimeSnapshot,
   resolveRuntimeIdentityInWorld,
-  type BrowserPreviewRuntimeComponentSnapshot,
-  type BrowserPreviewRuntimeNodeSnapshot,
   type BrowserPreviewRuntimeSnapshot,
 } from "./runtime-snapshot.js";
 export type {
