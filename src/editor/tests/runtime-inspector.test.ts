@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { RuntimeSelectionIdentity } from "@codogma/cge";
 import { resolveRuntimeAuthoringSelection } from "../src/domain/runtime-inspector.js";
 import type { SceneNodeEntry } from "../src/domain/scene-model.js";
