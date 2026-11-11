@@ -42,7 +42,7 @@ function entry(id: string, componentId: string, typeId: string): SceneNodeEntry 
   } as SceneNodeEntry;
 }
 
-function identity(nodeId: string, componentInstanceId: string): RuntimeSelectionIdentity {
+function identity(nodeId: string, componentInstanceId: string): Extract<RuntimeSelectionIdentity, { kind: "component" }> {
   return {
     kind: "component",
     projectId: "project",

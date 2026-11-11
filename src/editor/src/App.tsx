@@ -604,6 +604,11 @@ function App() {
       node.identity.nodeId === target.node.id ? node : null;
   });
 
+  function isRuntimeComponentSelected(instanceId: string): boolean {
+    const selection = runtimeSelection();
+    return selection?.kind === "component" && selection.componentInstanceId === instanceId;
+  }
+
   const runtimeComponentFor = (instanceId: string): BrowserPreviewRuntimeComponentSnapshot | undefined => {
     const node = runtimeInspectorNode();
     const authoringNode = selectedObject();
@@ -3082,7 +3087,7 @@ function App() {
       await disposeRuntimePreview();
       generation = runtimePreviewGeneration;
       setActiveViewport("Game");
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       if (generation !== runtimePreviewGeneration) return;
       const project = projectDocument();
       const currentScene = scene();
@@ -4045,7 +4050,7 @@ function App() {
                             </button>
                             <For each={entry.node.components}>{(component) => (
                               <button type="button" class="runtime-hierarchy-component"
-                                classList={{ selected: runtimeSelection()?.kind === "component" && runtimeSelection()?.componentInstanceId === component.identity.componentInstanceId }}
+                                classList={{ selected: isRuntimeComponentSelected(component.identity.componentInstanceId) }}
                                 style={{ "padding-left": `${(entry.depth + 1) * 12 + 10}px` }}
                                 data-testid={`runtime-component-${component.identity.componentInstanceId}`}
                                 onClick={() => selectRuntimeComponent(component.identity.nodeId, component.identity.componentInstanceId, component.identity.typeId)}>

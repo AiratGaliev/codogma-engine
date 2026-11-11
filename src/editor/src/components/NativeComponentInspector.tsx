@@ -48,31 +48,25 @@ function RuntimePropertyValue(props: { state: BrowserPreviewRuntimeComponentSnap
   const inspection = () => props.state?.properties[props.name];
   return (
     <Show when={inspection()} fallback={<span class="runtime-property-unavailable">No runtime inspection value was returned.</span>}>
-      {(value) => (
-        <Switch fallback={<span class="runtime-property-unavailable">Value unavailable.</span>}>
-          <Match when={value().status === "available"}>
-            {value().status === "available"
-              ? <code class="runtime-property-value">{formatRuntimeValue(value().value)}</code>
-              : null}
-          </Match>
-          <Match when={value().status === "unsupported"}>
+      {(result) => {
+        const value = result();
+        if (value.status === "available") {
+          return <code class="runtime-property-value">{formatRuntimeValue(value.value)}</code>;
+        }
+        if (value.status === "unsupported") {
+          return (
             <span class="runtime-property-unavailable">
-              {value().status === "unsupported" && value().reason === "not-exposed"
+              {value.reason === "not-exposed"
                 ? "Component did not expose this runtime field."
                 : "Runtime value has an unsupported data type."}
             </span>
-          </Match>
-          <Match when={value().status === "error"}>
-            <span class="runtime-property-error">
-              {value().status === "error" ? value().message : "Inspection failed."}
-            </span>
-          </Match>
-        </Switch>
-      )}
+          );
+        }
+        return <span class="runtime-property-error">{value.message}</span>;
+      }}
     </Show>
   );
 }
-
 function PropertyMessages(props: { diagnostics: readonly CoreDiagnostic[]; propertyName: string }) {
   const messages = () => props.diagnostics.filter((item) => item.propertyName === props.propertyName);
   return (
