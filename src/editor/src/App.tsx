@@ -1395,7 +1395,7 @@ function App() {
 
   async function saveTypeScriptFile() {
     const path = scriptSourcePath();
-    if (!path || scriptSaving() || !scriptDirty()) return;
+    if (!path || scriptSaving() || nativeProjectMutationInProgress || !scriptDirty()) return;
     setScriptSaving(true);
     try {
       const content = scriptSource();
@@ -1467,7 +1467,7 @@ function App() {
       setComponentModuleError("Save the active Scene, Project, Animation and Script before creating a Component module.");
       return;
     }
-    if (projectSaving() || scriptSaving() || saving() || nativeProjectMutationInProgress) {
+    if (activeSceneLoads > 0 || projectSaving() || scriptSaving() || saving() || nativeProjectMutationInProgress) {
       setComponentModuleError("Another document operation is in progress. Try again when it has finished.");
       return;
     }
@@ -1478,6 +1478,7 @@ function App() {
     const path = newComponentModulePath().trim().replace(/\\/g, "/");
     let scriptWritten = false;
     let manifestSaved = false;
+    nativeProjectMutationInProgress = true;
     setComponentModuleCreating(true);
     setComponentModuleError("");
     try {
@@ -1498,7 +1499,7 @@ function App() {
       scriptWritten = true;
 
       setProjectDocument(registration.project);
-      if (!(await saveProjectManifest())) {
+      if (!(await saveProjectManifest(true))) {
         setProjectDocument(project);
         throw new Error(`project.json could not be saved after creating the Script Asset "${path}".`);
       }
@@ -1528,6 +1529,7 @@ function App() {
       setComponentModuleError(reportedMessage);
       log("error", `Component module creation failed: ${message}`);
     } finally {
+      nativeProjectMutationInProgress = false;
       setComponentModuleCreating(false);
     }
   }
@@ -1698,9 +1700,9 @@ function App() {
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  async function saveProjectManifest(): Promise<boolean> {
+  async function saveProjectManifest(allowDuringProjectMutation = false): Promise<boolean> {
     const current = projectDocument();
-    if (!current || projectSaving() || nativeProjectMutationInProgress) return false;
+    if (!current || projectSaving() || (nativeProjectMutationInProgress && !allowDuringProjectMutation)) return false;
     setProjectSaving(true);
     try {
       const content = serializeNativeProjectDocument(current);

@@ -23,6 +23,8 @@ export interface PreviewModuleSourceDiagnostic {
 }
 
 const MAX_PREVIEW_MODULE_BYTES = 1_048_576;
+const MAX_PREVIEW_GRAPH_BYTES = 8 * 1_048_576;
+const MAX_PREVIEW_MODULES = 128;
 const PREVIEW_BUILTIN_ASSET_PREFIX = "codogma-preview-builtin-asset-";
 
 const BUILTIN_COMPONENT_NAMES: Readonly<Record<string, string>> = {
@@ -71,21 +73,93 @@ function isAborted(signal: AbortSignal): boolean {
   return signal.aborted;
 }
 
+function isPreviewExecutableScriptPath(path: string): boolean {
+  return /\.(ts|tsx)$/i.test(path) && !/\.d\.ts$/i.test(path);
+}
+
+function diagnosticAt(
+  ts: TypeScriptApi,
+  sourceFile: import("typescript").SourceFile,
+  node: import("typescript").Node,
+  message: string,
+): PreviewModuleSourceDiagnostic {
+  const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+  return { message, line: location.line + 1, column: location.character + 1 };
+}
+
+type TypeScriptApi = typeof import("typescript");
+
 /**
- * Preview deliberately supports self-contained Script Assets only. Project Model
- * IDs select the module; source text never supplies an import path to the Host.
+ * Resolve only relative imports to explicitly registered Project Script Assets.
+ * The TypeScript checker may understand package/baseUrl options, but Preview
+ * does not silently load npm packages or files outside the Project boundary.
  */
-export async function inspectPreviewModuleSource(
+export function resolvePreviewScriptModuleAsset(
+  importerPath: string,
+  specifier: string,
+  scriptAssets: readonly AssetReference[],
+): AssetReference {
+  if (!importerPath || importerPath.includes("\\") ||
+      (!specifier.startsWith("./") && !specifier.startsWith("../")) ||
+      specifier.includes("\\") || specifier.includes("\0") ||
+      specifier.includes("?") || specifier.includes("#")) {
+    throw new Error(
+      'Preview imports must be relative paths to Project Script Assets; unsupported specifier "' + specifier + '".',
+    );
+  }
+
+  const segments = importerPath.split("/");
+  segments.pop();
+  for (const segment of specifier.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length === 0) throw new Error('Preview import "' + specifier + '" escapes the Project root.');
+      segments.pop();
+    } else {
+      segments.push(segment);
+    }
+  }
+  const target = segments.join("/");
+  if (!target) throw new Error('Preview import "' + specifier + '" does not resolve to a Project Script Asset.');
+
+  const extension = /\.(ts|tsx|mts|cts|js|jsx)$/i.exec(target)?.[0].toLowerCase();
+  const candidates = extension
+    ? extension === ".js" ? [target.slice(0, -3) + ".ts", target.slice(0, -3) + ".tsx"]
+      : extension === ".jsx" ? [target.slice(0, -4) + ".tsx", target.slice(0, -4) + ".ts"]
+      : [target]
+    : [
+      target + ".ts",
+      target + ".tsx",
+      target + "/index.ts",
+      target + "/index.tsx",
+    ];
+  const byPath = new Map(scriptAssets.filter((asset) => asset.kind === "script" && isPreviewExecutableScriptPath(asset.path)).map((asset) => [asset.path, asset] as const));
+  for (const candidate of candidates) {
+    const asset = byPath.get(candidate);
+    if (asset) return asset;
+  }
+  throw new Error(
+    'Preview import "' + specifier + '" from "' + importerPath +
+    '" does not resolve to a registered .ts/.tsx Script Asset.',
+  );
+}
+
+async function inspectModuleSource(
   source: string,
   fileName: string,
-): Promise<PreviewModuleSourceDiagnostic[]> {
+): Promise<{
+  sourceFile?: import("typescript").SourceFile;
+  diagnostics: PreviewModuleSourceDiagnostic[];
+  imports: Array<{ specifier: string; node: import("typescript").Node }>;
+}> {
   const ts = await import("typescript");
   const diagnostics: PreviewModuleSourceDiagnostic[] = [];
-  if (!/\.tsx?$/i.test(fileName)) {
-    return [{ message: "Preview Component modules must be .ts or .tsx Script Assets." }];
+  const imports: Array<{ specifier: string; node: import("typescript").Node }> = [];
+  if (!/\.(ts|tsx)$/i.test(fileName)) {
+    return { diagnostics: [{ message: "Preview Component modules must be .ts or .tsx Script Assets." }], imports };
   }
   if (new TextEncoder().encode(source).byteLength > MAX_PREVIEW_MODULE_BYTES) {
-    return [{ message: "Preview Component module exceeds the 1 MiB source limit." }];
+    return { diagnostics: [{ message: "Preview Component module exceeds the 1 MiB source limit." }], imports };
   }
 
   const scriptKind = fileName.toLowerCase().endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
@@ -93,92 +167,249 @@ export async function inspectPreviewModuleSource(
   const parseDiagnostics = (sourceFile as import("typescript").SourceFile & {
     parseDiagnostics: readonly import("typescript").Diagnostic[];
   }).parseDiagnostics;
-  for (const diagnostic of parseDiagnostics) {
-    const location = sourceFile.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
+  for (const item of parseDiagnostics) {
+    const location = sourceFile.getLineAndCharacterOfPosition(item.start ?? 0);
     diagnostics.push({
-      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+      message: ts.flattenDiagnosticMessageText(item.messageText, "\n"),
       line: location.line + 1,
       column: location.character + 1,
     });
   }
-  if (diagnostics.length > 0) return diagnostics;
+  if (diagnostics.length > 0) return { sourceFile, diagnostics, imports };
 
   const visit = (node: import("typescript").Node): void => {
-    if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) ||
-        ts.isExportDeclaration(node) || ts.isImportTypeNode(node)) {
-      const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      diagnostics.push({
-        message: "Preview Component modules must be self-contained; imports and export declarations are not supported by this Host loader.",
-        line: location.line + 1,
-        column: location.character + 1,
-      });
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      const typeOnly = ts.isImportDeclaration(node)
+        ? node.importClause?.isTypeOnly === true ||
+          (!node.importClause?.name && !!node.importClause?.namedBindings &&
+            ts.isNamedImports(node.importClause.namedBindings) &&
+            node.importClause.namedBindings.elements.length > 0 &&
+            node.importClause.namedBindings.elements.every((item) => item.isTypeOnly))
+        : node.isTypeOnly ||
+          (!!node.exportClause && ts.isNamedExports(node.exportClause) &&
+            node.exportClause.elements.length > 0 &&
+            node.exportClause.elements.every((item) => item.isTypeOnly));
+      if (!typeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        imports.push({ specifier: node.moduleSpecifier.text, node });
+      }
+    } else if (ts.isImportEqualsDeclaration(node) && !node.isTypeOnly &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression && ts.isStringLiteral(node.moduleReference.expression)) {
+      imports.push({ specifier: node.moduleReference.expression.text, node });
     } else if (ts.isCallExpression(node) &&
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
-      const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      diagnostics.push({
-        message: "Dynamic import() and require() are not supported by the native Preview module loader.",
-        line: location.line + 1,
-        column: location.character + 1,
-      });
+      diagnostics.push(diagnosticAt(
+        ts,
+        sourceFile,
+        node,
+        "Dynamic import() and direct require() are not supported by the native Preview module loader; use a static relative import.",
+      ));
+    } else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) {
+      diagnostics.push(diagnosticAt(
+        ts,
+        sourceFile,
+        node,
+        "import.meta is not available in bundled Preview Component modules.",
+      ));
+    } else if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) {
+      diagnostics.push(diagnosticAt(
+        ts,
+        sourceFile,
+        node,
+        "JSX is not part of the runtime Component module contract; export a ComponentBehavior factory instead.",
+      ));
+    } else if (ts.isAwaitExpression(node)) {
+      let parent: import("typescript").Node | undefined = node.parent;
+      while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
+      if (!parent) {
+        diagnostics.push(diagnosticAt(
+          ts,
+          sourceFile,
+          node,
+          "Top-level await is not supported in synchronous Preview Component modules.",
+        ));
+      }
     }
     ts.forEachChild(node, visit);
   };
   sourceFile.forEachChild(visit);
-  return diagnostics;
+  return { sourceFile, diagnostics, imports };
 }
 
-async function loadSelfContainedComponentModule(
+/** Syntax/preflight validation; static dependencies are resolved against the Project manifest separately. */
+export async function inspectPreviewModuleSource(
   source: string,
   fileName: string,
-  signal: AbortSignal,
-): Promise<ComponentTypeDefinition> {
-  if (isAborted(signal)) throw signal.reason ?? new Error("Preview module loading was cancelled.");
-  const diagnostics = await inspectPreviewModuleSource(source, fileName);
-  if (diagnostics.length > 0) {
-    throw new Error(diagnostics.map((item) =>
-      (item.line === undefined ? "" : item.line + ":" + (item.column ?? 1) + ": ") + item.message
-    ).join("\n"));
+): Promise<PreviewModuleSourceDiagnostic[]> {
+  return (await inspectModuleSource(source, fileName)).diagnostics;
+}
+
+interface CompiledPreviewModule {
+  readonly asset: AssetReference;
+  readonly outputText: string;
+  readonly dependencies: ReadonlyMap<string, string>;
+}
+
+function createPreviewBundleSource(
+  entryAssetIds: readonly string[],
+  modules: ReadonlyMap<string, CompiledPreviewModule>,
+): string {
+  const factories: string[] = [];
+  const dependencyMaps: string[] = [];
+  for (const [assetId, record] of modules) {
+    factories.push(
+      "[" + JSON.stringify(assetId) + ", function(module, exports, require) {\n" +
+      record.outputText + "\n}]",
+    );
+    dependencyMaps.push(
+      "[" + JSON.stringify(assetId) + ", new Map(" +
+      JSON.stringify([...record.dependencies.entries()]) + ")]",
+    );
   }
 
-  const ts = await import("typescript");
-  const transpiled = ts.transpileModule(source, {
-    fileName,
-    reportDiagnostics: true,
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      jsx: ts.JsxEmit.Preserve,
-      sourceMap: false,
-      inlineSourceMap: false,
-      inlineSources: false,
-    },
-  });
-  const errors = (transpiled.diagnostics ?? []).filter((item) =>
-    item.category === ts.DiagnosticCategory.Error,
+  return [
+    "const __factories = new Map([" + factories.join(",") + "]);",
+    "const __dependencies = new Map([" + dependencyMaps.join(",") + "]);",
+    "const __cache = new Map();",
+    "function __load(id) {",
+    "  if (__cache.has(id)) return __cache.get(id).exports;",
+    "  const factory = __factories.get(id);",
+    "  if (!factory) throw new Error('Preview module is missing from the captured dependency graph: ' + id);",
+    "  const record = { exports: {} };",
+    "  __cache.set(id, record);",
+    "  try {",
+    "    factory(record, record.exports, (specifier) => {",
+    "      const dependencyId = __dependencies.get(id)?.get(specifier);",
+    "      if (!dependencyId) throw new Error('Preview module import was not resolved: ' + specifier);",
+    "      return __load(dependencyId);",
+    "    });",
+    "    return record.exports;",
+    "  } catch (error) {",
+    "    __cache.delete(id);",
+    "    throw error;",
+    "  }",
+    "}",
+    "const __definitions = new Map([" +
+      entryAssetIds.map((id) => "[" + JSON.stringify(id) + ", __load(" + JSON.stringify(id) + ").componentDefinition]").join(",") +
+      "]);",
+    "export default __definitions;",
+  ].join("\n");
+}
+
+async function loadProjectComponentModules(
+  entryAssets: readonly AssetReference[],
+  input: EditorPreviewModuleResolutionInput,
+  sourceCache: Map<string, Promise<string>>,
+): Promise<ReadonlyMap<string, ComponentTypeDefinition>> {
+  if (isAborted(input.signal)) throw input.signal.reason ?? new Error("Preview module loading was cancelled.");
+  const scriptAssets = input.project.assets.filter((asset) =>
+    asset.kind === "script" && isPreviewExecutableScriptPath(asset.path),
   );
-  if (errors.length > 0) {
-    throw new Error(errors.map((item) =>
-      ts.flattenDiagnosticMessageText(item.messageText, "\n")
-    ).join("\n"));
-  }
-  if (isAborted(signal)) throw signal.reason ?? new Error("Preview module loading was cancelled.");
+  const modules = new Map<string, CompiledPreviewModule>();
+  let totalSourceBytes = 0;
+
+  const visit = async (asset: AssetReference): Promise<void> => {
+    if (isAborted(input.signal)) throw input.signal.reason ?? new Error("Preview module loading was cancelled.");
+    if (modules.has(asset.id)) return;
+    if (modules.size >= MAX_PREVIEW_MODULES) {
+      throw new Error("Preview dependency graph exceeds the 128-module limit.");
+    }
+    if (asset.kind !== "script" || !isPreviewExecutableScriptPath(asset.path)) {
+      throw new Error('Preview dependency "' + asset.path + '" is not a supported TypeScript Script Asset.');
+    }
+
+    let sourcePromise = sourceCache.get(asset.id);
+    if (!sourcePromise) {
+      sourcePromise = input.readAssetDocument(asset, input.signal);
+      sourceCache.set(asset.id, sourcePromise);
+    }
+    const source = await sourcePromise;
+    if (isAborted(input.signal)) throw input.signal.reason ?? new Error("Preview module loading was cancelled.");
+    const bytes = new TextEncoder().encode(source).byteLength;
+    totalSourceBytes += bytes;
+    if (totalSourceBytes > MAX_PREVIEW_GRAPH_BYTES) {
+      throw new Error("Preview dependency graph exceeds the 8 MiB source limit.");
+    }
+
+    const inspected = await inspectModuleSource(source, asset.path);
+    if (inspected.diagnostics.length > 0 || !inspected.sourceFile) {
+      throw new Error(inspected.diagnostics.map((item) =>
+        (item.line === undefined ? "" : item.line + ":" + (item.column ?? 1) + ": ") + item.message
+      ).join("\n"));
+    }
+
+    const dependencies = new Map<string, string>();
+    for (const dependency of inspected.imports) {
+      const resolved = resolvePreviewScriptModuleAsset(asset.path, dependency.specifier, scriptAssets);
+      dependencies.set(dependency.specifier, resolved.id);
+    }
+
+    const ts = await import("typescript");
+    const transpiled = ts.transpileModule(source, {
+      fileName: asset.path,
+      reportDiagnostics: true,
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.Preserve,
+        sourceMap: false,
+        inlineSourceMap: false,
+        inlineSources: false,
+        esModuleInterop: true,
+      },
+    });
+    const errors = (transpiled.diagnostics ?? []).filter((item) =>
+      item.category === ts.DiagnosticCategory.Error,
+    );
+    if (errors.length > 0) {
+      throw new Error(errors.map((item) =>
+        ts.flattenDiagnosticMessageText(item.messageText, "\n")
+      ).join("\n"));
+    }
+
+    // Insert before traversing dependencies so valid circular imports can use
+    // CommonJS-compatible partial exports without recursing forever.
+    modules.set(asset.id, { asset, outputText: transpiled.outputText, dependencies });
+    for (const dependencyId of dependencies.values()) {
+      const dependencyAsset = scriptAssets.find((candidate) => candidate.id === dependencyId);
+      if (!dependencyAsset) throw new Error("Resolved Preview dependency disappeared from the Project manifest.");
+      await visit(dependencyAsset);
+    }
+  };
+
+  for (const entryAsset of entryAssets) await visit(entryAsset);
+  if (isAborted(input.signal)) throw input.signal.reason ?? new Error("Preview module loading was cancelled.");
   if (typeof Blob === "undefined" || typeof URL.createObjectURL !== "function") {
     throw new Error("This browser does not support Blob module URLs required by the native Preview loader.");
   }
 
-  const moduleUrl = URL.createObjectURL(new Blob([transpiled.outputText], { type: "text/javascript" }));
+  const moduleUrl = URL.createObjectURL(new Blob(
+    [createPreviewBundleSource(entryAssets.map((asset) => asset.id), modules)],
+    { type: "text/javascript" },
+  ));
   try {
-    // Executing the project's own Component code is intentional on Play. This is
-    // not a security sandbox; dependency/import graph support belongs to COD-91.
-    const moduleNamespace = await import(/* @vite-ignore */ moduleUrl) as Record<string, unknown>;
-    if (isAborted(signal)) throw signal.reason ?? new Error("Preview module loading was cancelled.");
-    const definition = moduleNamespace.componentDefinition;
-    if (!definition || typeof definition !== "object" ||
-        typeof (definition as { create?: unknown }).create !== "function") {
-      throw new Error("Script Asset must export componentDefinition with a synchronous create(context) factory.");
+    // The project's own Component code is executed only after explicit Play.
+    // This is not a sandbox; only the dependency graph is bounded to Project Assets.
+    const moduleNamespace = await import(/* @vite-ignore */ moduleUrl) as { default?: unknown };
+    if (isAborted(input.signal)) throw input.signal.reason ?? new Error("Preview module loading was cancelled.");
+    if (!(moduleNamespace.default instanceof Map)) {
+      throw new Error("Preview module bundle did not return a Component definition map.");
     }
-    return definition as ComponentTypeDefinition;
+    const definitions = moduleNamespace.default as Map<string, unknown>;
+    const result = new Map<string, ComponentTypeDefinition>();
+    for (const entryAsset of entryAssets) {
+      const definition = definitions.get(entryAsset.id);
+      if (!definition || typeof definition !== "object" ||
+          typeof (definition as { create?: unknown }).create !== "function") {
+        throw new Error(
+          'Script Asset "' + entryAsset.path +
+          '" must export componentDefinition with a synchronous create(context) factory.',
+        );
+      }
+      result.set(entryAsset.id, definition as ComponentTypeDefinition);
+    }
+    return result;
   } finally {
     URL.revokeObjectURL(moduleUrl);
   }
@@ -195,7 +426,7 @@ function createBuiltinPreviewDefinition(typeId: string): ComponentTypeDefinition
   return { schema, create: () => ({}) };
 }
 
-/** Uses Core's manifest resolver; this Host owns source compilation and execution. */
+/** Uses Core's manifest resolver; this Host owns bounded Project-local module loading. */
 export async function resolveEditorPreviewComponentRegistry(
   input: EditorPreviewModuleResolutionInput,
 ): Promise<BrowserPreviewModuleResolutionResult> {
@@ -204,14 +435,28 @@ export async function resolveEditorPreviewComponentRegistry(
     BUILTIN_COMPONENT_TYPE_IDS.has(module.typeId),
   );
   const previewBuiltinTypes = new Set(previewBuiltinModules.map((module) => module.typeId));
+  const sourceCache = new Map<string, Promise<string>>();
+  const requiredTypes = new Set(input.requiredTypeIds.filter((typeId) => !previewBuiltinTypes.has(typeId)));
+  const assetById = new Map(input.project.assets.map((asset) => [asset.id, asset] as const));
+  const entryAssets = input.project.componentModules
+    .filter((module) => requiredTypes.has(module.typeId))
+    .map((module) => assetById.get(module.moduleAssetId))
+    .filter((asset): asset is AssetReference =>
+      asset !== undefined && asset.kind === "script" && /\\.(ts|tsx)$/i.test(asset.path),
+    )
+    .sort((left, right) => left.id.localeCompare(right.id));
+  let definitionsPromise: Promise<ReadonlyMap<string, ComponentTypeDefinition>> | undefined;
   const result = await resolveProjectComponentRegistry({
     project: input.project,
-    requiredTypeIds: input.requiredTypeIds.filter((typeId) => !previewBuiltinTypes.has(typeId)),
+    requiredTypeIds: [...requiredTypes],
     signal: input.signal,
     loadModule: async (asset, signal) => {
-      const source = await input.readAssetDocument(asset, signal);
-      if (isAborted(signal)) throw signal.reason ?? new Error("Preview module loading was cancelled.");
-      return loadSelfContainedComponentModule(source, asset.path, signal);
+      if (signal.aborted) throw signal.reason ?? new Error("Preview module loading was cancelled.");
+      definitionsPromise ??= loadProjectComponentModules(entryAssets, input, sourceCache);
+      const definitions = await definitionsPromise;
+      const definition = definitions.get(asset.id);
+      if (!definition) throw new Error('Component module "' + asset.path + '" was not present in the bundled Preview graph.');
+      return definition;
     },
   });
   let registry: ComponentRegistry | undefined;
