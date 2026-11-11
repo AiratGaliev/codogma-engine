@@ -249,28 +249,25 @@ function matchesRuntimePropertySchema(
   value: JsonValue,
 ): boolean {
   switch (schema.type) {
+    // Runtime values are observations, not persisted edits: retain transient
+    // values even when authoring min/max/integer/pattern/enum constraints differ.
     case "string":
-      return typeof value === "string" &&
-        (schema.minLength === undefined || value.length >= schema.minLength) &&
-        (schema.maxLength === undefined || value.length <= schema.maxLength) &&
-        (schema.pattern === undefined || new RegExp(schema.pattern).test(value));
+      return typeof value === "string";
     case "number":
-      return typeof value === "number" && Number.isFinite(value) &&
-        (!schema.integer || Number.isInteger(value)) &&
-        (schema.min === undefined || value >= schema.min) &&
-        (schema.max === undefined || value <= schema.max);
+      return typeof value === "number" && Number.isFinite(value);
     case "boolean":
       return typeof value === "boolean";
     case "enum":
-      return typeof value === "string" && schema.options.includes(value);
+      return typeof value === "string";
     case "asset":
       return value !== null && typeof value === "object" && !Array.isArray(value) &&
-        typeof value.assetId === "string" &&
-        (value.subResourceId === undefined || (schema.allowSubResource === true && typeof value.subResourceId === "string")) &&
+        isValidStableId(value.assetId) &&
+        (value.subResourceId === undefined ||
+          (schema.allowSubResource === true && isValidStableId(value.subResourceId))) &&
         Object.keys(value).every((key) => key === "assetId" || key === "subResourceId");
     case "node":
       return value !== null && typeof value === "object" && !Array.isArray(value) &&
-        typeof value.nodeId === "string" && Object.keys(value).every((key) => key === "nodeId");
+        isValidStableId(value.nodeId) && Object.keys(value).every((key) => key === "nodeId");
   }
 }
 

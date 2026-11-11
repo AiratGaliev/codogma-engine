@@ -931,7 +931,7 @@ test("inspects only declared runtime values and reads their live state per compo
     version: "1.0.0",
     properties: {
       savedSpeed: { type: "number" },
-      elapsedSeconds: { type: "number", storage: "runtime" },
+      elapsedSeconds: { type: "number", min: 0, integer: true, storage: "runtime" },
     },
   };
   const registry = new ComponentRegistry();
