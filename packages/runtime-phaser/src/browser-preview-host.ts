@@ -504,6 +504,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     this.setState("disposed");
     this.events.dispose();
     this.sessionErrorCounts.clear();
+    this.documentSnapshots.clear();
     if (errors.length > 0) {
       throw new AggregateError(errors, "Browser Preview Host disposal failed.");
     }
@@ -602,7 +603,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       readAssetDocument: async (asset, signal) => {
         const cached = this.documentSnapshots.get(asset.id);
         if (cached !== undefined) return cached;
-        const content = await this.options.readAssetDocument(asset, signal);
+        const content = await this.options.readAssetDocument(Object.freeze({ ...asset }), signal);
         if (signal.aborted) throw abortReason(signal);
         if (typeof content !== "string") {
           throw new TypeError("Preview document provider must return UTF-8 JSON text.");

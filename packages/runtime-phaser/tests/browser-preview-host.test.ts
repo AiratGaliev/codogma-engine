@@ -130,7 +130,8 @@ test("composes one Phaser Game with repeatable Play/Pause/Resume/Restart/Stop an
     project: projectFixture(),
     sceneId: "scene-level",
     registry: registryFixture(),
-    readAssetDocument: async (_asset, signal) => {
+    readAssetDocument: async (assetReference, signal) => {
+      assert.equal(Object.isFrozen(assetReference), true);
       if (signal.aborted) throw signal.reason;
       return sceneText;
     },
