@@ -396,6 +396,11 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     const { runtime, scope } = context;
     const sessionId = context.scope.sessionId;
     const graph = runtime.session.coreSession.graph;
+    // RuntimeSceneGraph.getComponent currently enumerates ComponentWorld on
+    // every lookup. Build one indexed snapshot so Inspector refresh stays O(N).
+    const runtimeComponents = new Map(
+      runtime.session.coreSession.world.listComponents().map((component) => [component.id, component] as const),
+    );
     const nodeDocuments = new Map<string, NodeDocument>();
     const componentDocuments = new Map<string, { readonly nodeId: string; readonly document: ComponentInstanceDocument }>();
     const indexDocuments = (nodes: readonly NodeDocument[]): void => {
@@ -416,7 +421,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       const components: BrowserPreviewRuntimeComponentSnapshot[] = [];
       for (const componentInstanceId of node.componentInstanceIds) {
         const source = componentDocuments.get(componentInstanceId);
-        const runtimeComponent = graph.getComponent(componentInstanceId);
+        const runtimeComponent = runtimeComponents.get(componentInstanceId);
         const inspected = runtime.session.coreSession.world.inspectComponent(componentInstanceId);
         if (!source || source.nodeId !== node.id || !runtimeComponent ||
             runtimeComponent.nodeId !== node.id || source.document.typeId !== runtimeComponent.typeId ||
