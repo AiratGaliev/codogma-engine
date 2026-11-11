@@ -523,6 +523,33 @@ export function addNativePrefabReference(
   return validation.value;
 }
 
+export function registerNativeComponentModule(
+  project: ProjectDocumentV1,
+  input: { typeId: string; version: string; path: string },
+): { project: ProjectDocumentV1; moduleAssetId: string } {
+  const typeId = input.typeId.trim();
+  const version = input.version.trim();
+  const path = input.path.trim();
+  const extension = path.toLowerCase().endsWith(".tsx") ? ".tsx" : ".ts";
+  if (!typeId || !version || !path) throw new TypeError("Component typeId, version, and Script Asset path must be non-empty.");
+  if (!path.toLowerCase().endsWith(".ts") && !path.toLowerCase().endsWith(".tsx")) throw new TypeError("Component Script Asset must use a .ts or .tsx path.");
+  assertNativeAssetPath(path, extension);
+  if (project.componentModules.some((item) => item.typeId === typeId)) throw new Error(`Component type "${typeId}" is already registered in project.json.`);
+  if (project.assets.some((item) => item.path.toLowerCase() === path.toLowerCase())) throw new Error(`Project asset path is already registered: "${path}".`);
+
+  const moduleAssetId = createId();
+  const next: ProjectDocumentV1 = {
+    ...project,
+    assets: [...project.assets, { id: moduleAssetId, path, kind: "script" }],
+    componentModules: [...project.componentModules, { typeId, moduleAssetId, version }],
+  };
+  const validation = validateProjectDocument(next);
+  if (!validation.valid || !validation.value) {
+    throw new NativeProjectDocumentError("Updated Project document", validation.diagnostics);
+  }
+  return { project: validation.value, moduleAssetId };
+}
+
 export function getNativeScriptModules(project: ProjectDocumentV1): Array<{
   typeId: string;
   version: string;

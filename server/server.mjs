@@ -24,7 +24,8 @@ import {
     dispatchTool,
     getChatSystemPrompt
 } from "./mcp.mjs"
-import { safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync } from "./path-security.mjs"
+import { safeJoin, openSafeProjectFileForRead, openSafeProjectFileForWrite, isSafeOpenFileHandle, readFilePrefixSafely, ensureProjectDirectorySafely, readProjectDirectoryEntriesSafelySync, removeProjectEntrySafely, renameProjectEntrySafely, copyProjectEntrySafely, statProjectDirectorySafelySync, writeNewFileSafely } from "./path-security.mjs"
+import { checkProjectTypeScript } from "./typescript-project-diagnostics.mts"
 import { evaluateRequestGuard, parseAllowedHosts, parseAllowedOrigins } from "./request-origin.mjs"
 import { readRequestBuffer } from "./request-body.mjs"
 import {
@@ -440,6 +441,33 @@ async function handleProjectOperation(req, res) {
                     entryCount: entries.length,
                     root: buildProjectTree(PROJECT_DIR)
                 })
+            }
+
+            case "project.createFile": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
+                if (typeof args.relativePath !== "string" || typeof args.text !== "string") {
+                    return apiError(res, "relativePath and text are required")
+                }
+
+                const fullPath = safeJoin(PROJECT_DIR, args.relativePath)
+                if (!fullPath || fullPath === PROJECT_DIR) return apiError(res, "invalid project path")
+                if (!await ensureProjectDirectorySafely(PROJECT_DIR, path.dirname(fullPath))) {
+                    return apiError(res, "invalid project path")
+                }
+                if (!writeNewFileSafely(PROJECT_DIR, fullPath, args.text)) {
+                    return apiError(res, "Project file already exists or cannot be created safely.", 409)
+                }
+
+                hashCache.value = ""
+                return sendJSON(res, {
+                    entry: getProjectEntry(PROJECT_DIR, args.relativePath)
+                })
+            }
+
+            case "project.checkTypeScript": {
+                if (!PROJECT_DIR) return apiError(res, "No project is open.", 409)
+                const result = checkProjectTypeScript(PROJECT_DIR, args.relativePath, args.source)
+                return sendJSON(res, result)
             }
 
             case "project.createDirectory": {

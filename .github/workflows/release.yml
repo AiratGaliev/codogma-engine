@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           SERVER_LOG="$RUNNER_TEMP/codogma-engine-release.log"
-          PORT=3100 PROJECT_DIR=packages/cge/tests/fixtures/acceptance-project node server/server.mjs >"$SERVER_LOG" 2>&1 &
+          PORT=3100 PROJECT_DIR=packages/cge/tests/fixtures/acceptance-project node --experimental-strip-types server/server.mjs >"$SERVER_LOG" 2>&1 &
           SRV=$!
           cleanup() {
             kill "$SRV" 2>/dev/null || true

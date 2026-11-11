@@ -15,6 +15,7 @@ import {
   addNativePrefabReference,
   createNativeSceneDocument,
   registerNativeScene,
+  registerNativeComponentModule,
   findPrefabReferenceByAssetPath,
   findSceneReferenceByAssetPath,
   getNativeScriptModules,
@@ -784,4 +785,48 @@ testCase("rejects nested Prefab instances when parsing or serializing a native P
     () => parseNativePrefabDocument(registeredProject, outerPrefab.id, JSON.stringify(outerPrefab)),
     hasNestedPrefabDiagnostic,
   );
+});
+
+testCase("registers a new Script Asset and stable Component module reference in the native Project manifest", () => {
+  const registration = registerNativeComponentModule(project, {
+    typeId: "com.codogma.authoring.health",
+    version: "1.0.0",
+    path: "src/components/Health.ts",
+  });
+
+  assert.equal(registration.project.assets.at(-1)?.id, registration.moduleAssetId);
+  assert.deepEqual(registration.project.assets.at(-1), {
+    id: registration.moduleAssetId,
+    path: "src/components/Health.ts",
+    kind: "script",
+  });
+  assert.deepEqual(registration.project.componentModules.at(-1), {
+    typeId: "com.codogma.authoring.health",
+    moduleAssetId: registration.moduleAssetId,
+    version: "1.0.0",
+  });
+  assert.equal(getNativeScriptModules(registration.project).at(-1)?.path, "src/components/Health.ts");
+});
+
+testCase("rejects duplicate Component type ids, occupied asset paths, and unsafe Script paths", () => {
+  assert.throws(() => registerNativeComponentModule(project, {
+    typeId: "com.codogma.acceptance.follow-target",
+    version: "1.0.0",
+    path: "src/components/Other.ts",
+  }), /already registered/);
+  assert.throws(() => registerNativeComponentModule(project, {
+    typeId: "com.codogma.authoring.other",
+    version: "1.0.0",
+    path: "src/FollowTarget.ts",
+  }), /already registered/);
+  assert.throws(() => registerNativeComponentModule(project, {
+    typeId: "com.codogma.authoring.other",
+    version: "1.0.0",
+    path: "../outside.ts",
+  }), /relative .ts path/);
+  assert.throws(() => registerNativeComponentModule(project, {
+    typeId: "com.codogma.authoring.other",
+    version: "1.0.0",
+    path: "src/components/Other.js",
+  }), /must use a \.ts or \.tsx path/);
 });

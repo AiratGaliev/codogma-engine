@@ -31,6 +31,7 @@ import {
 import type { ComponentTypeSchemaV1, CoreDiagnostic, JsonValue } from "@codogma/cge";
 import { NativeComponentInspector } from "./components/NativeComponentInspector.tsx";
 import { parseComponentSchemaSource } from "./domain/component-schema-source.js";
+import { createNativeComponentModuleSource } from "./domain/component-module-source.js";
 import {
   createSceneNode,
   findSceneNode,
@@ -53,6 +54,7 @@ import {
   parseNativeSceneDocument,
   PROJECT_MANIFEST_PATH,
   registerNativeScene,
+  registerNativeComponentModule,
   resolvePrefabAsset,
   resolveSceneAsset,
   serializeNativePrefabDocument,
@@ -114,6 +116,7 @@ import {
   getProjectManagerSnapshot,
   readProjectFile,
   writeProjectFile,
+  createProjectFile,
   deleteProjectEntries,
   createProjectDirectory,
   type ProjectTreeEntry,
@@ -423,6 +426,13 @@ function App() {
   const [componentSchemaDiagnostics, setComponentSchemaDiagnostics] = createSignal<ReadonlyMap<string, readonly CoreDiagnostic[]>>(new Map());
   const [componentEditDiagnostics, setComponentEditDiagnostics] = createSignal<ReadonlyMap<string, readonly CoreDiagnostic[]>>(new Map());
   const [componentDrafts, setComponentDrafts] = createSignal<Record<string, string>>({});
+  const [componentModuleDialogOpen, setComponentModuleDialogOpen] = createSignal(false);
+  const [componentModuleCreating, setComponentModuleCreating] = createSignal(false);
+  const [componentModuleError, setComponentModuleError] = createSignal("");
+  const [newComponentModuleName, setNewComponentModuleName] = createSignal("New Component");
+  const [newComponentModuleTypeId, setNewComponentModuleTypeId] = createSignal("com.codogma.game.new-component");
+  const [newComponentModuleVersion, setNewComponentModuleVersion] = createSignal("1.0.0");
+  const [newComponentModulePath, setNewComponentModulePath] = createSignal("src/components/NewComponent.ts");
   const [prefabCatalog, setPrefabCatalog] = createSignal<NativePrefabCatalogEntry[]>([]);
   const [selectedPrefabPath, setSelectedPrefabPath] = createSignal("");
   const [history, setHistory] = createSignal<DocumentHistoryState<EditorDocument | null>>(
@@ -819,7 +829,12 @@ function App() {
   let nativeProjectMutationInProgress = false;
   let documentLoadSequence = 0;
   let scriptCheckSequence = 0;
+  let scriptCheckTimeout: number | undefined;
 
+  onCleanup(() => {
+    if (scriptCheckTimeout !== undefined) window.clearTimeout(scriptCheckTimeout);
+    scriptCheckSequence += 1;
+  });
 
   let componentSchemaRefreshSequence = 0;
 
@@ -1306,6 +1321,10 @@ function App() {
   }
 
   async function runTypeScriptSourceCheck(path: string, content: string) {
+    if (scriptCheckTimeout !== undefined) {
+      window.clearTimeout(scriptCheckTimeout);
+      scriptCheckTimeout = undefined;
+    }
     const request = ++scriptCheckSequence;
     setScriptChecking(true);
     try {
@@ -1314,8 +1333,15 @@ function App() {
         setScriptDiagnostics(result.diagnostics);
       }
     } catch (error) {
-      if (request === scriptCheckSequence) {
-        log("warning", `TypeScript diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      if (request === scriptCheckSequence && scriptSourcePath() === path && scriptSource() === content) {
+        const message = error instanceof Error ? error.message : String(error);
+        setScriptDiagnostics([{
+          code: 90000,
+          severity: "error",
+          message,
+          path,
+        }]);
+        log("warning", `TypeScript diagnostics unavailable: ${message}`);
       }
     } finally {
       if (request === scriptCheckSequence) setScriptChecking(false);
@@ -1325,7 +1351,13 @@ function App() {
   function updateTypeScriptSource(content: string) {
     setScriptSource(content);
     const path = scriptSourcePath();
-    if (path) void runTypeScriptSourceCheck(path, content);
+    if (!path) return;
+    if (scriptCheckTimeout !== undefined) window.clearTimeout(scriptCheckTimeout);
+    setScriptChecking(true);
+    scriptCheckTimeout = window.setTimeout(() => {
+      scriptCheckTimeout = undefined;
+      void runTypeScriptSourceCheck(path, content);
+    }, 350);
   }
 
   async function openTypeScriptFile(path: string, sourceContent?: string) {
@@ -1334,6 +1366,12 @@ function App() {
       return;
     }
     if (documentDirty() && !window.confirm("The active document has unsaved changes. Discard them and open the TypeScript source?")) return;
+    if (scriptCheckTimeout !== undefined) {
+      window.clearTimeout(scriptCheckTimeout);
+      scriptCheckTimeout = undefined;
+    }
+    scriptCheckSequence += 1;
+    setScriptChecking(false);
     const request = ++documentLoadSequence;
     try {
       const content = sourceContent ?? await readProjectFile(path);
@@ -1357,7 +1395,7 @@ function App() {
 
   async function saveTypeScriptFile() {
     const path = scriptSourcePath();
-    if (!path || scriptSaving() || !scriptDirty()) return;
+    if (!path || scriptSaving() || nativeProjectMutationInProgress || !scriptDirty()) return;
     setScriptSaving(true);
     try {
       const content = scriptSource();
@@ -1407,6 +1445,93 @@ function App() {
     if (!root) throw new Error("The project tree is not loaded.");
     const existing = flattenProjectEntries(root).find((item) => item.path.toLowerCase() === path.toLowerCase());
     if (existing) throw new Error(`A project item already exists at "${path}".`);
+  }
+
+  function openComponentModuleDialog() {
+    setComponentModuleError("");
+    setNewComponentModuleName("New Component");
+    setNewComponentModuleTypeId("com.codogma.game.new-component");
+    setNewComponentModuleVersion("1.0.0");
+    setNewComponentModulePath("src/components/NewComponent.ts");
+    setComponentModuleDialogOpen(true);
+  }
+
+  async function createComponentModule() {
+    if (componentModuleCreating()) return;
+    const project = projectDocument();
+    if (!project) {
+      setComponentModuleError("Open a native Project before creating a Component module.");
+      return;
+    }
+    if (documentDirty()) {
+      setComponentModuleError("Save the active Scene, Project, Animation and Script before creating a Component module.");
+      return;
+    }
+    if (activeSceneLoads > 0 || projectSaving() || scriptSaving() || saving() || nativeProjectMutationInProgress) {
+      setComponentModuleError("Another document operation is in progress. Try again when it has finished.");
+      return;
+    }
+
+    const name = newComponentModuleName().trim();
+    const typeId = newComponentModuleTypeId().trim();
+    const version = newComponentModuleVersion().trim();
+    const path = newComponentModulePath().trim().replace(/\\/g, "/");
+    let scriptWritten = false;
+    let manifestSaved = false;
+    nativeProjectMutationInProgress = true;
+    setComponentModuleCreating(true);
+    setComponentModuleError("");
+    try {
+      if (!name) throw new Error("Enter a Component display name.");
+      if (!typeId) throw new Error("Enter a stable Component typeId.");
+      if (!version) throw new Error("Enter a Component version.");
+      if (!path) throw new Error("Enter a Script Asset path.");
+      assertNewProjectFilePath(path);
+      const registration = registerNativeComponentModule(project, { typeId, version, path });
+      const source = createNativeComponentModuleSource({ typeId, name, version });
+
+      let directory = "";
+      for (const segment of path.split("/").slice(0, -1)) {
+        directory = directory ? directory + "/" + segment : segment;
+        await ensureProjectFolder(directory);
+      }
+      await createProjectFile(path, source);
+      scriptWritten = true;
+
+      setProjectDocument(registration.project);
+      if (!(await saveProjectManifest(true))) {
+        setProjectDocument(project);
+        throw new Error(`project.json could not be saved after creating the Script Asset "${path}".`);
+      }
+      manifestSaved = true;
+      await refreshProjectTree().catch((error) => {
+        log("warning", `Component module was saved, but the Project tree could not refresh: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      setComponentModuleDialogOpen(false);
+      await openTypeScriptFile(path, source);
+      log("success", `Created native Component module ${typeId}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      let reportedMessage = message;
+      if (scriptWritten && !manifestSaved) {
+        setProjectDocument(project);
+        try {
+          await deleteProjectEntries([path]);
+          scriptWritten = false;
+          reportedMessage = `${message} The newly created Script Asset was safely removed.`;
+          log("info", `Removed unregistered Script Asset ${path} after Project manifest save failed.`);
+        } catch (cleanupError) {
+          const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+          reportedMessage = `${message} The source file remains on disk because safe rollback failed: ${cleanupMessage}`;
+        }
+        await refreshProjectTree().catch(() => {});
+      }
+      setComponentModuleError(reportedMessage);
+      log("error", `Component module creation failed: ${message}`);
+    } finally {
+      nativeProjectMutationInProgress = false;
+      setComponentModuleCreating(false);
+    }
   }
 
   async function attachComponentToSelected(typeId: string) {
@@ -1575,9 +1700,9 @@ function App() {
     } catch (error) { log("error", error instanceof Error ? error.message : String(error)); }
   }
 
-  async function saveProjectManifest(): Promise<boolean> {
+  async function saveProjectManifest(allowDuringProjectMutation = false): Promise<boolean> {
     const current = projectDocument();
-    if (!current || projectSaving() || nativeProjectMutationInProgress) return false;
+    if (!current || projectSaving() || (nativeProjectMutationInProgress && !allowDuringProjectMutation)) return false;
     setProjectSaving(true);
     try {
       const content = serializeNativeProjectDocument(current);
@@ -4078,7 +4203,7 @@ function App() {
                   </div>
                   <div class="timeline-actions">
                     <span class="typescript-diagnostic-status">
-                      {scriptChecking() ? "Checking syntax…" : scriptDiagnostics().length === 0 ? "No syntax diagnostics" : `${scriptDiagnostics().length} diagnostic(s)`}
+                      {scriptChecking() ? "Checking Project…" : scriptDiagnostics().length === 0 ? "No Project diagnostics" : `${scriptDiagnostics().length} Project diagnostic(s)`}
                     </span>
                     <button class="primary-button" data-testid="save-typescript-source" disabled={!scriptDirty() || scriptSaving()} onClick={() => void saveTypeScriptFile()}>
                       {scriptSaving() ? "Saving…" : "Save"}
@@ -4097,12 +4222,12 @@ function App() {
                   onInput={(event) => updateTypeScriptSource(event.currentTarget.value)}
                 />
                 <div class="typescript-diagnostics" data-testid="typescript-diagnostics" role="status" aria-live="polite">
-                  <Show when={scriptDiagnostics().length > 0} fallback={<span class="inspector-note">Single-file TypeScript syntax check. Project-wide semantic type checking uses the project's configured tsc build.</span>}>
+                  <Show when={scriptDiagnostics().length > 0} fallback={<span class="inspector-note">Project-wide semantic checking covers registered Script Assets and their Project-local imports. Diagnostics never execute project code.</span>}>
                     <For each={scriptDiagnostics()}>
                       {(diagnostic) => (
                         <div class="typescript-diagnostic-row" classList={{ error: diagnostic.severity === "error", warning: diagnostic.severity === "warning" }}>
                           <strong>{diagnostic.severity.toUpperCase()}</strong>
-                          <span>{diagnostic.line ? `Ln ${diagnostic.line}, Col ${diagnostic.column ?? 1} · ` : ""}{diagnostic.message}</span>
+                          <span>{diagnostic.path ? diagnostic.path + ": " : ""}{diagnostic.line ? `Ln ${diagnostic.line}, Col ${diagnostic.column ?? 1} · ` : ""}{diagnostic.message}</span>
                           <code>TS{diagnostic.code}</code>
                         </div>
                       )}
@@ -4778,10 +4903,13 @@ function App() {
               <div class="components-toolbar">
                 <div class="components-file-heading">
                   <strong>Native Component Modules</strong>
-                  <span>Registered in project.json · no sidecar .components files</span>
+                  <span>Script Assets and stable module references in project.json</span>
                 </div>
+                <button class="primary-button" data-testid="new-component-module" disabled={!projectDocument() || componentModuleCreating()} onClick={openComponentModuleDialog}>
+                  New Component
+                </button>
               </div>
-              <Show when={componentRegistry().length > 0} fallback={<div class="timeline-empty">No native component modules are registered in this Project. Script module authoring belongs to COD-91.</div>}>
+              <Show when={componentRegistry().length > 0} fallback={<div class="timeline-empty">No Component modules are registered yet. Create one to add its Script Asset and register its stable typeId in project.json.</div>}>
                 <div class="components-definition-list">
                   <For each={componentRegistry()}>
                     {(entry) => (
@@ -4794,12 +4922,30 @@ function App() {
                           <span>Asset ID: {entry.module.moduleAssetId}</span>
                           <span>Path: {entry.path}</span>
                         </div>
+                        <Show when={entry.schema}>
+                          <div class="components-definition-meta">
+                            <span>Definition: {entry.schema?.name ?? "Unknown"}</span>
+                            <span>{Object.keys(entry.schema?.properties ?? {}).length} schema properties</span>
+                          </div>
+                        </Show>
+                        <Show when={entry.diagnostics.length > 0}>
+                          <div class="components-module-diagnostics" role="alert" data-testid={`component-module-diagnostics-${entry.module.typeId}`}>
+                            <For each={entry.diagnostics}>
+                              {(diagnostic) => (
+                                <div class="components-module-diagnostic">
+                                  <strong>{diagnostic.code}</strong>
+                                  <span>{diagnostic.path ? diagnostic.path + ": " : ""}{diagnostic.message}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
                       </section>
                     )}
                   </For>
                 </div>
               </Show>
-              <div class="inspector-note">This panel reads only native Project manifest references. Creating/editing module manifests and typed property schemas is handled by COD-91/COD-27.</div>
+              <div class="inspector-note">Component schemas are read from each Script Asset's static componentDefinition export. Edit a module to update its schema and factory; the Inspector uses the validated schema.</div>
             </div>
           </Show>
 
@@ -4899,6 +5045,63 @@ function App() {
             <span>Start the Codogma Node server and open the Host through the Vite proxy on port 5173.</span>
             <button class="primary-button" onClick={() => void loadProject()}>Retry connection</button>
           </div>
+        </div>
+      </Show>
+
+
+      <Show when={componentModuleDialogOpen()}>
+        <div class="modal-backdrop" data-testid="component-module-dialog-backdrop" onClick={(event) => {
+          if (event.target === event.currentTarget && !componentModuleCreating()) setComponentModuleDialogOpen(false);
+        }}>
+          <form
+            class="command-palette component-module-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="component-module-dialog-title"
+            data-testid="component-module-dialog"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createComponentModule();
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Escape" && !componentModuleCreating()) setComponentModuleDialogOpen(false);
+            }}
+          >
+            <div class="component-module-dialog-header">
+              <div>
+                <h2 id="component-module-dialog-title">Create Script Component</h2>
+                <p>Register a TypeScript Script Asset and its stable module identity in this Project.</p>
+              </div>
+            </div>
+            <div class="component-module-dialog-content">
+              <label class="inspector-field">
+                <span>Display name</span>
+                <input aria-label="Component display name" data-testid="component-module-name" required maxLength={80} value={newComponentModuleName()} onInput={(event) => setNewComponentModuleName(event.currentTarget.value)} />
+              </label>
+              <label class="inspector-field">
+                <span>Stable typeId</span>
+                <input aria-label="Component typeId" data-testid="component-module-type-id" required value={newComponentModuleTypeId()} onInput={(event) => setNewComponentModuleTypeId(event.currentTarget.value)} />
+              </label>
+              <label class="inspector-field">
+                <span>Version</span>
+                <input aria-label="Component version" data-testid="component-module-version" required value={newComponentModuleVersion()} onInput={(event) => setNewComponentModuleVersion(event.currentTarget.value)} />
+              </label>
+              <label class="inspector-field">
+                <span>Script Asset path</span>
+                <input aria-label="Component Script Asset path" data-testid="component-module-path" required value={newComponentModulePath()} onInput={(event) => setNewComponentModulePath(event.currentTarget.value)} />
+              </label>
+              <Show when={componentModuleError()}>
+                <div class="component-module-dialog-error" role="alert" data-testid="component-module-error">{componentModuleError()}</div>
+              </Show>
+            </div>
+            <div class="component-module-dialog-actions">
+              <button type="button" class="subtle-button" disabled={componentModuleCreating()} onClick={() => setComponentModuleDialogOpen(false)}>Cancel</button>
+              <button type="submit" class="primary-button" data-testid="create-component-module" disabled={componentModuleCreating() || !projectDocument()}>
+                {componentModuleCreating() ? "Creating…" : "Create Component"}
+              </button>
+            </div>
+          </form>
         </div>
       </Show>
 

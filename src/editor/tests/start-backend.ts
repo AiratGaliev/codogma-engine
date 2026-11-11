@@ -16,7 +16,7 @@ mkdirSync(projectsDirectory, { recursive: true });
 mkdirSync(userDataDirectory, { recursive: true });
 cpSync(sourceFixture, projectDirectory, { recursive: true });
 
-const server = spawn(process.execPath, [join(repositoryRoot, "server", "server.mjs")], {
+const server = spawn(process.execPath, ["--experimental-strip-types", join(repositoryRoot, "server", "server.mjs")], {
   cwd: repositoryRoot,
   stdio: "inherit",
   env: {

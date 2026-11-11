@@ -31,7 +31,7 @@ const services = [
   {
     name: "Codogma backend",
     command: process.execPath,
-    args: [resolve(rootDir, "server", "server.mjs")],
+    args: ["--experimental-strip-types", resolve(rootDir, "server", "server.mjs")],
     cwd: rootDir,
   },
   {

@@ -24,7 +24,7 @@ async function reserveLoopbackPort(): Promise<number> {
 
 async function startNativeEditorServer(): Promise<{ origin: string; stop: () => Promise<void> }> {
     const port = await reserveLoopbackPort()
-    const child = spawn(process.execPath, [join(repositoryRoot, "server", "server.mjs")], {
+    const child = spawn(process.execPath, ["--experimental-strip-types", join(repositoryRoot, "server", "server.mjs")], {
         cwd: repositoryRoot,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
@@ -107,6 +107,68 @@ test("Node server serves the native Editor Host, Project Model and runtime asset
         assert.equal(projectResponse.status, 200)
         const projectDocument = await projectResponse.json()
         assert.equal(projectDocument.schemaVersion, 1)
+
+        const exclusiveCreateResponse = await fetch(`${server.origin}/editor/project/operations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                operation: "project.createFile",
+                arguments: {
+                    relativePath: "src/GeneratedComponent.ts",
+                    text: "export const generated = true;",
+                },
+            }),
+        })
+        assert.equal(exclusiveCreateResponse.status, 200)
+        const createdFile = await exclusiveCreateResponse.json()
+        assert.equal(createdFile.entry.relativePath, "src/GeneratedComponent.ts")
+
+        const duplicateCreateResponse = await fetch(`${server.origin}/editor/project/operations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                operation: "project.createFile",
+                arguments: {
+                    relativePath: "src/GeneratedComponent.ts",
+                    text: "export const overwritten = true;",
+                },
+            }),
+        })
+        assert.equal(duplicateCreateResponse.status, 409)
+        assert.match((await duplicateCreateResponse.json()).error, /already exists/)
+
+        const typeCheckResponse = await fetch(`${server.origin}/editor/project/operations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                operation: "project.checkTypeScript",
+                arguments: {
+                    relativePath: "src/FollowTarget.ts",
+                    source: "export const invalidNumber: number = \"not a number\";",
+                },
+            }),
+        })
+        assert.equal(typeCheckResponse.status, 200)
+        const typeCheck = await typeCheckResponse.json()
+        assert.equal(typeCheck.compilerVersion, "6.0.3")
+        assert.ok(typeCheck.checkedFiles >= 1)
+        assert.ok(typeCheck.diagnostics.some((item: { code: number; path?: string }) =>
+            item.code === 2322 && item.path === "src/FollowTarget.ts",
+        ))
+
+        const rejectedTypeCheckResponse = await fetch(`${server.origin}/editor/project/operations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                operation: "project.checkTypeScript",
+                arguments: {
+                    relativePath: "../package.json",
+                    source: "export {}",
+                },
+            }),
+        })
+        const rejectedTypeCheck = await rejectedTypeCheckResponse.json()
+        assert.equal(rejectedTypeCheck.error.includes("registered Script Asset"), true)
 
         const projectAssetResponse = await fetch(`${server.origin}/editor/external/assets/player.svg`)
         assert.equal(projectAssetResponse.status, 200)

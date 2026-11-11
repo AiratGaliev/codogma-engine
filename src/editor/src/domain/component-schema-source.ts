@@ -21,6 +21,24 @@ function unwrapTypeExpression(ts: TypeScriptApi, input: import("typescript").Exp
   return node;
 }
 
+function isComponentFactoryExpression(
+  ts: TypeScriptApi,
+  input: import("typescript").Expression,
+  declarations: ReadonlyMap<string, import("typescript").VariableDeclaration>,
+  resolving = new Set<string>(),
+): boolean {
+  const node = unwrapTypeExpression(ts, input);
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+    return !node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+  }
+  if (!ts.isIdentifier(node) || resolving.has(node.text)) return false;
+  const declaration = declarations.get(node.text);
+  if (!declaration?.initializer) return false;
+  const next = new Set(resolving);
+  next.add(node.text);
+  return isComponentFactoryExpression(ts, declaration.initializer, declarations, next);
+}
+
 function schemaDiagnostic(message: string, path: string): CoreDiagnostic {
   return {
     code: "COMPONENT_INVALID_SCHEMA",
@@ -55,6 +73,8 @@ export async function parseComponentSchemaSource(
 
   const declarations = new Map<string, import("typescript").VariableDeclaration>();
   let schemaExpression: import("typescript").Expression | undefined;
+  let factoryCount = 0;
+  let factoryInvalid = false;
   for (const statement of sourceFile.statements) {
     if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
     const isExported = statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
@@ -72,13 +92,32 @@ export async function parseComponentSchemaSource(
       }
 
       for (const property of definition.properties) {
-        if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name)) continue;
+        if (!("name" in property) || !property.name || ts.isComputedPropertyName(property.name)) continue;
         const propertyName = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
           ? property.name.text
           : undefined;
         if (propertyName === "schema") {
+          if (!ts.isPropertyAssignment(property) || schemaExpression) {
+            return {
+              valid: false,
+              diagnostics: [schemaDiagnostic("componentDefinition must declare exactly one static schema property.", fileName)],
+            };
+          }
           schemaExpression = property.initializer;
-          break;
+          continue;
+        }
+        if (propertyName === "create") {
+          factoryCount += 1;
+          const validFactory = ts.isMethodDeclaration(property)
+            ? property.body !== undefined &&
+              !property.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+            : ts.isPropertyAssignment(property)
+              ? isComponentFactoryExpression(ts, property.initializer, declarations)
+              : ts.isShorthandPropertyAssignment(property) &&
+                isComponentFactoryExpression(ts, property.name, declarations);
+          if (!validFactory || factoryCount > 1) {
+            factoryInvalid = true;
+          }
         }
       }
     }
@@ -157,6 +196,18 @@ export async function parseComponentSchemaSource(
           ...item,
           path: item.path ?? fileName,
         })),
+      };
+    }
+    if (factoryCount !== 1) {
+      return {
+        valid: false,
+        diagnostics: [schemaDiagnostic("componentDefinition must export a callable create factory.", fileName)],
+      };
+    }
+    if (factoryInvalid) {
+      return {
+        valid: false,
+        diagnostics: [schemaDiagnostic("componentDefinition.create must be one callable method, function, or arrow function.", fileName)],
       };
     }
     if (validated.value.typeId !== expectedTypeId) {

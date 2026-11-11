@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "vitest";
 import { parseComponentSchemaSource } from "../src/domain/component-schema-source.js";
+import { createNativeComponentModuleSource } from "../src/domain/component-module-source.js";
 
 const fixturePath = resolve(
   process.cwd(),
@@ -67,6 +68,49 @@ test("does not execute dynamic expressions while reading an untrusted module sch
   assert.match(result.diagnostics[0]?.message ?? "", /static JSON literals/);
 });
 
+test("rejects a Component Definition without an executable factory export", async () => {
+  const missing = await parseComponentSchemaSource(
+    'export const componentDefinition = { schema: { schemaVersion: 1, typeId: "com.example.missing-factory", name: "Missing Factory", version: "1.0.0", properties: {} } };',
+    "MissingFactory.ts",
+    "com.example.missing-factory",
+    "1.0.0",
+  );
+  const nonCallable = await parseComponentSchemaSource(
+    'export const componentDefinition = { schema: { schemaVersion: 1, typeId: "com.example.invalid-factory", name: "Invalid Factory", version: "1.0.0", properties: {} }, create: 42 };',
+    "InvalidFactory.ts",
+    "com.example.invalid-factory",
+    "1.0.0",
+  );
+
+  assert.equal(missing.valid, false);
+  assert.equal(nonCallable.valid, false);
+  assert.match(missing.diagnostics[0]?.message ?? "", /callable create factory/);
+  assert.match(nonCallable.diagnostics[0]?.message ?? "", /callable method, function, or arrow function/);
+});
+
+test("accepts a factory referenced through a local const without executing it", async () => {
+  const source = `
+    const create = (_context: { readonly instanceId: string }) => ({});
+    export const componentDefinition = {
+      schema: {
+        schemaVersion: 1 as const,
+        typeId: "com.example.factory-reference",
+        name: "Factory Reference",
+        version: "1.0.0",
+        properties: {},
+      },
+      create,
+    };
+  `;
+  const result = await parseComponentSchemaSource(
+    source,
+    "FactoryReference.ts",
+    "com.example.factory-reference",
+    "1.0.0",
+  );
+  assert.equal(result.valid, true);
+});
+
 test("rejects a module that does not declare an exported Component Definition", async () => {
   const result = await parseComponentSchemaSource(
     'const componentDefinition = { schema: {} };',
@@ -77,4 +121,50 @@ test("rejects a module that does not declare an exported Component Definition", 
 
   assert.equal(result.valid, false);
   assert.match(result.diagnostics[0]?.message ?? "", /must export a componentDefinition constant/);
+});
+
+test("creates an editable Script Component starter whose static schema matches its manifest identity", async () => {
+  const source = createNativeComponentModuleSource({
+    typeId: "com.codogma.generated.health",
+    name: 'Health "Controller"',
+    version: "1.2.0",
+  });
+  const result = await parseComponentSchemaSource(
+    source,
+    "src/components/Health.ts",
+    "com.codogma.generated.health",
+    "1.2.0",
+  );
+
+  assert.equal(result.valid, true);
+  assert.equal(result.value?.name, 'Health "Controller"');
+  assert.equal(result.value?.typeId, "com.codogma.generated.health");
+  assert.equal(Object.keys(result.value?.properties ?? {}).length, 0);
+  assert.match(source, /create\(_context/);
+});
+
+
+test("rejects asynchronous Component factories because Core factories are synchronous", async () => {
+  const source = `
+    export const componentDefinition = {
+      schema: {
+        schemaVersion: 1 as const,
+        typeId: "com.example.async-factory",
+        name: "Async Factory",
+        version: "1.0.0",
+        properties: {},
+      },
+      async create() {
+        return {};
+      },
+    };
+  `;
+  const result = await parseComponentSchemaSource(
+    source,
+    "AsyncFactory.ts",
+    "com.example.async-factory",
+    "1.0.0",
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.diagnostics[0]?.message ?? "", /callable method, function, or arrow function/);
 });

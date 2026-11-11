@@ -34,3 +34,7 @@ developer's project directory.
 ## Runtime Identity / Live Inspector
 
 `runtime-identity-live-inspector.spec.ts` belongs to the promotion browser-acceptance gate. It starts the native Browser Preview Host, selects two Component attachments sharing a `typeId` but having different instance IDs, verifies exact Runtime Hierarchy → authoring Inspector mapping, observes a changing runtime-only property, and confirms Restart/Stop cleanup with unchanged serialized Scene data.
+
+The native Script Component authoring spec also creates a Script Asset from the Components panel, verifies its explicit `componentModules` manifest registration, checks semantic diagnostics against the unsaved source buffer, and confirms the persisted starter source can be reopened after a reload. Its generated files and directories are removed in `afterEach`.
+
+The Script Component authoring browser regression also holds the exclusive file-create request while attempting a Scene edit (verifying the native Project mutation lock), and exercises Preview loading of a Component that statically imports a relative helper Script Asset. This checks the bounded Project-local TypeScript module graph through the real Browser Preview Host; only promotion candidates execute the browser suite.
