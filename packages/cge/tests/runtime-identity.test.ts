@@ -32,6 +32,7 @@ test("rejects stale Preview sessions, other Projects and malformed IDs", () => {
   let getterCalls = 0;
   const accessorIdentity = Object.create(null) as Record<string, unknown>;
   for (const [key, value] of Object.entries(identity)) {
+    if (key === "sessionId") continue;
     Object.defineProperty(accessorIdentity, key, { enumerable: true, configurable: true, writable: true, value });
   }
   Object.defineProperty(accessorIdentity, "sessionId", {
