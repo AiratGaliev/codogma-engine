@@ -218,7 +218,6 @@ async function inspectModuleSource(
       while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
       if (!parent) {
         diagnostics.push(diagnosticAt(
-          ts,
           sourceFile,
           node,
           "Top-level await is not supported in synchronous Preview Component modules.",
