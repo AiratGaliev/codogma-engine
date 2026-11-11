@@ -349,7 +349,6 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     identity: RuntimeSelectionIdentity,
     context: BrowserPreviewRuntimeContext,
   ): RuntimeSelectionIdentity | undefined {
-    if (!isRuntimeIdentityInScope(identity, context.scope)) return undefined;
     return resolveRuntimeIdentityInWorld(
       identity,
       context.scope,
