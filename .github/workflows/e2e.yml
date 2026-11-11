@@ -112,7 +112,7 @@ jobs:
           export CODOGMA_MCP_URL=http://127.0.0.1:3100/editor/mcp
           export PROJECT_DIR="$GITHUB_WORKSPACE/packages/cge/tests/fixtures/acceptance-project"
 
-          node server/server.mjs >"$SERVER_LOG" 2>&1 &
+          node --experimental-strip-types server/server.mjs >"$SERVER_LOG" 2>&1 &
           SRV=$!
           cleanup() {
             kill "$SRV" 2>/dev/null || true

@@ -194,7 +194,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PORT=3100 node server/server.mjs &
+          PORT=3100 node --experimental-strip-types server/server.mjs &
           SRV=$!
           sleep 3
           curl -sf http://localhost:3100/editor/mcp-bridge-status | tee /dev/stderr | grep -q '"connected"'
