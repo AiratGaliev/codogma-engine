@@ -295,7 +295,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [x] Сохранять идентичность Project/Component registry/Scene document snapshot на весь lifetime Preview Host; Restart не подхватывает изменённый Scene document автоматически.
 - [ ] При выборе объекта во время игры позволить переход к соответствующему объекту редактора и отображать фактические runtime values в Inspector.
 - [ ] Разделить transient runtime mutation и изменение исходных сериализованных данных; UI обязан явно обозначать выбранный режим.
-- [x] Передавать ошибки загрузки Core/Phaser и diagnostics runtime adapter с привязкой к session ID; ошибки asset/module providers и live Inspector transport подключить в соответствующих следующих slices.
+- [x] Передавать session-scoped diagnostics от TypeScript/module preflight, Core Scene Loader и Phaser runtime adapter; ошибки конкретных asset renderer providers и live Inspector transport подключить в соответствующих следующих slices.
 - [ ] Добавить debug overlays для Transform/physics bodies/collisions в рамках поддерживаемого runtime.
 - [ ] Определить семантику time scale и single-step; реализовать после подтверждения, что scheduler может гарантировать корректное pause/step.
 - [ ] Измерить отзывчивость редактора под нагрузкой preview. Если embedded preview блокирует UI, проверить отдельный context/window/process вместо обещания изоляции по умолчанию.

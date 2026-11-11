@@ -6,6 +6,7 @@ import {
   createSceneManager,
   createTypedEventBus,
   type EventSubscribeOptions,
+  type AssetReference,
   type EventSubscription,
   type ProjectDocumentV1,
   type ProjectSceneLoaderOptions,
@@ -47,11 +48,14 @@ export interface BrowserPreviewErrorEvent {
   readonly sessionId: string;
   readonly projectId: string;
   readonly sceneId: string;
-  readonly source: "host" | "core" | "phaser";
+  readonly source: "host" | "core" | "phaser" | "module" | "compiler";
   readonly code: string;
+  readonly severity: "error";
   readonly message: string;
   readonly causeMessage?: string;
   readonly path?: string;
+  readonly line?: number;
+  readonly column?: number;
   readonly entityId?: string;
   readonly componentInstanceId?: string;
   readonly nodeId?: string;
@@ -63,7 +67,34 @@ export interface BrowserPreviewHostEvents {
   error: BrowserPreviewErrorEvent;
 }
 
-export interface BrowserPreviewHostOptions {
+export interface BrowserPreviewModuleDiagnostic {
+  readonly source: "compiler" | "module" | "core";
+  readonly code: string | number;
+  readonly severity: "error" | "warning" | "info";
+  readonly message: string;
+  readonly path?: string;
+  readonly line?: number;
+  readonly column?: number;
+  readonly entityId?: string;
+  readonly componentInstanceId?: string;
+  readonly nodeId?: string;
+}
+
+export interface BrowserPreviewModuleResolutionContext {
+  readonly project: ProjectDocumentV1;
+  readonly sceneId: string;
+  readonly signal: AbortSignal;
+  /** Reads only Asset IDs/paths declared by the captured Project snapshot. */
+  readonly readAssetDocument: ProjectSceneLoaderOptions["readAssetDocument"];
+}
+
+export interface BrowserPreviewModuleResolutionResult {
+  /** Complete executable registry for this Project Preview, returned only when resolution succeeds. */
+  readonly registry?: ComponentRegistry;
+  readonly diagnostics: readonly BrowserPreviewModuleDiagnostic[];
+}
+
+interface BrowserPreviewHostBaseOptions {
   /** Phaser 4.2.1 runtime namespace. Injection keeps this package importable in Node tooling. */
   readonly phaser: typeof Phaser;
   /** Browser element owned by the external host; the Preview Host never creates an iframe or window. */
@@ -71,8 +102,6 @@ export interface BrowserPreviewHostOptions {
   /** Captured when the host is created; later authoring edits require a new host/snapshot. */
   readonly project: ProjectDocumentV1;
   readonly sceneId: string;
-  /** Explicit executable Component/module allow-list, snapshotted at host creation. */
-  readonly registry: ComponentRegistry;
   /** Host-owned, project-scoped Scene document access. Successfully read documents are cached per host. */
   readonly readAssetDocument: ProjectSceneLoaderOptions["readAssetDocument"];
   /** Explicit rendering providers keyed by the registered Component type ID. */
@@ -81,7 +110,19 @@ export interface BrowserPreviewHostOptions {
   readonly height?: number;
   /** Rejects boot when Phaser never creates the Preview Scene; defaults to 15 seconds. */
   readonly startupTimeoutMs?: number;
+  /**
+   * Optional session-scoped module preflight. Run the Core module resolver and
+   * TypeScript diagnostics here; the callback executes before Phaser Game boot.
+   */
+  readonly resolveComponentRegistry?: (
+    context: BrowserPreviewModuleResolutionContext,
+  ) => Promise<BrowserPreviewModuleResolutionResult>;
 }
+
+export type BrowserPreviewHostOptions = BrowserPreviewHostBaseOptions & (
+  | { readonly registry: ComponentRegistry; readonly resolveComponentRegistry?: never }
+  | { readonly registry?: never; readonly resolveComponentRegistry: NonNullable<BrowserPreviewHostBaseOptions["resolveComponentRegistry"]> }
+);
 
 export interface BrowserPreviewHost {
   readonly state: BrowserPreviewState;
@@ -110,6 +151,22 @@ export interface BrowserPreviewHost {
 }
 
 let hostSequence = 0;
+
+function snapshotComponentRegistry(source: ComponentRegistry): ComponentRegistry {
+  const snapshot = new ComponentRegistry();
+  for (const definition of source.list()) snapshot.register(definition);
+  return snapshot;
+}
+
+function freezeProjectSnapshot<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      freezeProjectSnapshot(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -171,7 +228,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
   private readonly viewFactories: Readonly<Record<string, PhaserComponentViewFactory>>;
   private readonly hostId = "preview-" + (++hostSequence).toString(36);
   private readonly projectSnapshot?: ProjectDocumentV1;
-  private readonly registrySnapshot?: ComponentRegistry;
+  private registrySnapshot?: ComponentRegistry;
   private readonly snapshotError?: unknown;
   private viewport: { width: number; height: number };
   private game: Phaser.Game | undefined;
@@ -197,8 +254,11 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     if (!options.parent || typeof options.parent !== "object") {
       throw new TypeError("BrowserPreviewHost requires an existing browser parent element.");
     }
-    if (!options.registry || typeof options.registry.list !== "function") {
-      throw new TypeError("BrowserPreviewHost requires an explicit ComponentRegistry.");
+    if (options.registry && options.resolveComponentRegistry) {
+      throw new TypeError("Provide either a ComponentRegistry or a session-scoped Component module resolver, not both.");
+    }
+    if ((!options.registry || typeof options.registry.list !== "function") && !options.resolveComponentRegistry) {
+      throw new TypeError("BrowserPreviewHost requires a ComponentRegistry or a session-scoped module resolver.");
     }
     if (typeof options.readAssetDocument !== "function") {
       throw new TypeError("BrowserPreviewHost requires a host-owned Scene document provider.");
@@ -220,10 +280,10 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     // Capture both persisted data and executable registrations now, not on the
     // first Play. Invalid input is surfaced as a session-scoped startup error.
     try {
-      this.projectSnapshot = JSON.parse(JSON.stringify(options.project)) as ProjectDocumentV1;
-      const registrySnapshot = new ComponentRegistry();
-      for (const definition of options.registry.list()) registrySnapshot.register(definition);
-      this.registrySnapshot = registrySnapshot;
+      this.projectSnapshot = freezeProjectSnapshot(
+        JSON.parse(JSON.stringify(options.project)) as ProjectDocumentV1,
+      );
+      if (options.registry) this.registrySnapshot = snapshotComponentRegistry(options.registry);
     } catch (error) {
       this.snapshotError = error;
     }
@@ -368,6 +428,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     this.sessionErrorCounts.set(sessionId, 0);
     this.setState("starting");
     try {
+      await awaitWithAbort(this.ensureRegistry(signal), signal);
       const manager = await awaitWithAbort(this.ensureGame(), signal);
       if (signal.aborted || this.disposeRequested) return;
       const result = await manager.switchTo(this.sceneId, { signal });
@@ -376,7 +437,11 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     } catch (error) {
       if (signal.aborted || this.disposeRequested) return;
       if ((this.sessionErrorCounts.get(sessionId) ?? 0) === 0) {
-        this.reportError(error, "PREVIEW_START_FAILED", "phaser");
+        this.reportError(
+          error,
+          "PREVIEW_START_FAILED",
+          this.registrySnapshot ? "phaser" : "module",
+        );
       }
       if (!this.sceneManager && this.game) {
         try {
@@ -406,6 +471,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       this.setState("starting");
     }
     try {
+      await awaitWithAbort(this.ensureRegistry(signal), signal);
       const manager = await awaitWithAbort(this.ensureGame(), signal);
       if (signal.aborted || this.disposeRequested) return;
       await manager.stop();
@@ -424,7 +490,11 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       if (signal.aborted || this.disposeRequested) return;
       const sessionId = this.currentSessionId;
       if (sessionId && (this.sessionErrorCounts.get(sessionId) ?? 0) === 0) {
-        this.reportError(error, "PREVIEW_RESTART_FAILED", "phaser");
+        this.reportError(
+          error,
+          "PREVIEW_RESTART_FAILED",
+          this.registrySnapshot ? "phaser" : "module",
+        );
       }
       if (!this.sceneManager && this.game) {
         try {
@@ -451,6 +521,10 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
 
     this.setState("stopping");
     try {
+      // External Phaser Game destruction starts SceneManager.dispose() from
+      // the Scene event callback. Stop is a lifecycle barrier and must not
+      // report "stopped" until that asynchronous teardown has completed.
+      await this.unexpectedGameDestroyCleanup;
       await this.sceneManager?.stop();
       // If Stop races Phaser boot before Scene.create, there is no usable
       // Scene Manager to reuse. Destroy that partial Game instead of retaining
@@ -592,6 +666,86 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     return ready;
   }
 
+  private async ensureRegistry(signal: AbortSignal): Promise<ComponentRegistry> {
+    if (this.snapshotError !== undefined) throw this.snapshotError;
+    if (this.registrySnapshot) return this.registrySnapshot;
+    if (!this.projectSnapshot || !this.options.resolveComponentRegistry) {
+      throw new Error("Preview Component module resolution is not configured.");
+    }
+
+    const result = await this.options.resolveComponentRegistry({
+      project: this.projectSnapshot,
+      sceneId: this.sceneId,
+      signal,
+      readAssetDocument: (asset, assetSignal) => this.readProjectAssetDocument(asset, assetSignal),
+    });
+    if (signal.aborted) throw abortReason(signal);
+
+    let errorCount = 0;
+    for (const diagnostic of result.diagnostics) {
+      if (diagnostic.severity === "error") {
+        errorCount += 1;
+        const sessionId = this.currentSessionId;
+        if (!sessionId) continue;
+        this.publishError({
+          sessionId,
+          projectId: this.projectId,
+          sceneId: this.sceneId,
+          source: diagnostic.source,
+          code: String(diagnostic.code),
+          severity: "error",
+          message: diagnostic.message,
+          ...(diagnostic.path === undefined ? {} : { path: diagnostic.path }),
+          ...(diagnostic.line === undefined ? {} : { line: diagnostic.line }),
+          ...(diagnostic.column === undefined ? {} : { column: diagnostic.column }),
+          ...(diagnostic.entityId === undefined ? {} : { entityId: diagnostic.entityId }),
+          ...(diagnostic.componentInstanceId === undefined ? {} : { componentInstanceId: diagnostic.componentInstanceId }),
+          ...(diagnostic.nodeId === undefined ? {} : { nodeId: diagnostic.nodeId }),
+        });
+      } else {
+        const sessionId = this.currentSessionId;
+        if (!sessionId) continue;
+        this.emit("log", Object.freeze({
+          sessionId,
+          projectId: this.projectId,
+          sceneId: this.sceneId,
+          level: diagnostic.severity === "warning" ? "warn" : "info",
+          message: [
+            diagnostic.path,
+            diagnostic.line === undefined ? undefined : String(diagnostic.line),
+            diagnostic.column === undefined ? undefined : String(diagnostic.column),
+            diagnostic.message,
+          ].filter(Boolean).join(": "),
+        }));
+      }
+    }
+    if (errorCount > 0) throw new Error("Preview Component module resolution failed with diagnostics.");
+    if (!result.registry) throw new Error("Preview Component module resolver did not return a registry.");
+
+    this.registrySnapshot = snapshotComponentRegistry(result.registry);
+    return this.registrySnapshot;
+  }
+
+  private async readProjectAssetDocument(
+    asset: AssetReference,
+    signal: AbortSignal,
+  ): Promise<string> {
+    if (!this.projectSnapshot) throw new Error("Preview Project snapshot is unavailable.");
+    const capturedAsset = this.projectSnapshot.assets.find((item) => item.id === asset.id);
+    if (!capturedAsset || capturedAsset.path !== asset.path || capturedAsset.kind !== asset.kind) {
+      throw new Error("Preview document provider received an Asset outside the captured Project snapshot.");
+    }
+    const cached = this.documentSnapshots.get(capturedAsset.id);
+    if (cached !== undefined) return cached;
+    const content = await this.options.readAssetDocument(Object.freeze({ ...capturedAsset }), signal);
+    if (signal.aborted) throw abortReason(signal);
+    if (typeof content !== "string") {
+      throw new TypeError("Preview document provider must return UTF-8 JSON text.");
+    }
+    this.documentSnapshots.set(capturedAsset.id, content);
+    return content;
+  }
+
   private createCoreLoader(): ProjectSceneLoader {
     if (this.snapshotError !== undefined) throw this.snapshotError;
     if (!this.projectSnapshot || !this.registrySnapshot) {
@@ -600,17 +754,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
     return new ProjectSceneLoader({
       project: this.projectSnapshot,
       registry: this.registrySnapshot,
-      readAssetDocument: async (asset, signal) => {
-        const cached = this.documentSnapshots.get(asset.id);
-        if (cached !== undefined) return cached;
-        const content = await this.options.readAssetDocument(Object.freeze({ ...asset }), signal);
-        if (signal.aborted) throw abortReason(signal);
-        if (typeof content !== "string") {
-          throw new TypeError("Preview document provider must return UTF-8 JSON text.");
-        }
-        this.documentSnapshots.set(asset.id, content);
-        return content;
-      },
+      readAssetDocument: (asset, signal) => this.readProjectAssetDocument(asset, signal),
     });
   }
 
@@ -688,6 +832,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       sceneId: diagnostic.sceneId,
       source: "phaser",
       code: diagnostic.code,
+      severity: "error",
       message: diagnostic.message,
       ...(diagnostic.causeMessage === undefined ? {} : { causeMessage: diagnostic.causeMessage }),
       ...(diagnostic.nodeId === undefined ? {} : { nodeId: diagnostic.nodeId }),
@@ -711,6 +856,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
           sceneId: this.sceneId,
           source: "core",
           code: diagnostic.code,
+          severity: "error",
           message: diagnostic.message,
           ...(diagnostic.path === undefined ? {} : { path: diagnostic.path }),
           ...(diagnostic.entityId === undefined ? {} : { entityId: diagnostic.entityId }),
@@ -732,6 +878,7 @@ class BrowserPreviewHostImpl implements BrowserPreviewHost {
       sceneId: this.sceneId,
       source: fallbackSource,
       code: fallbackCode,
+      severity: "error",
       message: errorMessage(error),
       ...(error instanceof Error && error.cause !== undefined
         ? { causeMessage: errorMessage(error.cause) }

@@ -523,3 +523,141 @@ test("recreates Preview only after cleanup of an unexpectedly destroyed active G
   assert.equal(FakeGame.instances[1]?.scene.events.listenerCount("update"), 1);
   await host.dispose();
 });
+
+
+
+test("routes compiler and module-resolution diagnostics to the allocated session before Phaser boot", async () => {
+  FakeGame.instances = [];
+  const errors: BrowserPreviewErrorEvent[] = [];
+  const logs: BrowserPreviewLogEvent[] = [];
+  const host = createBrowserPreviewHost({
+    phaser,
+    parent: {} as HTMLElement,
+    project: projectFixture(),
+    sceneId: "scene-level",
+    readAssetDocument: async (_asset, signal) => {
+      if (signal.aborted) throw signal.reason;
+      return sceneText;
+    },
+    resolveComponentRegistry: async (context) => {
+      assert.equal(context.sceneId, "scene-level");
+      assert.equal(Object.isFrozen(context.project), true);
+      return {
+        diagnostics: [
+          {
+            source: "module",
+            code: "PROJECT_BUILD_MODULE_MISSING",
+            severity: "warning",
+            message: "Optional module could not be loaded.",
+            path: "src/Optional.ts",
+          },
+          {
+            source: "compiler",
+            code: 2307,
+            severity: "error",
+            message: "Cannot find module './missing'.",
+            path: "src/Player.ts",
+            line: 4,
+            column: 10,
+          },
+          {
+            source: "module",
+            code: "PROJECT_BUILD_MODULE_MISSING",
+            severity: "error",
+            message: "Required Component module is unavailable.",
+            path: "src/Player.ts",
+            entityId: componentTypeId,
+          },
+        ],
+      };
+    },
+  });
+  host.subscribe("error", (event) => errors.push(event));
+  host.subscribe("log", (event) => logs.push(event));
+
+  await assert.rejects(host.play(), /module resolution failed with diagnostics/);
+  const failedSessionId = host.sessionId;
+  assert.ok(failedSessionId);
+  assert.equal(host.state, "failed");
+  assert.equal(FakeGame.instances.length, 0);
+  assert.equal(errors.length, 2);
+  assert.ok(errors.every((event) => event.sessionId === failedSessionId));
+  assert.deepEqual(errors.map((event) => event.source), ["compiler", "module"]);
+  assert.equal(errors[0]?.code, "2307");
+  assert.equal(errors[0]?.path, "src/Player.ts");
+  assert.equal(errors[0]?.line, 4);
+  assert.equal(errors[0]?.column, 10);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0]?.sessionId, failedSessionId);
+  assert.equal(logs[0]?.level, "warn");
+  assert.match(logs[0]?.message ?? "", /Optional module could not be loaded/);
+
+  await host.dispose();
+});
+
+test("Stop waits for failed cleanup initiated by an unexpected external Game destruction", async () => {
+  FakeGame.instances = [];
+  const host = createHost({
+    factory(context) {
+      const view = new MockGameObject(context.scene);
+      view.destroy = (): void => {
+        throw new Error("Synthetic view cleanup failure.");
+      };
+      return view as unknown as Phaser.GameObjects.GameObject;
+    },
+  });
+
+  await host.play();
+  const game = FakeGame.instances[0];
+  assert.ok(game);
+  game.destroy(true);
+
+  await assert.rejects(host.stop(), /SceneManager disposal failed/);
+  assert.equal(host.state, "failed");
+  assert.ok(host.sessionId);
+
+  await assert.rejects(host.dispose(), /Browser Preview Host disposal failed/);
+  assert.equal(host.state, "disposed");
+});
+
+
+test("resolves and snapshots a host-owned Component registry before creating the Phaser Game", async () => {
+  FakeGame.instances = [];
+  let resolutions = 0;
+  const host = createBrowserPreviewHost({
+    phaser,
+    parent: {} as HTMLElement,
+    project: projectFixture(),
+    sceneId: "scene-level",
+    readAssetDocument: async (_asset, signal) => {
+      if (signal.aborted) throw signal.reason;
+      return sceneText;
+    },
+    resolveComponentRegistry: async ({ project, sceneId, signal }) => {
+      resolutions += 1;
+      assert.equal(Object.isFrozen(project), true);
+      assert.equal(sceneId, "scene-level");
+      assert.equal(signal.aborted, false);
+      return { registry: registryFixture(), diagnostics: [] };
+    },
+    componentViewFactories: {
+      [componentTypeId](context) {
+        return new MockGameObject(context.scene) as unknown as Phaser.GameObjects.GameObject;
+      },
+    },
+  });
+
+  await host.play();
+  const firstSessionId = host.sessionId;
+  assert.ok(firstSessionId);
+  assert.equal(host.state, "running");
+  assert.equal(resolutions, 1);
+  assert.equal(FakeGame.instances.length, 1);
+
+  await host.restart();
+  assert.notEqual(host.sessionId, firstSessionId);
+  assert.equal(resolutions, 1);
+  assert.equal(FakeGame.instances.length, 1);
+  await host.dispose();
+});
+

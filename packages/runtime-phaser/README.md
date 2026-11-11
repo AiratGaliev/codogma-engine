@@ -61,7 +61,8 @@ const preview = createBrowserPreviewHost({
   parent: document.querySelector("#preview")!,
   project,
   sceneId: "scene-level",
-  registry, // explicit allow-list of already resolved Component modules
+  resolveComponentRegistry: async ({ project, sceneId, signal }) =>
+    resolvePreviewModules(project, sceneId, signal), // Core module resolver + TypeScript diagnostics
   readAssetDocument: (asset, signal) => projectFiles.readText(asset.path, signal),
   componentViewFactories: {
     "com.example.sprite": (context) => {
@@ -76,7 +77,7 @@ preview.subscribe("error", (event) => reportPreviewError(event));
 await preview.play();
 ```
 
-`BrowserPreviewHostOptions` captures the Project JSON and the ComponentRegistry registrations when the Host is created. A Scene document is cached after its first successful read, so subsequent Restart operations use the same inputs. Create a new Host to adopt changed authoring data or a changed module allow-list. Component factories receive `getAsset(assetId)`, which returns only frozen copies of Asset references validated from that captured Project snapshot; actual file loading/rendering stays with the host's explicit providers.
+`BrowserPreviewHostOptions` captures and freezes the Project JSON when the Host is created. Supply either a pre-resolved `registry` or `resolveComponentRegistry`; the resolver runs after a Preview `sessionId` is allocated and before Phaser Game boot. It can compose Core `resolveProjectComponentRegistry` with the Editor's TypeScript diagnostics and return structured module/compiler diagnostics. Errors are emitted with that session ID and prevent Phaser startup; warnings/info are routed as session-scoped log events. A successful registry is snapshotted and reused on Restart. A Scene document is cached after its first successful read. Create a new Host to adopt changed authoring data or module definitions. The resolver's document provider accepts only Asset references declared by the captured Project and caches successful reads. Component factories receive `getAsset(assetId)`, which returns only frozen copies of Asset references validated from that captured Project snapshot; actual file loading/rendering stays with the host's explicit providers.
 
 - `play()` loads the selected Scene through `ProjectSceneLoader` → `PhaserRuntimeSceneLoader` → `SceneManager`.
 - `pause()` / `resume()` pause or resume Core simulation; the Phaser Game continues rendering. The Host does not pause the entire Game loop.
