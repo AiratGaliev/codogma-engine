@@ -278,23 +278,24 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 
 ### Внутренняя очередь выполнения
 
-1. **Первая цель — Browser Preview:** запустить fixture в обычном браузере через data-driven loader (serialized scene + registered component module), обрабатывать повторные Play/Stop/Restart, ошибки запуска и завершать принадлежащие preview процессы без утечек. Fixture не должен зависеть от per-scene generated TS class; Tauri не требуется.
+1. **Browser Preview lifecycle (engineering slice implemented):** `@codogma/runtime-phaser` предоставляет browser-first Host, который объединяет native loader и Phaser adapter, владеет одним Game и поддерживает повторные Play/Stop/Restart, resize и диагностику с идентификатором сессии. Проверка рендеринга, focus и visibility в реальном браузере остаётся в CODQA-15.
 2. **Сразу после него — runtime identity и диагностика:** связать runtime entity/component ID с Project Model, получать реальные runtime values, различать runtime mutations и serialized source data, привязывать errors/logs к запуску.
 3. **Следующий UI-слой — Embedded Game View:** подключать после доказанного browser lifecycle. Сравнить отзывчивость редактора под нагрузкой; не обещать изоляцию, если не измерены отдельные context/window/process.
 4. **Только затем — расширенная диагностика:** overlays, time scale и single-step после подтверждения scheduler semantics. Отдельное окно — дополнительный способ проверки fullscreen/input/scaling, а не блокер первой browser-сессии.
 
 ### Задачи
 
-- [ ] Выделить Game Preview Host с отдельным контрактом от Tauri/Electron и текущего HTTP сервера.
-- [ ] Запускать Core Preview из native Project Model через тот же loader/adapter contract, который используют runtime и Build.
-- [ ] Реализовать управление preview: Play, Pause, Resume, Restart/Stop, resize viewport и передачу log/error events.
+- [x] Выделить Browser Preview Host с отдельным контрактом от Tauri/Electron и текущего HTTP сервера.
+- [x] Запускать Core Preview из native Project Model через Core Scene Loader и Phaser runtime adapter; generated TypeScript class для каждой Scene не требуется.
+- [x] Реализовать управление Preview: Play, Pause, Resume, Restart/Stop, resize viewport и log/error events, привязанные к session ID.
 - [ ] Поддержать Embedded Game View для быстрой итерации.
 - [ ] Поддержать запуск игры в отдельном окне, чтобы проверять fullscreen, input, scaling и поведение без панелей редактора.
 - [ ] Сохранить внешний запуск в обычном браузере для проверки целевого HTML5 runtime.
-- [ ] Реализовать связь runtime entity/component ID с Project Model, когда это возможно без неоднозначности.
+- [ ] Реализовать live-связь runtime entity/component ID с Project Model и Editor selection, когда это возможно без неоднозначности.
+- [x] Сохранять идентичность Project/Component registry/Scene document snapshot на весь lifetime Preview Host; Restart не подхватывает изменённый Scene document автоматически.
 - [ ] При выборе объекта во время игры позволить переход к соответствующему объекту редактора и отображать фактические runtime values в Inspector.
 - [ ] Разделить transient runtime mutation и изменение исходных сериализованных данных; UI обязан явно обозначать выбранный режим.
-- [ ] Передавать сообщения об ошибках запуска, compile/runtime exceptions и недоступных ресурсах.
+- [x] Передавать ошибки загрузки Core/Phaser и diagnostics runtime adapter с привязкой к session ID; ошибки asset/module providers и live Inspector transport подключить в соответствующих следующих slices.
 - [ ] Добавить debug overlays для Transform/physics bodies/collisions в рамках поддерживаемого runtime.
 - [ ] Определить семантику time scale и single-step; реализовать после подтверждения, что scheduler может гарантировать корректное pause/step.
 - [ ] Измерить отзывчивость редактора под нагрузкой preview. Если embedded preview блокирует UI, проверить отдельный context/window/process вместо обещания изоляции по умолчанию.
@@ -308,7 +309,7 @@ Unity 6.6 (6000.6, выпущенная версия; актуальный patch
 - [ ] Команды жизненного цикла preview обрабатывают повторные вызовы и ошибки; зависшие server/preview процессы не остаются после Stop/закрытия.
 - [ ] Error/log messages связаны с текущим запуском и доступны для диагностики.
 - [ ] Live Inspector показывает runtime state, а не только сериализованные значения из editor model.
-- [ ] Сборка/запуск браузерного preview не требует Tauri.
+- [x] Browser Preview Host API не требует Tauri/Electron и создаёт Phaser Game внутри переданного browser parent element.
 - [ ] В документации указаны ограничения процесса изоляции и метрик; производительность подтверждена замером на fixture.
 
 ---

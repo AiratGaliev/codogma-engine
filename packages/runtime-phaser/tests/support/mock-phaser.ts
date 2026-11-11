@@ -15,6 +15,14 @@ export class MockEvents {
     return this;
   }
 
+  once(event: string, listener: (...args: unknown[]) => void): this {
+    const wrapped = (...args: unknown[]): void => {
+      this.off(event, wrapped);
+      listener(...args);
+    };
+    return this.on(event, wrapped);
+  }
+
   emit(event: string, ...args: unknown[]): void {
     for (const listener of [...(this.listeners.get(event) ?? [])]) listener(...args);
   }

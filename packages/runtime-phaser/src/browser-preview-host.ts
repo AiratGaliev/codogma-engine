@@ -1,0 +1,786 @@
+import type Phaser from "phaser";
+import {
+  ComponentRegistry,
+  ProjectSceneLoader,
+  SceneLoaderError,
+  createSceneManager,
+  createTypedEventBus,
+  type EventSubscribeOptions,
+  type EventSubscription,
+  type ProjectDocumentV1,
+  type ProjectSceneLoaderOptions,
+  type SceneManager,
+} from "@codogma/cge";
+import {
+  createPhaserRuntimeSceneLoader,
+  type PhaserComponentViewFactory,
+} from "./phaser-runtime-scene-loader.js";
+import type { PhaserRuntimeDiagnostic } from "./errors.js";
+
+export type BrowserPreviewState =
+  | "idle"
+  | "starting"
+  | "running"
+  | "paused"
+  | "stopping"
+  | "stopped"
+  | "failed"
+  | "disposed";
+
+export type BrowserPreviewLogLevel = "debug" | "info" | "warn" | "error";
+
+export interface BrowserPreviewStateChange {
+  readonly previous: BrowserPreviewState;
+  readonly current: BrowserPreviewState;
+  readonly sessionId: string | null;
+}
+
+export interface BrowserPreviewLogEvent {
+  readonly sessionId: string;
+  readonly projectId: string;
+  readonly sceneId: string;
+  readonly level: BrowserPreviewLogLevel;
+  readonly message: string;
+}
+
+export interface BrowserPreviewErrorEvent {
+  readonly sessionId: string;
+  readonly projectId: string;
+  readonly sceneId: string;
+  readonly source: "host" | "core" | "phaser";
+  readonly code: string;
+  readonly message: string;
+  readonly causeMessage?: string;
+  readonly path?: string;
+  readonly entityId?: string;
+  readonly componentInstanceId?: string;
+  readonly nodeId?: string;
+}
+
+export interface BrowserPreviewHostEvents {
+  "state-change": BrowserPreviewStateChange;
+  log: BrowserPreviewLogEvent;
+  error: BrowserPreviewErrorEvent;
+}
+
+export interface BrowserPreviewHostOptions {
+  /** Phaser 4.2.1 runtime namespace. Injection keeps this package importable in Node tooling. */
+  readonly phaser: typeof Phaser;
+  /** Browser element owned by the external host; the Preview Host never creates an iframe or window. */
+  readonly parent: HTMLElement;
+  /** Captured when the host is created; later authoring edits require a new host/snapshot. */
+  readonly project: ProjectDocumentV1;
+  readonly sceneId: string;
+  /** Explicit executable Component/module allow-list, snapshotted at host creation. */
+  readonly registry: ComponentRegistry;
+  /** Host-owned, project-scoped Scene document access. Successfully read documents are cached per host. */
+  readonly readAssetDocument: ProjectSceneLoaderOptions["readAssetDocument"];
+  /** Explicit rendering providers keyed by the registered Component type ID. */
+  readonly componentViewFactories?: Readonly<Record<string, PhaserComponentViewFactory>>;
+  readonly width?: number;
+  readonly height?: number;
+  /** Rejects boot when Phaser never creates the Preview Scene; defaults to 15 seconds. */
+  readonly startupTimeoutMs?: number;
+}
+
+export interface BrowserPreviewHost {
+  readonly state: BrowserPreviewState;
+  /** The current run's identity, including startup/failure diagnostics; null after Stop. */
+  readonly sessionId: string | null;
+  readonly projectId: string;
+  readonly sceneId: string;
+  subscribe<TKey extends keyof BrowserPreviewHostEvents>(
+    type: TKey,
+    handler: (payload: BrowserPreviewHostEvents[TKey]) => void,
+    options?: EventSubscribeOptions,
+  ): EventSubscription;
+  /** Emits a log only while a concrete Preview session is starting, running or paused. */
+  log(level: BrowserPreviewLogLevel, message: string): boolean;
+  play(): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  /** Stops the current runtime session and starts a fresh one from this host's captured inputs. */
+  restart(): Promise<void>;
+  /** Releases the runtime session but keeps the Phaser Game available for another Play. */
+  stop(): Promise<void>;
+  /** Updates the viewport immediately or stores the dimensions for the first Game boot. */
+  resize(width: number, height: number): void;
+  /** Terminal and idempotent. Destroys the Phaser Game and all host-owned runtime resources. */
+  dispose(): Promise<void>;
+}
+
+let hostSequence = 0;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isPreviewLogLevel(value: string): value is BrowserPreviewLogLevel {
+  return value === "debug" || value === "info" || value === "warn" || value === "error";
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new Error("Preview operation was cancelled.");
+}
+
+function awaitWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => signal.removeEventListener("abort", onAbort);
+    const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(abortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (signal.aborted) reject(abortReason(signal));
+        else resolve(value);
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+function validateViewport(width: number, height: number): void {
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new RangeError("Preview viewport width and height must be finite positive numbers.");
+  }
+}
+
+/**
+ * Composes the native Core Scene Loader and Phaser view adapter into one
+ * browser-owned Game. Core/Phaser remain the only simulation and frame owners.
+ */
+class BrowserPreviewHostImpl implements BrowserPreviewHost {
+  private currentState: BrowserPreviewState = "idle";
+  private currentSessionId: string | null = null;
+  private readonly events = createTypedEventBus<BrowserPreviewHostEvents>();
+  private readonly documentSnapshots = new Map<string, string>();
+  private readonly viewFactories: Readonly<Record<string, PhaserComponentViewFactory>>;
+  private readonly hostId = "preview-" + (++hostSequence).toString(36);
+  private readonly projectSnapshot?: ProjectDocumentV1;
+  private readonly registrySnapshot?: ComponentRegistry;
+  private readonly snapshotError?: unknown;
+  private viewport: { width: number; height: number };
+  private game: Phaser.Game | undefined;
+  private gameReadyPromise: Promise<SceneManager> | undefined;
+  private failGameReady: ((error: unknown) => void) | undefined;
+  private gameStartupTimer: ReturnType<typeof setTimeout> | undefined;
+  private sceneManager: SceneManager | undefined;
+  private unexpectedGameDestroyCleanup: Promise<void> | undefined;
+  private readonly pendingStartControllers = new Set<AbortController>();
+  private operationTail: Promise<void> = Promise.resolve();
+  private disposePromise: Promise<void> | undefined;
+  private disposeRequested = false;
+  private expectedGameDestruction = false;
+  private sessionErrorCounts = new Map<string, number>();
+  private nextSessionSequence = 0;
+
+  constructor(private readonly options: BrowserPreviewHostOptions) {
+    if (!options || !options.phaser || typeof options.phaser.Game !== "function" ||
+        typeof options.phaser.Scene !== "function" || !options.phaser.Core?.Events?.DESTROY ||
+        !options.phaser.Scale || options.phaser.Scale.RESIZE === undefined) {
+      throw new TypeError("BrowserPreviewHost requires the Phaser 4 Game, Scene, DESTROY event and RESIZE scale APIs.");
+    }
+    if (!options.parent || typeof options.parent !== "object") {
+      throw new TypeError("BrowserPreviewHost requires an existing browser parent element.");
+    }
+    if (!options.registry || typeof options.registry.list !== "function") {
+      throw new TypeError("BrowserPreviewHost requires an explicit ComponentRegistry.");
+    }
+    if (typeof options.readAssetDocument !== "function") {
+      throw new TypeError("BrowserPreviewHost requires a host-owned Scene document provider.");
+    }
+    if (typeof options.sceneId !== "string" || options.sceneId.trim().length === 0) {
+      throw new TypeError("BrowserPreviewHost requires a stable target Scene ID.");
+    }
+
+    const width = options.width ?? 800;
+    const height = options.height ?? 600;
+    validateViewport(width, height);
+    const startupTimeoutMs = options.startupTimeoutMs ?? 15_000;
+    if (!Number.isFinite(startupTimeoutMs) || startupTimeoutMs < 1 || startupTimeoutMs > 60_000) {
+      throw new RangeError("Preview startupTimeoutMs must be between 1 and 60000.");
+    }
+    this.viewport = { width, height };
+    this.viewFactories = Object.freeze({ ...(options.componentViewFactories ?? {}) });
+
+    // Capture both persisted data and executable registrations now, not on the
+    // first Play. Invalid input is surfaced as a session-scoped startup error.
+    try {
+      this.projectSnapshot = JSON.parse(JSON.stringify(options.project)) as ProjectDocumentV1;
+      const registrySnapshot = new ComponentRegistry();
+      for (const definition of options.registry.list()) registrySnapshot.register(definition);
+      this.registrySnapshot = registrySnapshot;
+    } catch (error) {
+      this.snapshotError = error;
+    }
+  }
+
+  get state(): BrowserPreviewState { return this.currentState; }
+  get sessionId(): string | null { return this.currentSessionId; }
+  get projectId(): string {
+    const id = (this.projectSnapshot ?? this.options.project)?.id;
+    return typeof id === "string" && id.length > 0 ? id : "unknown-project";
+  }
+  get sceneId(): string { return this.options.sceneId; }
+
+  subscribe<TKey extends keyof BrowserPreviewHostEvents>(
+    type: TKey,
+    handler: (payload: BrowserPreviewHostEvents[TKey]) => void,
+    options?: EventSubscribeOptions,
+  ): EventSubscription {
+    return this.events.subscribe(type, handler, options);
+  }
+
+  log(level: BrowserPreviewLogLevel, message: string): boolean {
+    if (!isPreviewLogLevel(level)) throw new TypeError("Preview log level must be debug, info, warn or error.");
+    if (typeof message !== "string") throw new TypeError("Preview log message must be a string.");
+    const sessionId = this.currentSessionId;
+    if (!sessionId || !["starting", "running", "paused"].includes(this.currentState)) return false;
+    this.emit("log", Object.freeze({
+      sessionId,
+      projectId: this.projectId,
+      sceneId: this.sceneId,
+      level,
+      message,
+    }));
+    return true;
+  }
+
+  play(): Promise<void> {
+    this.assertNotDisposing();
+    const controller = new AbortController();
+    return this.enqueueStart(controller, (signalOwner) => this.startInternal(signalOwner));
+  }
+
+  pause(): Promise<void> {
+    this.assertNotDisposing();
+    return this.enqueue(async () => {
+      if (this.currentState !== "running") return;
+      const manager = this.sceneManager;
+      if (!manager) throw new Error("The active Preview session has no Scene Manager.");
+      try {
+        await manager.pause();
+        this.setState("paused");
+      } catch (error) {
+        this.reportError(error, "PREVIEW_PAUSE_FAILED", "host");
+        throw error;
+      }
+    });
+  }
+
+  resume(): Promise<void> {
+    this.assertNotDisposing();
+    return this.enqueue(async () => {
+      if (this.currentState !== "paused") return;
+      const manager = this.sceneManager;
+      if (!manager) throw new Error("The paused Preview session has no Scene Manager.");
+      try {
+        await manager.resume();
+        this.setState("running");
+      } catch (error) {
+        this.reportError(error, "PREVIEW_RESUME_FAILED", "host");
+        throw error;
+      }
+    });
+  }
+
+  restart(): Promise<void> {
+    this.assertNotDisposing();
+    this.abortPendingStarts(new Error("Preview restart superseded earlier Play/Restart requests."));
+    const controller = new AbortController();
+    return this.enqueueStart(controller, (signalOwner) => this.restartInternal(signalOwner));
+  }
+
+  stop(): Promise<void> {
+    this.assertNotDisposing();
+    this.abortPendingStarts(new Error("Preview Stop cancelled earlier Play/Restart requests."));
+    return this.enqueue(() => this.stopInternal());
+  }
+
+  resize(width: number, height: number): void {
+    this.assertNotDisposing();
+    validateViewport(width, height);
+    this.viewport = { width, height };
+    this.game?.scale.resize(width, height);
+  }
+
+  dispose(): Promise<void> {
+    if (this.disposePromise) return this.disposePromise;
+    this.disposeRequested = true;
+    this.abortPendingStarts(new Error("Preview Host is being disposed."));
+    this.disposePromise = this.enqueue(() => this.disposeInternal());
+    return this.disposePromise;
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationTail.then(operation);
+    this.operationTail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private enqueueStart(
+    controller: AbortController,
+    operation: (controller: AbortController) => Promise<void>,
+  ): Promise<void> {
+    this.pendingStartControllers.add(controller);
+    return this.enqueue(async () => {
+      try {
+        await operation(controller);
+      } finally {
+        this.pendingStartControllers.delete(controller);
+      }
+    });
+  }
+
+  private abortPendingStarts(reason: Error): void {
+    for (const controller of this.pendingStartControllers) controller.abort(reason);
+  }
+
+  private async startInternal(controller: AbortController): Promise<void> {
+    const signal = controller.signal;
+    if (signal.aborted || this.disposeRequested) return;
+    if (this.currentState === "running") return;
+    if (this.currentState === "paused") {
+      const manager = this.sceneManager;
+      if (!manager) throw new Error("The paused Preview session has no Scene Manager.");
+      await manager.resume();
+      this.setState("running");
+      return;
+    }
+
+    const sessionId = this.createSessionId();
+    this.currentSessionId = sessionId;
+    this.sessionErrorCounts.clear();
+    this.sessionErrorCounts.set(sessionId, 0);
+    this.setState("starting");
+    try {
+      const manager = await awaitWithAbort(this.ensureGame(), signal);
+      if (signal.aborted || this.disposeRequested) return;
+      const result = await manager.switchTo(this.sceneId, { signal });
+      if (signal.aborted || result.status === "cancelled" || this.disposeRequested) return;
+      this.setState("running");
+    } catch (error) {
+      if (signal.aborted || this.disposeRequested) return;
+      if ((this.sessionErrorCounts.get(sessionId) ?? 0) === 0) {
+        this.reportError(error, "PREVIEW_START_FAILED", "phaser");
+      }
+      if (!this.sceneManager && this.game) {
+        try {
+          this.expectedGameDestruction = true;
+          await this.destroyGame();
+        } catch (cleanupError) {
+          this.reportError(cleanupError, "PREVIEW_START_ROLLBACK_FAILED", "host");
+        } finally {
+          this.expectedGameDestruction = false;
+        }
+      }
+      this.setState("failed");
+      throw error;
+    }
+  }
+
+  private async restartInternal(controller: AbortController): Promise<void> {
+    const signal = controller.signal;
+    const previousSessionId = this.currentSessionId;
+    if (previousSessionId) {
+      this.setState("stopping");
+    } else {
+      const initialSessionId = this.createSessionId();
+      this.currentSessionId = initialSessionId;
+      this.sessionErrorCounts.clear();
+      this.sessionErrorCounts.set(initialSessionId, 0);
+      this.setState("starting");
+    }
+    try {
+      const manager = await awaitWithAbort(this.ensureGame(), signal);
+      if (signal.aborted || this.disposeRequested) return;
+      await manager.stop();
+      if (signal.aborted || this.disposeRequested) return;
+      if (previousSessionId) {
+        const restartedSessionId = this.createSessionId();
+        this.currentSessionId = restartedSessionId;
+        this.sessionErrorCounts.clear();
+        this.sessionErrorCounts.set(restartedSessionId, 0);
+        this.setState("starting");
+      }
+      const result = await manager.switchTo(this.sceneId, { signal });
+      if (result.status === "cancelled" || signal.aborted || this.disposeRequested) return;
+      this.setState("running");
+    } catch (error) {
+      if (signal.aborted || this.disposeRequested) return;
+      const sessionId = this.currentSessionId;
+      if (sessionId && (this.sessionErrorCounts.get(sessionId) ?? 0) === 0) {
+        this.reportError(error, "PREVIEW_RESTART_FAILED", "phaser");
+      }
+      if (!this.sceneManager && this.game) {
+        try {
+          this.expectedGameDestruction = true;
+          await this.destroyGame();
+        } catch (cleanupError) {
+          this.reportError(cleanupError, "PREVIEW_RESTART_ROLLBACK_FAILED", "host");
+        } finally {
+          this.expectedGameDestruction = false;
+        }
+      }
+      this.setState("failed");
+      throw error;
+    }
+  }
+
+  private async stopInternal(): Promise<void> {
+    if (this.currentState === "stopped" && !this.currentSessionId) return;
+    if (this.currentState === "idle" && !this.sceneManager && !this.game) {
+      this.currentSessionId = null;
+      this.setState("stopped");
+      return;
+    }
+
+    this.setState("stopping");
+    try {
+      await this.sceneManager?.stop();
+      // If Stop races Phaser boot before Scene.create, there is no usable
+      // Scene Manager to reuse. Destroy that partial Game instead of retaining
+      // a host with a pending boot and no runtime lifecycle owner.
+      if (!this.sceneManager && this.game) {
+        this.expectedGameDestruction = true;
+        try {
+          await this.destroyGame();
+        } finally {
+          this.expectedGameDestruction = false;
+        }
+      }
+      this.currentSessionId = null;
+      this.setState("stopped");
+    } catch (error) {
+      this.reportError(error, "PREVIEW_STOP_FAILED", "host");
+      this.setState("failed");
+      throw error;
+    }
+  }
+
+  private async disposeInternal(): Promise<void> {
+    if (this.currentState !== "disposed") this.setState("stopping");
+    const errors: unknown[] = [];
+    const manager = this.sceneManager;
+    this.sceneManager = undefined;
+    if (manager) {
+      try {
+        await manager.dispose();
+      } catch (error) {
+        errors.push(error);
+        this.reportError(error, "PREVIEW_DISPOSE_FAILED", "host");
+      }
+    }
+    try {
+      await this.unexpectedGameDestroyCleanup;
+    } catch (error) {
+      errors.push(error);
+      this.reportError(error, "PREVIEW_UNEXPECTED_GAME_DESTROY_CLEANUP_FAILED", "host");
+    }
+
+    try {
+      await this.destroyGame();
+    } catch (error) {
+      errors.push(error);
+      this.reportError(error, "PREVIEW_GAME_DESTROY_FAILED", "host");
+    }
+
+    this.currentSessionId = null;
+    this.gameReadyPromise = undefined;
+    this.setState("disposed");
+    this.events.dispose();
+    this.sessionErrorCounts.clear();
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Browser Preview Host disposal failed.");
+    }
+  }
+
+  private ensureGame(): Promise<SceneManager> {
+    if (this.unexpectedGameDestroyCleanup) {
+      return this.unexpectedGameDestroyCleanup.then(() => this.ensureGame());
+    }
+    if (this.sceneManager) return Promise.resolve(this.sceneManager);
+    if (this.gameReadyPromise) return this.gameReadyPromise;
+
+    let resolveReady!: (manager: SceneManager) => void;
+    let rejectReady!: (error: unknown) => void;
+    let readySettled = false;
+    const ready = new Promise<SceneManager>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    const failReady = (error: unknown): void => {
+      if (readySettled) return;
+      readySettled = true;
+      this.clearGameStartupTimer();
+      if (this.failGameReady === failReady) this.failGameReady = undefined;
+      rejectReady(error);
+    };
+    const completeReady = (manager: SceneManager): void => {
+      if (readySettled) return;
+      readySettled = true;
+      this.clearGameStartupTimer();
+      if (this.failGameReady === failReady) this.failGameReady = undefined;
+      resolveReady(manager);
+    };
+    this.gameReadyPromise = ready;
+    this.failGameReady = failReady;
+    this.gameStartupTimer = setTimeout(() => {
+      failReady(new Error("Phaser did not create the Preview Scene before the startup timeout."));
+    }, this.options.startupTimeoutMs ?? 15_000);
+
+    const host = this;
+    class PreviewScene extends this.options.phaser.Scene {
+      create(): void {
+        if (readySettled) return;
+        if (host.disposeRequested || host.expectedGameDestruction) {
+          failReady(new Error("Preview Host stopped before the Phaser Scene became ready."));
+          return;
+        }
+        try {
+          const coreLoader = host.createCoreLoader();
+          const runtimeLoader = createPhaserRuntimeSceneLoader(this, coreLoader, {
+            projectId: host.projectId,
+            componentViewFactories: host.viewFactories,
+            onDiagnostic: (diagnostic) => host.handlePhaserDiagnostic(diagnostic),
+          });
+          const manager = createSceneManager(runtimeLoader);
+          host.sceneManager = manager;
+          completeReady(manager);
+        } catch (error) {
+          failReady(error);
+        }
+      }
+    }
+
+    const config: Phaser.Types.Core.GameConfig = {
+      type: this.options.phaser.AUTO,
+      parent: this.options.parent,
+      width: this.viewport.width,
+      height: this.viewport.height,
+      scale: {
+        mode: this.options.phaser.Scale.RESIZE,
+        width: this.viewport.width,
+        height: this.viewport.height,
+      },
+      scene: PreviewScene,
+    };
+
+    try {
+      const game = new this.options.phaser.Game(config);
+      this.game = game;
+      game.events.once(this.options.phaser.Core.Events.DESTROY, () => this.handleGameDestroyed(game));
+    } catch (error) {
+      this.gameReadyPromise = undefined;
+      failReady(error);
+    }
+    return ready;
+  }
+
+  private createCoreLoader(): ProjectSceneLoader {
+    if (this.snapshotError !== undefined) throw this.snapshotError;
+    if (!this.projectSnapshot || !this.registrySnapshot) {
+      throw new Error("Preview Project and Component registrations could not be snapshotted.");
+    }
+    return new ProjectSceneLoader({
+      project: this.projectSnapshot,
+      registry: this.registrySnapshot,
+      readAssetDocument: async (asset, signal) => {
+        const cached = this.documentSnapshots.get(asset.id);
+        if (cached !== undefined) return cached;
+        const content = await this.options.readAssetDocument(asset, signal);
+        if (signal.aborted) throw abortReason(signal);
+        if (typeof content !== "string") {
+          throw new TypeError("Preview document provider must return UTF-8 JSON text.");
+        }
+        this.documentSnapshots.set(asset.id, content);
+        return content;
+      },
+    });
+  }
+
+  private clearGameStartupTimer(): void {
+    if (this.gameStartupTimer !== undefined) clearTimeout(this.gameStartupTimer);
+    this.gameStartupTimer = undefined;
+  }
+
+  private async destroyGame(): Promise<void> {
+    this.clearGameStartupTimer();
+    this.failGameReady?.(new Error("Phaser Game was destroyed before Preview Scene startup completed."));
+    const game = this.game;
+    if (!game) {
+      this.gameReadyPromise = undefined;
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      game.events.once(this.options.phaser.Core.Events.DESTROY, finish);
+      try {
+        // Phaser finalizes Game destruction on its own next frame.
+        game.destroy(true);
+      } catch (error) {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      }
+    });
+    if (this.game === game) this.game = undefined;
+    this.gameReadyPromise = undefined;
+  }
+
+  private handleGameDestroyed(game: Phaser.Game): void {
+    this.clearGameStartupTimer();
+    this.failGameReady?.(new Error("Phaser Game was destroyed before Preview Scene startup completed."));
+    if (this.game === game) this.game = undefined;
+    this.gameReadyPromise = undefined;
+    if (this.disposeRequested || this.expectedGameDestruction) return;
+
+    const manager = this.sceneManager;
+    this.sceneManager = undefined;
+    if (manager) {
+      const cleanup = manager.dispose().catch((error: unknown) => {
+        this.reportError(error, "PREVIEW_UNEXPECTED_GAME_DESTROY_CLEANUP_FAILED", "host");
+        throw error;
+      });
+      this.unexpectedGameDestroyCleanup = cleanup;
+      // A failed cleanup remains recorded and blocks a replacement Game. The
+      // rejection is observed here as well as by the next Play/Dispose caller.
+      void cleanup.then(() => {
+        if (this.unexpectedGameDestroyCleanup === cleanup) this.unexpectedGameDestroyCleanup = undefined;
+      }, () => undefined);
+    }
+    if (this.currentSessionId) {
+      this.reportError(
+        new Error("The Phaser Game was destroyed outside the Preview Host lifecycle."),
+        "PREVIEW_GAME_DESTROYED",
+        "phaser",
+      );
+      this.setState("failed");
+    }
+  }
+
+  private handlePhaserDiagnostic(diagnostic: PhaserRuntimeDiagnostic): void {
+    const sessionId = this.currentSessionId;
+    if (!sessionId || !["starting", "running", "paused", "stopping"].includes(this.currentState)) return;
+    this.publishError({
+      sessionId,
+      projectId: diagnostic.projectId,
+      sceneId: diagnostic.sceneId,
+      source: "phaser",
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.causeMessage === undefined ? {} : { causeMessage: diagnostic.causeMessage }),
+      ...(diagnostic.nodeId === undefined ? {} : { nodeId: diagnostic.nodeId }),
+      ...(diagnostic.componentInstanceId === undefined ? {} : { componentInstanceId: diagnostic.componentInstanceId }),
+    });
+  }
+
+  private reportError(
+    error: unknown,
+    fallbackCode: string,
+    fallbackSource: BrowserPreviewErrorEvent["source"] = "host",
+  ): void {
+    const sessionId = this.currentSessionId;
+    if (!sessionId) return;
+
+    if (error instanceof SceneLoaderError && error.diagnostics.length > 0) {
+      for (const diagnostic of error.diagnostics) {
+        this.publishError({
+          sessionId,
+          projectId: this.projectId,
+          sceneId: this.sceneId,
+          source: "core",
+          code: diagnostic.code,
+          message: diagnostic.message,
+          ...(diagnostic.path === undefined ? {} : { path: diagnostic.path }),
+          ...(diagnostic.entityId === undefined ? {} : { entityId: diagnostic.entityId }),
+          ...(diagnostic.componentInstanceId === undefined ? {} : { componentInstanceId: diagnostic.componentInstanceId }),
+        });
+      }
+      return;
+    }
+
+    if (error instanceof AggregateError) {
+      const initialCount = this.sessionErrorCounts.get(sessionId) ?? 0;
+      for (const nested of error.errors) this.reportError(nested, fallbackCode, fallbackSource);
+      if ((this.sessionErrorCounts.get(sessionId) ?? 0) > initialCount) return;
+    }
+
+    this.publishError({
+      sessionId,
+      projectId: this.projectId,
+      sceneId: this.sceneId,
+      source: fallbackSource,
+      code: fallbackCode,
+      message: errorMessage(error),
+      ...(error instanceof Error && error.cause !== undefined
+        ? { causeMessage: errorMessage(error.cause) }
+        : {}),
+    });
+  }
+
+  private publishError(event: BrowserPreviewErrorEvent): void {
+    this.sessionErrorCounts.set(event.sessionId, (this.sessionErrorCounts.get(event.sessionId) ?? 0) + 1);
+    this.emit("error", Object.freeze(event));
+  }
+
+  private createSessionId(): string {
+    const sequence = ++this.nextSessionSequence;
+    const randomId = globalThis.crypto?.randomUUID?.();
+    return randomId
+      ? this.hostId + ":" + randomId
+      : this.hostId + ":session-" + sequence.toString(36);
+  }
+
+  private setState(next: BrowserPreviewState): void {
+    if (this.currentState === next) return;
+    const previous = this.currentState;
+    this.currentState = next;
+    this.emit("state-change", Object.freeze({
+      previous,
+      current: next,
+      sessionId: this.currentSessionId,
+    }));
+  }
+
+  private emit<TKey extends keyof BrowserPreviewHostEvents>(
+    type: TKey,
+    payload: BrowserPreviewHostEvents[TKey],
+  ): void {
+    try {
+      this.events.emit(type, payload);
+    } catch {
+      // Event observers are isolated from the Preview lifecycle and frame owner.
+    }
+  }
+
+  private assertNotDisposing(): void {
+    if (this.disposeRequested || this.currentState === "disposed") {
+      throw new Error("BrowserPreviewHost is being disposed or has been disposed.");
+    }
+  }
+}
+
+/** Creates a browser-first Preview Host without creating a second game loop or UI surface. */
+export function createBrowserPreviewHost(options: BrowserPreviewHostOptions): BrowserPreviewHost {
+  return new BrowserPreviewHostImpl(options);
+}

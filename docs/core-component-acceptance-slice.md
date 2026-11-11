@@ -60,6 +60,9 @@ The fixture and tests cover:
 - [ ] Physics/body integration is intentionally not included until a verified Physics slice has an explicit body ownership and cleanup contract.
 - [ ] Asset resolution, live Inspector transport and complete Preview/Build parity remain separate acceptance slices.
 - [x] View-construction diagnostics identify Project/Scene/Node/Component; cleanup diagnostics retain Project/Scene context.
+- [x] Browser Preview Host composes the real COD-103 Project/Scene fixture, Core Scene Loader, Phaser 4.2.1 adapter and Scene Manager; one Phaser Game supports session-scoped Play/Pause/Resume/Restart/Stop/resize and terminal disposal.
+- [x] Preview captures the Project and Component registration snapshot at Host creation and reuses successfully read Scene documents on Restart; registered view factories resolve only Asset references from the captured Project snapshot.
+- [x] Automated integration tests verify lifecycle transitions, repeated/concurrent operations, Core/Phaser startup failures, diagnostic/log session routing, viewport validation, runtime cleanup and retry after a failed start. The Phaser Game/Scene is a deterministic host double here; real-browser renderer/focus/visibility remains independent CODQA-15 acceptance.
 
 ## 5. Independent HTML5 Build
 

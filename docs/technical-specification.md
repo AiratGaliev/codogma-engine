@@ -59,7 +59,7 @@ P0/P1/P2 в разделе 9.3 задаёт относительный прио�
 | Работа с файлами | Project Manager выбирает и валидирует единственный active project; loopback HTTP API и MCP ограничивают project operations текущим безопасным project root. `PROJECTS_DIR` задаёт каталог обнаружения/создания, а `PROJECT_DIR` — необязательный стартовый проект |
 | Расширения | Внутренние feature modules принадлежат Editor Host; публичный/versioned Extension API является отдельным будущим решением и не предполагается готовым |
 | Сервер | `server/server.mjs` обслуживает production build Host, native project/runtime files, AI Chat и engine-owned MCP HTTP endpoint |
-| Runtime | Phaser 4.2.1 — выбранный HTML5 runtime target. Native Project Model/Core не зависят от Phaser; host-neutral ProjectSceneLoader находится в `packages/cge/`, минимальный view/lifecycle adapter реализован в `packages/runtime-phaser/`; полный browser Preview и HTML5 Build остаются отдельными stages |
+| Runtime | Phaser 4.2.1 — выбранный HTML5 runtime target. Native Project Model/Core не зависят от Phaser; host-neutral ProjectSceneLoader находится в `packages/cge/`; `packages/runtime-phaser/` содержит view/lifecycle adapter и browser-first Preview Host composition для одного Phaser Game. Editor controls/live Inspector, concrete asset loading, browser acceptance и HTML5 Build остаются отдельными stages |
 | AI/MCP | Engine-owned MCP registry и `POST /editor/mcp`; частный TypeScript stdio adapter `@codogma/editor-mcp-server` расположен в `packages/editor-mcp-server/` и проксирует engine schemas/calls. AI Chat service необязателен |
 | CI | `fast-checks` выполняет build/typecheck, unit/contract/security и server-smoke проверки; MCP и Playwright E2E выполняются на promotion workflow начиная с PR `dev → test`, затем на release-promotion PR |
 | TypeScript / lint baseline | Native Host, Core и first-party TypeScript packages используют строгие проверки, зафиксированные в ADR-0002; актуальные install/build/test команды выполняются CI |
@@ -76,10 +76,10 @@ Phaser 4.2.1 выбран как HTML5 runtime target. Native Project Model, Cor
 Следующие направления описывают целевой продукт, а не подтверждённые функции текущей версии:
 
 - завершённый независимый от Phaser публичный игровой API и runtime Core; начальный host-neutral contract slice теперь реализован в `packages/cge/` (Project/Scene/Prefab schema v1, validation/serialization, component schema/registry/world), но не является законченным runtime;
-- полный data-driven Preview workflow из Project Model через Phaser runtime: Core Scene Loader и минимальный `@codogma/runtime-phaser` graph-to-view adapter реализованы, но полноценный Preview Host, asset resolution, real-browser Phaser runtime, physics и HTML5 Build остаются незавершёнными;
-- полная end-to-end object/component runtime-модель, интегрированная с Editor Inspector и browser Preview: `@codogma/cge` и минимальный `@codogma/runtime-phaser` реализуют host-neutral graph → Phaser view slice, но live Inspector/real-browser Preview/physics acceptance не завершены. Optional Data-Oriented ECS и его Phaser adapter остаются отдельными package tasks COD-111/112;
+- полный data-driven Preview workflow из Project Model через Phaser runtime: Core Scene Loader, graph-to-view adapter и browser-first Preview Host API реализованы в `@codogma/runtime-phaser`; фактическая загрузка ресурсов, интеграция с Editor Host/live Inspector, browser acceptance, physics и HTML5 Build ещё не завершены;
+- полная end-to-end object/component runtime-модель, интегрированная с Editor Inspector и browser Preview: `@codogma/cge` и `@codogma/runtime-phaser` реализуют host-neutral graph → Phaser view и browser Preview lifecycle; live Inspector, browser acceptance рендеринга/focus/visibility и physics acceptance не завершены. Optional Data-Oriented ECS и его Phaser adapter остаются отдельными package tasks COD-111/112;
 - синхронизация Inspector с реальными экземплярами компонентов работающей игры;
-- полноценный Game Preview Host с embedded, standalone и внешним browser preview;
+- Embedded Game View и standalone preview UI, live Inspector transport и фактическая загрузка ресурсов; browser-first Preview Host runtime API реализован, но полный workflow редактора ещё не завершён;
 - специализированный runtime debugger и профайлер с измерениями CPU/кадра/ресурсов;
 - проверка ссылок/зависимостей и полноценный production asset/build pipeline;
 - унифицированный API платформенных сервисов Yandex Games, VK Mini Apps и VK Play;
